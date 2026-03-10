@@ -1,0 +1,234 @@
+@using RVS.BlazorWASM
+@using RVS.BlazorWASM.Features.CheckIn
+@using RVS.BlazorWASM.Layout
+@using RVS.BlazorWASM.Services
+@using RVS.Domain.DTOs
+@inject ILookupCacheService LookupCache
+@inject ILogger<EncounterDetailsSection> Logger
+@implements IDisposable
+
+<FluentCard>
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+        <FluentLabel Typo="Typography.Subject">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Calendar())" />
+            Encounter Details
+        </FluentLabel>
+
+        @if (_isLoading)
+        {
+            <FluentProgressRing />
+        }
+        else
+        {
+            <FluentGrid Spacing="3">
+                <FluentGridItem xs="12" sm="6" md="4">
+                    <FluentSelect TOption="LocationSummaryResponseDto"
+                                  Label="Location"
+                                  Items="@_locations"
+                                  OptionText="@(l => l.Name)"
+                                  OptionValue="@(l => l.LocationId)"
+                                  SelectedOption="@_selectedLocation"
+                                  SelectedOptionChanged="@OnLocationChanged"
+                                  Required="true" />
+                </FluentGridItem>
+                <FluentGridItem xs="12" sm="6" md="4">
+                    <FluentSelect TOption="LookupItemDto"
+                                  Label="Visit Type"
+                                  Items="@_visitTypes"
+                                  OptionText="@(v => v.Name)"
+                                  OptionValue="@(v => v.Code)"
+                                  SelectedOption="@_selectedVisitType"
+                                  SelectedOptionChanged="@OnVisitTypeChanged"
+                                  Placeholder="Select a Visit Type"
+                                  Required="true" />
+                </FluentGridItem>
+                <FluentGridItem xs="12" sm="6" md="4">
+                    <FluentDatePicker Label="Visit Date"
+                                      @bind-Value="_visitDate" />
+                </FluentGridItem>
+                <FluentGridItem xs="12" sm="6" md="4">
+                    <FluentTimePicker Label="Visit Time"
+                                      @bind-Value="_visitTime" />
+                </FluentGridItem>
+                <FluentGridItem xs="12" sm="6" md="8">
+                    <FluentTextField Label="External Reference (optional)" 
+                                     Value="@State.Encounter.ExternalRef"
+                                     ValueChanged="@(v => { State.SetExternalRef(v); NotifyStateChangedSync(); })"
+                                     Placeholder="PMS appointment ID, etc." />
+                </FluentGridItem>
+            </FluentGrid>
+        }
+    </FluentStack>
+</FluentCard>
+
+@code {
+    /// <summary>
+    /// The practice ID for loading locations.
+    /// </summary>
+    [Parameter] public string PracticeId { get; set; } = default!;
+
+    /// <summary>
+    /// The component's state container.
+    /// </summary>
+    [Parameter, EditorRequired] public EncounterDetailsSectionState State { get; set; } = default!;
+
+    /// <summary>
+    /// Callback when state changes. Parent should handle state propagation.
+    /// </summary>
+    [Parameter] public EventCallback<EncounterDetailsSectionState> StateChanged { get; set; }
+
+    // Lookup data (from cache)
+    private IReadOnlyList<LocationSummaryResponseDto> _locations = [];
+    private IReadOnlyList<LookupItemDto> _visitTypes = [];
+    private bool _isLoading = true;
+    private bool _disposed;
+
+    private DateTime? _visitDate;
+    private DateTime? _visitTime;
+    private string _lastAppliedLocationId = string.Empty;
+
+    private LocationSummaryResponseDto? _selectedLocation => 
+        _locations.FirstOrDefault(l => l.LocationId == State.Encounter.LocationId);
+
+    private LookupItemDto? _selectedVisitType => 
+        _visitTypes.FirstOrDefault(v => v.Code == State.Encounter.VisitType);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLookupsAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Initialize visit date/time
+        if (State.Encounter.VisitDate.HasValue)
+        {
+            _visitDate = State.Encounter.VisitDate.Value.Date;
+            _visitTime = State.Encounter.VisitDate.Value;
+        }
+        else
+        {
+            _visitDate = DateTime.Today;
+            _visitTime = DateTime.Now;
+        }
+
+        await ApplyDefaultsIfNeeded();
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        try
+        {
+            _isLoading = true;
+
+            // Use cached lookups - they should already be loaded by MainLayout
+            if (LookupCache.IsLoaded)
+            {
+                _visitTypes = LookupCache.VisitTypes;
+                _locations = LookupCache.Locations;
+            }
+            else
+            {
+                // Subscribe to cache loaded event if not yet loaded
+                LookupCache.CacheLoaded += OnCacheLoaded;
+            }
+
+            await ApplyDefaultsIfNeeded();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load lookup data for encounter details");
+        }
+        finally
+        {
+            _isLoading = !LookupCache.IsLoaded;
+        }
+    }
+
+    private void OnCacheLoaded(object? sender, EventArgs e)
+    {
+        // Guard against callbacks after disposal
+        if (_disposed) return;
+
+        _visitTypes = LookupCache.VisitTypes;
+        _locations = LookupCache.Locations;
+        _isLoading = false;
+        
+        _ = InvokeAsync(async () =>
+        {
+            await ApplyDefaultsIfNeeded();
+            StateHasChanged();
+        });
+        
+        // Unsubscribe after loading
+        LookupCache.CacheLoaded -= OnCacheLoaded;
+    }
+
+    private async Task ApplyDefaultsIfNeeded()
+    {
+        bool changed = false;
+
+        var currentLocationId = State.Encounter.LocationId ?? string.Empty;
+        if (string.IsNullOrEmpty(currentLocationId) && _locations.Count > 0)
+        {
+            var defaultLocationId = _locations[0].LocationId;
+            if (defaultLocationId != _lastAppliedLocationId)
+            {
+                State.SetLocationId(defaultLocationId);
+                _lastAppliedLocationId = defaultLocationId;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await NotifyStateChanged();
+        }
+    }
+
+    private async Task OnLocationChanged(LocationSummaryResponseDto? location)
+    {
+        if (location != null)
+        {
+            State.SetLocationId(location.LocationId);
+            await NotifyStateChanged();
+        }
+    }
+
+    private async Task OnVisitTypeChanged(LookupItemDto? visitType)
+    {
+        if (visitType != null)
+        {
+            State.SetVisitType(visitType.Code);
+            await NotifyStateChanged();
+        }
+    }
+
+    private async Task NotifyStateChanged()
+    {
+        StateHasChanged();
+        await StateChanged.InvokeAsync(State);
+    }
+
+    private void NotifyStateChangedSync()
+    {
+        StateHasChanged();
+        _ = StateChanged.InvokeAsync(State);
+    }
+
+    /// <summary>
+    /// Resets the component's local UI state.
+    /// </summary>
+    public void ResetLocalState()
+    {
+        _visitDate = DateTime.Today;
+        _visitTime = DateTime.Now;
+        _lastAppliedLocationId = string.Empty;
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        LookupCache.CacheLoaded -= OnCacheLoaded;
+    }
+}

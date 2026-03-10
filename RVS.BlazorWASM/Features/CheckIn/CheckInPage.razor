@@ -1,0 +1,353 @@
+@page "/practices/{PracticeId}/check-in"
+@* Route parameters make multi-tenant context explicit, secure, and stateless — critical for healthcare applications handling sensitive patient data across multiple organizations. *@
+
+@inject ICheckInApiService CheckInApi
+@inject IEligibilityCheckPollingService PollingService
+@inject NavigationManager Navigation
+@inject ILogger<CheckInPage> Logger
+@implements IDisposable
+
+<PageTitle>Patient Check-In</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+    <FluentLabel Typo="Typography.PageTitle">
+        <FluentIcon Value="@(new Icons.Regular.Size24.ClipboardCheckmark())" />
+        Patient Check-In
+    </FluentLabel>
+
+    @if (!string.IsNullOrEmpty(_appState.ErrorMessage))
+    {
+        <FluentMessageBar Title="Error" Intent="MessageIntent.Error" AllowDismiss="true" 
+                          OnDismiss="@(() => _appState.ClearError())">
+            @_appState.ErrorMessage
+        </FluentMessageBar>
+    }
+
+    @if (_appState.CheckInResult == null)
+    {
+        <!-- Phase 1: Check-In Form -->
+        <PatientDiscoverySection 
+            @ref="_patientDiscoverySectionRef"
+            State="_appState.PatientDiscovery"
+            StateChanged="HandlePatientDiscoveryStateChanged"
+            PracticeId="@PracticeId" />
+
+        @if (_appState.DiscoveryState is PatientDiscoveryState.PatientSelected or PatientDiscoveryState.EditingPatient or PatientDiscoveryState.CreatingNewPatient)
+        {
+            <CoverageEnrollmentsSection 
+                @ref="_coverageEnrollmentsSectionRef"
+                State="_appState.CoverageEnrollments"
+                StateChanged="HandleCoverageEnrollmentsStateChanged" />
+
+            <EncounterDetailsSection 
+                @ref="_encounterDetailsSectionRef"
+                State="_appState.EncounterDetails"
+                StateChanged="HandleEncounterDetailsStateChanged"
+                PracticeId="@PracticeId" />
+
+            <CoverageDecisionSection 
+                @ref="_coverageDecisionSectionRef"
+                State="_appState.CoverageDecision"
+                StateChanged="HandleCoverageDecisionStateChanged"
+                CoverageEnrollmentsState="_appState.CoverageEnrollments"
+                EncounterDetailsState="_appState.EncounterDetails" />
+
+            <FluentDivider />
+
+            @* Validation Messages *@
+            @if (!CanSubmit() && !_appState.IsSubmitting)
+            {
+                var missingItems = GetMissingRequirements();
+                if (missingItems.Any())
+                {
+                    <FluentMessageBar Intent="MessageIntent.Warning" Title="Complete Required Fields">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                            <span>Please complete the following to check in:</span>
+                            <ul style="margin: 4px 0; padding-left: 20px;">
+                                @foreach (var item in missingItems)
+                                {
+                                    <li>@item</li>
+                                }
+                            </ul>
+                        </FluentStack>
+                    </FluentMessageBar>
+                }
+            }
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                <FluentButton Appearance="Appearance.Accent" 
+                              Loading="@_appState.IsSubmitting"
+                              Disabled="@(!CanSubmit())"
+                              OnClick="HandleCheckInAsync"
+                              Title="@GetSubmitButtonTooltip()">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Slot="start" />
+                    Check In & Verify Eligibility
+                </FluentButton>
+
+                <FluentButton Appearance="Appearance.Outline" OnClick="HandleReset">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.ArrowReset())" Slot="start" />
+                    Start Over
+                </FluentButton>
+            </FluentStack>
+        }
+    }
+    else
+    {
+        <!-- Phase 2: Results -->
+        <CheckInResultsSection 
+            @ref="_checkInResultsSectionRef"
+            State="_appState.CheckInResults"
+            StateChanged="HandleCheckInResultsStateChanged" />
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+            <FluentButton Appearance="Appearance.Outline" OnClick="HandleStartNewCheckIn">
+                <FluentIcon Value="@(new Icons.Regular.Size20.PersonAdd())" Slot="start" />
+                Start New Check-In
+            </FluentButton>
+        </FluentStack>
+    }
+</FluentStack>
+
+@code {
+    [Parameter] public string PracticeId { get; set; } = default!;
+
+    private CheckInAppState _appState = new();
+    private bool _isDisposed;
+
+    // Component references
+    private PatientDiscoverySection? _patientDiscoverySectionRef;
+    private CoverageEnrollmentsSection? _coverageEnrollmentsSectionRef;
+    private EncounterDetailsSection? _encounterDetailsSectionRef;
+    private CheckInResultsSection? _checkInResultsSectionRef;
+    private CoverageDecisionSection? _coverageDecisionSectionRef;
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to state changes from the AppState
+        _appState.OnStateChanged += HandleAppStateChanged;
+    }
+
+    private void HandleAppStateChanged()
+    {
+        // Guard against callbacks after disposal
+        if (_isDisposed) return;
+
+        // Anytime appState changes, update the UI
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandlePatientDiscoveryStateChanged(PatientDiscoverySectionState state)
+    {
+        // When a patient is selected, populate coverage enrollments from the selected patient
+        if (state.DiscoveryState == PatientDiscoveryState.PatientSelected && state.SelectedPatient != null)
+        {
+            _appState.CoverageEnrollments.PopulateFromPatient(state.SelectedPatient);
+        }
+
+        _appState.NotifyStateChanged();
+    }
+
+    private void HandleCoverageEnrollmentsStateChanged(CoverageEnrollmentsSectionState state)
+    {
+        _appState.NotifyStateChanged();
+    }
+
+    private void HandleEncounterDetailsStateChanged(EncounterDetailsSectionState state)
+    {
+        _appState.NotifyStateChanged();
+    }
+
+    private void HandleCheckInResultsStateChanged(CheckInResultsSectionState state)
+    {
+        _appState.NotifyStateChanged();
+    }
+
+    private void HandleCoverageDecisionStateChanged(CoverageDecisionSectionState state)
+    {
+        _appState.NotifyStateChanged();
+    }
+
+    private List<string> GetMissingRequirements()
+    {
+        var missing = new List<string>();
+
+        // Always require patient demographics
+        if (string.IsNullOrWhiteSpace(_appState.Demographics.FirstName))
+            missing.Add("Patient First Name");
+        if (string.IsNullOrWhiteSpace(_appState.Demographics.LastName))
+            missing.Add("Patient Last Name");
+
+        // Always require encounter details
+        if (string.IsNullOrWhiteSpace(_appState.Encounter.LocationId))
+            missing.Add("Location");
+        if (string.IsNullOrWhiteSpace(_appState.Encounter.VisitType))
+            missing.Add("Visit Type");
+
+        return missing;
+    }
+
+    private string GetSubmitButtonTooltip()
+    {
+        if (_appState.IsSubmitting)
+            return "Submitting...";
+        
+        if (CanSubmit())
+            return "Click to check in patient and verify eligibility";
+
+        var missing = GetMissingRequirements();
+        if (missing.Any())
+            return $"Complete required fields: {string.Join(", ", missing)}";
+
+        return "Complete all required fields to continue";
+    }
+
+    private bool CanSubmit()
+    {
+        // Can't submit while already submitting
+        if (_appState.IsSubmitting) return false;
+        
+        // Demographics required (for new or existing patients)
+        if (string.IsNullOrWhiteSpace(_appState.Demographics.FirstName)) return false;
+        if (string.IsNullOrWhiteSpace(_appState.Demographics.LastName)) return false;
+        
+        // Encounter details are always required
+        if (string.IsNullOrWhiteSpace(_appState.Encounter.LocationId)) return false;
+        if (string.IsNullOrWhiteSpace(_appState.Encounter.VisitType)) return false;
+        
+        return true;
+    }
+
+    private async Task HandleCheckInAsync()
+    {
+        if (!CanSubmit()) return;
+
+        try
+        {
+            _appState.SetIsSubmitting(true);
+            _appState.ClearError();
+
+            var request = _appState.BuildRequest();
+            var result = await CheckInApi.CheckInAsync(PracticeId, request);
+
+            _appState.SetCheckInResult(result);
+
+            // Convert eligibility check results to summary DTOs for polling
+            var eligibilityChecks = result.EligibilityChecks
+                .Select(r => new EligibilityCheckSummaryResponseDto
+                {
+                    EligibilityCheckId = r.EligibilityCheckId,
+                    CoverageEnrollmentId = r.CoverageEnrollmentId,
+                    PayerId = r.PayerId,
+                    DateOfService = r.DateOfService,
+                    RequestedAtUtc = r.RequestedAtUtc,
+                    CompletedAtUtc = r.CompletedAtUtc,
+                    Status = r.Status
+                })
+                .ToList();
+
+            _appState.SetEligibilityChecks(eligibilityChecks);
+
+            // Start polling if any checks are in progress
+            if (eligibilityChecks.Any(c => c.Status == "InProgress" || c.Status == "Pending"))
+            {
+                StartPolling();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Check-in failed");
+            _appState.SetErrorMessage($"Check-in failed: {ex.Message}");
+        }
+        finally
+        {
+            _appState.SetIsSubmitting(false);
+        }
+    }
+
+    private void StartPolling()
+    {
+        if (_appState.CheckInResult == null) return;
+
+        _appState.SetIsPolling(true);
+
+        PollingService.StartPolling(
+            PracticeId,
+            _appState.CheckInResult.PatientId,
+            _appState.CheckInResult.EncounterId,
+            onUpdate: checks =>
+            {
+                _appState.SetEligibilityChecks(checks);
+                
+                // Stop polling when all checks are complete
+                if (!checks.Any(c => c.Status == "InProgress" || c.Status == "Pending"))
+                {
+                    PollingService.StopPolling();
+                    _appState.SetIsPolling(false);
+                }
+            },
+            onError: ex =>
+            {
+                Logger.LogError(ex, "Eligibility polling error");
+                _appState.SetIsPolling(false);
+            });
+    }
+
+    private async Task HandleCoverageDecisionConfirmedAsync(CoverageDecisionUpdateRequestDto decision)
+    {
+        if (_appState.CheckInResult == null) return;
+
+        try
+        {
+            _appState.SetIsSubmitting(true);
+            _appState.ClearError();
+
+            await CheckInApi.UpdateCoverageDecisionAsync(
+                PracticeId,
+                _appState.CheckInResult.PatientId,
+                _appState.CheckInResult.EncounterId,
+                decision);
+
+            // Show success (could navigate or show confirmation)
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update coverage decision");
+            _appState.SetErrorMessage($"Failed to save coverage decision: {ex.Message}");
+        }
+        finally
+        {
+            _appState.SetIsSubmitting(false);
+        }
+    }
+
+    private void HandleReset()
+    {
+        ResetComponent();
+    }
+
+    private void HandleStartNewCheckIn()
+    {
+        ResetComponent();
+    }
+
+    public void Dispose()
+    {
+        _isDisposed = true;
+        _appState.OnStateChanged -= HandleAppStateChanged;
+        PollingService.StopPolling();
+    }
+
+    private void ResetComponent()
+    {
+        PollingService.StopPolling();
+        _appState.SetIsPolling(false);
+        _appState.Reset();
+        
+        // Reset child component local UI state
+        _patientDiscoverySectionRef?.ResetLocalState();
+        _coverageEnrollmentsSectionRef?.ResetLocalState();
+        _encounterDetailsSectionRef?.ResetLocalState();
+        _checkInResultsSectionRef?.ResetLocalState();
+        _coverageDecisionSectionRef?.ResetLocalState();
+    }
+}

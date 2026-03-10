@@ -1,0 +1,6 @@
+@MF.API_HostAddress = http://localhost:5236
+
+GET {{MF.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,86 @@
+@page "/authentication/{action}"
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using RVS.BlazorWASM
+@using RVS.BlazorWASM.Features.CheckIn
+@using RVS.BlazorWASM.Layout
+@using RVS.BlazorWASM.Services
+@using RVS.Domain.DTOs
+
+<RemoteAuthenticatorView Action="@Action">
+    <LoggingIn>
+        <div class="authentication-status">
+            <FluentProgressRing />
+            <p>Redirecting to Auth0...</p>
+        </div>
+    </LoggingIn>
+    <CompletingLoggingIn>
+        <div class="authentication-status">
+            <FluentProgressRing />
+            <p>Completing login...</p>
+        </div>
+    </CompletingLoggingIn>
+    <LogInFailed>
+        <div class="authentication-error">
+            <FluentIcon Value="@(new Icons.Regular.Size24.ErrorCircle())" Color="Color.Error" />
+            <h3>Login Failed</h3>
+            <p>There was an error logging in. Please try again.</p>
+            <FluentButton Appearance="Appearance.Accent" Href="/">Return to Home</FluentButton>
+        </div>
+    </LogInFailed>
+    <LogOut>
+        <div class="authentication-status">
+            <FluentProgressRing />
+            <p>Logging out...</p>
+        </div>
+    </LogOut>
+    <CompletingLogOut>
+        <div class="authentication-status">
+            <FluentProgressRing />
+            <p>Completing logout...</p>
+        </div>
+    </CompletingLogOut>
+    <LogOutFailed>
+        <div class="authentication-error">
+            <FluentIcon Value="@(new Icons.Regular.Size24.ErrorCircle())" Color="Color.Error" />
+            <h3>Logout Failed</h3>
+            <p>There was an error logging out.</p>
+            <FluentButton Appearance="Appearance.Accent" Href="/">Return to Home</FluentButton>
+        </div>
+    </LogOutFailed>
+    <LogOutSucceeded>
+        <div class="authentication-status">
+            <FluentIcon Value="@(new Icons.Regular.Size24.CheckmarkCircle())" Color="Color.Success" />
+            <p>You have been successfully logged out.</p>
+            <FluentButton Appearance="Appearance.Accent" Href="/">Return to Home</FluentButton>
+        </div>
+    </LogOutSucceeded>
+</RemoteAuthenticatorView>
+
+<style>
+    .authentication-status,
+    .authentication-error {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 400px;
+        gap: 20px;
+        padding: 40px;
+    }
+
+    .authentication-error h3 {
+        margin: 0;
+        color: var(--error);
+    }
+
+    .authentication-status p,
+    .authentication-error p {
+        margin: 0;
+        text-align: center;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string? Action { get; set; }
+}

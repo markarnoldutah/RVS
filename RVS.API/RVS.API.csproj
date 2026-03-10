@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>1e937732-692b-4111-ae40-b24390fe8601</UserSecretsId>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Add Controller comments to Swagger UI -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.1.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RVS.Infra.AzBlobRepository\RVS.Infra.AzBlobRepository.csproj" />
+    <ProjectReference Include="..\RVS.Infra.AzCosmosRepository\RVS.Infra.AzCosmosRepository.csproj" />
+    <ProjectReference Include="..\RVS.Infra.AzTablesRepository\RVS.Infra.AzTablesRepository.csproj" />
+  </ItemGroup>
+
+</Project>

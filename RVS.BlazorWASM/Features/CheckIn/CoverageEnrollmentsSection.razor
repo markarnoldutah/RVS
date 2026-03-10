@@ -1,0 +1,160 @@
+@using RVS.BlazorWASM
+@using RVS.BlazorWASM.Features.CheckIn
+@using RVS.BlazorWASM.Layout
+@using RVS.BlazorWASM.Services
+@using RVS.Domain.DTOs
+@inject ILookupCacheService LookupCache
+@inject ILogger<CoverageEnrollmentsSection> Logger
+@implements IDisposable
+
+<FluentCard>
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+            <FluentLabel Typo="Typography.Subject">
+                <FluentIcon Value="@(new Icons.Regular.Size20.CreditCardPerson())" />
+                Coverage Enrollments
+            </FluentLabel>
+            <FluentBadge>@State.Count</FluentBadge>
+        </FluentStack>
+
+        @if (_isLoading)
+        {
+            <FluentProgressRing />
+        }
+        else if (State.Count == 0)
+        {
+            <FluentMessageBar Intent="MessageIntent.Info">
+                No coverage enrollments. Add at least one coverage to run eligibility checks.
+            </FluentMessageBar>
+        }
+        else
+        {
+            @for (int i = 0; i < State.Count; i++)
+            {
+                var index = i;
+                var coverage = State.CoverageEnrollments[index];
+                var payerName = _payers.FirstOrDefault(p => p.PayerId == coverage.PayerId)?.Name ?? coverage.PayerId;
+
+                <CoverageEnrollmentCard 
+                    Coverage="coverage"
+                    Index="index"
+                    PayerName="@payerName"
+                    Payers="_payers.ToList()"
+                    PlanTypes="_planTypes.ToList()"
+                    RelationshipTypes="_relationshipTypes.ToList()"
+                    OnUpdate="@((c) => HandleUpdateCoverage(index, c))"
+                    OnRemove="@(() => HandleRemoveCoverage(index))" />
+            }
+        }
+
+        <FluentButton Appearance="Appearance.Outline" OnClick="HandleAddCoverage">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
+            Add Coverage
+        </FluentButton>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    /// <summary>
+    /// The component's state container.
+    /// </summary>
+    [Parameter, EditorRequired] public CoverageEnrollmentsSectionState State { get; set; } = default!;
+
+    /// <summary>
+    /// Callback when state changes. Parent should handle state propagation.
+    /// </summary>
+    [Parameter] public EventCallback<CoverageEnrollmentsSectionState> StateChanged { get; set; }
+
+    // Lookup data (from cache)
+    private IReadOnlyList<PayerResponseDto> _payers = [];
+    private IReadOnlyList<LookupItemDto> _planTypes = [];
+    private IReadOnlyList<LookupItemDto> _relationshipTypes = [];
+    private bool _isLoading = true;
+    private bool _disposed;
+
+    protected override void OnInitialized()
+    {
+        LoadLookupsFromCache();
+    }
+
+    private void LoadLookupsFromCache()
+    {
+        try
+        {
+            _isLoading = true;
+
+            // Use cached lookups - they should already be loaded by MainLayout
+            if (LookupCache.IsLoaded)
+            {
+                _payers = LookupCache.Payers;
+                _planTypes = LookupCache.PlanTypes;
+                _relationshipTypes = LookupCache.RelationshipTypes;
+                _isLoading = false;
+            }
+            else
+            {
+                // Subscribe to cache loaded event if not yet loaded
+                LookupCache.CacheLoaded += OnCacheLoaded;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load lookup data for coverage enrollments");
+            _isLoading = false;
+        }
+    }
+
+    private void OnCacheLoaded(object? sender, EventArgs e)
+    {
+        // Guard against callbacks after disposal
+        if (_disposed) return;
+
+        _payers = LookupCache.Payers;
+        _planTypes = LookupCache.PlanTypes;
+        _relationshipTypes = LookupCache.RelationshipTypes;
+        _isLoading = false;
+        
+        _ = InvokeAsync(StateHasChanged);
+        
+        // Unsubscribe after loading
+        LookupCache.CacheLoaded -= OnCacheLoaded;
+    }
+
+    private async Task HandleAddCoverage()
+    {
+        State.AddCoverage();
+        await NotifyStateChanged();
+    }
+
+    private async Task HandleUpdateCoverage(int index, CoverageEnrollmentUpsertDto coverage)
+    {
+        State.UpdateCoverage(index, coverage);
+        await NotifyStateChanged();
+    }
+
+    private async Task HandleRemoveCoverage(int index)
+    {
+        State.RemoveCoverage(index);
+        await NotifyStateChanged();
+    }
+
+    private async Task NotifyStateChanged()
+    {
+        StateHasChanged();
+        await StateChanged.InvokeAsync(State);
+    }
+
+    /// <summary>
+    /// Resets the component's local UI state.
+    /// </summary>
+    public void ResetLocalState()
+    {
+        // No local UI state to reset in this component
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        LookupCache.CacheLoaded -= OnCacheLoaded;
+    }
+}

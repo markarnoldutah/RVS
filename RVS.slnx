@@ -1,0 +1,10 @@
+<Solution>
+  <Project Path="RVS.API/RVS.API.csproj" />
+  <Project Path="RVS.BlazorWASM/RVS.BlazorWASM.csproj" />
+  <Project Path="RVS.Data.Cosmos.Seed/RVS.Data.Cosmos.Seed.csproj" />
+  <Project Path="RVS.Domain/RVS.Domain.csproj" Id="f0820481-269c-4025-8f65-7dc70c6f2ae2" />
+  <Project Path="RVS.Infra.AzBlobRepository/RVS.Infra.AzBlobRepository.csproj" />
+  <Project Path="RVS.Infra.AzCosmosRepository/RVS.Infra.AzCosmosRepository.csproj" />
+  <Project Path="RVS.Infra.AzCredentials/RVS.Infra.AzCredentials.csproj" />
+  <Project Path="RVS.Infra.AzTablesRepository/RVS.Infra.AzTablesRepository.csproj" />
+</Solution>

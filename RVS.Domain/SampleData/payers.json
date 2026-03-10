@@ -1,0 +1,72 @@
+[
+  {
+    "id": "payer_vsp_001",
+    "payerId": "payer_vsp_001",
+    "type": "payer",
+    "tenantId": null,
+    "name": "VSP (Vision Service Plan)",
+    "planType": "Vision",
+    "availityPayerCode": "VSP",
+    "x12PayerId": "12345",
+    "isMedicare": false,
+    "isMedicaid": false,
+    "createdAtUtc": "2024-01-01T00:00:00Z",
+    "updatedAtUtc": "2024-11-15T10:30:00Z"
+  },
+  {
+    "id": "payer_bcbs_001",
+    "payerId": "payer_bcbs_001",
+    "type": "payer",
+    "tenantId": null,
+    "name": "Blue Cross Blue Shield - National",
+    "planType": "Medical",
+    "availityPayerCode": "BCBS",
+    "x12PayerId": "00590",
+    "isMedicare": false,
+    "isMedicaid": false,
+    "createdAtUtc": "2024-01-01T00:00:00Z",
+    "updatedAtUtc": "2024-12-01T08:00:00Z"
+  },
+  {
+    "id": "payer_eyemed_001",
+    "payerId": "payer_eyemed_001",
+    "type": "payer",
+    "tenantId": null,
+    "name": "EyeMed Vision Care",
+    "planType": "Vision",
+    "availityPayerCode": "EYEMED",
+    "x12PayerId": "13551",
+    "isMedicare": false,
+    "isMedicaid": false,
+    "createdAtUtc": "2024-01-01T00:00:00Z",
+    "updatedAtUtc": "2024-10-20T14:15:00Z"
+  },
+  {
+    "id": "payer_medicare_001",
+    "payerId": "payer_medicare_001",
+    "type": "payer",
+    "tenantId": null,
+    "name": "Medicare Part B",
+    "planType": "Medical",
+    "availityPayerCode": "MEDICARE",
+    "x12PayerId": "00901",
+    "isMedicare": true,
+    "isMedicaid": false,
+    "createdAtUtc": "2024-01-01T00:00:00Z",
+    "updatedAtUtc": "2024-09-30T12:00:00Z"
+  },
+  {
+    "id": "payer_medicaid_ca_001",
+    "payerId": "payer_medicaid_ca_001",
+    "type": "payer",
+    "tenantId": "ten_001",
+    "name": "California Medicaid (Medi-Cal)",
+    "planType": "Medical",
+    "availityPayerCode": "MEDICAID_CA",
+    "x12PayerId": "68069",
+    "isMedicare": false,
+    "isMedicaid": true,
+    "createdAtUtc": "2024-02-15T09:00:00Z",
+    "updatedAtUtc": "2024-12-10T11:00:00Z"
+  }
+]

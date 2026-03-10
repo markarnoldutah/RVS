@@ -1,0 +1,18 @@
+﻿@using Microsoft.FluentUI.AspNetCore.Components.Extensions
+@using RVS.BlazorWASM
+@using RVS.BlazorWASM.Features.CheckIn
+@using RVS.BlazorWASM.Layout
+@using RVS.BlazorWASM.Services
+@using RVS.Domain.DTOs
+@implements IDialogContentComponent
+
+<div>
+    <PatientDemographicsSection State="Content"  />
+</div>
+
+
+@code {
+
+    [Parameter, EditorRequired] public PatientDiscoverySectionState Content { get; set; } = default!;
+
+}

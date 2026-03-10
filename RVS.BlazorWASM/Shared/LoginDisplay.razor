@@ -1,0 +1,83 @@
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using RVS.BlazorWASM
+@using RVS.BlazorWASM.Features.CheckIn
+@using RVS.BlazorWASM.Layout
+@using RVS.BlazorWASM.Services
+@using RVS.Domain.DTOs
+@inject NavigationManager Navigation
+
+<AuthorizeView>
+    <Authorized>
+        <FluentProfileMenu 
+                           HeaderLabel="ADS"
+                           TopCorner="true"
+                           Initials="@GetUserInitials(context)"
+                           FullName="@GetDisplayName(context)"
+                           EMail="@GetUserEmail(context)"
+                           OnHeaderButtonClick="BeginLogout"
+                           PopoverStyle="min-width: 330px;" />
+    </Authorized>
+    <NotAuthorized>
+        <FluentButton Appearance="Appearance.Accent"
+                      @onclick="BeginLogin">
+            Log in
+        </FluentButton>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private void BeginLogin()
+    {
+        Navigation.NavigateToLogin("authentication/login");
+    }
+
+    private void BeginLogout()
+    {
+        Navigation.NavigateToLogout("authentication/logout");
+    }
+
+    private string GetDisplayName(AuthenticationState context)
+    {
+        // Try to get name claim first, fallback to email or "User"
+        return context.User.Identity?.Name
+            ?? context.User.FindFirst("email")?.Value
+            ?? context.User.FindFirst("preferred_username")?.Value
+            ?? "User";
+    }
+
+    private string GetUserInitials(AuthenticationState context)
+    {
+        // These claims not currently being added to the token by Auth0
+        // var firstName = context.User.FindFirst("given_name")?.Value;
+        // var lastName = context.User.FindFirst("family_name")?.Value;
+
+        // if (!string.IsNullOrWhiteSpace(firstName) && !string.IsNullOrWhiteSpace(lastName))
+        // {
+        //     return $"{firstName[0]}{lastName[0]}".ToUpper();
+        // }
+
+        // Fallback: try to parse from full name
+        var fullName = GetDisplayName(context);
+        var nameParts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (nameParts.Length >= 2)
+        {
+            return $"{nameParts[0][0]}{nameParts[^1][0]}".ToUpper();
+        }
+
+        if (nameParts.Length == 1 && nameParts[0].Length > 0)
+        {
+            return nameParts[0][..Math.Min(2, nameParts[0].Length)].ToUpper();
+        }
+
+        return "U";
+    }
+
+    private string GetUserEmail(AuthenticationState context)
+    {
+        return context.User.FindFirst("email")?.Value
+            ?? context.User.FindFirst("preferred_username")?.Value
+            ?? context.User.FindFirst("upn")?.Value
+            ?? string.Empty;
+    }
+}
