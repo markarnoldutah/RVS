@@ -23,13 +23,14 @@
 ## Features
 Best wedge features
 
-VIN scanner from phone camera
-photo/video diagnostics
-AI-assisted issue classification with technician-ready summaries
-AI-assisted problem description
-AI-guided issue wizard:  ie if category = fridge, ask type of fridge, error codes?, connected to shore power? 
-M: speech to text for initial problem description, then AI assisted cleanup and customer confirmation
+-VIN scanner from phone camera
+-photo/video diagnostics
+-AI-assisted issue classification with technician-ready summaries
+-AI-assisted problem description
+-AI-guided issue wizard:  ie if category = fridge, ask type of fridge, error codes?, connected to shore power? 
+-M: speech to text for initial problem description, then AI assisted cleanup and customer confirmation
 customer communication
+- service capacity forecasting:  based on failing parts captured across the dataset, predict/make maint recommendations? 
 
 
 ## Basic components
