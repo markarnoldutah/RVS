@@ -1,6 +1,5 @@
 ---
-agent: 'agent'
-tools: ['changes', 'search/codebase', 'edit/editFiles', 'problems']
+name: csharp-async
 description: 'Get best practices for C# async programming'
 ---
 
