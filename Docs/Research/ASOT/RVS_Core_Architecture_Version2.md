@@ -241,7 +241,7 @@ Shadow profile — created automatically on first intake submission at a corpora
 |---|---|---|
 | `Type` | `string` | `"customerProfile"` |
 | `TenantId` | `string` | Corporation partition key |
-| `Email` / `NormalizedEmail` | `string` | Customer email (normalized for lookups) |
+| `Email` | `string` | Customer email (normalized at input: lowercased, trimmed) |
 | `FirstName` / `LastName` / `Phone` | `string` | Contact info, updated on each intake |
 | `CustomerIdentityId` | `string` | FK to global `CustomerIdentity` |
 | `VehicleInteractions` | `List<VehicleInteraction>` | Full lifecycle of each customer ↔ VIN relationship |
@@ -266,12 +266,12 @@ Records a customer's relationship to a specific VIN over time. Handles ownership
 
 ### 3.5 CustomerIdentity (Cross-Dealer Global Record)
 
-Global customer identity — one record per real human (by email). Cross-tenant. Links all corporation-scoped profiles. Partitioned by `/normalizedEmail` for O(1) intake resolution.
+Global customer identity — one record per real human (by email). Cross-tenant. Links all corporation-scoped profiles. Partitioned by `/email` for O(1) intake resolution. Email is normalized (lowercased, trimmed) at input before storage and lookup.
 
 | Field | Type | Description |
 |---|---|---|
 | `Type` | `string` | `"customerIdentity"` |
-| `NormalizedEmail` / `Email` | `string` | Partition key + display |
+| `Email` | `string` | Partition key (normalized at input: lowercased, trimmed) |
 | `FirstName` / `LastName` / `Phone` | `string` | Latest contact info |
 | `LinkedProfiles` | `List<LinkedProfileReference>` | Pointers to all tenant-scoped profiles |
 | `AllKnownVins` | `List<string>` | Every VIN ever associated across all dealers |
@@ -345,7 +345,7 @@ Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/
 |---|---|---|---|---|
 | `service-requests` | `/tenantId` | `ServiceRequest` | Autoscale 400–4000 | Core service request data |
 | `customer-profiles` | `/tenantId` | `CustomerProfile` | Autoscale 400–1000 | Tenant-scoped customer view |
-| `customer-identities` | `/normalizedEmail` | `CustomerIdentity` | Manual 400 | Cross-dealer identity federation |
+| `customer-identities` | `/email` | `CustomerIdentity` | Manual 400 | Cross-dealer identity federation |
 | `vehicle-ledger` | `/vin` | `VehicleLedgerEntry` | Autoscale 400–1000 | Section 10A data moat |
 | `dealerships` | `/tenantId` | `Dealership` | Autoscale 400–1000 | Corporation profiles |
 | `locations` | `/tenantId` | `Location` | Autoscale 400–1000 | Physical service locations |
@@ -359,7 +359,7 @@ One document cannot serve three different access patterns:
 | Identity Layer | Partition Key | Optimized For |
 |---|---|---|
 | **Tenant-scoped customer** (Corp A's view of John) | `/tenantId` | Dashboard, VIN ownership, search |
-| **Global customer** (John across all corporations) | `/normalizedEmail` | Intake email resolution (~1 RU), cross-dealer status |
+| **Global customer** (John across all corporations) | `/email` | Intake email resolution (~1 RU), cross-dealer status |
 | **Global vehicle** (VIN 1ABC across all owners/dealers) | `/vin` | Unit service history (~1 RU), Section 10A analytics |
 
 ### 4.3 Multi-Location Query Patterns
@@ -376,7 +376,7 @@ One document cannot serve three different access patterns:
 
 **`service-requests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`. Composite index: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`.
 
-**`customer-profiles`** — Included paths: `/tenantId/?`, `/normalizedEmail/?`, `/customerIdentityId/?`, `/vehicleInteractions/[]/vin/?`, `/vehicleInteractions/[]/status/?`. Composite index: `[tenantId ASC, normalizedEmail ASC]`. Unique key: `[/tenantId, /normalizedEmail]`.
+**`customer-profiles`** — Included paths: `/tenantId/?`, `/email/?`, `/customerIdentityId/?`, `/vehicleInteractions/[]/vin/?`, `/vehicleInteractions/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
 **`locations`** — Included paths: `/tenantId/?`, `/slug/?`, `/regionTag/?`.
 
@@ -484,7 +484,7 @@ One document cannot serve three different access patterns:
 
 ### 5.3 Customer Identity
 
-**`ICustomerIdentityRepository`** — `GetByEmailAsync(normalizedEmail)`, `GetByMagicLinkTokenAsync(token)`, `CreateAsync`, `UpdateAsync`.
+**`ICustomerIdentityRepository`** — `GetByEmailAsync(email)`, `GetByMagicLinkTokenAsync(token)`, `CreateAsync`, `UpdateAsync`.
 
 **`ICustomerIdentityService`** — `ResolveOrCreateIdentityAsync(email, firstName, lastName, phone?)`, `ValidateMagicLinkAsync(token)`, `RotateMagicLinkTokenAsync(identityId)`.
 
@@ -534,7 +534,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ STEP 1: Resolve Global CustomerIdentity          │
 │                                                  │
 │ Container: customer-identities                   │
-│ Query: point read by normalizedEmail partition   │
+│ Query: point read by email partition (normalized)│
 │ Cost: ~1 RU                                      │
 │                                                  │
 │ Found? → use existing identity                   │
