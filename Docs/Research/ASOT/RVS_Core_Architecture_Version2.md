@@ -1,4 +1,4 @@
----
+
 
 # RV Service Flow (RVS) — Core Backend Architecture
 
@@ -518,98 +518,98 @@ The most important flow in the system — the complete sequence when a customer 
 
 ```
 Customer submits intake form at location slug "blue-compass-salt-lake"
-        │
-        ▼
+                    │
+                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 0: Resolve Location by Slug                  │
-│                                                    │
-│ Container: locations                              │
-│ Query: cross-partition by slug (or cached map)    │
-│ Returns: tenantId + locationId + IntakeFormConfig  │
-│ Cost: ~3 RU (or ~0 if cached)                     │
+│ STEP 0: Resolve Location by Slug                 │
+│                                                  │
+│ Container: locations                             │
+│ Query: cross-partition by slug (or cached map)   │
+│ Returns: tenantId + locationId + IntakeFormConfig│
+│ Cost: ~3 RU (or ~0 if cached)                    │
 └──────────────────┬───────────────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 1: Resolve Global CustomerIdentity           │
-│                                                    │
-│ Container: customer-identities                    │
-│ Query: point read by normalizedEmail partition    │
-│ Cost: ~1 RU                                       │
-│                                                    │
-│ Found? → use existing identity                    │
-│ Not found? → create new                           │
+│ STEP 1: Resolve Global CustomerIdentity          │
+│                                                  │
+│ Container: customer-identities                   │
+│ Query: point read by normalizedEmail partition   │
+│ Cost: ~1 RU                                      │
+│                                                  │
+│ Found? → use existing identity                   │
+│ Not found? → create new                          │
 └──────────────────┬───────────────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 2: Resolve Tenant-Scoped CustomerProfile     │
-│                                                    │
-│ Container: customer-profiles                      │
-│ Query: WHERE tenantId = @t                        │
-│   AND customerIdentityId = @identityId            │
-│ Cost: ~2.8 RU (single-partition indexed query)    │
-│                                                    │
-│ NOTE: Profile is per-corporation, not per-location │
-│ Blue Compass SLC and Denver share the same        │
-│ CustomerProfile for John Doe.                     │
-│                                                    │
-│ Found? → update contact info, handle VIN          │
-│ Not found? → create new shadow profile            │
+│ STEP 2: Resolve Tenant-Scoped CustomerProfile    │
+│                                                  │
+│ Container: customer-profiles                     │
+│ Query: WHERE tenantId = @t                       │
+│   AND customerIdentityId = @identityId           │
+│ Cost: ~2.8 RU (single-partition indexed query)   │
+│                                                  │
+│ NOTE: Profile is per-corporation, not per-location│
+│ Blue Compass SLC and Denver share the same       │
+│ CustomerProfile for John Doe.                    │
+│                                                  │
+│ Found? → update contact info, handle VIN         │
+│ Not found? → create new shadow profile           │
 └──────────────────┬───────────────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 2a: VIN Ownership Resolution                 │
-│                                                    │
+│ STEP 2a: VIN Ownership Resolution                │
+│                                                  │
 │ If VIN is active on THIS profile → update lastSeen│
-│ If VIN is active on DIFFERENT profile at same      │
-│   corporation → deactivate old, activate on this  │
-│ If VIN is brand new → create Active interaction   │
-│ Cost: ~3 RU (single-partition array filter)       │
+│ If VIN is active on DIFFERENT profile at same    │
+│   corporation → deactivate old, activate on this │
+│ If VIN is brand new → create Active interaction  │
+│ Cost: ~3 RU (single-partition array filter)      │
 └──────────────────┬───────────────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 3: Create ServiceRequest                     │
-│                                                    │
-│ Container: service-requests                       │
-│ Stamp tenantId + locationId from Step 0           │
-│ Embed CustomerSnapshot (denormalized)             │
-│ Auto-categorize issue (rule-based MVP)            │
-│ Generate technician summary                       │
-│ Cost: ~1 RU                                       │
+│ STEP 3: Create ServiceRequest                    │
+│                                                  │
+│ Container: service-requests                      │
+│ Stamp tenantId + locationId from Step 0          │
+│ Embed CustomerSnapshot (denormalized)            │
+│ Auto-categorize issue (rule-based MVP)           │
+│ Generate technician summary                      │
+│ Cost: ~1 RU                                      │
 └──────────────────┬───────────────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 4: Append VehicleLedgerEntry (Data Moat)     │
-│                                                    │
-│ Container: vehicle-ledger                         │
-│ Partition: /vin                                   │
-│ Includes: locationId + locationName               │
-│ Write-only in MVP (nothing reads it yet)          │
-│ Cost: ~1 RU                                       │
+│ STEP 4: Append VehicleLedgerEntry (Data Moat)    │
+│                                                  │
+│ Container: vehicle-ledger                        │
+│ Partition: /vin                                  │
+│ Includes: locationId + locationName              │
+│ Write-only in MVP (nothing reads it yet)         │
+│ Cost: ~1 RU                                      │
 └──────────────────┬───────────────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 5: Update Linkages                           │
-│                                                    │
-│ CustomerProfile: add SR ID, increment count       │
-│ CustomerIdentity: add VIN, add linked profile     │
-│   reference (with locationId + locationName),     │
-│   rotate magic-link token                         │
-│ Cost: ~2 RU                                       │
+│ STEP 5: Update Linkages                          │
+│                                                  │
+│ CustomerProfile: add SR ID, increment count      │
+│ CustomerIdentity: add VIN, add linked profile    │
+│   reference (with locationId + locationName),    │
+│   rotate magic-link token                        │
+│ Cost: ~2 RU                                      │
 └──────────────────┬───────────────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 6: Send Confirmation Email                   │
-│                                                    │
-│ Includes magic-link URL:                          │
-│   rvs.app/status/{magicLinkToken}                 │
-│ Fire-and-forget (async)                           │
+│ STEP 6: Send Confirmation Email                  │
+│                                                  │
+│ Includes magic-link URL:                         │
+│   rvs.app/status/{magicLinkToken}                │
+│ Fire-and-forget (async)                          │
 └──────────────────────────────────────────────────┘
 
 Total Cosmos cost per intake: ~13.8 RU (with slug resolution)
