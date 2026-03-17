@@ -275,7 +275,7 @@ Global customer identity — one record per real human (by email). Cross-tenant.
 | `FirstName` / `LastName` / `Phone` | `string` | Latest contact info |
 | `LinkedProfiles` | `List<LinkedProfileReferenceEmbedded>` | Pointers to all tenant-scoped profiles |
 | `AllKnownAssetIds` | `List<string>` | Every AssetId ever associated across all dealers (format: `{AssetType}:{Identifier}`) |
-| `MagicLinkToken` | `string?` | Global magic-link token for status page |
+| `MagicLinkToken` | `string?` | Global magic-link token for status page. Format: `base64url(SHA256(email)[0..8]):random_bytes` — the email-hash prefix encodes the partition key so token lookup is a single-partition point read (no cross-partition query). |
 | `MagicLinkExpiresAtUtc` | `DateTime?` | Token expiry |
 | `Auth0UserId` | `string?` | Phase 2+: linked Auth0 account (null during MVP) |
 
@@ -357,7 +357,7 @@ Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/
 | `customerProfiles` | `/tenantId` | `customerProfile` | Autoscale 400–1000 | Tenant-scoped customer view |
 | `globalCustomerAccts` | `/email` | `globalCustomerAcct` | Manual 400 | Cross-dealer identity federation |
 | `assetLedger` | `/assetId` | `assetLedgerEntry` | Autoscale 400–1000 | Section 10A data moat |
-| `dealerships` | `/tenantId` | `dealership` | Autoscale 400–1000 | Corporation profiles |
+| `dealerships` | `/tenantId` | `dealership` | Manual 400 | Corporation profiles |
 | `locations` | `/tenantId` | `location` | Autoscale 400–1000 | Physical service locations |
 | `tenantConfigs` | `/tenantId` | `tenantConfig` | Manual 400 | Tenant settings, access gate |
 | `lookupSets` | `/category` | `lookupSet` | Manual 400 | Issue categories, component types |
@@ -494,9 +494,9 @@ One document cannot serve three different access patterns:
 
 ### 5.3 Global Customer Acct
 
-**`IGlobalCustomerAcctRepository`** — `GetByEmailAsync(email)`, `GetByMagicLinkTokenAsync(token)`, `CreateAsync`, `UpdateAsync`.
+**`IGlobalCustomerAcctRepository`** — `GetByEmailAsync(email)`, `GetByMagicLinkTokenAsync(emailPrefix, token)`, `CreateAsync`, `UpdateAsync`. Note: `GetByMagicLinkTokenAsync` accepts the email-hash prefix (extracted from the token) to derive the partition key, enabling a single-partition query instead of a cross-partition scan.
 
-**`IGlobalCustomerAcctService`** — `ResolveOrCreateIdentityAsync(email, firstName, lastName, phone?)`, `ValidateMagicLinkAsync(token)`, `RotateMagicLinkTokenAsync(globalCustomerAcctId)`.
+**`IGlobalCustomerAcctService`** — `ResolveOrCreateIdentityAsync(email, firstName, lastName, phone?)`, `ValidateMagicLinkAsync(token)` (parses the email-hash prefix from the token to derive the partition key, then single-partition lookup + expiry check), `RotateMagicLinkTokenAsync(globalCustomerAcctId, email)` (generates a new token with format `base64url(SHA256(email)[0..8]):random_bytes`).
 
 ### 5.4 Asset Ledger
 
@@ -610,6 +610,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ GlobalCustomerAcct: add assetId, add linked profile│
 │   reference (with locationId + locationName),    │
 │   rotate magic-link token                        │
+│   (format: base64url(emailHash):random_bytes)    │
 │ Cost: ~2 RU                                      │
 └──────────────────┬───────────────────────────────┘
                    │
@@ -642,7 +643,7 @@ Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepos
 2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, asset identifier, and asset info. This handles shadow profile creation and asset ownership transfer.
 3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
 4. Calls `IAssetLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
-5. Updates linkages: adds the SR ID to the profile's `ServiceRequestIds`, increments `TotalRequestCount`, rotates the magic-link token on the global identity.
+5. Updates linkages: adds the SR ID to the profile's `ServiceRequestIds`, increments `TotalRequestCount`, rotates the magic-link token on the global identity. Token format: `base64url(SHA256(email)[0..8]):random_bytes` — embeds the email hash so token lookup derives the partition key without a cross-partition query.
 6. Fires `INotificationService.SendIntakeConfirmationAsync` with the magic-link token (fire-and-forget).
 
 ### 7.2 CustomerProfileService (Shadow Profile + Asset Ownership)
@@ -675,7 +676,7 @@ Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RV
 
 **IntakeController** — Route: `api/intake/{locationSlug}`. `[AllowAnonymous]`. Resolves location slug → `tenantId` + `locationId`. Endpoints: `GET` (intake config + optional prefill via `?token=`), `POST service-requests` (submit), `POST service-requests/{id}/attachments` (upload).
 
-**CustomerStatusController** — Route: `api/status`. `[AllowAnonymous]`. Endpoint: `GET {token}` validates magic link, returns requests across all dealerships/locations.
+**CustomerStatusController** — Route: `api/status`. `[AllowAnonymous]`. Endpoint: `GET {token}` parses the email-hash prefix from the token to derive the partition key, validates the magic link via single-partition point read, returns requests across all dealerships/locations.
 
 ### 8.2 Dealer-Facing (Authenticated)
 
@@ -770,7 +771,7 @@ rvs-attachments/
 | **Returning customer intake (same corporation)** | 1 location slug + 1 identity hit + 1 profile hit + 1 AssetId check + 1 SR write + 1 ledger write + 2 updates | ~12.8 RU |
 | **Returning customer, new corporation** | 1 location slug + 1 identity hit + 1 profile miss + 1 profile write + 1 SR write + 1 ledger write + 2 updates | ~13.8 RU |
 | **With cached slug map** | Subtract ~3 RU from above | ~10.8 / ~9.8 / ~10.8 RU |
-| **Magic-link status page** | 1 identity query (token) + N point reads (linked SRs) | ~1 + N RU |
+| **Magic-link status page** | 1 point read (token → partition via email-hash prefix) + N point reads (linked SRs) | ~1 + N RU |
 | **Dealer dashboard: view request** | 1 point read (SR — snapshot embedded) | ~1 RU |
 | **Dealer dashboard: search requests** | 1 single-partition query (with locationId filter) | ~3 RU |
 | **Asset service history (10A query)** | 1 single-partition read (assetLedger, /assetId) | **~1 RU** |
@@ -781,7 +782,8 @@ rvs-attachments/
 
 | Concern | Mitigation |
 |---|---|
-| **Token guessing** | 32-byte cryptographic random (256-bit entropy), URL-safe Base64 |
+| **Token format** | `base64url(SHA256(email)[0..8]):random_bytes` — email-hash prefix embedded in token enables partition-key derivation on lookup (single-partition point read, no cross-partition query) |
+| **Token guessing** | Random portion is 32-byte cryptographic random (256-bit entropy), URL-safe Base64. The 8-byte email-hash prefix is non-secret metadata; security relies entirely on the random portion. |
 | **Token expiry** | 30-day default, configurable per tenant |
 | **Token rotation** | New token on every intake submission; previous invalidated |
 | **Rate limiting** | `api/status/{token}` limited to 10 req/min per IP |
@@ -802,6 +804,7 @@ rvs-attachments/
 | **`AssetId` as `{AssetType}:{Identifier}` compound key** | Globally unique across asset types; clean Cosmos partition key; preserves VIN/HIN/serial semantics; works across industries without schema changes. |
 | **`CustomerSnapshotEmbedded` denormalized in SR** | Dashboard reads never join to customerProfiles. ~1 RU per view. |
 | **Magic link on global identity, not profile** | Status page shows requests across ALL corporations for the customer. |
+| **Email-hash prefix in magic-link token** | Avoids cross-partition query on `globalCustomerAccts` (partitioned by `/email`). Token format `base64url(emailHash):random_bytes` lets `ValidateMagicLinkAsync` derive the partition key from the token itself → single-partition point read (~1 RU). |
 | **`IntakeFormConfigEmbedded` on Location, not Dealership** | Each physical site can have different intake settings (e.g., different file size limits). |
 | **`regionTag` on Location** | Enables regional manager scoping without complex hierarchy. |
 | **Intake URL uses `locationSlug`, not `dealershipSlug`** | Each physical location has its own QR code / intake URL. The slug resolves to both tenantId and locationId in one operation. |
