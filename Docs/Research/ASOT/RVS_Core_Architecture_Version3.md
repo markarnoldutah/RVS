@@ -245,7 +245,6 @@ Shadow profile — created automatically on first intake submission at a corpora
 | `FirstName` / `LastName` / `Phone` | `string` | Contact info, updated on each intake |
 | `GlobalCustomerAcctId` | `string` | FK to global `GlobalCustomerAcct` |
 | `AssetsOwned` | `List<AssetsOwnedEmbedded>` | Full lifecycle of each customer ↔ asset relationship |
-| `ServiceRequestIds` | `List<string>` | All SR IDs for this customer at this corporation |
 | `TotalRequestCount` | `int` | Running count |
 
 Convenience helpers (not persisted): `GetActiveAssetIds()` returns asset identifiers with Active status. `GetOwnership(assetId)` returns the active ownership record for a specific asset.
@@ -643,7 +642,7 @@ Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepos
 2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, asset identifier, and asset info. This handles shadow profile creation and asset ownership transfer.
 3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
 4. Calls `IAssetLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
-5. Updates linkages: adds the SR ID to the profile's `ServiceRequestIds`, increments `TotalRequestCount`, rotates the magic-link token on the global identity. Token format: `base64url(SHA256(email)[0..8]):random_bytes` — embeds the email hash so token lookup derives the partition key without a cross-partition query.
+5. Updates linkages: increments `TotalRequestCount`, rotates the magic-link token on the global identity. Token format: `base64url(SHA256(email)[0..8]):random_bytes` — embeds the email hash so token lookup derives the partition key without a cross-partition query. (Service requests for a customer are retrieved via query: `WHERE tenantId = @t AND customerProfileId = @p` on the `serviceRequests` container — a cheap single-partition read (~3 RU) that avoids unbounded list growth on the profile document.)
 6. Fires `INotificationService.SendIntakeConfirmationAsync` with the magic-link token (fire-and-forget).
 
 ### 7.2 CustomerProfileService (Shadow Profile + Asset Ownership)
