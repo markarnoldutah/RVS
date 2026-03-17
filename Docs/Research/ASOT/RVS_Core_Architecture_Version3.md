@@ -308,6 +308,8 @@ Append-only service event record keyed by asset. One entry per service request, 
 | `Status` | `string` | SR status at time of write |
 | `SubmittedAtUtc` / `ServiceDateUtc` | `DateTime` / `DateTime?` | When submitted / when serviced |
 
+**TTL:** No TTL — entries are retained indefinitely by design. Partition size monitored per-asset. For assets with extreme service histories, the 20 GB logical partition limit is not a concern (each entry is ~1 KB, so you'd need ~20 million entries per asset).
+
 ### 3.7 Dealership (Corporation / Dealer Group)
 
 Represents the corporation or dealer group — the Auth0 Organization boundary and Cosmos partition key. Follows the MF [Practice](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.Domain/Entities/Practice.cs) pattern.
