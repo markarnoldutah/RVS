@@ -225,7 +225,7 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 
 ### 3.2 Embedded Sub-Entities (within ServiceRequest)
 
-**CustomerSnapshotEmbedded** — Point-in-time copy of customer info. Fields: `FirstName`, `LastName`, `Email`, `Phone`, `IsReturningCustomer`, `PriorRequestCount`. Denormalized so the dealer dashboard never joins to `customer-profiles`.
+**CustomerSnapshotEmbedded** — Point-in-time copy of customer info. Fields: `FirstName`, `LastName`, `Email`, `Phone`, `IsReturningCustomer`, `PriorRequestCount`. Denormalized so the dealer dashboard never joins to `customerProfiles`.
 
 **VehicleInfoEmbedded** — Fields: `Vin`, `Manufacturer`, `Model`, `Year`.
 
@@ -353,14 +353,14 @@ Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/
 
 | Container | Partition Key | Documents | RU Mode | Purpose |
 |---|---|---|---|---|
-| `service-requests` | `/tenantId` | `ServiceRequest` | Autoscale 400–4000 | Core service request data |
-| `customer-profiles` | `/tenantId` | `CustomerProfile` | Autoscale 400–1000 | Tenant-scoped customer view |
-| `customer-identities` | `/email` | `CustomerIdentity` | Manual 400 | Cross-dealer identity federation |
-| `asset-ledger` | `/assetId` | `AssetLedgerEntry` | Autoscale 400–1000 | Section 10A data moat |
-| `dealerships` | `/tenantId` | `Dealership` | Autoscale 400–1000 | Corporation profiles |
-| `locations` | `/tenantId` | `Location` | Autoscale 400–1000 | Physical service locations |
-| `config` | `/tenantId` | `TenantConfig` | Manual 400 | Tenant settings, access gate |
-| `lookups` | `/category` | `LookupSet` | Manual 400 | Issue categories, component types |
+| `serviceRequests` | `/tenantId` | `serviceRequest` | Autoscale 400–4000 | Core service request data |
+| `customerProfiles` | `/tenantId` | `customerProfile` | Autoscale 400–1000 | Tenant-scoped customer view |
+| `customerIdentities` | `/email` | `customerIdentity` | Manual 400 | Cross-dealer identity federation |
+| `assetLedger` | `/assetId` | `assetLedgerEntry` | Autoscale 400–1000 | Section 10A data moat |
+| `dealerships` | `/tenantId` | `dealership` | Autoscale 400–1000 | Corporation profiles |
+| `locations` | `/tenantId` | `location` | Autoscale 400–1000 | Physical service locations |
+| `tenantConfigs` | `/tenantId` | `tenantConfig` | Manual 400 | Tenant settings, access gate |
+| `lookupSets` | `/category` | `lookupSet` | Manual 400 | Issue categories, component types |
 
 ### 4.2 Why Three Identity Containers?
 
@@ -380,13 +380,13 @@ One document cannot serve three different access patterns:
 | Corporate admin views ALL SRs | `WHERE tenantId = @t` | Single-partition, no location filter |
 | Regional manager views West SRs | `WHERE tenantId = @t AND locationId IN (@loc1, @loc2, @loc3)` | Single-partition, IN filter |
 | Customer profile resolution | `WHERE tenantId = @t AND customerIdentityId = @id` | Single-partition — one profile per corporation |
-| Asset history across all dealers | `WHERE assetId = @a` | Single-partition in asset-ledger |
+| Asset history across all dealers | `WHERE assetId = @a` | Single-partition in assetLedger |
 
 ### 4.4 Key Indexing Policies
 
-**`service-requests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/cr eatedAtUtc/?`, `/issueCategory/?`. Composite index: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`.
+**`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`. Composite index: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`.
 
-**`customer-profiles`** — Included paths: `/tenantId/?`, `/email/?`, `/customerIdentityId/?`, `/vehicleInteractions/[]/vin/?`, `/vehicleInteractions/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
+**`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/customerIdentityId/?`, `/vehicleInteractions/[]/vin/?`, `/vehicleInteractions/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
 **`locations`** — Included paths: `/tenantId/?`, `/slug/?`, `/regionTag/?`.
 
@@ -543,7 +543,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 ┌──────────────────────────────────────────────────┐
 │ STEP 1: Resolve Global CustomerIdentity          │
 │                                                  │
-│ Container: customer-identities                   │
+│ Container: customerIdentities                    │
 │ Query: point read by email partition             │
 │ Cost: ~1 RU                                      │
 │                                                  │
@@ -555,7 +555,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 ┌──────────────────────────────────────────────────┐
 │ STEP 2: Resolve Tenant-Scoped CustomerProfile    │
 │                                                  │
-│ Container: customer-profiles                     │
+│ Container: customerProfiles                      │
 │ Query: WHERE tenantId = @t                       │
 │   AND customerIdentityId = @identityId           │
 │ Cost: ~2.8 RU (single-partition indexed query)   │
@@ -583,7 +583,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 ┌──────────────────────────────────────────────────┐
 │ STEP 3: Create ServiceRequest                    │
 │                                                  │
-│ Container: service-requests                      │
+│ Container: serviceRequests                       │
 │ Stamp tenantId + locationId from Step 0          │
 │ Embed CustomerSnapshotEmbedded (denormalized)    │
 │ Auto-categorize issue (rule-based MVP)           │
@@ -595,7 +595,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 ┌──────────────────────────────────────────────────┐
 │ STEP 4: Append AssetLedgerEntry (Data Moat)      │
 │                                                  │
-│ Container: asset-ledger                          │
+│ Container: assetLedger                           │
 │ Partition: /assetId                              │
 │ Includes: locationId + locationName              │
 │ Write-only in MVP (nothing reads it yet)         │
@@ -773,7 +773,7 @@ rvs-attachments/
 | **Magic-link status page** | 1 identity query (token) + N point reads (linked SRs) | ~1 + N RU |
 | **Dealer dashboard: view request** | 1 point read (SR — snapshot embedded) | ~1 RU |
 | **Dealer dashboard: search requests** | 1 single-partition query (with locationId filter) | ~3 RU |
-| **Asset service history (10A query)** | 1 single-partition read (asset-ledger, /assetId) | **~1 RU** |
+| **Asset service history (10A query)** | 1 single-partition read (assetLedger, /assetId) | **~1 RU** |
 
 ---
 
@@ -800,7 +800,7 @@ rvs-attachments/
 | **Three identity containers** | Each access pattern needs a different partition key. One doc can't serve all three. |
 | **Append-only asset ledger** | Data moat — proprietary, accumulating, non-replicable. Powers Section 10A intelligence. |
 | **`AssetId` as `{AssetType}:{Identifier}` compound key** | Globally unique across asset types; clean Cosmos partition key; preserves VIN/HIN/serial semantics; works across industries without schema changes. |
-| **`CustomerSnapshotEmbedded` denormalized in SR** | Dashboard reads never join to customer-profiles. ~1 RU per view. |
+| **`CustomerSnapshotEmbedded` denormalized in SR** | Dashboard reads never join to customerProfiles. ~1 RU per view. |
 | **Magic link on global identity, not profile** | Status page shows requests across ALL corporations for the customer. |
 | **`IntakeFormConfigEmbedded` on Location, not Dealership** | Each physical site can have different intake settings (e.g., different file size limits). |
 | **`regionTag` on Location** | Enables regional manager scoping without complex hierarchy. |
