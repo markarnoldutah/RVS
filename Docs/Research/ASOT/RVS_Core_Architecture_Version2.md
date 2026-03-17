@@ -63,8 +63,8 @@ RVS.slnx
 │   │   ├── ServiceRequestAttachmentEmbedded.cs # Embedded in ServiceRequest
 │   │   ├── ServiceEventEmbedded.cs            # Embedded in ServiceRequest (10A fields)
 │   │   ├── CustomerProfile.cs         # Tenant-scoped shadow record
-│   │   ├── AssetOwnedEmbedded.cs      # Embedded in CustomerProfile
-│   │   ├── AssetOwnedStatus.cs
+│   │   ├── AssetsOwnedEmbedded.cs      # Embedded in CustomerProfile
+│   │   ├── AssetsOwnedStatus.cs
 │   │   ├── CustomerIdentity.cs        # Cross-dealer global identity
 │   │   ├── LinkedProfileReferenceEmbedded.cs  # Embedded in CustomerIdentity
 │   │   ├── AssetLedgerEntry.cs        # Append-only asset service event
@@ -244,13 +244,13 @@ Shadow profile — created automatically on first intake submission at a corpora
 | `Email` | `string` | Customer email (normalized on input) |
 | `FirstName` / `LastName` / `Phone` | `string` | Contact info, updated on each intake |
 | `CustomerIdentityId` | `string` | FK to global `CustomerIdentity` |
-| `AssetsOwned` | `List<AssetOwnedEmbedded>` | Full lifecycle of each customer ↔ asset relationship |
+| `AssetsOwned` | `List<AssetsOwnedEmbedded>` | Full lifecycle of each customer ↔ asset relationship |
 | `ServiceRequestIds` | `List<string>` | All SR IDs for this customer at this corporation |
 | `TotalRequestCount` | `int` | Running count |
 
 Convenience helpers (not persisted): `GetActiveAssetIds()` returns asset identifiers with Active status. `GetOwnership(assetId)` returns the active ownership record for a specific asset.
 
-### 3.4 AssetOwnedEmbedded (Embedded in CustomerProfile)
+### 3.4 AssetsOwnedEmbedded (Embedded in CustomerProfile)
 
 Records a customer's relationship to a specific asset over time. Handles ownership transfers: when a different customer submits for the same asset, the previous owner's record is set to Inactive.
 
@@ -656,8 +656,8 @@ Implements `ResolveOrCreateProfileAsync`. Two phases:
 
 **Phase 2 — Asset Ownership Resolution (three branches):**
 - **Same customer, same asset** → update `LastSeenAtUtc`, increment `RequestCount` on the existing Active ownership.
-- **Different customer at same corporation owns this asset** → deactivate the previous owner's `AssetOwnedEmbedded` (set status to Inactive, stamp `DeactivatedAtUtc` and reason). Then create or reactivate on the current profile.
-- **Brand new asset (not seen before at this corporation)** → create new Active `AssetOwnedEmbedded` with `FirstSeenAtUtc = now`, `RequestCount = 1`.
+- **Different customer at same corporation owns this asset** → deactivate the previous owner's `AssetsOwnedEmbedded` (set status to Inactive, stamp `DeactivatedAtUtc` and reason). Then create or reactivate on the current profile.
+- **Brand new asset (not seen before at this corporation)** → create new Active `AssetsOwnedEmbedded` with `FirstSeenAtUtc = now`, `RequestCount = 1`.
 
 Also handles **reactivation** — if the current customer previously had an Inactive ownership for this asset (sold the RV, bought it back), the existing ownership is reactivated rather than creating a duplicate.
 
