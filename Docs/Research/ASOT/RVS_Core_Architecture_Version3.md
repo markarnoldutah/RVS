@@ -273,7 +273,7 @@ Global customer identity — one record per real human (by email). Cross-tenant.
 | `Email` | `string` | Partition key (normalized on input) |
 | `FirstName` / `LastName` / `Phone` | `string` | Latest contact info |
 | `LinkedProfiles` | `List<LinkedProfileReferenceEmbedded>` | Pointers to all tenant-scoped profiles |
-| `AllKnownAssetIds` | `List<string>` | Every AssetId ever associated across all dealers (format: `{AssetType}:{Identifier}`) |
+| `AllKnownAssetIds` | `List<string>` | Every AssetId ever associated across all dealers (format: `{AssetType}:{Identifier}`). Capped at 200 items (most-recent first); older history is recoverable from `AssetLedgerEntry` by querying on `GlobalCustomerAcctId`. |
 | `MagicLinkToken` | `string?` | Global magic-link token for status page. Format: `base64url(SHA256(email)[0..8]):random_bytes` — the email-hash prefix encodes the partition key so token lookup is a single-partition point read (no cross-partition query). |
 | `MagicLinkExpiresAtUtc` | `DateTime?` | Token expiry |
 | `Auth0UserId` | `string?` | Phase 2+: linked Auth0 account (null during MVP) |
