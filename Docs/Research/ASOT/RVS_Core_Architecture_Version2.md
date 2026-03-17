@@ -27,7 +27,7 @@ RVS.slnx
 │   │   ├── ServiceRequestService.cs
 │   │   ├── CustomerProfileService.cs   # Shadow profile resolve-or-create + magic link
 │   │   ├── CustomerIdentityService.cs  # Cross-dealer identity federation
-│   │   ├── VehicleLedgerService.cs     # Append-only VIN event log
+│   │   ├── AssetLedgerService.cs       # Append-only asset event log
 │   │   ├── AttachmentService.cs
 │   │   ├── DealershipService.cs
 │   │   ├── LocationService.cs         # Physical location CRUD + slug resolution
@@ -40,7 +40,7 @@ RVS.slnx
 │   │   ├── ServiceRequestMapper.cs
 │   │   ├── CustomerProfileMapper.cs
 │   │   ├── CustomerIdentityMapper.cs
-│   │   ├── VehicleLedgerMapper.cs
+│   │   ├── AssetLedgerMapper.cs
 │   │   ├── DealershipMapper.cs
 │   │   ├── LocationMapper.cs
 │   │   └── LookupMapper.cs
@@ -67,7 +67,7 @@ RVS.slnx
 │   │   ├── VehicleInteractionStatus.cs
 │   │   ├── CustomerIdentity.cs        # Cross-dealer global identity
 │   │   ├── LinkedProfileReferenceEmbedded.cs  # Embedded in CustomerIdentity
-│   │   ├── VehicleLedgerEntry.cs      # Append-only VIN service event
+│   │   ├── AssetLedgerEntry.cs        # Append-only asset service event
 │   │   ├── Dealership.cs             # Corporation / dealer group
 │   │   ├── Location.cs               # Physical service location
 │   │   ├── AddressEmbedded.cs                # Embedded in Location
@@ -111,8 +111,8 @@ RVS.slnx
 │   │   ├── ICustomerProfileService.cs
 │   │   ├── ICustomerIdentityRepository.cs
 │   │   ├── ICustomerIdentityService.cs
-│   │   ├── IVehicleLedgerRepository.cs
-│   │   ├── IVehicleLedgerService.cs
+│   │   ├── IAssetLedgerRepository.cs
+│   │   ├── IAssetLedgerService.cs
 │   │   ├── IAttachmentService.cs
 │   │   ├── IBlobStorageRepository.cs
 │   │   ├── IDealershipRepository.cs
@@ -182,7 +182,7 @@ Blue Compass RV (Corporation / Auth0 Organization / Cosmos Partition)
 - **Blue Compass = 1 Auth0 Organization, not 100+.** Keeps Auth0 costs sane, allows corporate-wide user management.
 - **`tenantId` remains the Cosmos partition key.** All locations for a corporation share the same partition. Cross-location queries within a corporation are single-partition (~3 RU).
 - **Customer profiles are tenant-scoped (per corporation, not per location).** Blue Compass sees one John Doe record across all their locations.
-- **VIN ownership transfers within a corporation** are intra-partition operations.
+- **Asset ownership transfers within a corporation** are intra-partition operations.
 - **`locationId` is a filter within the partition**, not a partition boundary.
 
 ---
@@ -274,26 +274,36 @@ Global customer identity — one record per real human (by email). Cross-tenant.
 | `Email` | `string` | Partition key (normalized on input) |
 | `FirstName` / `LastName` / `Phone` | `string` | Latest contact info |
 | `LinkedProfiles` | `List<LinkedProfileReferenceEmbedded>` | Pointers to all tenant-scoped profiles |
-| `AllKnownVins` | `List<string>` | Every VIN ever associated across all dealers |
+| `AllKnownAssetIds` | `List<string>` | Every AssetId ever associated across all dealers (format: `{AssetType}:{Identifier}`) |
 | `MagicLinkToken` | `string?` | Global magic-link token for status page |
 | `MagicLinkExpiresAtUtc` | `DateTime?` | Token expiry |
 | `Auth0UserId` | `string?` | Phase 2+: linked Auth0 account (null during MVP) |
 
 **LinkedProfileReferenceEmbedded** — Lightweight pointer from global identity to a tenant-scoped profile. Fields: `TenantId`, `ProfileId`, `DealershipName`, `LocationId`, `LocationName`, `FirstSeenAtUtc`, `RequestCount`.
 
-### 3.6 VehicleLedgerEntry (Append-Only VIN Event Log — Data Moat)
+### 3.6 AssetLedgerEntry (Append-Only Asset Event Log — Data Moat)
 
-Append-only service event record linked to a VIN. One entry per service request, written at intake time. This is the **data moat**: proprietary, accumulating, non-replicable data that powers Section 10A service intelligence. Partitioned by `/vin`.
+Append-only service event record keyed by asset. One entry per service request, written at intake time. This is the **data moat**: proprietary, accumulating, non-replicable data that powers Section 10A service intelligence. Partitioned by `/assetId`.
+
+**AssetId format:** `{AssetType}:{Identifier}` — a normalized compound key that is globally unique, works across industries, and preserves VIN/HIN/serial semantics.
+
+| Asset Type | Example AssetId |
+|---|---|
+| RV | `RV:1ABC234567` |
+| Boat | `Boat:HIN123456789` |
+| Excavator | `Excavator:CAT320GX987654` |
+| Tractor | `Tractor:JD8R34012345` |
 
 | Field | Type | Description |
 |---|---|---|
-| `Vin` | `string` | Partition key |
+| `AssetId` | `string` | Partition key — format: `{AssetType}:{Identifier}` (e.g. `RV:1ABC234567`) |
+| `AssetType` | `string` | Asset category (e.g. `"RV"`, `"Boat"`, `"Excavator"`) |
 | `TenantId` | `string` | Which corporation |
 | `DealershipName` | `string` | Corporation display name |
 | `LocationId` / `LocationName` | `string` | Which physical location |
 | `ServiceRequestId` | `string` | FK back to the SR |
 | `CustomerIdentityId` | `string` | Which customer (global) |
-| `Manufacturer` / `Model` / `Year` | `string?` / `int?` | Vehicle details |
+| `Manufacturer` / `Model` / `Year` | `string?` / `int?` | Asset details |
 | `IssueCategory` / `IssueDescription` | `string?` | What was reported |
 | `FailureMode` / `RepairAction` / `PartsUsed` / `LaborHours` | various | Section 10A fields, populated progressively |
 | `Status` | `string` | SR status at time of write |
@@ -346,7 +356,7 @@ Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/
 | `service-requests` | `/tenantId` | `ServiceRequest` | Autoscale 400–4000 | Core service request data |
 | `customer-profiles` | `/tenantId` | `CustomerProfile` | Autoscale 400–1000 | Tenant-scoped customer view |
 | `customer-identities` | `/email` | `CustomerIdentity` | Manual 400 | Cross-dealer identity federation |
-| `vehicle-ledger` | `/vin` | `VehicleLedgerEntry` | Autoscale 400–1000 | Section 10A data moat |
+| `asset-ledger` | `/assetId` | `AssetLedgerEntry` | Autoscale 400–1000 | Section 10A data moat |
 | `dealerships` | `/tenantId` | `Dealership` | Autoscale 400–1000 | Corporation profiles |
 | `locations` | `/tenantId` | `Location` | Autoscale 400–1000 | Physical service locations |
 | `config` | `/tenantId` | `TenantConfig` | Manual 400 | Tenant settings, access gate |
@@ -360,7 +370,7 @@ One document cannot serve three different access patterns:
 |---|---|---|
 | **Tenant-scoped customer** (Corp A's view of John) | `/tenantId` | Dashboard, VIN ownership, search |
 | **Global customer** (John across all corporations) | `/email` | Intake email resolution (~1 RU), cross-dealer status |
-| **Global vehicle** (VIN 1ABC across all owners/dealers) | `/vin` | Unit service history (~1 RU), Section 10A analytics |
+| **Global asset** (RV:1ABC across all owners/dealers) | `/assetId` | Asset service history (~1 RU), Section 10A analytics |
 
 ### 4.3 Multi-Location Query Patterns
 
@@ -370,7 +380,7 @@ One document cannot serve three different access patterns:
 | Corporate admin views ALL SRs | `WHERE tenantId = @t` | Single-partition, no location filter |
 | Regional manager views West SRs | `WHERE tenantId = @t AND locationId IN (@loc1, @loc2, @loc3)` | Single-partition, IN filter |
 | Customer profile resolution | `WHERE tenantId = @t AND customerIdentityId = @id` | Single-partition — one profile per corporation |
-| VIN history across all dealers | `WHERE vin = @v` | Single-partition in vehicle-ledger |
+| Asset history across all dealers | `WHERE assetId = @a` | Single-partition in asset-ledger |
 
 ### 4.4 Key Indexing Policies
 
@@ -488,11 +498,11 @@ One document cannot serve three different access patterns:
 
 **`ICustomerIdentityService`** — `ResolveOrCreateIdentityAsync(email, firstName, lastName, phone?)`, `ValidateMagicLinkAsync(token)`, `RotateMagicLinkTokenAsync(identityId)`.
 
-### 5.4 Vehicle Ledger
+### 5.4 Asset Ledger
 
-**`IVehicleLedgerRepository`** — `AppendAsync(entry)`, `GetByVinAsync(vin, limit)`, `UpdateEntryAsync(entry)`.
+**`IAssetLedgerRepository`** — `AppendAsync(entry)`, `GetByAssetIdAsync(assetId, limit)`, `UpdateEntryAsync(entry)`.
 
-**`IVehicleLedgerService`** — `RecordServiceEventAsync(request, dealershipName, locationId, locationName, customerIdentityId)`, `GetVinHistoryAsync(vin, limit)`. Write-only in MVP; read in Phase 5-6.
+**`IAssetLedgerService`** — `RecordServiceEventAsync(request, dealershipName, locationId, locationName, customerIdentityId)`, `GetAssetHistoryAsync(assetId, limit)`. Write-only in MVP; read in Phase 5-6.
 
 ### 5.5 Location
 
@@ -583,10 +593,10 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 4: Append VehicleLedgerEntry (Data Moat)    │
+│ STEP 4: Append AssetLedgerEntry (Data Moat)      │
 │                                                  │
-│ Container: vehicle-ledger                        │
-│ Partition: /vin                                  │
+│ Container: asset-ledger                          │
+│ Partition: /assetId                              │
 │ Includes: locationId + locationName              │
 │ Write-only in MVP (nothing reads it yet)         │
 │ Cost: ~1 RU                                      │
@@ -597,7 +607,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ STEP 5: Update Linkages                          │
 │                                                  │
 │ CustomerProfile: add SR ID, increment count      │
-│ CustomerIdentity: add VIN, add linked profile    │
+│ CustomerIdentity: add assetId, add linked profile│
 │   reference (with locationId + locationName),    │
 │   rotate magic-link token                        │
 │ Cost: ~2 RU                                      │
@@ -624,14 +634,14 @@ All services are `sealed`, inject repository interfaces + `IUserContextAccessor`
 
 ### 7.1 ServiceRequestService (Primary Orchestrator)
 
-Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepository`, `ICustomerIdentityService`, `ICustomerProfileService`, `IVehicleLedgerService`, `IDealershipService`, `ILocationService`, `ICategorizationService`, `INotificationService`, `IUserContextAccessor`.
+Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepository`, `ICustomerIdentityService`, `ICustomerProfileService`, `IAssetLedgerService`, `IDealershipService`, `ILocationService`, `ICategorizationService`, `INotificationService`, `IUserContextAccessor`.
 
 **`CreateServiceRequestAsync(tenantId, locationId, request)`** executes Steps 1–6 sequentially:
 
 1. Calls `ICustomerIdentityService.ResolveOrCreateIdentityAsync` with customer email/name/phone from the request DTO.
 2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, VIN, and vehicle info. This handles shadow profile creation and VIN ownership transfer.
 3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
-4. Calls `IVehicleLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
+4. Calls `IAssetLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
 5. Updates linkages: adds the SR ID to the profile's `ServiceRequestIds`, increments `TotalRequestCount`, rotates the magic-link token on the global identity.
 6. Fires `INotificationService.SendIntakeConfirmationAsync` with the magic-link token (fire-and-forget).
 
@@ -763,7 +773,7 @@ rvs-attachments/
 | **Magic-link status page** | 1 identity query (token) + N point reads (linked SRs) | ~1 + N RU |
 | **Dealer dashboard: view request** | 1 point read (SR — snapshot embedded) | ~1 RU |
 | **Dealer dashboard: search requests** | 1 single-partition query (with locationId filter) | ~3 RU |
-| **VIN service history (10A query)** | 1 single-partition read (vehicle-ledger, /vin) | **~1 RU** |
+| **Asset service history (10A query)** | 1 single-partition read (asset-ledger, /assetId) | **~1 RU** |
 
 ---
 
@@ -788,7 +798,8 @@ rvs-attachments/
 | **`locationId` as filter, not partition key** | Cross-location queries stay single-partition. Avoids fan-out for corporate dashboards. |
 | **Shadow profiles (no customer sign-up)** | Zero friction intake. Customers never see a registration screen. |
 | **Three identity containers** | Each access pattern needs a different partition key. One doc can't serve all three. |
-| **Append-only vehicle ledger** | Data moat — proprietary, accumulating, non-replicable. Powers Section 10A intelligence. |
+| **Append-only asset ledger** | Data moat — proprietary, accumulating, non-replicable. Powers Section 10A intelligence. |
+| **`AssetId` as `{AssetType}:{Identifier}` compound key** | Globally unique across asset types; clean Cosmos partition key; preserves VIN/HIN/serial semantics; works across industries without schema changes. |
 | **`CustomerSnapshotEmbedded` denormalized in SR** | Dashboard reads never join to customer-profiles. ~1 RU per view. |
 | **Magic link on global identity, not profile** | Status page shows requests across ALL corporations for the customer. |
 | **`IntakeFormConfigEmbedded` on Location, not Dealership** | Each physical site can have different intake settings (e.g., different file size limits). |
