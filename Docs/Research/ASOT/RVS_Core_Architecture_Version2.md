@@ -26,7 +26,7 @@ RVS.slnx
 │   ├── Services/
 │   │   ├── ServiceRequestService.cs
 │   │   ├── CustomerProfileService.cs   # Shadow profile resolve-or-create + magic link
-│   │   ├── CustomerIdentityService.cs  # Cross-dealer identity federation
+│   │   ├── GlobalCustomerAcctService.cs # Cross-dealer identity federation
 │   │   ├── AssetLedgerService.cs       # Append-only asset event log
 │   │   ├── AttachmentService.cs
 │   │   ├── DealershipService.cs
@@ -39,7 +39,7 @@ RVS.slnx
 │   ├── Mappers/
 │   │   ├── ServiceRequestMapper.cs
 │   │   ├── CustomerProfileMapper.cs
-│   │   ├── CustomerIdentityMapper.cs
+│   │   ├── GlobalCustomerAcctMapper.cs
 │   │   ├── AssetLedgerMapper.cs
 │   │   ├── DealershipMapper.cs
 │   │   ├── LocationMapper.cs
@@ -65,8 +65,8 @@ RVS.slnx
 │   │   ├── CustomerProfile.cs         # Tenant-scoped shadow record
 │   │   ├── AssetsOwnedEmbedded.cs      # Embedded in CustomerProfile
 │   │   ├── AssetsOwnedStatus.cs
-│   │   ├── CustomerIdentity.cs        # Cross-dealer global identity
-│   │   ├── LinkedProfileReferenceEmbedded.cs  # Embedded in CustomerIdentity
+│   │   ├── GlobalCustomerAcct.cs      # Cross-dealer global identity
+│   │   ├── LinkedProfileReferenceEmbedded.cs  # Embedded in GlobalCustomerAcct
 │   │   ├── AssetLedgerEntry.cs        # Append-only asset service event
 │   │   ├── Dealership.cs             # Corporation / dealer group
 │   │   ├── Location.cs               # Physical service location
@@ -109,8 +109,8 @@ RVS.slnx
 │   │   ├── IServiceRequestService.cs
 │   │   ├── ICustomerProfileRepository.cs
 │   │   ├── ICustomerProfileService.cs
-│   │   ├── ICustomerIdentityRepository.cs
-│   │   ├── ICustomerIdentityService.cs
+│   │   ├── IGlobalCustomerAcctRepository.cs
+│   │   ├── IGlobalCustomerAcctService.cs
 │   │   ├── IAssetLedgerRepository.cs
 │   │   ├── IAssetLedgerService.cs
 │   │   ├── IAttachmentService.cs
@@ -243,7 +243,7 @@ Shadow profile — created automatically on first intake submission at a corpora
 | `TenantId` | `string` | Corporation partition key |
 | `Email` | `string` | Customer email (normalized on input) |
 | `FirstName` / `LastName` / `Phone` | `string` | Contact info, updated on each intake |
-| `CustomerIdentityId` | `string` | FK to global `CustomerIdentity` |
+| `GlobalCustomerAcctId` | `string` | FK to global `GlobalCustomerAcct` |
 | `AssetsOwned` | `List<AssetsOwnedEmbedded>` | Full lifecycle of each customer ↔ asset relationship |
 | `ServiceRequestIds` | `List<string>` | All SR IDs for this customer at this corporation |
 | `TotalRequestCount` | `int` | Running count |
@@ -264,13 +264,13 @@ Records a customer's relationship to a specific asset over time. Handles ownersh
 | `DeactivatedAtUtc` | `DateTime?` | When ownership was transferred |
 | `DeactivationReason` | `string?` | e.g. "Asset claimed by a different customer" |
 
-### 3.5 CustomerIdentity (Cross-Dealer Global Record)
+### 3.5 GlobalCustomerAcct (Cross-Dealer Global Record)
 
 Global customer identity — one record per real human (by email). Cross-tenant. Links all corporation-scoped profiles. Partitioned by `/email` for O(1) intake resolution.
 
 | Field | Type | Description |
 |---|---|---|
-| `Type` | `string` | `"customerIdentity"` |
+| `Type` | `string` | `"globalCustomerAcct"` |
 | `Email` | `string` | Partition key (normalized on input) |
 | `FirstName` / `LastName` / `Phone` | `string` | Latest contact info |
 | `LinkedProfiles` | `List<LinkedProfileReferenceEmbedded>` | Pointers to all tenant-scoped profiles |
@@ -302,7 +302,7 @@ Append-only service event record keyed by asset. One entry per service request, 
 | `DealershipName` | `string` | Corporation display name |
 | `LocationId` / `LocationName` | `string` | Which physical location |
 | `ServiceRequestId` | `string` | FK back to the SR |
-| `CustomerIdentityId` | `string` | Which customer (global) |
+| `GlobalCustomerAcctId` | `string` | Which customer (global) |
 | `Manufacturer` / `Model` / `Year` | `string?` / `int?` | Asset details |
 | `IssueCategory` / `IssueDescription` | `string?` | What was reported |
 | `FailureMode` / `RepairAction` / `PartsUsed` / `LaborHours` | various | Section 10A fields, populated progressively |
@@ -355,7 +355,7 @@ Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/
 |---|---|---|---|---|
 | `serviceRequests` | `/tenantId` | `serviceRequest` | Autoscale 400–4000 | Core service request data |
 | `customerProfiles` | `/tenantId` | `customerProfile` | Autoscale 400–1000 | Tenant-scoped customer view |
-| `customerIdentities` | `/email` | `customerIdentity` | Manual 400 | Cross-dealer identity federation |
+| `globalCustomerAccts` | `/email` | `globalCustomerAcct` | Manual 400 | Cross-dealer identity federation |
 | `assetLedger` | `/assetId` | `assetLedgerEntry` | Autoscale 400–1000 | Section 10A data moat |
 | `dealerships` | `/tenantId` | `dealership` | Autoscale 400–1000 | Corporation profiles |
 | `locations` | `/tenantId` | `location` | Autoscale 400–1000 | Physical service locations |
@@ -379,14 +379,14 @@ One document cannot serve three different access patterns:
 | Location advisor views their SRs | `WHERE tenantId = @t AND locationId = @loc` | Single-partition, filtered |
 | Corporate admin views ALL SRs | `WHERE tenantId = @t` | Single-partition, no location filter |
 | Regional manager views West SRs | `WHERE tenantId = @t AND locationId IN (@loc1, @loc2, @loc3)` | Single-partition, IN filter |
-| Customer profile resolution | `WHERE tenantId = @t AND customerIdentityId = @id` | Single-partition — one profile per corporation |
+| Customer profile resolution | `WHERE tenantId = @t AND globalCustomerAcctId = @id` | Single-partition — one profile per corporation |
 | Asset history across all dealers | `WHERE assetId = @a` | Single-partition in assetLedger |
 
 ### 4.4 Key Indexing Policies
 
 **`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`. Composite index: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`.
 
-**`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/customerIdentityId/?`, `/assetsOwned/[]/assetId/?`, `/assetsOwned/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
+**`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/globalCustomerAcctId/?`, `/assetsOwned/[]/assetId/?`, `/assetsOwned/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
 **`locations`** — Included paths: `/tenantId/?`, `/slug/?`, `/regionTag/?`.
 
@@ -488,21 +488,21 @@ One document cannot serve three different access patterns:
 
 ### 5.2 Customer Profile
 
-**`ICustomerProfileRepository`** — `GetByIdAsync(tenantId, profileId)`, `GetByIdentityIdAsync(tenantId, customerIdentityId)`, `GetByActiveAssetIdAsync(tenantId, assetId)`, `CreateAsync`, `UpdateAsync`.
+**`ICustomerProfileRepository`** — `GetByIdAsync(tenantId, profileId)`, `GetByIdentityIdAsync(tenantId, globalCustomerAcctId)`, `GetByActiveAssetIdAsync(tenantId, assetId)`, `CreateAsync`, `UpdateAsync`.
 
 **`ICustomerProfileService`** — `ResolveOrCreateProfileAsync(tenantId, identity, assetId?, assetInfo?)`. Resolves existing or creates shadow record. Handles asset ownership transfer detection within the tenant.
 
-### 5.3 Customer Identity
+### 5.3 Global Customer Acct
 
-**`ICustomerIdentityRepository`** — `GetByEmailAsync(email)`, `GetByMagicLinkTokenAsync(token)`, `CreateAsync`, `UpdateAsync`.
+**`IGlobalCustomerAcctRepository`** — `GetByEmailAsync(email)`, `GetByMagicLinkTokenAsync(token)`, `CreateAsync`, `UpdateAsync`.
 
-**`ICustomerIdentityService`** — `ResolveOrCreateIdentityAsync(email, firstName, lastName, phone?)`, `ValidateMagicLinkAsync(token)`, `RotateMagicLinkTokenAsync(identityId)`.
+**`IGlobalCustomerAcctService`** — `ResolveOrCreateIdentityAsync(email, firstName, lastName, phone?)`, `ValidateMagicLinkAsync(token)`, `RotateMagicLinkTokenAsync(globalCustomerAcctId)`.
 
 ### 5.4 Asset Ledger
 
 **`IAssetLedgerRepository`** — `AppendAsync(entry)`, `GetByAssetIdAsync(assetId, limit)`, `UpdateEntryAsync(entry)`.
 
-**`IAssetLedgerService`** — `RecordServiceEventAsync(request, dealershipName, locationId, locationName, customerIdentityId)`, `GetAssetHistoryAsync(assetId, limit)`. Write-only in MVP; read in Phase 5-6.
+**`IAssetLedgerService`** — `RecordServiceEventAsync(request, dealershipName, locationId, locationName, globalCustomerAcctId)`, `GetAssetHistoryAsync(assetId, limit)`. Write-only in MVP; read in Phase 5-6.
 
 ### 5.5 Location
 
@@ -541,9 +541,9 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 1: Resolve Global CustomerIdentity          │
+│ STEP 1: Resolve GlobalCustomerAcct               │
 │                                                  │
-│ Container: customerIdentities                    │
+│ Container: globalCustomerAccts                   │
 │ Query: point read by email partition             │
 │ Cost: ~1 RU                                      │
 │                                                  │
@@ -557,7 +557,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │                                                  │
 │ Container: customerProfiles                      │
 │ Query: WHERE tenantId = @t                       │
-│   AND customerIdentityId = @identityId           │
+│   AND globalCustomerAcctId = @identityId         │
 │ Cost: ~2.8 RU (single-partition indexed query)   │
 │                                                  │
 │ NOTE: Profile is per-corporation, not per-location│
@@ -607,7 +607,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ STEP 5: Update Linkages                          │
 │                                                  │
 │ CustomerProfile: add SR ID, increment count      │
-│ CustomerIdentity: add assetId, add linked profile│
+│ GlobalCustomerAcct: add assetId, add linked profile│
 │   reference (with locationId + locationName),    │
 │   rotate magic-link token                        │
 │ Cost: ~2 RU                                      │
@@ -634,11 +634,11 @@ All services are `sealed`, inject repository interfaces + `IUserContextAccessor`
 
 ### 7.1 ServiceRequestService (Primary Orchestrator)
 
-Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepository`, `ICustomerIdentityService`, `ICustomerProfileService`, `IAssetLedgerService`, `IDealershipService`, `ILocationService`, `ICategorizationService`, `INotificationService`, `IUserContextAccessor`.
+Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepository`, `IGlobalCustomerAcctService`, `ICustomerProfileService`, `IAssetLedgerService`, `IDealershipService`, `ILocationService`, `ICategorizationService`, `INotificationService`, `IUserContextAccessor`.
 
 **`CreateServiceRequestAsync(tenantId, locationId, request)`** executes Steps 1–6 sequentially:
 
-1. Calls `ICustomerIdentityService.ResolveOrCreateIdentityAsync` with customer email/name/phone from the request DTO.
+1. Calls `IGlobalCustomerAcctService.ResolveOrCreateIdentityAsync` with customer email/name/phone from the request DTO.
 2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, asset identifier, and asset info. This handles shadow profile creation and asset ownership transfer.
 3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
 4. Calls `IAssetLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
@@ -650,7 +650,7 @@ Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepos
 Implements `ResolveOrCreateProfileAsync`. Two phases:
 
 **Phase 1 — Profile Resolution:**
-- Find by `customerIdentityId` within tenant partition.
+- Find by `globalCustomerAcctId` within tenant partition.
 - If not found → create new shadow profile with all customer fields, no assets owned, zero request count.
 - If found → update contact info (firstName, lastName, phone) from the latest submission.
 
