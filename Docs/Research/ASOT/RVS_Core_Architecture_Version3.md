@@ -811,3 +811,45 @@ rvs-attachments/
 | **Intake URL uses `locationSlug`, not `dealershipSlug`** | Each physical location has its own QR code / intake URL. The slug resolves to both tenantId and locationId in one operation. |
 | **Blob path includes `locationId`** | Storage organization mirrors data model. Enables future per-location retention policies. |
 | **`Dealership.IsMultiLocation` flag** | UI can adapt (show location picker vs. skip). No code branching in the API layer. |
+
+---
+
+## 15. Change Feed Strategy
+
+Cosmos DB Change Feed is not used in MVP, but several architectural patterns create natural future consumers. This section documents where change feed fits and when each consumer is warranted.
+
+### 15.1 Overview
+
+| Consumer | Source Container | Target | Phase | Priority |
+|---|---|---|---|---|
+| Asset ledger enrichment | `serviceRequests` | `assetLedger` | Phase 5–6 | **Required** |
+| Analytics counter aggregation | `serviceRequests` | Azure Tables | Phase 2 | High |
+| Snapshot staleness repair | `serviceRequests` | `serviceRequests` | Phase 2+ | Low |
+
+### 15.2 Asset Ledger Enrichment (Required — Phase 5–6)
+
+**Problem:** `AssetLedgerEntry` is written at intake time with only the fields available then (`IssueCategory`, `IssueDescription`, basic asset info). Section 10A fields — `FailureMode`, `RepairAction`, `PartsUsed`, `LaborHours`, `ServiceDateUtc` — are populated by the technician when the `ServiceRequest` is updated to `Completed`.
+
+**Pattern:** A change feed consumer watches `serviceRequests` for documents where `status = Completed` and `serviceEvent` fields are populated. It issues a patch update to the matching `assetLedger` document (keyed by `serviceRequestId` within the `/assetId` partition).
+
+**Why change feed, not synchronous write:** The SR completion path is latency-sensitive (technician UI). The ledger enrichment is analytics pipeline work — eventual consistency (seconds to minutes) is acceptable. Decoupling also means a ledger write failure doesn't roll back the SR completion.
+
+**MVP stance:** The `AssetLedgerEntry` is intentionally written with null Section 10A fields at intake. The stale state is acceptable until Phase 5–6 when the 10A query surface is built out.
+
+### 15.3 Analytics Counter Aggregation (Phase 2)
+
+**Problem:** Dealer dashboards will need aggregate counts (open requests by location, requests by status, daily volume). These are expensive to compute on-demand from Cosmos.
+
+**Pattern:** A change feed consumer on `serviceRequests` maintains pre-aggregated counters in `RVS.Infra.AzTablesRepository` (Azure Table Storage). Counters are partitioned by `tenantId` + `locationId` and updated on every status transition. Dashboard reads hit Azure Tables for counts (~0 RU Cosmos cost) and Cosmos only for document-level detail.
+
+**MVP stance:** Aggregate queries run against Cosmos directly (single-partition, acceptable at low volume). Azure Tables aggregation is deferred until query cost or latency becomes measurable.
+
+### 15.4 CustomerSnapshot Staleness (Phase 2+, Low Priority)
+
+**Problem:** `CustomerSnapshotEmbedded` is denormalized into every `ServiceRequest` at intake time. If a customer later updates their contact info (phone, email) in `customerProfiles`, open SRs reflect stale data.
+
+**Design intent:** The snapshot is point-in-time by design — it records who the customer was at intake, not who they are today. This is correct for completed/historical SRs. For open SRs, staleness is a minor UX issue (advisor sees old phone number).
+
+**Pattern if needed:** A change feed consumer on `customerProfiles` fans out patch updates to open `serviceRequests` in the same tenant partition. Scope is limited to `status IN ('New', 'InProgress')` to avoid touching historical records.
+
+**MVP stance:** Accept stale snapshots. The advisor can always look up the current profile. This consumer is only warranted if customer contact updates during open SRs become a reported pain point.
