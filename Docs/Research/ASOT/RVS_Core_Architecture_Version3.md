@@ -362,6 +362,7 @@ Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/
 | `locations` | `/tenantId` | `location` | Autoscale 400–1000 | Physical service locations |
 | `tenantConfigs` | `/tenantId` | `tenantConfig` | Manual 400 | Tenant settings, access gate |
 | `lookupSets` | `/category` | `lookupSet` | Manual 400 | Issue categories, component types |
+| `slugLookup` | `/slug` | `slugLookup` | Autoscale 400–1,000 | Slug → tenantId + locationId point read |
 
 ### 4.2 Why Three Identity Containers?
 
@@ -390,6 +391,8 @@ One document cannot serve three different access patterns:
 **`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/globalCustomerAcctId/?`, `/assetsOwned/[]/assetId/?`, `/assetsOwned/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
 **`locations`** — Included paths: `/tenantId/?`, `/slug/?`, `/regionTag/?`.
+
+**`slugLookup`** — No secondary indexes required. All reads are point reads by `/slug` (partition key = document id). Index policy: excluded paths `/*`, included paths `/_etag/?` only.
 
 ### 4.5 Cosmos DB Document Examples
 
@@ -477,6 +480,19 @@ One document cannot serve three different access patterns:
 }
 ```
 
+**Slug Lookup:**
+
+```json
+{
+  "id": "blue-compass-salt-lake",
+  "slug": "blue-compass-salt-lake",
+  "tenantId": "org_blue_compass_rv",
+  "locationId": "loc_blue_compass_slc",
+  "isEnabled": true,
+  "updatedAtUtc": "2026-01-15T08:00:00Z"
+}
+```
+
 ---
 
 ## 5. Domain Interfaces
@@ -507,9 +523,11 @@ One document cannot serve three different access patterns:
 
 ### 5.5 Location
 
-**`ILocationRepository`** — `GetByIdAsync(tenantId, locationId)`, `GetBySlugAsync(slug)`, `GetByTenantIdAsync(tenantId)`, `CreateAsync`, `UpdateAsync`.
+**`ILocationRepository`** — `GetByIdAsync(tenantId, locationId)`, `GetByTenantIdAsync(tenantId)`, `CreateAsync`, `UpdateAsync`.
 
-**`ILocationService`** — `GetByIdAsync(tenantId, locationId)`, `GetBySlugAsync(slug)`, `GetByTenantIdAsync(tenantId)`, `CreateLocationAsync(tenantId, createDto)`, `UpdateLocationAsync(tenantId, locationId, updateDto)`.
+**`ILocationService`** — `GetByIdAsync(tenantId, locationId)`, `GetByTenantIdAsync(tenantId)`, `CreateLocationAsync(tenantId, createDto)`, `UpdateLocationAsync(tenantId, locationId, updateDto)`.
+
+**`ISlugLookupRepository`** — `GetBySlugAsync(slug)`, `UpsertAsync(slug, tenantId, locationId)`, `DeleteAsync(slug)`.
 
 ### 5.6 Attachments & Blob Storage
 
@@ -534,10 +552,10 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 ┌──────────────────────────────────────────────────┐
 │ STEP 0: Resolve Location by Slug                 │
 │                                                  │
-│ Container: locations                             │
-│ Query: cross-partition by slug (or cached map)   │
-│ Returns: tenantId + locationId + IntakeFormConfigEmbedded│
-│ Cost: ~3 RU (or ~0 if cached)                    │
+│ Container: slugLookup                            │
+│ Query: point read by slug (partition key = slug) │
+│ Returns: tenantId + locationId                   │
+│ Cost: ~1 RU cold / ~0 RU gateway-cached          │
 └──────────────────┬───────────────────────────────┘
                    │
                    ▼
@@ -624,8 +642,8 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ Fire-and-forget (async)                          │
 └──────────────────────────────────────────────────┘
 
-Total Cosmos cost per intake: ~13.8 RU (with slug resolution)
-                              ~10.8 RU (with cached slug map)
+Total Cosmos cost per intake: ~11.8 RU (cold, gateway miss)
+                              ~10.8 RU (gateway-cached slug)
 ```
 
 ---
@@ -665,7 +683,7 @@ Also handles **reactivation** — if the current customer previously had an Inac
 
 ### 7.3 LocationService
 
-Implements slug-to-location resolution for the intake flow. `GetBySlugAsync(slug)` returns the `Location` with its `TenantId` — this is how the anonymous intake endpoint determines which tenant and location to write to. Results are cacheable (location slugs change rarely).
+Implements physical location CRUD for the dealer-facing API. `UpsertSlugLookupAsync(slug, tenantId, locationId)` is called within `CreateLocationAsync` and `UpdateLocationAsync`. On slug rename via `UpdateLocationAsync`, the old slug entry is deleted and the new one is written atomically before the `Location` document is updated — ensuring the lookup table is never stale.
 
 ---
 
@@ -711,6 +729,8 @@ Following the [RVS copilot-instructions.md pipeline order](https://github.com/ma
 | 6 | Authentication & Authorization | `UseAuthentication()` + `UseAuthorization()` | Auth0 JWT validation + policy checks |
 | 7 | TenantAccessGateMiddleware | `RequestDelegate`, scoped injection | Checks `TenantConfig.AccessGate` to verify tenant is active/configured |
 | 8 | Map controllers | `MapControllers()` | Terminal |
+
+> **Cosmos SDK connection mode:** `ConnectionMode.Gateway` is configured globally on `CosmosClient`. Gateway mode enables server-side result caching for point reads on stable-key containers (`slugLookup`, `tenantConfigs`, `lookupSets`), reducing effective RU consumption on repeated reads without application-layer cache code. `TenantAccessGateMiddleware` reads `TenantConfig` on every authenticated request — gateway caching makes this effectively free after the first read per tenant per cache window.
 
 ---
 
@@ -768,10 +788,13 @@ rvs-attachments/
 
 | Operation | Cosmos Calls | Estimated RU |
 |---|---|---|
-| **New customer intake (first visit, first corporation)** | 1 location slug + 1 identity miss + 1 identity write + 1 profile write + 1 SR write + 1 ledger write + 1 identity update + 1 profile update | ~13.8 RU |
-| **Returning customer intake (same corporation)** | 1 location slug + 1 identity hit + 1 profile hit + 1 AssetId check + 1 SR write + 1 ledger write + 2 updates | ~12.8 RU |
-| **Returning customer, new corporation** | 1 location slug + 1 identity hit + 1 profile miss + 1 profile write + 1 SR write + 1 ledger write + 2 updates | ~13.8 RU |
-| **With cached slug map** | Subtract ~3 RU from above | ~10.8 / ~9.8 / ~10.8 RU |
+| **Slug resolution (gateway cold)** | 1 point read (`slugLookup`) | ~1 RU |
+| **Slug resolution (gateway cached)** | 1 point read (served from gateway cache) | ~0 RU |
+| **TenantConfig read (gateway cached)** | 1 point read (served from gateway cache) | ~0 RU |
+| **New customer intake (first visit, first corporation)** | 1 slug + 1 identity miss + 1 identity write + 1 profile write + 1 SR write + 1 ledger write + 1 identity update + 1 profile update | ~11.8 RU |
+| **Returning customer intake (same corporation)** | 1 slug + 1 identity hit + 1 profile hit + 1 AssetId check + 1 SR write + 1 ledger write + 2 updates | ~10.8 RU |
+| **Returning customer, new corporation** | 1 slug + 1 identity hit + 1 profile miss + 1 profile write + 1 SR write + 1 ledger write + 2 updates | ~11.8 RU |
+| **With gateway-cached slug** | Subtract ~1 RU from above | ~10.8 / ~9.8 / ~10.8 RU |
 | **Magic-link status page** | 1 point read (token → partition via email-hash prefix) + N point reads (linked SRs) | ~1 + N RU |
 | **Dealer dashboard: view request** | 1 point read (SR — snapshot embedded) | ~1 RU |
 | **Dealer dashboard: search requests** | 1 single-partition query (with locationId filter) | ~3 RU |
@@ -808,6 +831,8 @@ rvs-attachments/
 | **Email-hash prefix in magic-link token** | Avoids cross-partition query on `globalCustomerAccts` (partitioned by `/email`). Token format `base64url(emailHash):random_bytes` lets `ValidateMagicLinkAsync` derive the partition key from the token itself → single-partition point read (~1 RU). |
 | **`IntakeFormConfigEmbedded` on Location, not Dealership** | Each physical site can have different intake settings (e.g., different file size limits). |
 | **`regionTag` on Location** | Enables regional manager scoping without complex hierarchy. |
-| **Intake URL uses `locationSlug`, not `dealershipSlug`** | Each physical location has its own QR code / intake URL. The slug resolves to both tenantId and locationId in one operation. |
+| **Intake URL uses `locationSlug`, not `dealershipSlug`** | Each physical location has its own QR code / intake URL. The slug resolves to both `tenantId` and `locationId` via a point read on the `slugLookup` container — O(1), gateway-cacheable, replica-consistent, no application-layer cache required. |
 | **Blob path includes `locationId`** | Storage organization mirrors data model. Enables future per-location retention policies. |
 | **`Dealership.IsMultiLocation` flag** | UI can adapt (show location picker vs. skip). No code branching in the API layer. |
+| **`ConnectionMode.Gateway` for Cosmos SDK** | Enables server-side gateway caching for stable point reads (`slugLookup`, `tenantConfigs`, `lookupSets`). Zero additional cost. Eliminates application-layer caching for these access patterns. Consistent across all replicas and through deploys. |
+| **`slugLookup` as a dedicated container** | Decouples slug resolution from the `locations` container partition scheme. Enables O(1) point reads partitioned by `/slug`. Gateway-cached on repeated reads. Autoscale floor ~$2.30/month. Invalidation is write-through on `CreateLocationAsync` / `UpdateLocationAsync`. |
