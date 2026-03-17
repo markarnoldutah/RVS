@@ -63,8 +63,8 @@ RVS.slnx
 │   │   ├── ServiceRequestAttachmentEmbedded.cs # Embedded in ServiceRequest
 │   │   ├── ServiceEventEmbedded.cs            # Embedded in ServiceRequest (10A fields)
 │   │   ├── CustomerProfile.cs         # Tenant-scoped shadow record
-│   │   ├── AssetInteractionEmbedded.cs      # Embedded in CustomerProfile
-│   │   ├── AssetInteractionStatus.cs
+│   │   ├── AssetOwnedEmbedded.cs      # Embedded in CustomerProfile
+│   │   ├── AssetOwnedStatus.cs
 │   │   ├── CustomerIdentity.cs        # Cross-dealer global identity
 │   │   ├── LinkedProfileReferenceEmbedded.cs  # Embedded in CustomerIdentity
 │   │   ├── AssetLedgerEntry.cs        # Append-only asset service event
@@ -244,15 +244,15 @@ Shadow profile — created automatically on first intake submission at a corpora
 | `Email` | `string` | Customer email (normalized on input) |
 | `FirstName` / `LastName` / `Phone` | `string` | Contact info, updated on each intake |
 | `CustomerIdentityId` | `string` | FK to global `CustomerIdentity` |
-| `AssetInteractions` | `List<AssetInteractionEmbedded>` | Full lifecycle of each customer ↔ asset relationship |
+| `AssetsOwned` | `List<AssetOwnedEmbedded>` | Full lifecycle of each customer ↔ asset relationship |
 | `ServiceRequestIds` | `List<string>` | All SR IDs for this customer at this corporation |
 | `TotalRequestCount` | `int` | Running count |
 
-Convenience helpers (not persisted): `GetActiveAssetIds()` returns asset identifiers with Active status. `GetActiveInteraction(assetId)` returns the active interaction for a specific asset.
+Convenience helpers (not persisted): `GetActiveAssetIds()` returns asset identifiers with Active status. `GetOwnership(assetId)` returns the active ownership record for a specific asset.
 
-### 3.4 AssetInteractionEmbedded (Embedded in CustomerProfile)
+### 3.4 AssetOwnedEmbedded (Embedded in CustomerProfile)
 
-Records a customer's relationship to a specific asset over time. Handles ownership transfers: when a different customer submits for the same asset, the previous owner's interaction is set to Inactive.
+Records a customer's relationship to a specific asset over time. Handles ownership transfers: when a different customer submits for the same asset, the previous owner's record is set to Inactive.
 
 | Field | Type | Description |
 |---|---|---|
@@ -386,7 +386,7 @@ One document cannot serve three different access patterns:
 
 **`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`. Composite index: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`.
 
-**`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/customerIdentityId/?`, `/assetInteractions/[]/assetId/?`, `/assetInteractions/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
+**`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/customerIdentityId/?`, `/assetsOwned/[]/assetId/?`, `/assetsOwned/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
 **`locations`** — Included paths: `/tenantId/?`, `/slug/?`, `/regionTag/?`.
 
@@ -575,7 +575,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ If AssetId on THIS profile → update lastSeen     │
 │ If AssetId on DIFFERENT profile at same          │
 │   corporation → deactivate old, activate on this │
-│ If AssetId is brand new → create Active interaction│
+│ If AssetId is brand new → create Active ownership │
 │ Cost: ~3 RU (single-partition array filter)      │
 └──────────────────┬───────────────────────────────┘
                    │
@@ -651,15 +651,15 @@ Implements `ResolveOrCreateProfileAsync`. Two phases:
 
 **Phase 1 — Profile Resolution:**
 - Find by `customerIdentityId` within tenant partition.
-- If not found → create new shadow profile with all customer fields, empty asset interactions, zero request count.
+- If not found → create new shadow profile with all customer fields, no assets owned, zero request count.
 - If found → update contact info (firstName, lastName, phone) from the latest submission.
 
 **Phase 2 — Asset Ownership Resolution (three branches):**
-- **Same customer, same asset** → update `LastSeenAtUtc`, increment `RequestCount` on the existing Active interaction.
-- **Different customer at same corporation owns this asset** → deactivate the previous owner's `AssetInteractionEmbedded` (set status to Inactive, stamp `DeactivatedAtUtc` and reason). Then create or reactivate on the current profile.
-- **Brand new asset (not seen before at this corporation)** → create new Active `AssetInteractionEmbedded` with `FirstSeenAtUtc = now`, `RequestCount = 1`.
+- **Same customer, same asset** → update `LastSeenAtUtc`, increment `RequestCount` on the existing Active ownership.
+- **Different customer at same corporation owns this asset** → deactivate the previous owner's `AssetOwnedEmbedded` (set status to Inactive, stamp `DeactivatedAtUtc` and reason). Then create or reactivate on the current profile.
+- **Brand new asset (not seen before at this corporation)** → create new Active `AssetOwnedEmbedded` with `FirstSeenAtUtc = now`, `RequestCount = 1`.
 
-Also handles **reactivation** — if the current customer previously had an Inactive interaction for this asset (sold the RV, bought it back), the existing interaction is reactivated rather than creating a duplicate.
+Also handles **reactivation** — if the current customer previously had an Inactive ownership for this asset (sold the RV, bought it back), the existing ownership is reactivated rather than creating a duplicate.
 
 ### 7.3 LocationService
 
