@@ -58,22 +58,22 @@ RVS.slnx
 │   ├── Entities/
 │   │   ├── EntityBase.cs
 │   │   ├── ServiceRequest.cs
-│   │   ├── CustomerSnapshot.cs        # Embedded in ServiceRequest
-│   │   ├── VehicleInfo.cs             # Embedded in ServiceRequest
-│   │   ├── ServiceRequestAttachment.cs # Embedded in ServiceRequest
-│   │   ├── ServiceEvent.cs            # Embedded in ServiceRequest (10A fields)
+│   │   ├── CustomerSnapshotEmbedded.cs        # Embedded in ServiceRequest
+│   │   ├── VehicleInfoEmbedded.cs             # Embedded in ServiceRequest
+│   │   ├── ServiceRequestAttachmentEmbedded.cs # Embedded in ServiceRequest
+│   │   ├── ServiceEventEmbedded.cs            # Embedded in ServiceRequest (10A fields)
 │   │   ├── CustomerProfile.cs         # Tenant-scoped shadow record
-│   │   ├── VehicleInteraction.cs      # Embedded in CustomerProfile
+│   │   ├── VehicleInteractionEmbedded.cs      # Embedded in CustomerProfile
 │   │   ├── VehicleInteractionStatus.cs
 │   │   ├── CustomerIdentity.cs        # Cross-dealer global identity
-│   │   ├── LinkedProfileReference.cs  # Embedded in CustomerIdentity
+│   │   ├── LinkedProfileReferenceEmbedded.cs  # Embedded in CustomerIdentity
 │   │   ├── VehicleLedgerEntry.cs      # Append-only VIN service event
 │   │   ├── Dealership.cs             # Corporation / dealer group
 │   │   ├── Location.cs               # Physical service location
-│   │   ├── Address.cs                # Embedded in Location
-│   │   ├── IntakeFormConfig.cs       # Embedded in Location
+│   │   ├── AddressEmbedded.cs                # Embedded in Location
+│   │   ├── IntakeFormConfigEmbedded.cs       # Embedded in Location
 │   │   ├── TenantConfig.cs
-│   │   ├── TenantAccessGate.cs        # Embedded in TenantConfig
+│   │   ├── TenantAccessGateEmbedded.cs        # Embedded in TenantConfig
 │   │   └── LookupSet.cs
 │   ├── DTOs/
 │   │   ├── ServiceRequestCreateRequestDto.cs
@@ -211,13 +211,13 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 | `LocationId` | `string` | FK to the physical `Location` where this SR was submitted |
 | `Status` | `string` | `"New"`, `"InProgress"`, `"Completed"`, `"Cancelled"` |
 | `CustomerProfileId` | `string` | FK to tenant-scoped `CustomerProfile` |
-| `Customer` | `CustomerSnapshot` | Point-in-time denormalized snapshot (no joins on dashboard reads) |
-| `Vehicle` | `VehicleInfo` | VIN, manufacturer, model, year |
+| `Customer` | `CustomerSnapshotEmbedded` | Point-in-time denormalized snapshot (no joins on dashboard reads) |
+| `Vehicle` | `VehicleInfoEmbedded` | VIN, manufacturer, model, year |
 | `IssueDescription` | `string` | Free-text customer description |
 | `IssueCategory` | `string?` | Auto-categorized (rule-based MVP, AI future) |
 | `TechnicianSummary` | `string?` | Generated summary for tech |
-| `Attachments` | `List<ServiceRequestAttachment>` | Embedded photo/video references |
-| `ServiceEvent` | `ServiceEvent` | Section 10A structured repair data |
+| `Attachments` | `List<ServiceRequestAttachmentEmbedded>` | Embedded photo/video references |
+| `ServiceEvent` | `ServiceEventEmbedded` | Section 10A structured repair data |
 | `ScheduledDateUtc` | `DateTime?` | Future: scheduling |
 | `AssignedBayId` | `string?` | Future: bay assignment |
 | `AssignedTechnicianId` | `string?` | Future: tech assignment |
@@ -225,13 +225,13 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 
 ### 3.2 Embedded Sub-Entities (within ServiceRequest)
 
-**CustomerSnapshot** — Point-in-time copy of customer info. Fields: `FirstName`, `LastName`, `Email`, `Phone`, `IsReturningCustomer`, `PriorRequestCount`. Denormalized so the dealer dashboard never joins to `customer-profiles`.
+**CustomerSnapshotEmbedded** — Point-in-time copy of customer info. Fields: `FirstName`, `LastName`, `Email`, `Phone`, `IsReturningCustomer`, `PriorRequestCount`. Denormalized so the dealer dashboard never joins to `customer-profiles`.
 
-**VehicleInfo** — Fields: `Vin`, `Manufacturer`, `Model`, `Year`.
+**VehicleInfoEmbedded** — Fields: `Vin`, `Manufacturer`, `Model`, `Year`.
 
-**ServiceRequestAttachment** — Fields: `AttachmentId` (auto GUID), `BlobUri`, `FileName`, `ContentType`, `SizeBytes`, `CreatedAtUtc`.
+**ServiceRequestAttachmentEmbedded** — Fields: `AttachmentId` (auto GUID), `BlobUri`, `FileName`, `ContentType`, `SizeBytes`, `CreatedAtUtc`.
 
-**ServiceEvent** — Section 10A structured data. Fields: `ComponentType`, `FailureMode`, `RepairAction`, `PartsUsed` (list), `LaborHours`, `ServiceDateUtc`. Populated progressively across phases; MVP captures `IssueCategory` and `ComponentType` only.
+**ServiceEventEmbedded** — Section 10A structured data. Fields: `ComponentType`, `FailureMode`, `RepairAction`, `PartsUsed` (list), `LaborHours`, `ServiceDateUtc`. Populated progressively across phases; MVP captures `IssueCategory` and `ComponentType` only.
 
 ### 3.3 CustomerProfile (Tenant-Scoped Shadow Record)
 
@@ -241,16 +241,16 @@ Shadow profile — created automatically on first intake submission at a corpora
 |---|---|---|
 | `Type` | `string` | `"customerProfile"` |
 | `TenantId` | `string` | Corporation partition key |
-| `Email` / `NormalizedEmail` | `string` | Customer email (normalized for lookups) |
+| `Email` | `string` | Customer email (normalized on input) |
 | `FirstName` / `LastName` / `Phone` | `string` | Contact info, updated on each intake |
 | `CustomerIdentityId` | `string` | FK to global `CustomerIdentity` |
-| `VehicleInteractions` | `List<VehicleInteraction>` | Full lifecycle of each customer ↔ VIN relationship |
+| `VehicleInteractions` | `List<VehicleInteractionEmbedded>` | Full lifecycle of each customer ↔ VIN relationship |
 | `ServiceRequestIds` | `List<string>` | All SR IDs for this customer at this corporation |
 | `TotalRequestCount` | `int` | Running count |
 
 Convenience helpers (not persisted): `GetActiveVins()` returns VINs with Active status. `GetActiveInteraction(vin)` returns the active interaction for a specific VIN.
 
-### 3.4 VehicleInteraction (Embedded in CustomerProfile)
+### 3.4 VehicleInteractionEmbedded (Embedded in CustomerProfile)
 
 Records a customer's relationship to a specific VIN over time. Handles ownership transfers: when a different customer submits for a VIN, the previous owner's interaction is set to Inactive.
 
@@ -266,20 +266,20 @@ Records a customer's relationship to a specific VIN over time. Handles ownership
 
 ### 3.5 CustomerIdentity (Cross-Dealer Global Record)
 
-Global customer identity — one record per real human (by email). Cross-tenant. Links all corporation-scoped profiles. Partitioned by `/normalizedEmail` for O(1) intake resolution.
+Global customer identity — one record per real human (by email). Cross-tenant. Links all corporation-scoped profiles. Partitioned by `/email` for O(1) intake resolution.
 
 | Field | Type | Description |
 |---|---|---|
 | `Type` | `string` | `"customerIdentity"` |
-| `NormalizedEmail` / `Email` | `string` | Partition key + display |
+| `Email` | `string` | Partition key (normalized on input) |
 | `FirstName` / `LastName` / `Phone` | `string` | Latest contact info |
-| `LinkedProfiles` | `List<LinkedProfileReference>` | Pointers to all tenant-scoped profiles |
+| `LinkedProfiles` | `List<LinkedProfileReferenceEmbedded>` | Pointers to all tenant-scoped profiles |
 | `AllKnownVins` | `List<string>` | Every VIN ever associated across all dealers |
 | `MagicLinkToken` | `string?` | Global magic-link token for status page |
 | `MagicLinkExpiresAtUtc` | `DateTime?` | Token expiry |
 | `Auth0UserId` | `string?` | Phase 2+: linked Auth0 account (null during MVP) |
 
-**LinkedProfileReference** — Lightweight pointer from global identity to a tenant-scoped profile. Fields: `TenantId`, `ProfileId`, `DealershipName`, `LocationId`, `LocationName`, `FirstSeenAtUtc`, `RequestCount`.
+**LinkedProfileReferenceEmbedded** — Lightweight pointer from global identity to a tenant-scoped profile. Fields: `TenantId`, `ProfileId`, `DealershipName`, `LocationId`, `LocationName`, `FirstSeenAtUtc`, `RequestCount`.
 
 ### 3.6 VehicleLedgerEntry (Append-Only VIN Event Log — Data Moat)
 
@@ -321,19 +321,19 @@ A physical service site within a dealership group. Single-location dealers have 
 | `TenantId` | `string` | Parent corporation |
 | `Slug` | `string` | Globally unique intake URL slug (e.g. `"blue-compass-salt-lake"`) |
 | `DisplayName` | `string` | e.g. `"Blue Compass RV - Salt Lake City"` |
-| `Address` | `Address` | Street, City, State, Zip |
+| `Address` | `AddressEmbedded` | Street, City, State, Zip |
 | `ServiceEmail` / `Phone` | `string?` | Location contact info |
 | `LogoUrl` | `string?` | Location-specific logo (overrides corporate if set) |
-| `IntakeConfig` | `IntakeFormConfig` | Accepted file types, max file size |
+| `IntakeConfig` | `IntakeFormConfigEmbedded` | Accepted file types, max file size |
 | `RegionTag` | `string?` | e.g. `"west"`, `"southeast"` — for regional manager scoping |
 
-**Address** — Fields: `Street`, `City`, `State`, `Zip`.
+**AddressEmbedded** — Fields: `Street`, `City`, `State`, `Zip`.
 
-**IntakeFormConfig** — Fields: `AcceptedFileTypes` (default: `.jpg`, `.png`, `.mp4`), `MaxFileSizeMb` (default: 25).
+**IntakeFormConfigEmbedded** — Fields: `AcceptedFileTypes` (default: `.jpg`, `.png`, `.mp4`), `MaxFileSizeMb` (default: 25).
 
 ### 3.9 TenantConfig, LookupSet
 
-Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.Domain/Entities/TenantConfig.cs) and [LookupSet](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.Domain/Entities/LookupSet.cs). `TenantConfig` embeds `TenantAccessGate` for onboarding flow control. No changes from MF baseline.
+Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.Domain/Entities/TenantConfig.cs) and [LookupSet](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.Domain/Entities/LookupSet.cs). `TenantConfig` embeds `TenantAccessGateEmbedded` for onboarding flow control. No changes from MF baseline.
 
 ---
 
@@ -345,7 +345,7 @@ Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/
 |---|---|---|---|---|
 | `service-requests` | `/tenantId` | `ServiceRequest` | Autoscale 400–4000 | Core service request data |
 | `customer-profiles` | `/tenantId` | `CustomerProfile` | Autoscale 400–1000 | Tenant-scoped customer view |
-| `customer-identities` | `/normalizedEmail` | `CustomerIdentity` | Manual 400 | Cross-dealer identity federation |
+| `customer-identities` | `/email` | `CustomerIdentity` | Manual 400 | Cross-dealer identity federation |
 | `vehicle-ledger` | `/vin` | `VehicleLedgerEntry` | Autoscale 400–1000 | Section 10A data moat |
 | `dealerships` | `/tenantId` | `Dealership` | Autoscale 400–1000 | Corporation profiles |
 | `locations` | `/tenantId` | `Location` | Autoscale 400–1000 | Physical service locations |
@@ -359,7 +359,7 @@ One document cannot serve three different access patterns:
 | Identity Layer | Partition Key | Optimized For |
 |---|---|---|
 | **Tenant-scoped customer** (Corp A's view of John) | `/tenantId` | Dashboard, VIN ownership, search |
-| **Global customer** (John across all corporations) | `/normalizedEmail` | Intake email resolution (~1 RU), cross-dealer status |
+| **Global customer** (John across all corporations) | `/email` | Intake email resolution (~1 RU), cross-dealer status |
 | **Global vehicle** (VIN 1ABC across all owners/dealers) | `/vin` | Unit service history (~1 RU), Section 10A analytics |
 
 ### 4.3 Multi-Location Query Patterns
@@ -374,9 +374,9 @@ One document cannot serve three different access patterns:
 
 ### 4.4 Key Indexing Policies
 
-**`service-requests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`. Composite index: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`.
+**`service-requests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/cr eatedAtUtc/?`, `/issueCategory/?`. Composite index: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`.
 
-**`customer-profiles`** — Included paths: `/tenantId/?`, `/normalizedEmail/?`, `/customerIdentityId/?`, `/vehicleInteractions/[]/vin/?`, `/vehicleInteractions/[]/status/?`. Composite index: `[tenantId ASC, normalizedEmail ASC]`. Unique key: `[/tenantId, /normalizedEmail]`.
+**`customer-profiles`** — Included paths: `/tenantId/?`, `/email/?`, `/customerIdentityId/?`, `/vehicleInteractions/[]/vin/?`, `/vehicleInteractions/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
 **`locations`** — Included paths: `/tenantId/?`, `/slug/?`, `/regionTag/?`.
 
@@ -484,7 +484,7 @@ One document cannot serve three different access patterns:
 
 ### 5.3 Customer Identity
 
-**`ICustomerIdentityRepository`** — `GetByEmailAsync(normalizedEmail)`, `GetByMagicLinkTokenAsync(token)`, `CreateAsync`, `UpdateAsync`.
+**`ICustomerIdentityRepository`** — `GetByEmailAsync(email)`, `GetByMagicLinkTokenAsync(token)`, `CreateAsync`, `UpdateAsync`.
 
 **`ICustomerIdentityService`** — `ResolveOrCreateIdentityAsync(email, firstName, lastName, phone?)`, `ValidateMagicLinkAsync(token)`, `RotateMagicLinkTokenAsync(identityId)`.
 
@@ -525,7 +525,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │                                                  │
 │ Container: locations                             │
 │ Query: cross-partition by slug (or cached map)   │
-│ Returns: tenantId + locationId + IntakeFormConfig│
+│ Returns: tenantId + locationId + IntakeFormConfigEmbedded│
 │ Cost: ~3 RU (or ~0 if cached)                    │
 └──────────────────┬───────────────────────────────┘
                    │
@@ -534,7 +534,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ STEP 1: Resolve Global CustomerIdentity          │
 │                                                  │
 │ Container: customer-identities                   │
-│ Query: point read by normalizedEmail partition   │
+│ Query: point read by email partition             │
 │ Cost: ~1 RU                                      │
 │                                                  │
 │ Found? → use existing identity                   │
@@ -575,7 +575,7 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │                                                  │
 │ Container: service-requests                      │
 │ Stamp tenantId + locationId from Step 0          │
-│ Embed CustomerSnapshot (denormalized)            │
+│ Embed CustomerSnapshotEmbedded (denormalized)    │
 │ Auto-categorize issue (rule-based MVP)           │
 │ Generate technician summary                      │
 │ Cost: ~1 RU                                      │
@@ -630,7 +630,7 @@ Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepos
 
 1. Calls `ICustomerIdentityService.ResolveOrCreateIdentityAsync` with customer email/name/phone from the request DTO.
 2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, VIN, and vehicle info. This handles shadow profile creation and VIN ownership transfer.
-3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshot` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
+3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
 4. Calls `IVehicleLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
 5. Updates linkages: adds the SR ID to the profile's `ServiceRequestIds`, increments `TotalRequestCount`, rotates the magic-link token on the global identity.
 6. Fires `INotificationService.SendIntakeConfirmationAsync` with the magic-link token (fire-and-forget).
@@ -646,8 +646,8 @@ Implements `ResolveOrCreateProfileAsync`. Two phases:
 
 **Phase 2 — VIN Ownership Resolution (three branches):**
 - **Same customer, same VIN** → update `LastSeenAtUtc`, increment `RequestCount` on the existing Active interaction.
-- **Different customer at same corporation owns this VIN** → deactivate the previous owner's `VehicleInteraction` (set status to Inactive, stamp `DeactivatedAtUtc` and reason). Then create or reactivate on the current profile.
-- **Brand new VIN (not seen before at this corporation)** → create new Active `VehicleInteraction` with `FirstSeenAtUtc = now`, `RequestCount = 1`.
+- **Different customer at same corporation owns this VIN** → deactivate the previous owner's `VehicleInteractionEmbedded` (set status to Inactive, stamp `DeactivatedAtUtc` and reason). Then create or reactivate on the current profile.
+- **Brand new VIN (not seen before at this corporation)** → create new Active `VehicleInteractionEmbedded` with `FirstSeenAtUtc = now`, `RequestCount = 1`.
 
 Also handles **reactivation** — if the current customer previously had an Inactive interaction for this VIN (sold the RV, bought it back), the existing interaction is reactivated rather than creating a duplicate.
 
@@ -789,9 +789,9 @@ rvs-attachments/
 | **Shadow profiles (no customer sign-up)** | Zero friction intake. Customers never see a registration screen. |
 | **Three identity containers** | Each access pattern needs a different partition key. One doc can't serve all three. |
 | **Append-only vehicle ledger** | Data moat — proprietary, accumulating, non-replicable. Powers Section 10A intelligence. |
-| **CustomerSnapshot denormalized in SR** | Dashboard reads never join to customer-profiles. ~1 RU per view. |
+| **`CustomerSnapshotEmbedded` denormalized in SR** | Dashboard reads never join to customer-profiles. ~1 RU per view. |
 | **Magic link on global identity, not profile** | Status page shows requests across ALL corporations for the customer. |
-| **IntakeFormConfig on Location, not Dealership** | Each physical site can have different intake settings (e.g., different file size limits). |
+| **`IntakeFormConfigEmbedded` on Location, not Dealership** | Each physical site can have different intake settings (e.g., different file size limits). |
 | **`regionTag` on Location** | Enables regional manager scoping without complex hierarchy. |
 | **Intake URL uses `locationSlug`, not `dealershipSlug`** | Each physical location has its own QR code / intake URL. The slug resolves to both tenantId and locationId in one operation. |
 | **Blob path includes `locationId`** | Storage organization mirrors data model. Enables future per-location retention policies. |
