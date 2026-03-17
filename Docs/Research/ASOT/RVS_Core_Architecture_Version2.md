@@ -59,12 +59,12 @@ RVS.slnx
 │   │   ├── EntityBase.cs
 │   │   ├── ServiceRequest.cs
 │   │   ├── CustomerSnapshotEmbedded.cs        # Embedded in ServiceRequest
-│   │   ├── VehicleInfoEmbedded.cs             # Embedded in ServiceRequest
+│   │   ├── AssetInfoEmbedded.cs             # Embedded in ServiceRequest
 │   │   ├── ServiceRequestAttachmentEmbedded.cs # Embedded in ServiceRequest
 │   │   ├── ServiceEventEmbedded.cs            # Embedded in ServiceRequest (10A fields)
 │   │   ├── CustomerProfile.cs         # Tenant-scoped shadow record
-│   │   ├── VehicleInteractionEmbedded.cs      # Embedded in CustomerProfile
-│   │   ├── VehicleInteractionStatus.cs
+│   │   ├── AssetInteractionEmbedded.cs      # Embedded in CustomerProfile
+│   │   ├── AssetInteractionStatus.cs
 │   │   ├── CustomerIdentity.cs        # Cross-dealer global identity
 │   │   ├── LinkedProfileReferenceEmbedded.cs  # Embedded in CustomerIdentity
 │   │   ├── AssetLedgerEntry.cs        # Append-only asset service event
@@ -83,13 +83,13 @@ RVS.slnx
 │   │   ├── ServiceRequestSummaryResponseDto.cs
 │   │   ├── AttachmentUploadRequestDto.cs
 │   │   ├── AttachmentResponseDto.cs
-│   │   ├── VehicleInfoDto.cs
+│   │   ├── AssetInfoDto.cs
 │   │   ├── CustomerInfoDto.cs
 │   │   ├── CustomerStatusResponseDto.cs
 │   │   ├── CustomerServiceRequestSummaryDto.cs
 │   │   ├── IntakeConfigResponseDto.cs
 │   │   ├── IntakePrefillDto.cs
-│   │   ├── VehiclePrefillDto.cs
+│   │   ├── AssetPrefillDto.cs
 │   │   ├── DealershipDetailResponseDto.cs
 │   │   ├── DealershipSummaryResponseDto.cs
 │   │   ├── DealershipUpdateRequestDto.cs
@@ -212,7 +212,7 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 | `Status` | `string` | `"New"`, `"InProgress"`, `"Completed"`, `"Cancelled"` |
 | `CustomerProfileId` | `string` | FK to tenant-scoped `CustomerProfile` |
 | `Customer` | `CustomerSnapshotEmbedded` | Point-in-time denormalized snapshot (no joins on dashboard reads) |
-| `Vehicle` | `VehicleInfoEmbedded` | VIN, manufacturer, model, year |
+| `Asset` | `AssetInfoEmbedded` | Identifier, manufacturer, model, year |
 | `IssueDescription` | `string` | Free-text customer description |
 | `IssueCategory` | `string?` | Auto-categorized (rule-based MVP, AI future) |
 | `TechnicianSummary` | `string?` | Generated summary for tech |
@@ -227,7 +227,7 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 
 **CustomerSnapshotEmbedded** — Point-in-time copy of customer info. Fields: `FirstName`, `LastName`, `Email`, `Phone`, `IsReturningCustomer`, `PriorRequestCount`. Denormalized so the dealer dashboard never joins to `customerProfiles`.
 
-**VehicleInfoEmbedded** — Fields: `Vin`, `Manufacturer`, `Model`, `Year`.
+**AssetInfoEmbedded** — Fields: `AssetId`, `Manufacturer`, `Model`, `Year`.
 
 **ServiceRequestAttachmentEmbedded** — Fields: `AttachmentId` (auto GUID), `BlobUri`, `FileName`, `ContentType`, `SizeBytes`, `CreatedAtUtc`.
 
@@ -244,25 +244,25 @@ Shadow profile — created automatically on first intake submission at a corpora
 | `Email` | `string` | Customer email (normalized on input) |
 | `FirstName` / `LastName` / `Phone` | `string` | Contact info, updated on each intake |
 | `CustomerIdentityId` | `string` | FK to global `CustomerIdentity` |
-| `VehicleInteractions` | `List<VehicleInteractionEmbedded>` | Full lifecycle of each customer ↔ VIN relationship |
+| `AssetInteractions` | `List<AssetInteractionEmbedded>` | Full lifecycle of each customer ↔ asset relationship |
 | `ServiceRequestIds` | `List<string>` | All SR IDs for this customer at this corporation |
 | `TotalRequestCount` | `int` | Running count |
 
-Convenience helpers (not persisted): `GetActiveVins()` returns VINs with Active status. `GetActiveInteraction(vin)` returns the active interaction for a specific VIN.
+Convenience helpers (not persisted): `GetActiveAssetIds()` returns asset identifiers with Active status. `GetActiveInteraction(assetId)` returns the active interaction for a specific asset.
 
-### 3.4 VehicleInteractionEmbedded (Embedded in CustomerProfile)
+### 3.4 AssetInteractionEmbedded (Embedded in CustomerProfile)
 
-Records a customer's relationship to a specific VIN over time. Handles ownership transfers: when a different customer submits for a VIN, the previous owner's interaction is set to Inactive.
+Records a customer's relationship to a specific asset over time. Handles ownership transfers: when a different customer submits for the same asset, the previous owner's interaction is set to Inactive.
 
 | Field | Type | Description |
 |---|---|---|
-| `Vin` | `string` | Vehicle identification number |
-| `Manufacturer` / `Model` / `Year` | `string?` / `int?` | Vehicle details |
+| `AssetId` | `string` | Compound asset key — format: `{AssetType}:{Identifier}` (e.g. `RV:1ABC234567`) |
+| `Manufacturer` / `Model` / `Year` | `string?` / `int?` | Asset details |
 | `Status` | `string` | `"Active"` or `"Inactive"` (string constants, not enum) |
 | `FirstSeenAtUtc` / `LastSeenAtUtc` | `DateTime` | Lifecycle timestamps |
-| `RequestCount` | `int` | Number of SRs with this VIN |
+| `RequestCount` | `int` | Number of SRs for this asset |
 | `DeactivatedAtUtc` | `DateTime?` | When ownership was transferred |
-| `DeactivationReason` | `string?` | e.g. "VIN submitted by a different customer" |
+| `DeactivationReason` | `string?` | e.g. "Asset claimed by a different customer" |
 
 ### 3.5 CustomerIdentity (Cross-Dealer Global Record)
 
@@ -368,7 +368,7 @@ One document cannot serve three different access patterns:
 
 | Identity Layer | Partition Key | Optimized For |
 |---|---|---|
-| **Tenant-scoped customer** (Corp A's view of John) | `/tenantId` | Dashboard, VIN ownership, search |
+| **Tenant-scoped customer** (Corp A's view of John) | `/tenantId` | Dashboard, asset ownership, search |
 | **Global customer** (John across all corporations) | `/email` | Intake email resolution (~1 RU), cross-dealer status |
 | **Global asset** (RV:1ABC across all owners/dealers) | `/assetId` | Asset service history (~1 RU), Section 10A analytics |
 
@@ -386,7 +386,7 @@ One document cannot serve three different access patterns:
 
 **`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`. Composite index: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`.
 
-**`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/customerIdentityId/?`, `/vehicleInteractions/[]/vin/?`, `/vehicleInteractions/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
+**`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/customerIdentityId/?`, `/assetInteractions/[]/assetId/?`, `/assetInteractions/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
 **`locations`** — Included paths: `/tenantId/?`, `/slug/?`, `/regionTag/?`.
 
@@ -410,8 +410,8 @@ One document cannot serve three different access patterns:
     "isReturningCustomer": true,
     "priorRequestCount": 2
   },
-  "vehicle": {
-    "vin": "1ABC234567",
+  "asset": {
+    "assetId": "RV:1ABC234567",
     "manufacturer": "Grand Design",
     "model": "Momentum 395G",
     "year": 2023
@@ -488,9 +488,9 @@ One document cannot serve three different access patterns:
 
 ### 5.2 Customer Profile
 
-**`ICustomerProfileRepository`** — `GetByIdAsync(tenantId, profileId)`, `GetByIdentityIdAsync(tenantId, customerIdentityId)`, `GetByActiveVinAsync(tenantId, vin)`, `CreateAsync`, `UpdateAsync`.
+**`ICustomerProfileRepository`** — `GetByIdAsync(tenantId, profileId)`, `GetByIdentityIdAsync(tenantId, customerIdentityId)`, `GetByActiveAssetIdAsync(tenantId, assetId)`, `CreateAsync`, `UpdateAsync`.
 
-**`ICustomerProfileService`** — `ResolveOrCreateProfileAsync(tenantId, identity, vin?, vehicleInfo?)`. Resolves existing or creates shadow record. Handles VIN ownership transfer detection within the tenant.
+**`ICustomerProfileService`** — `ResolveOrCreateProfileAsync(tenantId, identity, assetId?, assetInfo?)`. Resolves existing or creates shadow record. Handles asset ownership transfer detection within the tenant.
 
 ### 5.3 Customer Identity
 
@@ -564,18 +564,18 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ Blue Compass SLC and Denver share the same       │
 │ CustomerProfile for John Doe.                    │
 │                                                  │
-│ Found? → update contact info, handle VIN         │
+│ Found? → update contact info, handle AssetId     │
 │ Not found? → create new shadow profile           │
 └──────────────────┬───────────────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────────────┐
-│ STEP 2a: VIN Ownership Resolution                │
+│ STEP 2a: AssetId Ownership Resolution            │
 │                                                  │
-│ If VIN is active on THIS profile → update lastSeen│
-│ If VIN is active on DIFFERENT profile at same    │
+│ If AssetId on THIS profile → update lastSeen     │
+│ If AssetId on DIFFERENT profile at same          │
 │   corporation → deactivate old, activate on this │
-│ If VIN is brand new → create Active interaction  │
+│ If AssetId is brand new → create Active interaction│
 │ Cost: ~3 RU (single-partition array filter)      │
 └──────────────────┬───────────────────────────────┘
                    │
@@ -639,27 +639,27 @@ Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepos
 **`CreateServiceRequestAsync(tenantId, locationId, request)`** executes Steps 1–6 sequentially:
 
 1. Calls `ICustomerIdentityService.ResolveOrCreateIdentityAsync` with customer email/name/phone from the request DTO.
-2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, VIN, and vehicle info. This handles shadow profile creation and VIN ownership transfer.
+2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, asset identifier, and asset info. This handles shadow profile creation and asset ownership transfer.
 3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
 4. Calls `IAssetLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
 5. Updates linkages: adds the SR ID to the profile's `ServiceRequestIds`, increments `TotalRequestCount`, rotates the magic-link token on the global identity.
 6. Fires `INotificationService.SendIntakeConfirmationAsync` with the magic-link token (fire-and-forget).
 
-### 7.2 CustomerProfileService (Shadow Profile + VIN Ownership)
+### 7.2 CustomerProfileService (Shadow Profile + Asset Ownership)
 
 Implements `ResolveOrCreateProfileAsync`. Two phases:
 
 **Phase 1 — Profile Resolution:**
 - Find by `customerIdentityId` within tenant partition.
-- If not found → create new shadow profile with all customer fields, empty vehicle interactions, zero request count.
+- If not found → create new shadow profile with all customer fields, empty asset interactions, zero request count.
 - If found → update contact info (firstName, lastName, phone) from the latest submission.
 
-**Phase 2 — VIN Ownership Resolution (three branches):**
-- **Same customer, same VIN** → update `LastSeenAtUtc`, increment `RequestCount` on the existing Active interaction.
-- **Different customer at same corporation owns this VIN** → deactivate the previous owner's `VehicleInteractionEmbedded` (set status to Inactive, stamp `DeactivatedAtUtc` and reason). Then create or reactivate on the current profile.
-- **Brand new VIN (not seen before at this corporation)** → create new Active `VehicleInteractionEmbedded` with `FirstSeenAtUtc = now`, `RequestCount = 1`.
+**Phase 2 — Asset Ownership Resolution (three branches):**
+- **Same customer, same asset** → update `LastSeenAtUtc`, increment `RequestCount` on the existing Active interaction.
+- **Different customer at same corporation owns this asset** → deactivate the previous owner's `AssetInteractionEmbedded` (set status to Inactive, stamp `DeactivatedAtUtc` and reason). Then create or reactivate on the current profile.
+- **Brand new asset (not seen before at this corporation)** → create new Active `AssetInteractionEmbedded` with `FirstSeenAtUtc = now`, `RequestCount = 1`.
 
-Also handles **reactivation** — if the current customer previously had an Inactive interaction for this VIN (sold the RV, bought it back), the existing interaction is reactivated rather than creating a duplicate.
+Also handles **reactivation** — if the current customer previously had an Inactive interaction for this asset (sold the RV, bought it back), the existing interaction is reactivated rather than creating a duplicate.
 
 ### 7.3 LocationService
 
@@ -767,7 +767,7 @@ rvs-attachments/
 | Operation | Cosmos Calls | Estimated RU |
 |---|---|---|
 | **New customer intake (first visit, first corporation)** | 1 location slug + 1 identity miss + 1 identity write + 1 profile write + 1 SR write + 1 ledger write + 1 identity update + 1 profile update | ~13.8 RU |
-| **Returning customer intake (same corporation)** | 1 location slug + 1 identity hit + 1 profile hit + 1 VIN check + 1 SR write + 1 ledger write + 2 updates | ~12.8 RU |
+| **Returning customer intake (same corporation)** | 1 location slug + 1 identity hit + 1 profile hit + 1 AssetId check + 1 SR write + 1 ledger write + 2 updates | ~12.8 RU |
 | **Returning customer, new corporation** | 1 location slug + 1 identity hit + 1 profile miss + 1 profile write + 1 SR write + 1 ledger write + 2 updates | ~13.8 RU |
 | **With cached slug map** | Subtract ~3 RU from above | ~10.8 / ~9.8 / ~10.8 RU |
 | **Magic-link status page** | 1 identity query (token) + N point reads (linked SRs) | ~1 + N RU |
@@ -785,7 +785,7 @@ rvs-attachments/
 | **Token expiry** | 30-day default, configurable per tenant |
 | **Token rotation** | New token on every intake submission; previous invalidated |
 | **Rate limiting** | `api/status/{token}` limited to 10 req/min per IP |
-| **PII exposure** | Status page returns first name + vehicle summaries only — no full email, no phone, no other customers' data |
+| **PII exposure** | Status page returns first name + asset summaries only — no full email, no phone, no other customers' data |
 | **Cross-dealer visibility** | Customer sees their own requests across all corporations — intentional for customer convenience. No other customer's data is exposed. |
 
 ---
