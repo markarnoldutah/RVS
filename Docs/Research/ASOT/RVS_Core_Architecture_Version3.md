@@ -109,7 +109,9 @@ RVS.slnx
 │   │   ├── TenantAccessGateDto.cs
 │   │   ├── LookupSetDto.cs
 │   │   ├── LookupItemDto.cs
-│   │   └── ServiceRequestAnalyticsResponseDto.cs
+│   │   ├── ServiceRequestAnalyticsResponseDto.cs
+│   │   ├── ServiceRequestBatchOutcomeRequestDto.cs
+│   │   └── ServiceRequestBatchOutcomeResponseDto.cs
 │   ├── Interfaces/
 │   │   ├── IServiceRequestRepository.cs
 │   │   ├── IServiceRequestService.cs
@@ -133,6 +135,7 @@ RVS.slnx
 │   │   ├── INotificationService.cs
 │   │   └── IUserContextAccessor.cs
 │   ├── Validation/
+│   │   └── StatusTransitions.cs   # Allowed status transition rules for ServiceRequest
 │   └── Shared/
 │       └── PagedResult.cs
 │
@@ -215,7 +218,7 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 | `Type` | `string` | `"serviceRequest"` (discriminator) |
 | `TenantId` | `string` | Corporation partition key (inherited from `EntityBase`) |
 | `LocationId` | `string` | FK to the physical `Location` where this SR was submitted |
-| `Status` | `string` | `"New"`, `"InProgress"`, `"Completed"`, `"Cancelled"` |
+| `Status` | `string` | `"New"` \| `"Scheduled"` \| `"InDiagnosis"` \| `"WaitingParts"` \| `"InRepair"` \| `"Completed"` \| `"Closed"` \| `"Cancelled"`. See Section 18.2 for per-value semantics and allowed transitions. |
 | `CustomerProfileId` | `string` | FK to tenant-scoped `CustomerProfile` |
 | `Customer` | `CustomerSnapshotEmbedded` | Point-in-time denormalized snapshot (no joins on dashboard reads) |
 | `Asset` | `AssetInfoEmbedded` | Identifier, manufacturer, model, year |
@@ -229,6 +232,7 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 | `AssignedBayId` | `string?` | Future: bay assignment |
 | `AssignedTechnicianId` | `string?` | Future: tech assignment |
 | `RequiredSkills` | `List<string>` | Future: skill matching |
+| `Priority` | `string?` | Job priority set by manager. Values: `"Low"`, `"Normal"`, `"High"`, `"Urgent"`. Default: `null` (unset). |
 
 ### 3.2 Embedded Sub-Entities (within ServiceRequest)
 
@@ -395,7 +399,7 @@ One document cannot serve three different access patterns:
 
 ### 4.4 Key Indexing Policies
 
-**`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`, `/assignedTechnicianId/?`, `/assignedBayId/?`, `/asset/assetId/?`, `/diagnosticResponses/[]/selectedOptions/?`. Composite indexes: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, status ASC, createdAtUtc DESC]`, `[tenantId ASC, assignedTechnicianId ASC, status ASC, createdAtUtc DESC]`.
+**`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`, `/assignedTechnicianId/?`, `/assignedBayId/?`, `/asset/assetId/?`, `/scheduledDateUtc/?`, `/priority/?`, `/diagnosticResponses/[]/selectedOptions/?`. Composite indexes: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, status ASC, createdAtUtc DESC]`, `[tenantId ASC, assignedTechnicianId ASC, status ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, scheduledDateUtc ASC]`, `[tenantId ASC, priority ASC, status ASC, createdAtUtc DESC]`.
 
 **`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/globalCustomerAcctId/?`, `/assetsOwned/[]/assetId/?`, `/assetsOwned/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
@@ -471,12 +475,17 @@ One document cannot serve three different access patterns:
   "assignedBayId": null,
   "assignedTechnicianId": null,
   "requiredSkills": [],
+  "priority": null,
   "createdAtUtc": "2026-03-08T10:00:00Z",
   "createdByUserId": null,
   "updatedAtUtc": "2026-03-08T10:00:00Z",
   "updatedByUserId": null
 }
 ```
+
+> **Valid `status` values:** `"New"`, `"Scheduled"`, `"InDiagnosis"`, `"WaitingParts"`, `"InRepair"`, `"Completed"`, `"Closed"`, `"Cancelled"`. Allowed transitions are enforced by `StatusTransitions.cs` in `RVS.Domain/Validation/` (see Section 18.2 for the full transition table).
+>
+> **Valid `priority` values:** `"Low"`, `"Normal"`, `"High"`, `"Urgent"`, or `null` (unset).
 
 **Location:**
 
@@ -531,9 +540,17 @@ One document cannot serve three different access patterns:
 
 **`IServiceRequestRepository`** — `GetByIdAsync(tenantId, serviceRequestId)`, `SearchAsync(tenantId, searchDto)`, `GetByProfileIdAsync(tenantId, profileId, limit)`, `CreateAsync`, `UpdateAsync`, `DeleteAsync(tenantId, serviceRequestId)`, `GetCountByStatusAsync(tenantId, status?, locationId?)`.
 
-**`IServiceRequestService`** — `CreateServiceRequestAsync(tenantId, locationId, createDto)`, `GetServiceRequestAsync(tenantId, serviceRequestId)`, `SearchServiceRequestsAsync(tenantId, searchDto)`, `GetByProfileAsync(tenantId, profileId, limit)`, `UpdateServiceRequestAsync(tenantId, serviceRequestId, updateDto)`, `UpdateStatusAsync(tenantId, serviceRequestId, newStatus)`, `DeleteServiceRequestAsync(tenantId, serviceRequestId)`.
+**`IServiceRequestService`** — `CreateServiceRequestAsync(tenantId, locationId, createDto)`, `GetServiceRequestAsync(tenantId, serviceRequestId)`, `SearchServiceRequestsAsync(tenantId, searchDto)`, `GetByProfileAsync(tenantId, profileId, limit)`, `UpdateServiceRequestAsync(tenantId, serviceRequestId, updateDto)`, `UpdateStatusAsync(tenantId, serviceRequestId, newStatus)` (validates transitions using `StatusTransitions.cs`), `BatchApplyOutcomeAsync(tenantId, batchDto)`, `DeleteServiceRequestAsync(tenantId, serviceRequestId)`.
 
-**`ServiceRequestSearchRequestDto`** — Supports the following filter fields: `LocationId` (string?), `Status` (string?), `IssueCategory` (string?), `CustomerName` (string?), `AssetId` (string? — enables VIN scan → job lookup on the technician mobile app), `AssignedTechnicianId` (string? — enables "My Jobs" queue for technicians), `AssignedBayId` (string? — enables bay-based tablet access), `CreatedAfterUtc` (DateTime?), `CreatedBeforeUtc` (DateTime?), `SortBy` (string?, default: `"createdAtUtc"`), `SortDirection` (string?, default: `"desc"`), `PageNumber` (int, default: 1), `PageSize` (int, default: 25, max: 100). All filters are optional and combined with AND logic. Results are scoped by `ClaimsService.HasAccessToLocation()` in the service layer. For `dealer:technician` role, the service layer further restricts results to SRs where `AssignedTechnicianId` matches the current user's `userId` claim.
+**`ServiceRequestSearchRequestDto`** — Supports the following filter fields: `LocationId` (string?), `Status` (string?), `Priority` (string? — filter by job priority; values: `"Low"`, `"Normal"`, `"High"`, `"Urgent"`), `IssueCategory` (string?), `CustomerName` (string?), `AssetId` (string? — enables VIN scan → job lookup on the technician mobile app), `AssignedTechnicianId` (string? — enables "My Jobs" queue for technicians), `AssignedBayId` (string? — enables bay-based tablet access), `CreatedAfterUtc` (DateTime?), `CreatedBeforeUtc` (DateTime?), `ScheduledAfterUtc` (DateTime? — filter by scheduled date range start), `ScheduledBeforeUtc` (DateTime? — filter by scheduled date range end), `HasOutcome` (bool? — when `false`, returns completed jobs where `serviceEvent.failureMode` or `serviceEvent.repairAction` is null; when `true`, returns completed jobs with outcome data populated), `SortBy` (string?, default: `"createdAtUtc"`), `SortDirection` (string?, default: `"desc"`), `PageNumber` (int, default: 1), `PageSize` (int, default: 25, max: 100). All filters are optional and combined with AND logic. Results are scoped by `ClaimsService.HasAccessToLocation()` in the service layer. For `dealer:technician` role, the service layer further restricts results to SRs where `AssignedTechnicianId` matches the current user's `userId` claim.
+
+**`ServiceRequestUpdateRequestDto`** — Includes all updatable fields: `Status`, `Priority` (`string?` — `"Low"`, `"Normal"`, `"High"`, `"Urgent"`), `IssueCategory`, `AssignedTechnicianId`, `AssignedBayId`, `ScheduledDateUtc`, `RequiredSkills`, and `ServiceEvent` sub-fields.
+
+**`ServiceRequestDetailResponseDto`** and **`ServiceRequestSummaryResponseDto`** — Both include `Priority` (`string?`) in the response payload alongside `Status`, `AssignedTechnicianId`, `AssignedBayId`, `ScheduledDateUtc`, and other standard fields.
+
+**`ServiceRequestBatchOutcomeRequestDto`** — Fields: `ServiceRequestIds` (`List<string>`, required, max 25 — requests exceeding 25 items return HTTP 400), `FailureMode` (`string?`), `RepairAction` (`string?`), `PartsUsed` (`List<string>?`), `LaborHours` (`decimal?`). Used by the `PATCH .../batch-outcome` endpoint to apply a shared repair outcome to multiple service requests in a single operation.
+
+**`ServiceRequestBatchOutcomeResponseDto`** — Fields: `Succeeded` (`List<string>` — IDs of successfully updated SRs), `Failed` (`List<BatchOutcomeFailureDto>` — IDs and error reasons for failed updates). `BatchOutcomeFailureDto` contains `ServiceRequestId` (`string`) and `Reason` (`string`).
 
 ### 5.2 Customer Profile
 
@@ -732,7 +749,13 @@ Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RV
 
 ### 8.2 Dealer-Facing (Authenticated)
 
-**ServiceRequestsController** — Route: `api/dealerships/{dealershipId}/service-requests`. Actions: `GET {id}` (CanReadServiceRequests), `POST search` (CanSearchServiceRequests), `PUT {id}` (CanUpdateServiceRequests), `DELETE {id}` (CanDeleteServiceRequests). Location filtering applied server-side via `ClaimsService.HasAccessToLocation()`.
+**ServiceRequestsController** — Route: `api/dealerships/{dealershipId}/service-requests`. Actions: `GET {id}` (CanReadServiceRequests), `POST search` (CanSearchServiceRequests), `PUT {id}` (CanUpdateServiceRequests), `PATCH batch-outcome` (CanUpdateServiceRequests — applies a shared repair outcome to up to 25 service requests in one call; delegates to `IServiceRequestService.BatchApplyOutcomeAsync`), `DELETE {id}` (CanDeleteServiceRequests). Location filtering applied server-side via `ClaimsService.HasAccessToLocation()`.
+
+> **Phase 2 — Request Additional Information (GAP 5 — MVP Deferral)**
+>
+> **MVP approach:** Managers record questions internally via the existing `PUT {id}` update and contact the customer via phone/email outside the system. Customer contact details are available in the embedded `CustomerSnapshotEmbedded` (`Email`, `Phone`).
+>
+> **Phase 2 implementation:** Add `INotificationService.SendFollowUpRequestAsync(serviceRequestId, message)` and a new endpoint `POST api/dealerships/{id}/service-requests/{srId}/follow-ups`. This will send the customer a structured follow-up email with a link to a response form on their magic-link status page.
 
 **AttachmentsController** — Route: `api/dealerships/{dealershipId}/service-requests/{serviceRequestId}/attachments`. Actions: `POST` (CanUploadAttachments — authenticated upload for dealer staff/technicians), `GET {attachmentId}` (CanReadAttachments), `DELETE {attachmentId}` (CanDeleteAttachments).
 
@@ -745,6 +768,10 @@ Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RV
 **LookupsController** — Route: `api/lookups`. Action: `GET {lookupSetId}` (CanReadLookups).
 
 **AnalyticsController** — Route: `api/dealerships/{dealershipId}/analytics`. Action: `GET service-requests/summary` (CanReadAnalytics).
+
+- **Query parameters:** `?from={date}&to={date}&locationId={locId}` (all optional)
+- **Response:** `ServiceRequestAnalyticsResponseDto` — covers all analytics dimensions needed by the Service Manager Desktop, including request counts by status/category/location, top failure modes, top repair actions, average repair time, top parts used, and average days to completion. See Section 12.1 for the full response DTO field definitions.
+- **Performance:** For MVP volumes (<200 jobs/month), a single-partition aggregate query is acceptable (~5–10 RU). Accelerate the Phase 2 change feed → Azure Tables aggregation (Section 15.3) if analytics query cost becomes measurable at higher volume.
 
 ---
 
@@ -798,6 +825,7 @@ rvs-attachments/
 | `GET` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | CanReadServiceRequests | Request detail |
 | `POST` | `api/dealerships/{id}/service-requests/search` | Bearer | CanSearchServiceRequests | Search/filter requests |
 | `PUT` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | CanUpdateServiceRequests | Update request |
+| `PATCH` | `api/dealerships/{id}/service-requests/batch-outcome` | Bearer | CanUpdateServiceRequests | Batch apply repair outcome to multiple service requests (max 25) |
 | `DELETE` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | CanDeleteServiceRequests | Delete request |
 | `GET` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | CanReadAttachments | Get attachment SAS URL |
 | `DELETE` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | CanDeleteAttachments | Delete attachment |
@@ -810,7 +838,7 @@ rvs-attachments/
 | `POST` | `api/locations` | Bearer | CanCreateLocations | Create location |
 | `PUT` | `api/locations/{id}` | Bearer | CanUpdateLocations | Update location |
 | `GET` | `api/locations/{id}/qr-code` | Bearer | CanReadLocations | Generate intake QR code |
-| `GET` | `api/dealerships/{id}/analytics/service-requests/summary` | Bearer | CanReadAnalytics | Request analytics |
+| `GET` | `api/dealerships/{id}/analytics/service-requests/summary?from={date}&to={date}&locationId={locId}` | Bearer | CanReadAnalytics | Request analytics (see Section 12.1 for response DTO) |
 | `POST` | `api/tenants/config` | Bearer | CanManageTenantConfig | Bootstrap tenant config |
 | `GET` | `api/tenants/config` | Bearer | CanManageTenantConfig | Get tenant config |
 | `PUT` | `api/tenants/config` | Bearer | CanManageTenantConfig | Update tenant config |
@@ -834,6 +862,28 @@ rvs-attachments/
 | **Dealer dashboard: view request** | 1 point read (SR — snapshot embedded) | ~1 RU |
 | **Dealer dashboard: search requests** | 1 single-partition query (with locationId filter) | ~3 RU |
 | **Asset service history (10A query)** | 1 single-partition read (assetLedger, /assetId) | **~1 RU** |
+
+---
+
+## 12.1 Analytics Response DTO
+
+`ServiceRequestAnalyticsResponseDto` — Returned by `GET api/dealerships/{id}/analytics/service-requests/summary`. Supports optional time range and location filtering via query parameters (`?from={date}&to={date}&locationId={locId}`).
+
+| Field | Type | Description |
+|---|---|---|
+| `TotalRequests` | `int` | Total service requests in the queried period |
+| `RequestsByStatus` | `Dictionary<string, int>` | Count per status value (e.g. `"New"`, `"InRepair"`) |
+| `RequestsByCategory` | `Dictionary<string, int>` | Count per issue category |
+| `RequestsByLocation` | `Dictionary<string, int>` | Count per location (relevant for multi-location groups) |
+| `TopFailureModes` | `List<AnalyticsRankItem>` | Top N failure modes with occurrence count |
+| `TopRepairActions` | `List<AnalyticsRankItem>` | Top N repair actions with occurrence count |
+| `AverageRepairTimeHours` | `decimal?` | Mean labor hours across completed jobs with `serviceEvent.laborHours` populated |
+| `TopPartsUsed` | `List<AnalyticsRankItem>` | Top N parts with total replacement count |
+| `AverageDaysToComplete` | `decimal?` | Mean elapsed days from `createdAtUtc` to `Closed` status across completed jobs |
+
+`AnalyticsRankItem` — `Name` (`string`), `Count` (`int`).
+
+> **Scaling note:** For MVP volumes (<200 jobs/month), a single-partition aggregate query is acceptable (~5–10 RU). If analytics queries become expensive at higher volume, accelerate the Phase 2 change feed → Azure Tables aggregation pattern (Section 15.3).
 
 ---
 
@@ -1084,3 +1134,81 @@ GET api/predictions/labor?issueCategory={cat}&componentType={type}&manufacturer=
 ```
 
 For MVP, the mobile app uses static suggested labor times from the `LookupSet` data or hardcoded client-side values.
+
+---
+
+## 18. Service Manager Desktop App — API Readiness
+
+This section documents the API surface gaps identified from the Service Manager Desktop feature requirements (see `Docs/Research/FrontEnd/RVS_Features_Mngr_Desktop.md`) and the resolutions adopted in this architecture version.
+
+### 18.1 Gap Summary
+
+| Priority | Gap | Resolution | Status |
+|---|---|---|---|
+| 🔴 Critical | Status model only has 4 values; Service Board needs 7+1 | Expanded to 8 status values with transition validation (`StatusTransitions.cs`) — Section 3.1 | ✅ Resolved in this version |
+| 🔴 Critical | No batch outcome endpoint for Batch Outcome Entry (M6) | Added `PATCH api/dealerships/{id}/service-requests/batch-outcome` — Sections 8.2, 11 | ✅ Resolved in this version |
+| 🟡 Important | `Priority` field missing for Work Assignment (M3) | Added `Priority` (`string?`) to `ServiceRequest` entity and all relevant DTOs — Sections 3.1, 4.4, 4.5, 5.1 | ✅ Resolved in this version |
+| 🟡 Important | No `HasOutcome` filter for Outcome Compliance Monitoring (M5) | Added `HasOutcome` (`bool?`) to `ServiceRequestSearchRequestDto` — Section 5.1 | ✅ Resolved in this version |
+| 🟡 Important | No scheduled date search filters (M2, M3) | Added `ScheduledAfterUtc`/`ScheduledBeforeUtc` to `ServiceRequestSearchRequestDto`; added `/scheduledDateUtc/?` to indexing policy — Sections 4.4, 5.1 | ✅ Resolved in this version |
+| 🟡 Important | Analytics response DTO scope too narrow (M7) | Expanded `ServiceRequestAnalyticsResponseDto` with failure modes, repair times, parts trends; added time range query params — Sections 8.2, 11, 12.1 | ✅ Resolved in this version |
+| 🟢 Phase 2 | No "request additional info" flow for triage (M2) | MVP: managers contact customers externally via `CustomerSnapshotEmbedded` contact details. Phase 2: `POST .../follow-ups` endpoint + `INotificationService.SendFollowUpRequestAsync` — Section 8.2 | 🔵 Deferred |
+
+### 18.2 Expanded Status Values and Transition Validation
+
+The `ServiceRequest.Status` field has been expanded from 4 to 8 values to align with the Service Manager Desktop Service Board columns:
+
+| Status Value | Service Board Column | Notes |
+|---|---|---|
+| `"New"` | New Requests | Submitted, not yet triaged |
+| `"Scheduled"` | Scheduled | Has `ScheduledDateUtc` set |
+| `"InDiagnosis"` | In Diagnosis | Technician is diagnosing |
+| `"WaitingParts"` | Waiting Parts | Blocked on parts availability |
+| `"InRepair"` | In Repair | Repair actively in progress |
+| `"Completed"` | Completed (Outcome Needed) | Repair done; outcome may be missing |
+| `"Closed"` | Closed | Outcome recorded; job fully closed |
+| `"Cancelled"` | — | Cancelled at any stage |
+
+**Allowed transitions** (enforced by `StatusTransitions.cs` in `RVS.Domain/Validation/`):
+
+| From | Allowed Next States |
+|---|---|
+| `New` | `Scheduled`, `InDiagnosis`, `Cancelled` |
+| `Scheduled` | `InDiagnosis`, `WaitingParts`, `Cancelled` |
+| `InDiagnosis` | `WaitingParts`, `InRepair`, `Cancelled` |
+| `WaitingParts` | `InDiagnosis`, `InRepair`, `Cancelled` |
+| `InRepair` | `WaitingParts`, `Completed`, `Cancelled` |
+| `Completed` | `Closed`, `InRepair` (reopen for additional work) |
+| `Closed` | *(terminal — no transitions)* |
+| `Cancelled` | *(terminal — no transitions)* |
+
+`UpdateStatusAsync` in `IServiceRequestService` validates the requested transition using this class and throws `ArgumentException` (mapped to HTTP 400) if the transition is not allowed.
+
+### 18.3 Batch Outcome Endpoint
+
+`PATCH api/dealerships/{id}/service-requests/batch-outcome` applies a shared repair outcome to up to 25 service requests in one call.
+
+**Validation:**
+- Requests with more than 25 IDs in `ServiceRequestIds` return HTTP 400 immediately.
+- Each SR is validated to exist within the tenant and to have a status of `"Completed"` (the expected state for outcome entry).
+- SRs that fail validation (not found, wrong status, wrong tenant) are collected into the `Failed` list with an explanatory reason rather than aborting the entire batch.
+
+**Operation:** For each valid SR, the service applies the provided `ServiceEvent` fields (`FailureMode`, `RepairAction`, `PartsUsed`, `LaborHours`) and returns a result summary with separate `Succeeded` and `Failed` lists.
+
+**Request — `ServiceRequestBatchOutcomeRequestDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `ServiceRequestIds` | `List<string>` | Required. IDs of SRs to update. Max 25. |
+| `FailureMode` | `string?` | Failure mode to apply to all |
+| `RepairAction` | `string?` | Repair action to apply to all |
+| `PartsUsed` | `List<string>?` | Parts list to apply to all |
+| `LaborHours` | `decimal?` | Labor hours to apply to all |
+
+**Response — `ServiceRequestBatchOutcomeResponseDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `Succeeded` | `List<string>` | IDs of successfully updated service requests |
+| `Failed` | `List<BatchOutcomeFailureDto>` | Items that failed, with reason |
+
+`BatchOutcomeFailureDto` — `ServiceRequestId` (`string`), `Reason` (`string`).

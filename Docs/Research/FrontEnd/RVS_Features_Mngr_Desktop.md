@@ -213,6 +213,26 @@ Not replace dealership DMS systems but complement them.
 
 ---
 
+## API Readiness Notes
+
+The following gap analysis was performed cross-referencing these feature requirements against the API route table and domain model in `Docs/Research/ASOT/RVS_Core_Architecture_Version3.md` (Section 11). All MVP gaps have been resolved in Architecture Version 3.
+
+### Gap Summary
+
+| Priority | Gap | Resolution | Status |
+|---|---|---|---|
+| 🔴 Critical | Status model only has 4 values; Service Board needs 7+1 | Expanded to 8 status values with transition validation (`StatusTransitions.cs`) | ✅ Resolved in Architecture V3 |
+| 🔴 Critical | No batch outcome endpoint for Batch Outcome Entry | Added `PATCH api/dealerships/{id}/service-requests/batch-outcome` | ✅ Resolved in Architecture V3 |
+| 🟡 Important | `Priority` field missing for Work Assignment | Added `Priority` (`string?`) to `ServiceRequest` entity | ✅ Resolved in Architecture V3 |
+| 🟡 Important | No `HasOutcome` filter for Outcome Compliance Monitoring | Added `HasOutcome` (`bool?`) to `ServiceRequestSearchRequestDto` | ✅ Resolved in Architecture V3 |
+| 🟡 Important | No scheduled date search filters | Added `ScheduledAfterUtc`/`ScheduledBeforeUtc` to search DTO | ✅ Resolved in Architecture V3 |
+| 🟡 Important | Analytics response DTO scope too narrow | Expanded `ServiceRequestAnalyticsResponseDto` with failure modes, repair times, parts trends | ✅ Resolved in Architecture V3 |
+| 🟢 Phase 2 | No "request additional info" flow for triage | MVP: managers contact customers externally. Phase 2: follow-up endpoint + notification | 🔵 Deferred |
+
+The architecture document (`Docs/Research/ASOT/RVS_Core_Architecture_Version3.md`) has been updated to address all MVP gaps. See Section 18 ("Service Manager Desktop App — API Readiness") for the full technical resolution details.
+
+---
+
 # Resulting System Behavior
 
 When designed correctly:
