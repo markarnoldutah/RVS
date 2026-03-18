@@ -2,7 +2,7 @@
 
 # RV Service Flow (RVS) — Core Backend Architecture
 
-**As-of-Thread (ASOT) — March 10, 2026**
+**As-of-Thread (ASOT) — March 18, 2026**
 
 This document captures the domain model, multi-location tenancy, data layer, orchestration flows, service layer, middleware pipeline, API surface, and storage design for RVS. For Auth0 identity, RBAC roles/permissions, ClaimsService, and authorization policies, see the companion document **RVS_Auth0_Identity.md**.
 
@@ -33,7 +33,7 @@ RVS.slnx
 │   │   ├── LocationService.cs         # Physical location CRUD + slug resolution
 │   │   ├── TenantService.cs
 │   │   ├── LookupService.cs
-│   │   ├── CategorizationService.cs    # Rule-based MVP; AI-ready interface
+│   │   ├── CategorizationService.cs    # Azure OpenAI-powered; rule-based fallback
 │   │   ├── NotificationService.cs
 │   │   └── ClaimsService.cs           # Auth0 JWT claims (see RVS_Auth0_Identity.md)
 │   ├── Mappers/
@@ -47,7 +47,8 @@ RVS.slnx
 │   ├── Middleware/
 │   │   ├── ExceptionHandlingMiddleware.cs  # IMiddleware, singleton
 │   │   └── TenantAccessGateMiddleware.cs   # RequestDelegate, scoped injection
-│   ├── Integrations/                   # Future: DMS webhooks, AI clients
+│   ├── Integrations/
+│   │   └── AzureOpenAiClient.cs       # Azure OpenAI client wrapper
 │   ├── Properties/
 │   ├── Program.cs
 │   ├── appsettings.json
@@ -62,6 +63,7 @@ RVS.slnx
 │   │   ├── AssetInfoEmbedded.cs             # Embedded in ServiceRequest
 │   │   ├── ServiceRequestAttachmentEmbedded.cs # Embedded in ServiceRequest
 │   │   ├── ServiceEventEmbedded.cs            # Embedded in ServiceRequest (10A fields)
+│   │   ├── DiagnosticResponseEmbedded.cs     # Embedded in ServiceRequest
 │   │   ├── CustomerProfile.cs         # Tenant-scoped shadow record
 │   │   ├── AssetsOwnedEmbedded.cs      # Embedded in CustomerProfile
 │   │   ├── AssetsOwnedStatus.cs
@@ -90,6 +92,10 @@ RVS.slnx
 │   │   ├── IntakeConfigResponseDto.cs
 │   │   ├── IntakePrefillDto.cs
 │   │   ├── AssetPrefillDto.cs
+│   │   ├── DiagnosticQuestionsRequestDto.cs
+│   │   ├── DiagnosticQuestionsResponseDto.cs
+│   │   ├── DiagnosticQuestionDto.cs
+│   │   ├── DiagnosticResponseDto.cs
 │   │   ├── DealershipDetailResponseDto.cs
 │   │   ├── DealershipSummaryResponseDto.cs
 │   │   ├── DealershipUpdateRequestDto.cs
@@ -123,7 +129,7 @@ RVS.slnx
 │   │   ├── ITenantService.cs
 │   │   ├── ILookupRepository.cs
 │   │   ├── ILookupService.cs
-│   │   ├── ICategorizationService.cs  # Rule-based MVP; AI future
+│   │   ├── ICategorizationService.cs  # Azure OpenAI-powered; rule-based fallback
 │   │   ├── INotificationService.cs
 │   │   └── IUserContextAccessor.cs
 │   ├── Validation/
@@ -216,6 +222,7 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 | `IssueDescription` | `string` | Free-text customer description |
 | `IssueCategory` | `string?` | Auto-categorized (rule-based MVP, AI future) |
 | `TechnicianSummary` | `string?` | Generated summary for tech |
+| `DiagnosticResponses` | `List<DiagnosticResponseEmbedded>` | AI-generated Q&A captured during intake wizard |
 | `Attachments` | `List<ServiceRequestAttachmentEmbedded>` | Embedded photo/video references |
 | `ServiceEvent` | `ServiceEventEmbedded` | Section 10A structured repair data |
 | `ScheduledDateUtc` | `DateTime?` | Future: scheduling |
@@ -232,6 +239,8 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 **ServiceRequestAttachmentEmbedded** — Fields: `AttachmentId` (auto GUID), `BlobUri`, `FileName`, `ContentType`, `SizeBytes`, `CreatedAtUtc`.
 
 **ServiceEventEmbedded** — Section 10A structured data. Fields: `ComponentType`, `FailureMode`, `RepairAction`, `PartsUsed` (list), `LaborHours`, `ServiceDateUtc`. Populated progressively across phases; MVP captures `IssueCategory` and `ComponentType` only.
+
+**DiagnosticResponseEmbedded** — Structured answer from the AI-guided intake wizard. Fields: `QuestionText` (string), `SelectedOptions` (List<string>), `FreeTextResponse` (string?). Embedded as a list in `ServiceRequest`. Used by `CategorizationService` to improve auto-categorization and technician summary quality.
 
 ### 3.3 CustomerProfile (Tenant-Scoped Shadow Record)
 
@@ -340,7 +349,7 @@ A physical service site within a dealership group. Single-location dealers have 
 
 **AddressEmbedded** — Fields: `Street`, `City`, `State`, `Zip`.
 
-**IntakeFormConfigEmbedded** — Fields: `AcceptedFileTypes` (default: `.jpg`, `.png`, `.mp4`), `MaxFileSizeMb` (default: 25).
+**IntakeFormConfigEmbedded** — Fields: `AcceptedFileTypes` (default: `.jpg`, `.png`, `.mp4`), `MaxFileSizeMb` (default: 25), `MaxAttachmentCount` (default: 10), `RequiredFields` (List<string>, default: empty — all standard fields required), `ServiceInstructions` (string?, optional location-specific instructions shown on intake page), `AiContext` (string?, optional dealer-specific context appended to the Azure OpenAI system prompt for diagnostic question generation — e.g. "We specialize in Grand Design and Keystone brands" or "Always ask about extended warranty status").
 
 ### 3.9 TenantConfig, LookupSet
 
@@ -386,7 +395,7 @@ One document cannot serve three different access patterns:
 
 ### 4.4 Key Indexing Policies
 
-**`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`. Composite indexes: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, status ASC, createdAtUtc DESC]`.
+**`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`, `/diagnosticResponses/[]/selectedOptions/?`. Composite indexes: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, status ASC, createdAtUtc DESC]`.
 
 **`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/globalCustomerAcctId/?`, `/assetsOwned/[]/assetId/?`, `/assetsOwned/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
@@ -423,6 +432,23 @@ One document cannot serve three different access patterns:
   "issueDescription": "Slide-out hydraulic pump makes grinding noise...",
   "issueCategory": "Slide System",
   "technicianSummary": "Possible hydraulic pump failure on slide-out mechanism...",
+  "diagnosticResponses": [
+    {
+      "questionText": "What happens when you try to extend the slide?",
+      "selectedOptions": ["Grinding noise"],
+      "freeTextResponse": null
+    },
+    {
+      "questionText": "Does the slide operate on hydraulic or electric mechanisms?",
+      "selectedOptions": ["Hydraulic"],
+      "freeTextResponse": null
+    },
+    {
+      "questionText": "Have you noticed any fluid leaks near the slide mechanism?",
+      "selectedOptions": ["Yes"],
+      "freeTextResponse": "Small puddle under the RV near the slide"
+    }
+  ],
   "attachments": [
     {
       "attachmentId": "att_001",
@@ -472,7 +498,11 @@ One document cannot serve three different access patterns:
   "logoUrl": "https://rvsstorage.blob.core.windows.net/logos/bc-slc.png",
   "intakeConfig": {
     "acceptedFileTypes": [".jpg", ".png", ".mp4"],
-    "maxFileSizeMb": 25
+    "maxFileSizeMb": 25,
+    "maxAttachmentCount": 10,
+    "requiredFields": [],
+    "serviceInstructions": null,
+    "aiContext": null
   },
   "regionTag": "west",
   "isEnabled": true,
@@ -605,8 +635,9 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ Container: serviceRequests                       │
 │ Stamp tenantId + locationId from Step 0          │
 │ Embed CustomerSnapshotEmbedded (denormalized)    │
-│ Auto-categorize issue (rule-based MVP)           │
-│ Generate technician summary                      │
+│ Auto-categorize issue (Azure OpenAI)             │
+│ Generate technician summary (AI-enhanced with    │
+│   diagnostic responses if present)               │
 │ Cost: ~1 RU                                      │
 └──────────────────┬───────────────────────────────┘
                    │
@@ -660,7 +691,7 @@ Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepos
 
 1. Calls `IGlobalCustomerAcctService.ResolveOrCreateIdentityAsync` with customer email/name/phone from the request DTO.
 2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, asset identifier, and asset info. This handles shadow profile creation and asset ownership transfer.
-3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
+3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Embeds `DiagnosticResponses` from the request DTO (captured during the AI-guided wizard step). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary — the categorization service uses diagnostic responses (if present) to produce higher-quality results.
 4. Calls `IAssetLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
 5. Updates linkages: increments `TotalRequestCount`, rotates the magic-link token on the global identity. Token format: `base64url(SHA256(email)[0..8]):random_bytes` — embeds the email hash so token lookup derives the partition key without a cross-partition query. (Service requests for a customer are retrieved via query: `WHERE tenantId = @t AND customerProfileId = @p` on the `serviceRequests` container — a cheap single-partition read (~3 RU) that avoids unbounded list growth on the profile document.)
 6. Fires `INotificationService.SendIntakeConfirmationAsync` with the magic-link token (fire-and-forget).
@@ -693,7 +724,7 @@ Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RV
 
 ### 8.1 Customer-Facing (Unauthenticated)
 
-**IntakeController** — Route: `api/intake/{locationSlug}`. `[AllowAnonymous]`. Resolves location slug → `tenantId` + `locationId`. Endpoints: `GET` (intake config + optional prefill via `?token=`), `POST service-requests` (submit), `POST service-requests/{id}/attachments` (upload).
+**IntakeController** — Route: `api/intake/{locationSlug}`. `[AllowAnonymous]`. Resolves location slug → `tenantId` + `locationId`. Endpoints: `GET` (intake config + optional prefill via `?token=`), `POST diagnostic-questions` (AI-generated follow-up questions based on category + initial description), `POST service-requests` (submit), `POST service-requests/{id}/attachments` (upload).
 
 **CustomerStatusController** — Route: `api/status`. `[AllowAnonymous]`. Endpoint: `GET {token}` parses the email-hash prefix from the token to derive the partition key, validates the magic link via single-partition point read, returns requests across all dealerships/locations.
 
@@ -759,6 +790,7 @@ rvs-attachments/
 |---|---|---|---|---|
 | `GET` | `api/intake/{locationSlug}?token={t}` | Anonymous | — | Intake config + optional prefill via magic link |
 | `POST` | `api/intake/{locationSlug}/service-requests` | Anonymous | — | Submit request → full intake orchestration |
+| `POST` | `api/intake/{locationSlug}/diagnostic-questions` | Anonymous | — | AI-generated diagnostic questions for selected category |
 | `POST` | `api/intake/{locationSlug}/service-requests/{id}/attachments` | Anonymous | — | Upload photo/video |
 | `GET` | `api/status/{token}` | Anonymous | — | Customer status page via magic link (cross-dealer) |
 | `GET` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | CanReadServiceRequests | Request detail |
@@ -836,6 +868,7 @@ rvs-attachments/
 | **`Dealership.IsMultiLocation` flag** | UI can adapt (show location picker vs. skip). No code branching in the API layer. |
 | **`ConnectionMode.Gateway` for Cosmos SDK** | Enables server-side gateway caching for stable point reads (`slugLookup`, `tenantConfigs`, `lookupSets`). Zero additional cost. Eliminates application-layer caching for these access patterns. Consistent across all replicas and through deploys. |
 | **`slugLookup` as a dedicated container** | Decouples slug resolution from the `locations` container partition scheme. Enables O(1) point reads partitioned by `/slug`. Gateway-cached on repeated reads. Autoscale floor ~$2.30/month. Invalidation is write-through on `CreateLocationAsync` / `UpdateLocationAsync`. |
+| **Azure OpenAI for diagnostic questions, not static templates** | Dynamic AI-generated questions adapt to category, description, and asset context. Eliminates need for per-category question template CRUD, admin UI, and ongoing curation. Cost: ~$0.0002/intake with GPT-4o-mini. Rule-based fallback if AI is unavailable. |
 
 ---
 
@@ -878,3 +911,121 @@ Cosmos DB Change Feed is not used in MVP, but several architectural patterns cre
 **Pattern if needed:** A change feed consumer on `customerProfiles` fans out patch updates to open `serviceRequests` in the same tenant partition. Scope is limited to `status IN ('New', 'InProgress')` to avoid touching historical records.
 
 **MVP stance:** Accept stale snapshots. The advisor can always look up the current profile. This consumer is only warranted if customer contact updates during open SRs become a reported pain point.
+
+---
+
+## 16. Azure OpenAI Integration
+
+### 16.1 Purpose
+
+Azure OpenAI powers two features in the intake flow:
+
+1. **Dynamic diagnostic question generation** — Given an issue category, optional initial description, and asset info, generates 2–4 targeted follow-up questions with checkbox options. Replaces static per-category question templates.
+2. **Enhanced auto-categorization and technician summary** — Uses structured diagnostic responses (if present) alongside the free-text description to produce more accurate issue categorization and richer technician summaries.
+
+### 16.2 Interface
+
+`ICategorizationService` is the sole integration point. Two methods:
+
+| Method | Purpose | Called When |
+|---|---|---|
+| `CategorizeAsync(issueDescription, issueCategory?, assetInfo?, diagnosticResponses?)` | Auto-categorize + generate technician summary | Step 3 of intake orchestration (submission) |
+| `GenerateDiagnosticQuestionsAsync(issueCategory, initialDescription?, assetInfo?, aiContext?)` | Generate follow-up questions for the intake wizard | `POST api/intake/{locationSlug}/diagnostic-questions` |
+
+### 16.3 Implementation
+
+**Primary: `AzureOpenAiCategorizationService`** — Lives in `RVS.API/Integrations/`. Calls Azure OpenAI (GPT-4o-mini) with a structured system prompt containing RV service domain knowledge. Uses JSON mode for structured output. The `aiContext` parameter (from `IntakeFormConfigEmbedded`) is appended to the system prompt when present, allowing per-dealer customization without a template admin UI.
+
+**Fallback: Rule-based** — If Azure OpenAI is unavailable (timeout, quota, outage), falls back to keyword-based categorization (existing rule-based logic) and returns a minimal set of hardcoded questions per category. The fallback ensures intake never blocks on an external service.
+
+### 16.4 DTOs
+
+**Request — `DiagnosticQuestionsRequestDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `IssueCategory` | `string` | Selected category (e.g. "Slide System") |
+| `InitialDescription` | `string?` | Optional free-text the customer has typed so far |
+| `Asset` | `AssetInfoDto?` | Optional vehicle info for context |
+
+**Response — `DiagnosticQuestionsResponseDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `Questions` | `List<DiagnosticQuestionDto>` | 2–4 generated questions |
+| `SmartSuggestion` | `string?` | Optional AI insight (e.g. "This is commonly caused by a hydraulic pump issue. Please upload a photo of the hydraulic pump area if possible.") |
+
+**`DiagnosticQuestionDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `QuestionText` | `string` | The question to display |
+| `Options` | `List<string>` | Checkbox/radio options |
+| `AllowFreeText` | `bool` | Whether to show a free-text input alongside options |
+| `HelpText` | `string?` | Optional guidance (e.g. "Upload a photo of...") |
+
+**`DiagnosticResponseDto`** (in `ServiceRequestCreateRequestDto`):
+
+| Field | Type | Description |
+|---|---|---|
+| `QuestionText` | `string` | The question that was asked |
+| `SelectedOptions` | `List<string>` | Options the customer selected |
+| `FreeTextResponse` | `string?` | Optional free-text answer |
+
+### 16.5 Cost & Performance
+
+| Model | Input Tokens | Output Tokens | Cost per Intake | Latency |
+|---|---|---|---|---|
+| **GPT-4o-mini** (recommended) | ~300 | ~400 | ~$0.0002 | 500ms–1s |
+| GPT-4o (future, if quality demands) | ~300 | ~400 | ~$0.003 | 1–2s |
+
+At 1,000 intakes/month: ~$0.20/month. At 100,000 intakes/month: ~$20/month. Negligible relative to Cosmos DB costs.
+
+Latency is acceptable because the diagnostic questions call happens during a wizard step transition — the customer just tapped "Next" after selecting a category. A brief loading indicator ("Generating diagnostic questions...") is expected.
+
+### 16.6 Two-Phase Intake Flow
+
+The intake wizard becomes a two-phase API interaction:
+
+**Phase 1 — Diagnostic Questions (mid-wizard):**
+```
+POST api/intake/{locationSlug}/diagnostic-questions
+Body: { issueCategory, initialDescription?, asset? }
+→ Returns: DiagnosticQuestionsResponseDto (2–4 questions + optional smart suggestion)
+```
+
+**Phase 2 — Submission (existing flow, enhanced):**
+```
+POST api/intake/{locationSlug}/service-requests
+Body: { asset, issueCategory, issueDescription, diagnosticResponses[], customer }
+→ Returns: 201 Created with SR details
+```
+
+Phase 1 is optional — if it fails or times out, the customer proceeds with free-text description only. The submission in Phase 2 works with or without `diagnosticResponses`.
+
+### 16.7 Configuration
+
+Azure OpenAI settings in `appsettings.json`:
+
+```json
+{
+  "AzureOpenAi": {
+    "Endpoint": "https://{resource}.openai.azure.com/",
+    "DeploymentName": "gpt-4o-mini",
+    "MaxTokens": 500,
+    "TimeoutSeconds": 5
+  }
+}
+```
+
+Authentication uses `DefaultAzureCredential` (consistent with Cosmos DB, Blob Storage, and all other Azure services in the stack via `RVS.Infra.AzCredentials`).
+
+### 16.8 Architectural Decision
+
+| Decision | Rationale |
+|---|---|
+| **AI-generated questions, not static templates** | Eliminates `DiagnosticQuestionTemplate` entity, template CRUD API, admin UI, and per-dealer curation. AI adapts to any category including "Other". Cost is negligible (~$0.0002/intake). |
+| **Single `ICategorizationService` interface** | Both question generation and categorization share the same domain knowledge and external dependency. One interface, one DI registration, one fallback strategy. |
+| **Fallback to rule-based on AI failure** | Intake must never block on an external service. The fallback produces acceptable (if less rich) results. |
+| **`aiContext` on `IntakeFormConfigEmbedded`** | Dealers can customize AI behavior without a template admin UI. Simple string field, appended to system prompt. E.g. "We specialize in Grand Design and Keystone brands." |
+| **`diagnosticResponses` embedded in `ServiceRequest`** | Stored alongside the SR for full audit trail. Used by the categorization step for better results. Queryable via Cosmos indexing for future analytics on symptom patterns. |
