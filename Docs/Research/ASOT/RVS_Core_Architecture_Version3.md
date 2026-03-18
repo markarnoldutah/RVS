@@ -349,7 +349,7 @@ A physical service site within a dealership group. Single-location dealers have 
 
 **AddressEmbedded** — Fields: `Street`, `City`, `State`, `Zip`.
 
-**IntakeFormConfigEmbedded** — Fields: `AcceptedFileTypes` (default: `.jpg`, `.png`, `.mp4`), `MaxFileSizeMb` (default: 25), `MaxAttachmentCount` (default: 10), `RequiredFields` (List<string>, default: empty — all standard fields required), `ServiceInstructions` (string?, optional location-specific instructions shown on intake page), `AiContext` (string?, optional dealer-specific context appended to the Azure OpenAI system prompt for diagnostic question generation — e.g. "We specialize in Grand Design and Keystone brands" or "Always ask about extended warranty status").
+**IntakeFormConfigEmbedded** — Fields: `AcceptedFileTypes` (default: `.jpg`, `.png`, `.mp4`, `.m4a`, `.wav`), `MaxFileSizeMb` (default: 25), `MaxAttachmentCount` (default: 10), `RequiredFields` (List<string>, default: empty — all standard fields required), `ServiceInstructions` (string?, optional location-specific instructions shown on intake page), `AiContext` (string?, optional dealer-specific context appended to the Azure OpenAI system prompt for diagnostic question generation — e.g. "We specialize in Grand Design and Keystone brands" or "Always ask about extended warranty status").
 
 ### 3.9 TenantConfig, LookupSet
 
@@ -395,7 +395,7 @@ One document cannot serve three different access patterns:
 
 ### 4.4 Key Indexing Policies
 
-**`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`, `/diagnosticResponses/[]/selectedOptions/?`. Composite indexes: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, status ASC, createdAtUtc DESC]`.
+**`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`, `/assignedTechnicianId/?`, `/assignedBayId/?`, `/asset/assetId/?`, `/diagnosticResponses/[]/selectedOptions/?`. Composite indexes: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, status ASC, createdAtUtc DESC]`, `[tenantId ASC, assignedTechnicianId ASC, status ASC, createdAtUtc DESC]`.
 
 **`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/globalCustomerAcctId/?`, `/assetsOwned/[]/assetId/?`, `/assetsOwned/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
@@ -532,6 +532,8 @@ One document cannot serve three different access patterns:
 **`IServiceRequestRepository`** — `GetByIdAsync(tenantId, serviceRequestId)`, `SearchAsync(tenantId, searchDto)`, `GetByProfileIdAsync(tenantId, profileId, limit)`, `CreateAsync`, `UpdateAsync`, `DeleteAsync(tenantId, serviceRequestId)`, `GetCountByStatusAsync(tenantId, status?, locationId?)`.
 
 **`IServiceRequestService`** — `CreateServiceRequestAsync(tenantId, locationId, createDto)`, `GetServiceRequestAsync(tenantId, serviceRequestId)`, `SearchServiceRequestsAsync(tenantId, searchDto)`, `GetByProfileAsync(tenantId, profileId, limit)`, `UpdateServiceRequestAsync(tenantId, serviceRequestId, updateDto)`, `UpdateStatusAsync(tenantId, serviceRequestId, newStatus)`, `DeleteServiceRequestAsync(tenantId, serviceRequestId)`.
+
+**`ServiceRequestSearchRequestDto`** — Supports the following filter fields: `LocationId` (string?), `Status` (string?), `IssueCategory` (string?), `CustomerName` (string?), `AssetId` (string? — enables VIN scan → job lookup on the technician mobile app), `AssignedTechnicianId` (string? — enables "My Jobs" queue for technicians), `AssignedBayId` (string? — enables bay-based tablet access), `CreatedAfterUtc` (DateTime?), `CreatedBeforeUtc` (DateTime?), `SortBy` (string?, default: `"createdAtUtc"`), `SortDirection` (string?, default: `"desc"`), `PageNumber` (int, default: 1), `PageSize` (int, default: 25, max: 100). All filters are optional and combined with AND logic. Results are scoped by `ClaimsService.HasAccessToLocation()` in the service layer. For `dealer:technician` role, the service layer further restricts results to SRs where `AssignedTechnicianId` matches the current user's `userId` claim.
 
 ### 5.2 Customer Profile
 
@@ -732,7 +734,7 @@ Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RV
 
 **ServiceRequestsController** — Route: `api/dealerships/{dealershipId}/service-requests`. Actions: `GET {id}` (CanReadServiceRequests), `POST search` (CanSearchServiceRequests), `PUT {id}` (CanUpdateServiceRequests), `DELETE {id}` (CanDeleteServiceRequests). Location filtering applied server-side via `ClaimsService.HasAccessToLocation()`.
 
-**AttachmentsController** — Route: `api/dealerships/{dealershipId}/service-requests/{serviceRequestId}/attachments`. Actions: `GET {attachmentId}` (CanReadAttachments), `DELETE {attachmentId}` (CanDeleteAttachments).
+**AttachmentsController** — Route: `api/dealerships/{dealershipId}/service-requests/{serviceRequestId}/attachments`. Actions: `POST` (CanUploadAttachments — authenticated upload for dealer staff/technicians), `GET {attachmentId}` (CanReadAttachments), `DELETE {attachmentId}` (CanDeleteAttachments).
 
 **DealershipsController** — Route: `api/dealerships`. Actions: `GET` (CanReadDealerships), `GET {id}` (CanReadDealerships), `PUT {id}` (CanUpdateDealerships).
 
@@ -799,6 +801,7 @@ rvs-attachments/
 | `DELETE` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | CanDeleteServiceRequests | Delete request |
 | `GET` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | CanReadAttachments | Get attachment SAS URL |
 | `DELETE` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | CanDeleteAttachments | Delete attachment |
+| `POST` | `api/dealerships/{id}/service-requests/{srId}/attachments` | Bearer | CanUploadAttachments | Upload attachment (authenticated — technician/staff photo capture) |
 | `GET` | `api/dealerships` | Bearer | CanReadDealerships | List dealerships for tenant |
 | `GET` | `api/dealerships/{id}` | Bearer | CanReadDealerships | Dealership detail |
 | `PUT` | `api/dealerships/{id}` | Bearer | CanUpdateDealerships | Update dealership |
@@ -1029,3 +1032,55 @@ Authentication uses `DefaultAzureCredential` (consistent with Cosmos DB, Blob St
 | **Fallback to rule-based on AI failure** | Intake must never block on an external service. The fallback produces acceptable (if less rich) results. |
 | **`aiContext` on `IntakeFormConfigEmbedded`** | Dealers can customize AI behavior without a template admin UI. Simple string field, appended to system prompt. E.g. "We specialize in Grand Design and Keystone brands." |
 | **`diagnosticResponses` embedded in `ServiceRequest`** | Stored alongside the SR for full audit trail. Used by the categorization step for better results. Queryable via Cosmos indexing for future analytics on symptom patterns. |
+
+---
+
+## 17. Technician Mobile App — API Readiness
+
+This section documents the API surface gaps identified from the technician mobile app feature requirements (see `Docs/Research/FrontEnd/RVS_Features_Tech_Mobile.md`) and the resolutions adopted in this architecture.
+
+### 17.1 Gap Summary
+
+| Priority | Gap | Resolution | Status |
+|---|---|---|---|
+| 🔴 Critical | No authenticated attachment upload for dealer staff | Added `POST` to `AttachmentsController` with `CanUploadAttachments` policy (Section 8.2, Section 11) | ✅ Resolved in this version |
+| 🔴 Critical | `dealer:technician` missing `service-requests:search` permission | Added to role → permission matrix (see `RVS_Auth0_Identity` update) | ✅ Resolved in this version |
+| 🟡 Important | No `assignedTechnicianId` search filter (My Jobs Queue) | Added to `ServiceRequestSearchRequestDto` (Section 5.1) | ✅ Resolved in this version |
+| 🟡 Important | No `assignedBayId` search filter (Bay-Based Access) | Added to `ServiceRequestSearchRequestDto` (Section 5.1) | ✅ Resolved in this version |
+| 🟡 Important | No `assetId` search filter (VIN scan → job lookup) | Added to `ServiceRequestSearchRequestDto` (Section 5.1) | ✅ Resolved in this version |
+| 🟡 Important | Seed `LookupSet` data for `failureModes`, `repairActions` | Documented below as seed data requirement | ✅ Resolved in this version |
+| 🟢 Nice-to-have | Voice notes (audio file support) | Added `.m4a`, `.wav` to `IntakeFormConfigEmbedded.AcceptedFileTypes` defaults (Section 3.8) | ✅ Resolved in this version |
+| 🟢 Nice-to-have | Batch update endpoint for offline sync | Deferred — sequential `PUT` calls acceptable for MVP | 🔵 Deferred |
+| 🔵 Future | Labor time prediction API | Phase 5–6 feature powered by `AssetLedger` data | 🔵 Deferred |
+
+### 17.2 Required LookupSet Seed Data
+
+The technician mobile app's repair outcome entry screen (failure mode selection, repair action selection) requires the following `LookupSet` categories to be seeded in `RVS.Data.Cosmos.Seed`:
+
+| Category | Example Items | Used By |
+|---|---|---|
+| `failureModes` | Hydraulic pump failure, Slide motor failure, Electrical fault, Fluid leak, Seal degradation, Bearing failure, Control board malfunction | Failure Mode picker |
+| `repairActions` | Replace pump, Replace motor, Repair wiring, Adjust mechanism, Replace seal, Lubricate, Reflash firmware | Repair Action picker |
+| `componentTypes` | Hydraulic System, Electrical System, Slide Mechanism, HVAC, Plumbing, Refrigeration, Leveling System, Awning, Generator | Component Type picker |
+
+These categories use the existing `LookupSet` entity and `LookupsController` (`GET api/lookups/{lookupSetId}`). The `dealer:technician` role already has `lookups:read` permission. No new API endpoints or permissions are needed — only seed data.
+
+### 17.3 Offline Sync Strategy (Deferred)
+
+For MVP, the technician mobile app handles offline mode client-side:
+
+1. Queue failed `PUT` requests locally (IndexedDB or SQLite).
+2. On connectivity restore, replay queued requests sequentially via `PUT api/dealerships/{id}/service-requests/{srId}`.
+3. Use `updatedAtUtc` for optimistic concurrency — if the server's `updatedAtUtc` is newer than the queued request's baseline, surface a conflict to the user.
+
+A dedicated `POST api/dealerships/{id}/service-requests/batch-update` endpoint may be added in a future phase if sequential replay proves insufficient at scale.
+
+### 17.4 Labor Time Prediction (Deferred — Phase 5–6)
+
+When the `AssetLedger` accumulates sufficient Section 10A data, a prediction endpoint can be added:
+
+```
+GET api/predictions/labor?issueCategory={cat}&componentType={type}&manufacturer={mfg}
+```
+
+For MVP, the mobile app uses static suggested labor times from the `LookupSet` data or hardcoded client-side values.

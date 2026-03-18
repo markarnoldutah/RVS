@@ -130,6 +130,7 @@ Fine-grained permissions assigned to roles. Carried in the JWT `permissions` arr
 | Permission | Description |
 |---|---|
 | `attachments:read` | View / download attachments (SAS URL) |
+| `attachments:upload` | Upload an attachment (authenticated — technician/staff photo capture during repair) |
 | `attachments:delete` | Delete an attachment |
 
 ### 5.3 Dealerships
@@ -181,12 +182,13 @@ Fine-grained permissions assigned to roles. Carried in the JWT `permissions` arr
 | Permission | `platform:admin` | `dealer:corporate-admin` | `dealer:owner` | `dealer:regional-manager` | `dealer:manager` | `dealer:advisor` | `dealer:technician` | `dealer:readonly` |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | `service-requests:read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ ¹ | ✅ |
-| `service-requests:search` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ |
+| `service-requests:search` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ ² | ✅ |
 | `service-requests:create` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
 | `service-requests:update` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
 | `service-requests:update-service-event` | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — |
 | `service-requests:delete` | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | — |
 | `attachments:read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `attachments:upload` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | `attachments:delete` | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | — |
 | `dealerships:read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `dealerships:update` | ✅ | ✅ | ✅ | — | — | — | — | — |
@@ -202,6 +204,8 @@ Fine-grained permissions assigned to roles. Carried in the JWT `permissions` arr
 | `platform:lookups:manage` | ✅ | — | — | — | — | — | — | — |
 
 ¹ Technicians have `service-requests:read` but the application layer further restricts to their assigned SRs only (checked in `ServiceRequestService`, not at the Auth0 level).
+
+² Technicians have `service-requests:search` but the application layer restricts search results to SRs where `AssignedTechnicianId` matches the technician's `userId` claim. This enables the "My Jobs" queue on the technician mobile app.
 
 ---
 
@@ -330,6 +334,38 @@ Note: No `org_id` or `tenantId` claim — platform admins operate cross-tenant.
 
 ---
 
+### 8.4 Sample: Location Technician
+
+```json
+{
+  "iss": "https://rvserviceflow.auth0.com/",
+  "sub": "auth0|tech001",
+  "aud": "https://api.rvserviceflow.com",
+  "org_id": "org_blue_compass_rv",
+  "https://rvserviceflow.com/tenantId": "org_blue_compass_rv",
+  "https://rvserviceflow.com/orgName": "Blue Compass RV",
+  "https://rvserviceflow.com/roles": ["dealer:technician"],
+  "https://rvserviceflow.com/userId": "auth0|tech001",
+  "https://rvserviceflow.com/locationIds": ["loc_blue_compass_slc"],
+  "permissions": [
+    "service-requests:read",
+    "service-requests:search",
+    "service-requests:update-service-event",
+    "attachments:read",
+    "attachments:upload",
+    "dealerships:read",
+    "locations:read",
+    "lookups:read"
+  ],
+  "iat": 1741561200,
+  "exp": 1741564800
+}
+```
+
+Note: Technicians have `service-requests:search` (for "My Jobs" queue) and `attachments:upload` (for repair photo capture) but not `service-requests:update` (they can only update Section 10A fields via `service-requests:update-service-event`).
+
+---
+
 ## 9. ClaimsService
 
 `ClaimsService` is a `sealed` class registered as scoped. It reads the JWT claims injected by the Login Action and provides strongly-typed accessor methods used by controllers, services, and middleware. Follows the [MF ClaimsService pattern](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.API/Services/ClaimsService.cs).
@@ -417,6 +453,7 @@ Authorization policies are registered in `Program.cs` using `AddAuthorizationBui
 | `CanUpdateServiceEvent` | `service-requests:update-service-event` |
 | `CanDeleteServiceRequests` | `service-requests:delete` |
 | `CanReadAttachments` | `attachments:read` |
+| `CanUploadAttachments` | `attachments:upload` |
 | `CanDeleteAttachments` | `attachments:delete` |
 | `CanReadDealerships` | `dealerships:read` |
 | `CanUpdateDealerships` | `dealerships:update` |
