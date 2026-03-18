@@ -191,4 +191,27 @@ Service bays may have poor connectivity.
 
 Outcome entries should store locally and sync when connection returns.
 
+---
+
+## API Backend Readiness
+
+> Cross-reference: See **RVS_Core_Architecture_Version3.md** Section 17 for full gap analysis and resolutions.
+
+The following backend capabilities support the features described above:
+
+| Feature | API Endpoint(s) | Auth | Status |
+|---|---|---|---|
+| **QR / VIN Scanning** | `POST .../search` with `assetId` filter | Bearer + `service-requests:search` | ✅ Ready |
+| **My Jobs Queue** | `POST .../search` with `assignedTechnicianId` filter | Bearer + `service-requests:search` | ✅ Ready |
+| **Bay-Based Access** | `POST .../search` with `assignedBayId` filter | Bearer + `service-requests:search` | ✅ Ready |
+| **Vehicle Info / Issue Summary** | `GET .../service-requests/{srId}` | Bearer + `service-requests:read` | ✅ Ready |
+| **Predicted Diagnostics** | `GET .../service-requests/{srId}` (diagnosticResponses + technicianSummary) | Bearer + `service-requests:read` | ✅ Ready |
+| **Failure Mode / Repair Action Selection** | `GET api/lookups/{category}` for `failureModes`, `repairActions` | Bearer + `lookups:read` | ✅ Ready (requires seed data) |
+| **Labor Time Entry** | `PUT .../service-requests/{srId}` (ServiceEvent.LaborHours) | Bearer + `service-requests:update-service-event` | ✅ Ready |
+| **Parts / Notes / Complete Job** | `PUT .../service-requests/{srId}` (ServiceEvent fields + status) | Bearer + `service-requests:update-service-event` | ✅ Ready |
+| **Photo Capture (Technician)** | `POST .../attachments` (authenticated) | Bearer + `attachments:upload` | ✅ Ready |
+| **Voice Notes** | `POST .../attachments` (`.m4a`, `.wav` accepted) | Bearer + `attachments:upload` | ✅ Ready |
+| **Offline Mode** | Client-side queue → sequential `PUT` replay on reconnect | — | 🟡 Client-side only (MVP) |
+| **Suggested Labor Time** | Static lookup values (MVP) → `GET api/predictions/labor` (Phase 5–6) | — | 🔵 Future |
+
 

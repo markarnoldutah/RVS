@@ -63,10 +63,11 @@ The process should take **2–3 minutes**.
 Steps:
 
 1. Vehicle information
-2. Problem description
-3. Photos/videos
-4. Contact information
-5. Submit
+2. Issue category selection
+3. AI-guided diagnostic questions
+4. Photos/videos
+5. Contact information
+6. Submit
 
 ---
 
@@ -118,19 +119,42 @@ Selecting a category allows the system to:
 
 ---
 
-## Step 3: Guided Problem Description
+## Step 3: AI-Guided Diagnostic Questions
 
-Instead of asking customers to write long descriptions, the system asks **simple structured questions**.
+After the customer selects a category and optionally types an initial description, the system calls **Azure OpenAI** to generate **2–4 targeted follow-up questions** specific to the selected category, description, and vehicle.
+
+This replaces static per-category question templates with dynamic, context-aware questions.
 
 Example for slide systems:
 
 ```
+Based on your description, here are a few questions to help our technician:
+
 What happens when you try to extend the slide?
 
 ☐ Grinding noise
 ☐ Slide moves unevenly
-☐ Slide does not move
+☐ Slide does not move at all
 ☐ Error message on panel
+
+Does the slide operate on hydraulic or electric mechanisms?
+
+☐ Hydraulic
+☐ Electric / Motor
+☐ Not sure
+
+Have you noticed any fluid leaks near the slide mechanism?
+
+☐ Yes
+☐ No
+☐ Not sure
+```
+
+The system may also display a **smart suggestion**:
+
+```
+This is commonly caused by a hydraulic pump issue.
+Please upload a photo of the hydraulic pump area if possible.
 ```
 
 Optional free-text description:
@@ -139,7 +163,15 @@ Optional free-text description:
 Tell us anything else that may help our technician.
 ```
 
-Structured responses dramatically improve technician diagnostic speed.
+Benefits:
+
+• questions adapt to the specific category, description, and vehicle
+• no manual template curation required
+• handles "Other" category gracefully
+• structured responses dramatically improve technician diagnostic speed
+• if AI is unavailable, the system falls back to basic questions per category
+
+API call: `POST api/intake/{locationSlug}/diagnostic-questions`
 
 ---
 
@@ -274,27 +306,40 @@ Typical submission time should be **under three minutes**.
 
 ---
 
-# 7. Smart Diagnostic Assistance (Future Enhancement)
+# 7. Smart Diagnostic Assistance (MVP — Powered by Azure OpenAI)
 
-As RVS collects more service data, the intake app can provide **automated troubleshooting suggestions**.
+The intake app provides **AI-powered diagnostic assistance** at intake time via Azure OpenAI (GPT-4o-mini).
+
+Two capabilities are included in MVP:
+
+**1. Dynamic diagnostic questions** — Generated based on the selected category, initial description, and vehicle info. The AI adapts questions to the specific context rather than using static templates.
+
+**2. Smart suggestions** — When the AI identifies a likely root cause or useful photo opportunity, it surfaces a suggestion to the customer.
 
 Example:
 
 Customer selects:
 
 ```
-Slide grinding noise
+Category: Slide System
+Description: Slide grinding noise
+Vehicle: Grand Design Momentum 395G
 ```
 
 System response:
 
 ```
-This issue is commonly caused by a hydraulic pump problem.
+This issue is commonly caused by a hydraulic pump problem
+on Grand Design slide-outs.
 
 Please upload a photo of the hydraulic pump area if possible.
 ```
 
-This helps capture more useful diagnostic data.
+This helps capture more useful diagnostic data before the RV arrives.
+
+**Cost:** ~$0.0002 per intake with GPT-4o-mini (~$0.20/month at 1,000 intakes).
+
+**Fallback:** If Azure OpenAI is unavailable, the system falls back to basic rule-based questions per category. Intake is never blocked by an external service dependency.
 
 ---
 
@@ -305,10 +350,12 @@ Dealerships should be able to configure intake behavior.
 Configurable elements:
 
 • issue categories
-• diagnostic questions
+• AI context for diagnostic questions (optional dealer-specific prompt context, e.g. "We specialize in Grand Design and Keystone brands")
 • intake page branding
 • required fields
 • photo/video limits
+• maximum attachment count
+• service instructions displayed on intake page
 
 This allows dealerships to tailor intake to their service operations.
 

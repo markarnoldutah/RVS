@@ -2,7 +2,7 @@
 
 # RV Service Flow (RVS) — Core Backend Architecture
 
-**As-of-Thread (ASOT) — March 10, 2026**
+**As-of-Thread (ASOT) — March 18, 2026**
 
 This document captures the domain model, multi-location tenancy, data layer, orchestration flows, service layer, middleware pipeline, API surface, and storage design for RVS. For Auth0 identity, RBAC roles/permissions, ClaimsService, and authorization policies, see the companion document **RVS_Auth0_Identity.md**.
 
@@ -33,7 +33,7 @@ RVS.slnx
 │   │   ├── LocationService.cs         # Physical location CRUD + slug resolution
 │   │   ├── TenantService.cs
 │   │   ├── LookupService.cs
-│   │   ├── CategorizationService.cs    # Rule-based MVP; AI-ready interface
+│   │   ├── CategorizationService.cs    # Azure OpenAI-powered; rule-based fallback
 │   │   ├── NotificationService.cs
 │   │   └── ClaimsService.cs           # Auth0 JWT claims (see RVS_Auth0_Identity.md)
 │   ├── Mappers/
@@ -47,7 +47,8 @@ RVS.slnx
 │   ├── Middleware/
 │   │   ├── ExceptionHandlingMiddleware.cs  # IMiddleware, singleton
 │   │   └── TenantAccessGateMiddleware.cs   # RequestDelegate, scoped injection
-│   ├── Integrations/                   # Future: DMS webhooks, AI clients
+│   ├── Integrations/
+│   │   └── AzureOpenAiClient.cs       # Azure OpenAI client wrapper
 │   ├── Properties/
 │   ├── Program.cs
 │   ├── appsettings.json
@@ -62,6 +63,7 @@ RVS.slnx
 │   │   ├── AssetInfoEmbedded.cs             # Embedded in ServiceRequest
 │   │   ├── ServiceRequestAttachmentEmbedded.cs # Embedded in ServiceRequest
 │   │   ├── ServiceEventEmbedded.cs            # Embedded in ServiceRequest (10A fields)
+│   │   ├── DiagnosticResponseEmbedded.cs     # Embedded in ServiceRequest
 │   │   ├── CustomerProfile.cs         # Tenant-scoped shadow record
 │   │   ├── AssetsOwnedEmbedded.cs      # Embedded in CustomerProfile
 │   │   ├── AssetsOwnedStatus.cs
@@ -90,6 +92,10 @@ RVS.slnx
 │   │   ├── IntakeConfigResponseDto.cs
 │   │   ├── IntakePrefillDto.cs
 │   │   ├── AssetPrefillDto.cs
+│   │   ├── DiagnosticQuestionsRequestDto.cs
+│   │   ├── DiagnosticQuestionsResponseDto.cs
+│   │   ├── DiagnosticQuestionDto.cs
+│   │   ├── DiagnosticResponseDto.cs
 │   │   ├── DealershipDetailResponseDto.cs
 │   │   ├── DealershipSummaryResponseDto.cs
 │   │   ├── DealershipUpdateRequestDto.cs
@@ -103,7 +109,9 @@ RVS.slnx
 │   │   ├── TenantAccessGateDto.cs
 │   │   ├── LookupSetDto.cs
 │   │   ├── LookupItemDto.cs
-│   │   └── ServiceRequestAnalyticsResponseDto.cs
+│   │   ├── ServiceRequestAnalyticsResponseDto.cs
+│   │   ├── ServiceRequestBatchOutcomeRequestDto.cs
+│   │   └── ServiceRequestBatchOutcomeResponseDto.cs
 │   ├── Interfaces/
 │   │   ├── IServiceRequestRepository.cs
 │   │   ├── IServiceRequestService.cs
@@ -123,10 +131,11 @@ RVS.slnx
 │   │   ├── ITenantService.cs
 │   │   ├── ILookupRepository.cs
 │   │   ├── ILookupService.cs
-│   │   ├── ICategorizationService.cs  # Rule-based MVP; AI future
+│   │   ├── ICategorizationService.cs  # Azure OpenAI-powered; rule-based fallback
 │   │   ├── INotificationService.cs
 │   │   └── IUserContextAccessor.cs
 │   ├── Validation/
+│   │   └── StatusTransitions.cs   # Allowed status transition rules for ServiceRequest
 │   └── Shared/
 │       └── PagedResult.cs
 │
@@ -209,19 +218,21 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 | `Type` | `string` | `"serviceRequest"` (discriminator) |
 | `TenantId` | `string` | Corporation partition key (inherited from `EntityBase`) |
 | `LocationId` | `string` | FK to the physical `Location` where this SR was submitted |
-| `Status` | `string` | `"New"`, `"InProgress"`, `"Completed"`, `"Cancelled"` |
+| `Status` | `string` | `"New"` \| `"Scheduled"` \| `"InDiagnosis"` \| `"WaitingParts"` \| `"InRepair"` \| `"Completed"` \| `"Closed"` \| `"Cancelled"`. See Section 18.2 for per-value semantics and allowed transitions. |
 | `CustomerProfileId` | `string` | FK to tenant-scoped `CustomerProfile` |
 | `Customer` | `CustomerSnapshotEmbedded` | Point-in-time denormalized snapshot (no joins on dashboard reads) |
 | `Asset` | `AssetInfoEmbedded` | Identifier, manufacturer, model, year |
 | `IssueDescription` | `string` | Free-text customer description |
 | `IssueCategory` | `string?` | Auto-categorized (rule-based MVP, AI future) |
 | `TechnicianSummary` | `string?` | Generated summary for tech |
+| `DiagnosticResponses` | `List<DiagnosticResponseEmbedded>` | AI-generated Q&A captured during intake wizard |
 | `Attachments` | `List<ServiceRequestAttachmentEmbedded>` | Embedded photo/video references |
 | `ServiceEvent` | `ServiceEventEmbedded` | Section 10A structured repair data |
 | `ScheduledDateUtc` | `DateTime?` | Future: scheduling |
 | `AssignedBayId` | `string?` | Future: bay assignment |
 | `AssignedTechnicianId` | `string?` | Future: tech assignment |
 | `RequiredSkills` | `List<string>` | Future: skill matching |
+| `Priority` | `string?` | Job priority set by manager. Values: `"Low"`, `"Normal"`, `"High"`, `"Urgent"`. Default: `null` (unset). |
 
 ### 3.2 Embedded Sub-Entities (within ServiceRequest)
 
@@ -232,6 +243,8 @@ The central entity. Partitioned by `/tenantId`. Each service request belongs to 
 **ServiceRequestAttachmentEmbedded** — Fields: `AttachmentId` (auto GUID), `BlobUri`, `FileName`, `ContentType`, `SizeBytes`, `CreatedAtUtc`.
 
 **ServiceEventEmbedded** — Section 10A structured data. Fields: `ComponentType`, `FailureMode`, `RepairAction`, `PartsUsed` (list), `LaborHours`, `ServiceDateUtc`. Populated progressively across phases; MVP captures `IssueCategory` and `ComponentType` only.
+
+**DiagnosticResponseEmbedded** — Structured answer from the AI-guided intake wizard. Fields: `QuestionText` (string), `SelectedOptions` (List<string>), `FreeTextResponse` (string?). Embedded as a list in `ServiceRequest`. Used by `CategorizationService` to improve auto-categorization and technician summary quality.
 
 ### 3.3 CustomerProfile (Tenant-Scoped Shadow Record)
 
@@ -340,7 +353,7 @@ A physical service site within a dealership group. Single-location dealers have 
 
 **AddressEmbedded** — Fields: `Street`, `City`, `State`, `Zip`.
 
-**IntakeFormConfigEmbedded** — Fields: `AcceptedFileTypes` (default: `.jpg`, `.png`, `.mp4`), `MaxFileSizeMb` (default: 25).
+**IntakeFormConfigEmbedded** — Fields: `AcceptedFileTypes` (default: `.jpg`, `.png`, `.mp4`, `.m4a`, `.wav`), `MaxFileSizeMb` (default: 25), `MaxAttachmentCount` (default: 10), `RequiredFields` (List<string>, default: empty — all standard fields required), `ServiceInstructions` (string?, optional location-specific instructions shown on intake page), `AiContext` (string?, optional dealer-specific context appended to the Azure OpenAI system prompt for diagnostic question generation — e.g. "We specialize in Grand Design and Keystone brands" or "Always ask about extended warranty status").
 
 ### 3.9 TenantConfig, LookupSet
 
@@ -386,7 +399,7 @@ One document cannot serve three different access patterns:
 
 ### 4.4 Key Indexing Policies
 
-**`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`. Composite indexes: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, status ASC, createdAtUtc DESC]`.
+**`serviceRequests`** — Included paths: `/tenantId/?`, `/locationId/?`, `/status/?`, `/customerProfileId/?`, `/createdAtUtc/?`, `/issueCategory/?`, `/assignedTechnicianId/?`, `/assignedBayId/?`, `/asset/assetId/?`, `/scheduledDateUtc/?`, `/priority/?`, `/diagnosticResponses/[]/selectedOptions/?`. Composite indexes: `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, status ASC, createdAtUtc DESC]`, `[tenantId ASC, assignedTechnicianId ASC, status ASC, createdAtUtc DESC]`, `[tenantId ASC, locationId ASC, scheduledDateUtc ASC]`, `[tenantId ASC, priority ASC, status ASC, createdAtUtc DESC]`.
 
 **`customerProfiles`** — Included paths: `/tenantId/?`, `/email/?`, `/globalCustomerAcctId/?`, `/assetsOwned/[]/assetId/?`, `/assetsOwned/[]/status/?`. Composite index: `[tenantId ASC, email ASC]`. Unique key: `[/tenantId, /email]`.
 
@@ -423,6 +436,23 @@ One document cannot serve three different access patterns:
   "issueDescription": "Slide-out hydraulic pump makes grinding noise...",
   "issueCategory": "Slide System",
   "technicianSummary": "Possible hydraulic pump failure on slide-out mechanism...",
+  "diagnosticResponses": [
+    {
+      "questionText": "What happens when you try to extend the slide?",
+      "selectedOptions": ["Grinding noise"],
+      "freeTextResponse": null
+    },
+    {
+      "questionText": "Does the slide operate on hydraulic or electric mechanisms?",
+      "selectedOptions": ["Hydraulic"],
+      "freeTextResponse": null
+    },
+    {
+      "questionText": "Have you noticed any fluid leaks near the slide mechanism?",
+      "selectedOptions": ["Yes"],
+      "freeTextResponse": "Small puddle under the RV near the slide"
+    }
+  ],
   "attachments": [
     {
       "attachmentId": "att_001",
@@ -445,12 +475,17 @@ One document cannot serve three different access patterns:
   "assignedBayId": null,
   "assignedTechnicianId": null,
   "requiredSkills": [],
+  "priority": null,
   "createdAtUtc": "2026-03-08T10:00:00Z",
   "createdByUserId": null,
   "updatedAtUtc": "2026-03-08T10:00:00Z",
   "updatedByUserId": null
 }
 ```
+
+> **Valid `status` values:** `"New"`, `"Scheduled"`, `"InDiagnosis"`, `"WaitingParts"`, `"InRepair"`, `"Completed"`, `"Closed"`, `"Cancelled"`. Allowed transitions are enforced by `StatusTransitions.cs` in `RVS.Domain/Validation/` (see Section 18.2 for the full transition table).
+>
+> **Valid `priority` values:** `"Low"`, `"Normal"`, `"High"`, `"Urgent"`, or `null` (unset).
 
 **Location:**
 
@@ -472,7 +507,11 @@ One document cannot serve three different access patterns:
   "logoUrl": "https://rvsstorage.blob.core.windows.net/logos/bc-slc.png",
   "intakeConfig": {
     "acceptedFileTypes": [".jpg", ".png", ".mp4"],
-    "maxFileSizeMb": 25
+    "maxFileSizeMb": 25,
+    "maxAttachmentCount": 10,
+    "requiredFields": [],
+    "serviceInstructions": null,
+    "aiContext": null
   },
   "regionTag": "west",
   "isEnabled": true,
@@ -501,7 +540,17 @@ One document cannot serve three different access patterns:
 
 **`IServiceRequestRepository`** — `GetByIdAsync(tenantId, serviceRequestId)`, `SearchAsync(tenantId, searchDto)`, `GetByProfileIdAsync(tenantId, profileId, limit)`, `CreateAsync`, `UpdateAsync`, `DeleteAsync(tenantId, serviceRequestId)`, `GetCountByStatusAsync(tenantId, status?, locationId?)`.
 
-**`IServiceRequestService`** — `CreateServiceRequestAsync(tenantId, locationId, createDto)`, `GetServiceRequestAsync(tenantId, serviceRequestId)`, `SearchServiceRequestsAsync(tenantId, searchDto)`, `GetByProfileAsync(tenantId, profileId, limit)`, `UpdateServiceRequestAsync(tenantId, serviceRequestId, updateDto)`, `UpdateStatusAsync(tenantId, serviceRequestId, newStatus)`, `DeleteServiceRequestAsync(tenantId, serviceRequestId)`.
+**`IServiceRequestService`** — `CreateServiceRequestAsync(tenantId, locationId, createDto)`, `GetServiceRequestAsync(tenantId, serviceRequestId)`, `SearchServiceRequestsAsync(tenantId, searchDto)`, `GetByProfileAsync(tenantId, profileId, limit)`, `UpdateServiceRequestAsync(tenantId, serviceRequestId, updateDto)`, `UpdateStatusAsync(tenantId, serviceRequestId, newStatus)` (validates transitions using `StatusTransitions.cs`), `BatchApplyOutcomeAsync(tenantId, batchDto)`, `DeleteServiceRequestAsync(tenantId, serviceRequestId)`.
+
+**`ServiceRequestSearchRequestDto`** — Supports the following filter fields: `LocationId` (string?), `Status` (string?), `Priority` (string? — filter by job priority; values: `"Low"`, `"Normal"`, `"High"`, `"Urgent"`), `IssueCategory` (string?), `CustomerName` (string?), `AssetId` (string? — enables VIN scan → job lookup on the technician mobile app), `AssignedTechnicianId` (string? — enables "My Jobs" queue for technicians), `AssignedBayId` (string? — enables bay-based tablet access), `CreatedAfterUtc` (DateTime?), `CreatedBeforeUtc` (DateTime?), `ScheduledAfterUtc` (DateTime? — filter by scheduled date range start), `ScheduledBeforeUtc` (DateTime? — filter by scheduled date range end), `HasOutcome` (bool? — when `false`, returns completed jobs where `serviceEvent.failureMode` or `serviceEvent.repairAction` is null; when `true`, returns completed jobs with outcome data populated), `SortBy` (string?, default: `"createdAtUtc"`), `SortDirection` (string?, default: `"desc"`), `PageNumber` (int, default: 1), `PageSize` (int, default: 25, max: 100). All filters are optional and combined with AND logic. Results are scoped by `ClaimsService.HasAccessToLocation()` in the service layer. For `dealer:technician` role, the service layer further restricts results to SRs where `AssignedTechnicianId` matches the current user's `userId` claim.
+
+**`ServiceRequestUpdateRequestDto`** — Includes all updatable fields: `Status`, `Priority` (`string?` — `"Low"`, `"Normal"`, `"High"`, `"Urgent"`), `IssueCategory`, `AssignedTechnicianId`, `AssignedBayId`, `ScheduledDateUtc`, `RequiredSkills`, and `ServiceEvent` sub-fields.
+
+**`ServiceRequestDetailResponseDto`** and **`ServiceRequestSummaryResponseDto`** — Both include `Priority` (`string?`) in the response payload alongside `Status`, `AssignedTechnicianId`, `AssignedBayId`, `ScheduledDateUtc`, and other standard fields.
+
+**`ServiceRequestBatchOutcomeRequestDto`** — Fields: `ServiceRequestIds` (`List<string>`, required, max 25 — requests exceeding 25 items return HTTP 400), `FailureMode` (`string?`), `RepairAction` (`string?`), `PartsUsed` (`List<string>?`), `LaborHours` (`decimal?`). Used by the `PATCH .../batch-outcome` endpoint to apply a shared repair outcome to multiple service requests in a single operation.
+
+**`ServiceRequestBatchOutcomeResponseDto`** — Fields: `Succeeded` (`List<string>` — IDs of successfully updated SRs), `Failed` (`List<BatchOutcomeFailureDto>` — IDs and error reasons for failed updates). `BatchOutcomeFailureDto` contains `ServiceRequestId` (`string`) and `Reason` (`string`).
 
 ### 5.2 Customer Profile
 
@@ -605,8 +654,9 @@ Customer submits intake form at location slug "blue-compass-salt-lake"
 │ Container: serviceRequests                       │
 │ Stamp tenantId + locationId from Step 0          │
 │ Embed CustomerSnapshotEmbedded (denormalized)    │
-│ Auto-categorize issue (rule-based MVP)           │
-│ Generate technician summary                      │
+│ Auto-categorize issue (Azure OpenAI)             │
+│ Generate technician summary (AI-enhanced with    │
+│   diagnostic responses if present)               │
 │ Cost: ~1 RU                                      │
 └──────────────────┬───────────────────────────────┘
                    │
@@ -660,7 +710,7 @@ Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepos
 
 1. Calls `IGlobalCustomerAcctService.ResolveOrCreateIdentityAsync` with customer email/name/phone from the request DTO.
 2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, asset identifier, and asset info. This handles shadow profile creation and asset ownership transfer.
-3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
+3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Embeds `DiagnosticResponses` from the request DTO (captured during the AI-guided wizard step). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary — the categorization service uses diagnostic responses (if present) to produce higher-quality results.
 4. Calls `IAssetLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
 5. Updates linkages: increments `TotalRequestCount`, rotates the magic-link token on the global identity. Token format: `base64url(SHA256(email)[0..8]):random_bytes` — embeds the email hash so token lookup derives the partition key without a cross-partition query. (Service requests for a customer are retrieved via query: `WHERE tenantId = @t AND customerProfileId = @p` on the `serviceRequests` container — a cheap single-partition read (~3 RU) that avoids unbounded list growth on the profile document.)
 6. Fires `INotificationService.SendIntakeConfirmationAsync` with the magic-link token (fire-and-forget).
@@ -693,15 +743,21 @@ Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RV
 
 ### 8.1 Customer-Facing (Unauthenticated)
 
-**IntakeController** — Route: `api/intake/{locationSlug}`. `[AllowAnonymous]`. Resolves location slug → `tenantId` + `locationId`. Endpoints: `GET` (intake config + optional prefill via `?token=`), `POST service-requests` (submit), `POST service-requests/{id}/attachments` (upload).
+**IntakeController** — Route: `api/intake/{locationSlug}`. `[AllowAnonymous]`. Resolves location slug → `tenantId` + `locationId`. Endpoints: `GET` (intake config + optional prefill via `?token=`), `POST diagnostic-questions` (AI-generated follow-up questions based on category + initial description), `POST service-requests` (submit), `POST service-requests/{id}/attachments` (upload).
 
 **CustomerStatusController** — Route: `api/status`. `[AllowAnonymous]`. Endpoint: `GET {token}` parses the email-hash prefix from the token to derive the partition key, validates the magic link via single-partition point read, returns requests across all dealerships/locations.
 
 ### 8.2 Dealer-Facing (Authenticated)
 
-**ServiceRequestsController** — Route: `api/dealerships/{dealershipId}/service-requests`. Actions: `GET {id}` (CanReadServiceRequests), `POST search` (CanSearchServiceRequests), `PUT {id}` (CanUpdateServiceRequests), `DELETE {id}` (CanDeleteServiceRequests). Location filtering applied server-side via `ClaimsService.HasAccessToLocation()`.
+**ServiceRequestsController** — Route: `api/dealerships/{dealershipId}/service-requests`. Actions: `GET {id}` (CanReadServiceRequests), `POST search` (CanSearchServiceRequests), `PUT {id}` (CanUpdateServiceRequests), `PATCH batch-outcome` (CanUpdateServiceRequests — applies a shared repair outcome to up to 25 service requests in one call; delegates to `IServiceRequestService.BatchApplyOutcomeAsync`), `DELETE {id}` (CanDeleteServiceRequests). Location filtering applied server-side via `ClaimsService.HasAccessToLocation()`.
 
-**AttachmentsController** — Route: `api/dealerships/{dealershipId}/service-requests/{serviceRequestId}/attachments`. Actions: `GET {attachmentId}` (CanReadAttachments), `DELETE {attachmentId}` (CanDeleteAttachments).
+> **Phase 2 — Request Additional Information (GAP 5 — MVP Deferral)**
+>
+> **MVP approach:** Managers record questions internally via the existing `PUT {id}` update and contact the customer via phone/email outside the system. Customer contact details are available in the embedded `CustomerSnapshotEmbedded` (`Email`, `Phone`).
+>
+> **Phase 2 implementation:** Add `INotificationService.SendFollowUpRequestAsync(serviceRequestId, message)` and a new endpoint `POST api/dealerships/{id}/service-requests/{srId}/follow-ups`. This will send the customer a structured follow-up email with a link to a response form on their magic-link status page.
+
+**AttachmentsController** — Route: `api/dealerships/{dealershipId}/service-requests/{serviceRequestId}/attachments`. Actions: `POST` (CanUploadAttachments — authenticated upload for dealer staff/technicians), `GET {attachmentId}` (CanReadAttachments), `DELETE {attachmentId}` (CanDeleteAttachments).
 
 **DealershipsController** — Route: `api/dealerships`. Actions: `GET` (CanReadDealerships), `GET {id}` (CanReadDealerships), `PUT {id}` (CanUpdateDealerships).
 
@@ -712,6 +768,10 @@ Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RV
 **LookupsController** — Route: `api/lookups`. Action: `GET {lookupSetId}` (CanReadLookups).
 
 **AnalyticsController** — Route: `api/dealerships/{dealershipId}/analytics`. Action: `GET service-requests/summary` (CanReadAnalytics).
+
+- **Query parameters:** `?from={date}&to={date}&locationId={locId}` (all optional)
+- **Response:** `ServiceRequestAnalyticsResponseDto` — covers all analytics dimensions needed by the Service Manager Desktop, including request counts by status/category/location, top failure modes, top repair actions, average repair time, top parts used, and average days to completion. See Section 12.1 for the full response DTO field definitions.
+- **Performance:** For MVP volumes (<200 jobs/month), a single-partition aggregate query is acceptable (~5–10 RU). Accelerate the Phase 2 change feed → Azure Tables aggregation (Section 15.3) if analytics query cost becomes measurable at higher volume.
 
 ---
 
@@ -759,14 +819,17 @@ rvs-attachments/
 |---|---|---|---|---|
 | `GET` | `api/intake/{locationSlug}?token={t}` | Anonymous | — | Intake config + optional prefill via magic link |
 | `POST` | `api/intake/{locationSlug}/service-requests` | Anonymous | — | Submit request → full intake orchestration |
+| `POST` | `api/intake/{locationSlug}/diagnostic-questions` | Anonymous | — | AI-generated diagnostic questions for selected category |
 | `POST` | `api/intake/{locationSlug}/service-requests/{id}/attachments` | Anonymous | — | Upload photo/video |
 | `GET` | `api/status/{token}` | Anonymous | — | Customer status page via magic link (cross-dealer) |
 | `GET` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | CanReadServiceRequests | Request detail |
 | `POST` | `api/dealerships/{id}/service-requests/search` | Bearer | CanSearchServiceRequests | Search/filter requests |
 | `PUT` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | CanUpdateServiceRequests | Update request |
+| `PATCH` | `api/dealerships/{id}/service-requests/batch-outcome` | Bearer | CanUpdateServiceRequests | Batch apply repair outcome to multiple service requests (max 25) |
 | `DELETE` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | CanDeleteServiceRequests | Delete request |
 | `GET` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | CanReadAttachments | Get attachment SAS URL |
 | `DELETE` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | CanDeleteAttachments | Delete attachment |
+| `POST` | `api/dealerships/{id}/service-requests/{srId}/attachments` | Bearer | CanUploadAttachments | Upload attachment (authenticated — technician/staff photo capture) |
 | `GET` | `api/dealerships` | Bearer | CanReadDealerships | List dealerships for tenant |
 | `GET` | `api/dealerships/{id}` | Bearer | CanReadDealerships | Dealership detail |
 | `PUT` | `api/dealerships/{id}` | Bearer | CanUpdateDealerships | Update dealership |
@@ -775,7 +838,7 @@ rvs-attachments/
 | `POST` | `api/locations` | Bearer | CanCreateLocations | Create location |
 | `PUT` | `api/locations/{id}` | Bearer | CanUpdateLocations | Update location |
 | `GET` | `api/locations/{id}/qr-code` | Bearer | CanReadLocations | Generate intake QR code |
-| `GET` | `api/dealerships/{id}/analytics/service-requests/summary` | Bearer | CanReadAnalytics | Request analytics |
+| `GET` | `api/dealerships/{id}/analytics/service-requests/summary?from={date}&to={date}&locationId={locId}` | Bearer | CanReadAnalytics | Request analytics (see Section 12.1 for response DTO) |
 | `POST` | `api/tenants/config` | Bearer | CanManageTenantConfig | Bootstrap tenant config |
 | `GET` | `api/tenants/config` | Bearer | CanManageTenantConfig | Get tenant config |
 | `PUT` | `api/tenants/config` | Bearer | CanManageTenantConfig | Update tenant config |
@@ -799,6 +862,28 @@ rvs-attachments/
 | **Dealer dashboard: view request** | 1 point read (SR — snapshot embedded) | ~1 RU |
 | **Dealer dashboard: search requests** | 1 single-partition query (with locationId filter) | ~3 RU |
 | **Asset service history (10A query)** | 1 single-partition read (assetLedger, /assetId) | **~1 RU** |
+
+---
+
+## 12.1 Analytics Response DTO
+
+`ServiceRequestAnalyticsResponseDto` — Returned by `GET api/dealerships/{id}/analytics/service-requests/summary`. Supports optional time range and location filtering via query parameters (`?from={date}&to={date}&locationId={locId}`).
+
+| Field | Type | Description |
+|---|---|---|
+| `TotalRequests` | `int` | Total service requests in the queried period |
+| `RequestsByStatus` | `Dictionary<string, int>` | Count per status value (e.g. `"New"`, `"InRepair"`) |
+| `RequestsByCategory` | `Dictionary<string, int>` | Count per issue category |
+| `RequestsByLocation` | `Dictionary<string, int>` | Count per location (relevant for multi-location groups) |
+| `TopFailureModes` | `List<AnalyticsRankItem>` | Top N failure modes with occurrence count |
+| `TopRepairActions` | `List<AnalyticsRankItem>` | Top N repair actions with occurrence count |
+| `AverageRepairTimeHours` | `decimal?` | Mean labor hours across completed jobs with `serviceEvent.laborHours` populated |
+| `TopPartsUsed` | `List<AnalyticsRankItem>` | Top N parts with total replacement count |
+| `AverageDaysToComplete` | `decimal?` | Mean elapsed days from `createdAtUtc` to `Closed` status across completed jobs |
+
+`AnalyticsRankItem` — `Name` (`string`), `Count` (`int`).
+
+> **Scaling note:** For MVP volumes (<200 jobs/month), a single-partition aggregate query is acceptable (~5–10 RU). If analytics queries become expensive at higher volume, accelerate the Phase 2 change feed → Azure Tables aggregation pattern (Section 15.3).
 
 ---
 
@@ -836,6 +921,7 @@ rvs-attachments/
 | **`Dealership.IsMultiLocation` flag** | UI can adapt (show location picker vs. skip). No code branching in the API layer. |
 | **`ConnectionMode.Gateway` for Cosmos SDK** | Enables server-side gateway caching for stable point reads (`slugLookup`, `tenantConfigs`, `lookupSets`). Zero additional cost. Eliminates application-layer caching for these access patterns. Consistent across all replicas and through deploys. |
 | **`slugLookup` as a dedicated container** | Decouples slug resolution from the `locations` container partition scheme. Enables O(1) point reads partitioned by `/slug`. Gateway-cached on repeated reads. Autoscale floor ~$2.30/month. Invalidation is write-through on `CreateLocationAsync` / `UpdateLocationAsync`. |
+| **Azure OpenAI for diagnostic questions, not static templates** | Dynamic AI-generated questions adapt to category, description, and asset context. Eliminates need for per-category question template CRUD, admin UI, and ongoing curation. Cost: ~$0.0002/intake with GPT-4o-mini. Rule-based fallback if AI is unavailable. |
 
 ---
 
@@ -878,3 +964,251 @@ Cosmos DB Change Feed is not used in MVP, but several architectural patterns cre
 **Pattern if needed:** A change feed consumer on `customerProfiles` fans out patch updates to open `serviceRequests` in the same tenant partition. Scope is limited to `status IN ('New', 'InProgress')` to avoid touching historical records.
 
 **MVP stance:** Accept stale snapshots. The advisor can always look up the current profile. This consumer is only warranted if customer contact updates during open SRs become a reported pain point.
+
+---
+
+## 16. Azure OpenAI Integration
+
+### 16.1 Purpose
+
+Azure OpenAI powers two features in the intake flow:
+
+1. **Dynamic diagnostic question generation** — Given an issue category, optional initial description, and asset info, generates 2–4 targeted follow-up questions with checkbox options. Replaces static per-category question templates.
+2. **Enhanced auto-categorization and technician summary** — Uses structured diagnostic responses (if present) alongside the free-text description to produce more accurate issue categorization and richer technician summaries.
+
+### 16.2 Interface
+
+`ICategorizationService` is the sole integration point. Two methods:
+
+| Method | Purpose | Called When |
+|---|---|---|
+| `CategorizeAsync(issueDescription, issueCategory?, assetInfo?, diagnosticResponses?)` | Auto-categorize + generate technician summary | Step 3 of intake orchestration (submission) |
+| `GenerateDiagnosticQuestionsAsync(issueCategory, initialDescription?, assetInfo?, aiContext?)` | Generate follow-up questions for the intake wizard | `POST api/intake/{locationSlug}/diagnostic-questions` |
+
+### 16.3 Implementation
+
+**Primary: `AzureOpenAiCategorizationService`** — Lives in `RVS.API/Integrations/`. Calls Azure OpenAI (GPT-4o-mini) with a structured system prompt containing RV service domain knowledge. Uses JSON mode for structured output. The `aiContext` parameter (from `IntakeFormConfigEmbedded`) is appended to the system prompt when present, allowing per-dealer customization without a template admin UI.
+
+**Fallback: Rule-based** — If Azure OpenAI is unavailable (timeout, quota, outage), falls back to keyword-based categorization (existing rule-based logic) and returns a minimal set of hardcoded questions per category. The fallback ensures intake never blocks on an external service.
+
+### 16.4 DTOs
+
+**Request — `DiagnosticQuestionsRequestDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `IssueCategory` | `string` | Selected category (e.g. "Slide System") |
+| `InitialDescription` | `string?` | Optional free-text the customer has typed so far |
+| `Asset` | `AssetInfoDto?` | Optional vehicle info for context |
+
+**Response — `DiagnosticQuestionsResponseDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `Questions` | `List<DiagnosticQuestionDto>` | 2–4 generated questions |
+| `SmartSuggestion` | `string?` | Optional AI insight (e.g. "This is commonly caused by a hydraulic pump issue. Please upload a photo of the hydraulic pump area if possible.") |
+
+**`DiagnosticQuestionDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `QuestionText` | `string` | The question to display |
+| `Options` | `List<string>` | Checkbox/radio options |
+| `AllowFreeText` | `bool` | Whether to show a free-text input alongside options |
+| `HelpText` | `string?` | Optional guidance (e.g. "Upload a photo of...") |
+
+**`DiagnosticResponseDto`** (in `ServiceRequestCreateRequestDto`):
+
+| Field | Type | Description |
+|---|---|---|
+| `QuestionText` | `string` | The question that was asked |
+| `SelectedOptions` | `List<string>` | Options the customer selected |
+| `FreeTextResponse` | `string?` | Optional free-text answer |
+
+### 16.5 Cost & Performance
+
+| Model | Input Tokens | Output Tokens | Cost per Intake | Latency |
+|---|---|---|---|---|
+| **GPT-4o-mini** (recommended) | ~300 | ~400 | ~$0.0002 | 500ms–1s |
+| GPT-4o (future, if quality demands) | ~300 | ~400 | ~$0.003 | 1–2s |
+
+At 1,000 intakes/month: ~$0.20/month. At 100,000 intakes/month: ~$20/month. Negligible relative to Cosmos DB costs.
+
+Latency is acceptable because the diagnostic questions call happens during a wizard step transition — the customer just tapped "Next" after selecting a category. A brief loading indicator ("Generating diagnostic questions...") is expected.
+
+### 16.6 Two-Phase Intake Flow
+
+The intake wizard becomes a two-phase API interaction:
+
+**Phase 1 — Diagnostic Questions (mid-wizard):**
+```
+POST api/intake/{locationSlug}/diagnostic-questions
+Body: { issueCategory, initialDescription?, asset? }
+→ Returns: DiagnosticQuestionsResponseDto (2–4 questions + optional smart suggestion)
+```
+
+**Phase 2 — Submission (existing flow, enhanced):**
+```
+POST api/intake/{locationSlug}/service-requests
+Body: { asset, issueCategory, issueDescription, diagnosticResponses[], customer }
+→ Returns: 201 Created with SR details
+```
+
+Phase 1 is optional — if it fails or times out, the customer proceeds with free-text description only. The submission in Phase 2 works with or without `diagnosticResponses`.
+
+### 16.7 Configuration
+
+Azure OpenAI settings in `appsettings.json`:
+
+```json
+{
+  "AzureOpenAi": {
+    "Endpoint": "https://{resource}.openai.azure.com/",
+    "DeploymentName": "gpt-4o-mini",
+    "MaxTokens": 500,
+    "TimeoutSeconds": 5
+  }
+}
+```
+
+Authentication uses `DefaultAzureCredential` (consistent with Cosmos DB, Blob Storage, and all other Azure services in the stack via `RVS.Infra.AzCredentials`).
+
+### 16.8 Architectural Decision
+
+| Decision | Rationale |
+|---|---|
+| **AI-generated questions, not static templates** | Eliminates `DiagnosticQuestionTemplate` entity, template CRUD API, admin UI, and per-dealer curation. AI adapts to any category including "Other". Cost is negligible (~$0.0002/intake). |
+| **Single `ICategorizationService` interface** | Both question generation and categorization share the same domain knowledge and external dependency. One interface, one DI registration, one fallback strategy. |
+| **Fallback to rule-based on AI failure** | Intake must never block on an external service. The fallback produces acceptable (if less rich) results. |
+| **`aiContext` on `IntakeFormConfigEmbedded`** | Dealers can customize AI behavior without a template admin UI. Simple string field, appended to system prompt. E.g. "We specialize in Grand Design and Keystone brands." |
+| **`diagnosticResponses` embedded in `ServiceRequest`** | Stored alongside the SR for full audit trail. Used by the categorization step for better results. Queryable via Cosmos indexing for future analytics on symptom patterns. |
+
+---
+
+## 17. Technician Mobile App — API Readiness
+
+This section documents the API surface gaps identified from the technician mobile app feature requirements (see `Docs/Research/FrontEnd/RVS_Features_Tech_Mobile.md`) and the resolutions adopted in this architecture.
+
+### 17.1 Gap Summary
+
+| Priority | Gap | Resolution | Status |
+|---|---|---|---|
+| 🔴 Critical | No authenticated attachment upload for dealer staff | Added `POST` to `AttachmentsController` with `CanUploadAttachments` policy (Section 8.2, Section 11) | ✅ Resolved in this version |
+| 🔴 Critical | `dealer:technician` missing `service-requests:search` permission | Added to role → permission matrix (see `RVS_Auth0_Identity` update) | ✅ Resolved in this version |
+| 🟡 Important | No `assignedTechnicianId` search filter (My Jobs Queue) | Added to `ServiceRequestSearchRequestDto` (Section 5.1) | ✅ Resolved in this version |
+| 🟡 Important | No `assignedBayId` search filter (Bay-Based Access) | Added to `ServiceRequestSearchRequestDto` (Section 5.1) | ✅ Resolved in this version |
+| 🟡 Important | No `assetId` search filter (VIN scan → job lookup) | Added to `ServiceRequestSearchRequestDto` (Section 5.1) | ✅ Resolved in this version |
+| 🟡 Important | Seed `LookupSet` data for `failureModes`, `repairActions` | Documented below as seed data requirement | ✅ Resolved in this version |
+| 🟢 Nice-to-have | Voice notes (audio file support) | Added `.m4a`, `.wav` to `IntakeFormConfigEmbedded.AcceptedFileTypes` defaults (Section 3.8) | ✅ Resolved in this version |
+| 🟢 Nice-to-have | Batch update endpoint for offline sync | Deferred — sequential `PUT` calls acceptable for MVP | 🔵 Deferred |
+| 🔵 Future | Labor time prediction API | Phase 5–6 feature powered by `AssetLedger` data | 🔵 Deferred |
+
+### 17.2 Required LookupSet Seed Data
+
+The technician mobile app's repair outcome entry screen (failure mode selection, repair action selection) requires the following `LookupSet` categories to be seeded in `RVS.Data.Cosmos.Seed`:
+
+| Category | Example Items | Used By |
+|---|---|---|
+| `failureModes` | Hydraulic pump failure, Slide motor failure, Electrical fault, Fluid leak, Seal degradation, Bearing failure, Control board malfunction | Failure Mode picker |
+| `repairActions` | Replace pump, Replace motor, Repair wiring, Adjust mechanism, Replace seal, Lubricate, Reflash firmware | Repair Action picker |
+| `componentTypes` | Hydraulic System, Electrical System, Slide Mechanism, HVAC, Plumbing, Refrigeration, Leveling System, Awning, Generator | Component Type picker |
+
+These categories use the existing `LookupSet` entity and `LookupsController` (`GET api/lookups/{lookupSetId}`). The `dealer:technician` role already has `lookups:read` permission. No new API endpoints or permissions are needed — only seed data.
+
+### 17.3 Offline Sync Strategy (Deferred)
+
+For MVP, the technician mobile app handles offline mode client-side:
+
+1. Queue failed `PUT` requests locally (IndexedDB or SQLite).
+2. On connectivity restore, replay queued requests sequentially via `PUT api/dealerships/{id}/service-requests/{srId}`.
+3. Use `updatedAtUtc` for optimistic concurrency — if the server's `updatedAtUtc` is newer than the queued request's baseline, surface a conflict to the user.
+
+A dedicated `POST api/dealerships/{id}/service-requests/batch-update` endpoint may be added in a future phase if sequential replay proves insufficient at scale.
+
+### 17.4 Labor Time Prediction (Deferred — Phase 5–6)
+
+When the `AssetLedger` accumulates sufficient Section 10A data, a prediction endpoint can be added:
+
+```
+GET api/predictions/labor?issueCategory={cat}&componentType={type}&manufacturer={mfg}
+```
+
+For MVP, the mobile app uses static suggested labor times from the `LookupSet` data or hardcoded client-side values.
+
+---
+
+## 18. Service Manager Desktop App — API Readiness
+
+This section documents the API surface gaps identified from the Service Manager Desktop feature requirements (see `Docs/Research/FrontEnd/RVS_Features_Mngr_Desktop.md`) and the resolutions adopted in this architecture version.
+
+### 18.1 Gap Summary
+
+| Priority | Gap | Resolution | Status |
+|---|---|---|---|
+| 🔴 Critical | Status model only has 4 values; Service Board needs 7+1 | Expanded to 8 status values with transition validation (`StatusTransitions.cs`) — Section 3.1 | ✅ Resolved in this version |
+| 🔴 Critical | No batch outcome endpoint for Batch Outcome Entry (M6) | Added `PATCH api/dealerships/{id}/service-requests/batch-outcome` — Sections 8.2, 11 | ✅ Resolved in this version |
+| 🟡 Important | `Priority` field missing for Work Assignment (M3) | Added `Priority` (`string?`) to `ServiceRequest` entity and all relevant DTOs — Sections 3.1, 4.4, 4.5, 5.1 | ✅ Resolved in this version |
+| 🟡 Important | No `HasOutcome` filter for Outcome Compliance Monitoring (M5) | Added `HasOutcome` (`bool?`) to `ServiceRequestSearchRequestDto` — Section 5.1 | ✅ Resolved in this version |
+| 🟡 Important | No scheduled date search filters (M2, M3) | Added `ScheduledAfterUtc`/`ScheduledBeforeUtc` to `ServiceRequestSearchRequestDto`; added `/scheduledDateUtc/?` to indexing policy — Sections 4.4, 5.1 | ✅ Resolved in this version |
+| 🟡 Important | Analytics response DTO scope too narrow (M7) | Expanded `ServiceRequestAnalyticsResponseDto` with failure modes, repair times, parts trends; added time range query params — Sections 8.2, 11, 12.1 | ✅ Resolved in this version |
+| 🟢 Phase 2 | No "request additional info" flow for triage (M2) | MVP: managers contact customers externally via `CustomerSnapshotEmbedded` contact details. Phase 2: `POST .../follow-ups` endpoint + `INotificationService.SendFollowUpRequestAsync` — Section 8.2 | 🔵 Deferred |
+
+### 18.2 Expanded Status Values and Transition Validation
+
+The `ServiceRequest.Status` field has been expanded from 4 to 8 values to align with the Service Manager Desktop Service Board columns:
+
+| Status Value | Service Board Column | Notes |
+|---|---|---|
+| `"New"` | New Requests | Submitted, not yet triaged |
+| `"Scheduled"` | Scheduled | Has `ScheduledDateUtc` set |
+| `"InDiagnosis"` | In Diagnosis | Technician is diagnosing |
+| `"WaitingParts"` | Waiting Parts | Blocked on parts availability |
+| `"InRepair"` | In Repair | Repair actively in progress |
+| `"Completed"` | Completed (Outcome Needed) | Repair done; outcome may be missing |
+| `"Closed"` | Closed | Outcome recorded; job fully closed |
+| `"Cancelled"` | — | Cancelled at any stage |
+
+**Allowed transitions** (enforced by `StatusTransitions.cs` in `RVS.Domain/Validation/`):
+
+| From | Allowed Next States |
+|---|---|
+| `New` | `Scheduled`, `InDiagnosis`, `Cancelled` |
+| `Scheduled` | `InDiagnosis`, `WaitingParts`, `Cancelled` |
+| `InDiagnosis` | `WaitingParts`, `InRepair`, `Cancelled` |
+| `WaitingParts` | `InDiagnosis`, `InRepair`, `Cancelled` |
+| `InRepair` | `WaitingParts`, `Completed`, `Cancelled` |
+| `Completed` | `Closed`, `InRepair` (reopen for additional work) |
+| `Closed` | *(terminal — no transitions)* |
+| `Cancelled` | *(terminal — no transitions)* |
+
+`UpdateStatusAsync` in `IServiceRequestService` validates the requested transition using this class and throws `ArgumentException` (mapped to HTTP 400) if the transition is not allowed.
+
+### 18.3 Batch Outcome Endpoint
+
+`PATCH api/dealerships/{id}/service-requests/batch-outcome` applies a shared repair outcome to up to 25 service requests in one call.
+
+**Validation:**
+- Requests with more than 25 IDs in `ServiceRequestIds` return HTTP 400 immediately.
+- Each SR is validated to exist within the tenant and to have a status of `"Completed"` (the expected state for outcome entry).
+- SRs that fail validation (not found, wrong status, wrong tenant) are collected into the `Failed` list with an explanatory reason rather than aborting the entire batch.
+
+**Operation:** For each valid SR, the service applies the provided `ServiceEvent` fields (`FailureMode`, `RepairAction`, `PartsUsed`, `LaborHours`) and returns a result summary with separate `Succeeded` and `Failed` lists.
+
+**Request — `ServiceRequestBatchOutcomeRequestDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `ServiceRequestIds` | `List<string>` | Required. IDs of SRs to update. Max 25. |
+| `FailureMode` | `string?` | Failure mode to apply to all |
+| `RepairAction` | `string?` | Repair action to apply to all |
+| `PartsUsed` | `List<string>?` | Parts list to apply to all |
+| `LaborHours` | `decimal?` | Labor hours to apply to all |
+
+**Response — `ServiceRequestBatchOutcomeResponseDto`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `Succeeded` | `List<string>` | IDs of successfully updated service requests |
+| `Failed` | `List<BatchOutcomeFailureDto>` | Items that failed, with reason |
+
+`BatchOutcomeFailureDto` — `ServiceRequestId` (`string`), `Reason` (`string`).
