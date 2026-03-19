@@ -32,7 +32,7 @@ All services are `sealed`, injected via dependency injection. All repositories f
 
 # RV Service Flow (RVS) — Core Backend Architecture
 
-**As-of-Thread (ASOT) — March 18, 2026**
+**Authoritative Source of Truth (ASOT) — March 18, 2026**
 
 This document captures the domain model, multi-location tenancy, data layer, orchestration flows, service layer, middleware pipeline, API surface, and storage design for RVS. For Auth0 identity, RBAC roles/permissions, ClaimsService, and authorization policies, see the companion document **RVS_Auth0_Identity_Version2.md**.
 

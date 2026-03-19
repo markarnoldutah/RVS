@@ -2,7 +2,7 @@
 
 # RV Service Flow (RVS) — Auth0 Identity & Authorization
 
-**As-of-Thread (ASOT) — March 18, 2026**
+**Authoritative Source of Truth (ASOT) — March 18, 2026**
 
 This document covers Auth0 configuration, RBAC roles and permissions, JWT design, ClaimsService, authorization policies, and the tenant provisioning flow. For domain model, data layer, and API surface, see the companion document **RVS_Core_Architecture_Version3.md**.
 

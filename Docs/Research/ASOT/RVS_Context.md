@@ -1,6 +1,6 @@
 # RV Service Flow (RVS) — Platform Context
 
-**As-of-Thread (ASOT) — March 18, 2026**
+**Authoritative Source of Truth (ASOT) — March 18, 2026**
 
 A comprehensive platform overview for developers, investors, partners, and stakeholders. For detailed architecture and identity specifics, see companion documents [**RVS_PRD.md**](RVS_PRD.md), [**RVS_Core_Architecture_Version3.md**](RVS_Core_Architecture_Version3.md), and [**RVS_Auth0_Identity_Version2.md**](RVS_Auth0_Identity_Version2.md).
 
