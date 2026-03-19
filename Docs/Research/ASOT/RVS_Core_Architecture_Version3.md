@@ -1,163 +1,181 @@
 
+## 18. Service Manager Desktop App
+
+**Resolved gaps (this version):**
+- 8 status values (expanded from 4) with validated transitions (New → Scheduled → InDiagnosis → ... → Closed)
+- Batch outcome endpoint (apply repair outcome to up to 25 SRs at once)
+- Priority field (`"Low"`, `"Normal"`, `"High"`, `"Urgent"`) for work assignment
+- `HasOutcome` filter to find SRs missing repair outcome (Outcome Compliance Monitoring)
+- Scheduled date filters (`ScheduledAfterUtc`, `ScheduledBeforeUtc`)
+- Enhanced analytics (failure modes, repair time trends, parts usage)
+
+**Deferred to Phase 2:**
+- "Request Additional Information" flow (MVP: managers contact customers externally)
+
+**Reference:** See `StatusTransitions.cs` for allowed state transitions and `ServiceRequestBatchOutcomeRequestDto` for batch outcome operation details.
+## 5. Service & Repository Layer
+
+All services are `sealed`, injected via dependency injection. All repositories follow the repository pattern for data access abstraction. For detailed method signatures, DTOs, and implementation patterns, see:
+- Service interfaces in `RVS.Domain/Interfaces/`
+- Repository implementations in `RVS.Infra.AzCosmosRepository/`, `RVS.Infra.AzBlobRepository/`, `RVS.Infra.AzTablesRepository/`
+- Service implementations in `RVS.API/Services/`
+- DTO definitions in `RVS.Domain/DTOs/`
+
+**Key service responsibilities:**
+- **`IServiceRequestService`** — Orchestrates the core intake flow (Steps 1–6), status transitions, and batch outcome operations. Validates transitions via `StatusTransitions.cs`.
+- **`ICustomerProfileService`** — Profile resolution, asset ownership transfer, reactivation logic.
+- **`IGlobalCustomerAcctService`** — Global identity federation, magic-link token generation/validation.
+- **`IAssetLedgerService`** — Append-only event recording for the data moat.
+- **`IAttachmentService`** — Blob upload/download, SAS URI generation.
+- **`ICategorizationService`** — Issue auto-categorization (AI-powered with rule-based fallback) and technician summary generation.
+- **`ILocationService`** — Location CRUD with slug-lookup table synchronization.
 
 # RV Service Flow (RVS) — Core Backend Architecture
 
 **As-of-Thread (ASOT) — March 18, 2026**
 
-This document captures the domain model, multi-location tenancy, data layer, orchestration flows, service layer, middleware pipeline, API surface, and storage design for RVS. For Auth0 identity, RBAC roles/permissions, ClaimsService, and authorization policies, see the companion document **RVS_Auth0_Identity.md**.
+This document captures the domain model, multi-location tenancy, data layer, orchestration flows, service layer, middleware pipeline, API surface, and storage design for RVS. For Auth0 identity, RBAC roles/permissions, ClaimsService, and authorization policies, see the companion document **RVS_Auth0_Identity_Version2.md**.
 
 ---
 
-## 1. Solution Structure
+## Executive Summary
 
-```
-RVS.slnx
-├── RVS.API/                           # ASP.NET Core API (.NET 10, C# 14)
-│   ├── Controllers/
-│   │   ├── IntakeController.cs        # [AllowAnonymous] — customer-facing intake
-│   │   ├── CustomerStatusController.cs # [AllowAnonymous] — magic-link status page
-│   │   ├── ServiceRequestsController.cs # [Authorize] — dealer dashboard CRUD
-│   │   ├── AttachmentsController.cs    # [Authorize] — photo/video SAS URLs
-│   │   ├── DealershipsController.cs    # [Authorize] — dealership/corporation management
-│   │   ├── LocationsController.cs     # [Authorize] — physical location management
-│   │   ├── TenantsController.cs        # [Authorize] — tenant config, access gate
-│   │   ├── LookupsController.cs        # [Authorize] — issue categories, component types
-│   │   └── AnalyticsController.cs      # [Authorize] — basic request analytics
-│   ├── Services/
-│   │   ├── ServiceRequestService.cs
-│   │   ├── CustomerProfileService.cs   # Shadow profile resolve-or-create + magic link
-│   │   ├── GlobalCustomerAcctService.cs # Cross-dealer identity federation
-│   │   ├── AssetLedgerService.cs       # Append-only asset event log
-│   │   ├── AttachmentService.cs
-│   │   ├── DealershipService.cs
-│   │   ├── LocationService.cs         # Physical location CRUD + slug resolution
-│   │   ├── TenantService.cs
-│   │   ├── LookupService.cs
-│   │   ├── CategorizationService.cs    # Azure OpenAI-powered; rule-based fallback
-│   │   ├── NotificationService.cs
-│   │   └── ClaimsService.cs           # Auth0 JWT claims (see RVS_Auth0_Identity.md)
-│   ├── Mappers/
-│   │   ├── ServiceRequestMapper.cs
-│   │   ├── CustomerProfileMapper.cs
-│   │   ├── GlobalCustomerAcctMapper.cs
-│   │   ├── AssetLedgerMapper.cs
-│   │   ├── DealershipMapper.cs
-│   │   ├── LocationMapper.cs
-│   │   └── LookupMapper.cs
-│   ├── Middleware/
-│   │   ├── ExceptionHandlingMiddleware.cs  # IMiddleware, singleton
-│   │   └── TenantAccessGateMiddleware.cs   # RequestDelegate, scoped injection
-│   ├── Integrations/
-│   │   └── AzureOpenAiClient.cs       # Azure OpenAI client wrapper
-│   ├── Properties/
-│   ├── Program.cs
-│   ├── appsettings.json
-│   ├── appsettings.Development.json
-│   └── appsettings.Production.json
-│
-├── RVS.Domain/                        # Zero infra dependencies
-│   ├── Entities/
-│   │   ├── EntityBase.cs
-│   │   ├── ServiceRequest.cs
-│   │   ├── CustomerSnapshotEmbedded.cs        # Embedded in ServiceRequest
-│   │   ├── AssetInfoEmbedded.cs             # Embedded in ServiceRequest
-│   │   ├── ServiceRequestAttachmentEmbedded.cs # Embedded in ServiceRequest
-│   │   ├── ServiceEventEmbedded.cs            # Embedded in ServiceRequest (10A fields)
-│   │   ├── DiagnosticResponseEmbedded.cs     # Embedded in ServiceRequest
-│   │   ├── CustomerProfile.cs         # Tenant-scoped shadow record
-│   │   ├── AssetsOwnedEmbedded.cs      # Embedded in CustomerProfile
-│   │   ├── AssetsOwnedStatus.cs
-│   │   ├── GlobalCustomerAcct.cs      # Cross-dealer global identity
-│   │   ├── LinkedProfileReferenceEmbedded.cs  # Embedded in GlobalCustomerAcct
-│   │   ├── AssetLedgerEntry.cs        # Append-only asset service event
-│   │   ├── Dealership.cs             # Corporation / dealer group
-│   │   ├── Location.cs               # Physical service location
-│   │   ├── AddressEmbedded.cs                # Embedded in Location
-│   │   ├── IntakeFormConfigEmbedded.cs       # Embedded in Location
-│   │   ├── TenantConfig.cs
-│   │   ├── TenantAccessGateEmbedded.cs        # Embedded in TenantConfig
-│   │   └── LookupSet.cs
-│   ├── DTOs/
-│   │   ├── ServiceRequestCreateRequestDto.cs
-│   │   ├── ServiceRequestUpdateRequestDto.cs
-│   │   ├── ServiceRequestSearchRequestDto.cs
-│   │   ├── ServiceRequestDetailResponseDto.cs
-│   │   ├── ServiceRequestSummaryResponseDto.cs
-│   │   ├── AttachmentUploadRequestDto.cs
-│   │   ├── AttachmentResponseDto.cs
-│   │   ├── AssetInfoDto.cs
-│   │   ├── CustomerInfoDto.cs
-│   │   ├── CustomerStatusResponseDto.cs
-│   │   ├── CustomerServiceRequestSummaryDto.cs
-│   │   ├── IntakeConfigResponseDto.cs
-│   │   ├── IntakePrefillDto.cs
-│   │   ├── AssetPrefillDto.cs
-│   │   ├── DiagnosticQuestionsRequestDto.cs
-│   │   ├── DiagnosticQuestionsResponseDto.cs
-│   │   ├── DiagnosticQuestionDto.cs
-│   │   ├── DiagnosticResponseDto.cs
-│   │   ├── DealershipDetailResponseDto.cs
-│   │   ├── DealershipSummaryResponseDto.cs
-│   │   ├── DealershipUpdateRequestDto.cs
-│   │   ├── LocationDetailResponseDto.cs
-│   │   ├── LocationSummaryResponseDto.cs
-│   │   ├── LocationCreateRequestDto.cs
-│   │   ├── LocationUpdateRequestDto.cs
-│   │   ├── TenantConfigCreateRequestDto.cs
-│   │   ├── TenantConfigUpdateRequestDto.cs
-│   │   ├── TenantConfigResponseDto.cs
-│   │   ├── TenantAccessGateDto.cs
-│   │   ├── LookupSetDto.cs
-│   │   ├── LookupItemDto.cs
-│   │   ├── ServiceRequestAnalyticsResponseDto.cs
-│   │   ├── ServiceRequestBatchOutcomeRequestDto.cs
-│   │   └── ServiceRequestBatchOutcomeResponseDto.cs
-│   ├── Interfaces/
-│   │   ├── IServiceRequestRepository.cs
-│   │   ├── IServiceRequestService.cs
-│   │   ├── ICustomerProfileRepository.cs
-│   │   ├── ICustomerProfileService.cs
-│   │   ├── IGlobalCustomerAcctRepository.cs
-│   │   ├── IGlobalCustomerAcctService.cs
-│   │   ├── IAssetLedgerRepository.cs
-│   │   ├── IAssetLedgerService.cs
-│   │   ├── IAttachmentService.cs
-│   │   ├── IBlobStorageRepository.cs
-│   │   ├── IDealershipRepository.cs
-│   │   ├── IDealershipService.cs
-│   │   ├── ILocationRepository.cs
-│   │   ├── ILocationService.cs
-│   │   ├── ITenantRepository.cs
-│   │   ├── ITenantService.cs
-│   │   ├── ILookupRepository.cs
-│   │   ├── ILookupService.cs
-│   │   ├── ICategorizationService.cs  # Azure OpenAI-powered; rule-based fallback
-│   │   ├── INotificationService.cs
-│   │   └── IUserContextAccessor.cs
-│   ├── Validation/
-│   │   └── StatusTransitions.cs   # Allowed status transition rules for ServiceRequest
-│   └── Shared/
-│       └── PagedResult.cs
-│
-├── RVS.Infra.AzCosmosRepository/      # Cosmos DB repository implementations
-├── RVS.Infra.AzBlobRepository/        # Azure Blob Storage
-├── RVS.Infra.AzTablesRepository/      # Azure Table Storage (analytics counters cache)
-├── RVS.Infra.AzCredentials/           # DefaultAzureCredential shared config
-├── RVS.Data.Cosmos.Seed/              # Seed data for dev/test
-│
-├── .github/
-│   ├── copilot-instructions.md
-│   └── instructions/
-│       ├── csharp.instructions.md
-│       ├── aspnet-rest-apis.instructions.md
-│       ├── blazor.instructions.md
-│       └── markdowninstructions.md
-│
-└── Docs/
-    └── Research/
-        ├── RVS_Core_Architecture.md       # This document
-        └── RVS_Auth0_Identity.md          # Auth0, RBAC, ClaimsService
-```
+RVS is a B2B SaaS platform for RV dealership service management. The backend is built on ASP.NET Core (.NET 10), Azure Cosmos DB (NoSQL), Blazor WASM frontend, and Auth0 identity.
+
+**Multi-tenancy Model:** Tenant = Corporation (e.g., Blue Compass RV). One tenant maps to:
+- One Auth0 Organization
+- One Cosmos DB partition keyed on `tenantId`
+- One to many Physical Locations (intake URLs per location)
+- Cross-location analytics, shared customer profiles
+
+**Key Aggregates:**
+1. **ServiceRequest** — Customer intake (Cosmos: `/tenantId`)
+2. **CustomerProfile** — Tenant-scoped shadow record (Cosmos: `/tenantId`)
+3. **GlobalCustomerAcct** — Cross-dealer identity by email (Cosmos: `/email`)
+4. **AssetLedgerEntry** — Append-only service history (Cosmos: `/assetId`, the "data moat")
+5. **Location**, **Dealership**, **TenantConfig**, **LookupSet** — Supporting aggregates
+
+**Data Moat:** Append-only `AssetLedgerEntry` accumulates proprietary service intelligence indexed by asset ID. Powers Section 10A service failure/repair analytics (Phase 5–6).
+
+**Intake Flow (7 Steps, ~11 RU):**
+1. Slug → Location & Tenant lookup
+2. Customer email → Global identity (create if first visit)
+3. Tenant-scoped profile resolution + asset ownership tracking
+4. ServiceRequest creation with auto-categorization (AI + rule-based fallback)
+5. Append to asset ledger
+6. Update linkages (customer request count, magic-link rotation)
+7. Send confirmation email
+
+**Magic-Link Design:** Customer sees all their SRs across corporations via `api/status/{token}`. Token embeds email-hash prefix enabling O(1) partition-key derivation (no cross-partition query).
+
+---
+
+## ⚠️ CRITICAL GAPS — Assessment Action Items
+
+The following issues are identified in `RVS_SaaS_Architecture_Assessment.md` and `RVS_Cloud_Arch_Assessment.md` and require resolution before commercialization. Organized by urgency:
+
+### 🔴 CRITICAL — P0 (Non-negotiable before paying customers)
+
+1. **No Infrastructure-as-Code (Bicep/Terraform)**
+  - Impact: Manual environment setup, infra drift, disaster recovery risk
+  - Action: Create Bicep templates for App Service, Cosmos DB (9 containers), Blob Storage, Key Vault, Application Insights, Static Web Apps
+  - See: Assessment "Operational Excellence" section, Cloud Arch Assessment
+
+2. **No CI/CD Pipeline (GitHub Actions)**
+  - Impact: Manual deployment, cannot safely release changes, tenant onboarding cannot auto-provision
+  - Action: Build GitHub Actions workflow with `build → test → deploy-staging → (manual approval) → deploy-prod`
+  - See: Assessment "Operational Excellence" section
+
+3. **Application Insights Missing (Zero Telemetry)**
+  - Impact: Cannot measure SLAs, cannot detect outages until customer complains, cannot troubleshoot issues
+  - Action: Wire Application Insights with tenant-tagged custom dimensions (TenantId, LocationId), Cosmos RU tracking, Azure OpenAI latency, error rates by tenant
+  - See: Assessment "Reliability" section
+
+4. **SFTP Private Keys Stored in Cosmos DB**
+  - Impact: Critical security violation, fails SOC 2 audit, private key exposed if DB compromised
+  - Action: Move SFTP credentials to Azure Key Vault. Store only `privateKeySecretUri` in `TenantConfig`.
+  - See: Assessment "Security" section
+
+5. **Billing/Metering Infrastructure Missing**
+  - Impact: Cannot charge customers, violates SaaS WAF principle "Understand your cost/revenue relationship"
+  - Action: Design lightweight metering layer: `PlanTier` field in `TenantConfig`, monthly SR count tracking (change feed or scheduled job), Stripe Billing integration, overage enforcement in `TenantAccessGateMiddleware`
+  - See: Assessment "Cost Optimization" section, Cloud Arch Assessment
+
+### 🟡 HIGH — P1 (Must have before MVP launch to production)
+
+1. **No Azure Front Door + WAF**
+  - Impact: Unauthenticated intake endpoints unprotected from injection, DDoS, bot attacks
+  - Action: Place Azure Front Door Standard in front of API, enable OWASP Core Rule Set
+  - Cost: ~$35/month at MVP scale
+  - See: Assessment "Security" section
+
+2. **No Azure Key Vault for Secrets**
+  - Impact: Auth0 client secret, Azure OpenAI API key, Stripe API key all in `appsettings.json` or environment variables (expo sure risk, no rotation)
+  - Action: Add `AddAzureKeyVault` to Program.cs, grant App Service managed identity `Key Vault Secrets User` RBAC
+  - See: Assessment "Security" section
+
+3. **No SAS Pre-Signed Direct Upload for Large Files**
+  - Impact: 25 MB video uploads block API worker threads (3–8 seconds on mobile LTE), causes request starvation
+  - Action: Add `GenerateUploadSasUriAsync` endpoint. Client uploads directly to Blob Storage, calls confirm endpoint afterward.
+  - See: Assessment "Performance Efficiency" section
+
+4. **Per-Tenant Rate Limiting Missing**
+  - Impact: "Noisy neighbor" — one tenant's batch queries can consume all Cosmos RU, degrading service for other tenants
+  - Action: Add per-`tenantId` sliding-window rate limiter (e.g., 300 req/min per tenant) on authenticated endpoints
+  - See: Assessment "Operational Excellence", Cloud Arch Assessment
+
+5. **No Health Check Endpoints**
+  - Impact: App Service cannot detect unhealthy API (Cosmos connection broken → 503 responses but health = OK)
+  - Action: Add `/health`, `/health/live`, `/health/ready` with Cosmos connectivity check
+  - See: Assessment "Reliability" section
+
+### 🟠 MEDIUM — P1 (Phase 1 Sprint N)
+
+1. **Autoscale Missing on Variable-Load Containers**
+  - Current: `dealerships`, `tenantConfigs`, `lookupSets` on Manual 400 RU
+  - Impact: Risk throttling (429) during intake bursts, higher cost ($225/month floor vs. $52/month for autoscale)
+  - Action: Change to Autoscale 400–1000 RU for all three
+  - See: Assessment "Cost Optimization" section
+
+2. **No CDN for Blazor WASM**
+  - Impact: 5–15 MB runtime + app download from single App Service instance, poor UX on mobile
+  - Action: Deploy Blazor WASM to Azure Static Web Apps (Free tier) or front with Azure Front Door CDN
+  - See: Assessment "Performance Efficiency" section
+
+3. **No Blob Storage Lifecycle Management**
+  - Impact: Storage costs grow linearly with service request volume (photos/videos retained indefinitely)
+  - Action: Define per-tier retention policies in `TenantConfig`, implement Blob lifecycle management (Hot→Cool→Archive)
+  - See: Assessment "Cost Optimization" section
+
+### 📋 Reference Documents
+
+- **RVS_SaaS_Architecture_Assessment.md** — Complete security, reliability, performance, cost, operational analysis
+- **RVS_Cloud_Arch_Assessment.md** — Document health issues, architecture gaps, incomplete designs, scope conflicts
+- **RVS_Auth0_Identity_Version2.md** — Companion doc: Auth0 setup, RBAC roles, JWT claims, permissions matrix
+- `.github/copilot-instructions.md` — ASP.NET Core, C# 14 coding patterns
+
+---
+---
+
+## 1. Solution Structure and Layering
+
+**Technology Stack:** ASP.NET Core (.NET 10, C# 14), Blazor WASM frontend, Azure Cosmos DB (SQL API), Azure Blob Storage, Auth0 identity.
+
+**Layered Architecture:**
+- **RVS.API** — ASP.NET Core REST API; request handlers, service layer, middleware pipeline
+- **RVS.Domain** — Zero infrastructure dependencies; entities, DTOs, interfaces, validation rules
+- **RVS.Infra.*** — Azure service implementations (Cosmos repositories, Blob Storage, Table Storage, credential management)
+- **RVS.Data.Cosmos.Seed** — Development seed data
+- **RVS.BlazorWASM** — Customer intake portal + dealer dashboard frontend
+
+**Design Patterns:**
+- Clean architecture with clear dependency direction (API → Service → Domain; Infra injected via DI)
+- Repository pattern for data access; Service layer for orchestration and business rules
+- Mapper classes for entity ↔ DTO transformations
+- Middleware pipeline for cross-cutting concerns (exception handling, authentication, tenant access gating)
+- Interface-driven service dependencies for testability and fallback strategies
+
+See `.github/copilot-instructions.md` for detailed coding patterns.
 
 ---
 
@@ -196,168 +214,32 @@ Blue Compass RV (Corporation / Auth0 Organization / Cosmos Partition)
 
 ---
 
-## 3. Domain Entities
+## 3. Domain Model Overview
 
-All entities inherit `EntityBase` following the [MF `EntityBase` pattern](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.Domain/Entities/EntityBase.cs):
+**Core Aggregates:**
 
-- `Type` — abstract, `init`-only discriminator
-- `Id` — auto GUID, `init`-only
-- `TenantId` — virtual, `init`-only
-- `Name` — virtual
-- `IsEnabled` — soft-enable/disable
-- `CreatedAtUtc`, `UpdatedAtUtc`, `CreatedByUserId`, `UpdatedByUserId`
-- `MarkAsUpdated(userId)` stamps update fields
-- `[JsonProperty("camelCase")]` on all properties
+1. **ServiceRequest** — Central aggregate. Represents a customer service submission at a specific location. Partitioned by `/tenantId`. Key embedded sub-entities are `CustomerSnapshotEmbedded` (denormalized for read efficiency), `AssetInfoEmbedded`, `ServiceEventEmbedded` (technician repair outcomes), and `DiagnosticResponseEmbedded` (AI diagnostic responses).
 
-### 3.1 ServiceRequest (Aggregate Root)
+2. **CustomerProfile** — Tenant-scoped shadow record created automatically on first intake. No customer sign-up. Maps to a global identity via `GlobalCustomerAcctId`. Tracks asset ownership transitions within a corporation.
 
-The central entity. Partitioned by `/tenantId`. Each service request belongs to exactly one Location within the tenant.
+3. **GlobalCustomerAcct** — Cross-dealer global identity by email. Enables customers to see their service history across all corporations via magic-link status page.
 
-| Field | Type | Description |
-|---|---|---|
-| `Type` | `string` | `"serviceRequest"` (discriminator) |
-| `TenantId` | `string` | Corporation partition key (inherited from `EntityBase`) |
-| `LocationId` | `string` | FK to the physical `Location` where this SR was submitted |
-| `Status` | `string` | `"New"` \| `"Scheduled"` \| `"InDiagnosis"` \| `"WaitingParts"` \| `"InRepair"` \| `"Completed"` \| `"Closed"` \| `"Cancelled"`. See Section 18.2 for per-value semantics and allowed transitions. |
-| `CustomerProfileId` | `string` | FK to tenant-scoped `CustomerProfile` |
-| `Customer` | `CustomerSnapshotEmbedded` | Point-in-time denormalized snapshot (no joins on dashboard reads) |
-| `Asset` | `AssetInfoEmbedded` | Identifier, manufacturer, model, year |
-| `IssueDescription` | `string` | Free-text customer description |
-| `IssueCategory` | `string?` | Auto-categorized (rule-based MVP, AI future) |
-| `TechnicianSummary` | `string?` | Generated summary for tech |
-| `DiagnosticResponses` | `List<DiagnosticResponseEmbedded>` | AI-generated Q&A captured during intake wizard |
-| `Attachments` | `List<ServiceRequestAttachmentEmbedded>` | Embedded photo/video references |
-| `ServiceEvent` | `ServiceEventEmbedded` | Section 10A structured repair data |
-| `ScheduledDateUtc` | `DateTime?` | Future: scheduling |
-| `AssignedBayId` | `string?` | Future: bay assignment |
-| `AssignedTechnicianId` | `string?` | Future: tech assignment |
-| `RequiredSkills` | `List<string>` | Future: skill matching |
-| `Priority` | `string?` | Job priority set by manager. Values: `"Low"`, `"Normal"`, `"High"`, `"Urgent"`. Default: `null` (unset). |
+4. **AssetLedgerEntry** — Append-only service event log (data moat). One entry per service request, partitioned by `/assetId`. Enables Section 10A asset service intelligence. Written at intake; enriched asynchronously when repair is completed (Phase 5–6 via change feed).
 
-### 3.2 Embedded Sub-Entities (within ServiceRequest)
+5. **Dealership** — Corporation / dealer group. One Auth0 Organization per dealership. Many Locations per Dealership.
 
-**CustomerSnapshotEmbedded** — Point-in-time copy of customer info. Fields: `FirstName`, `LastName`, `Email`, `Phone`, `IsReturningCustomer`, `PriorRequestCount`. Denormalized so the dealer dashboard never joins to `customerProfiles`.
+6. **Location** — Physical service site. Slug-based intake URL. Configurable intake form settings.
 
-**AssetInfoEmbedded** — Fields: `AssetId`, `Manufacturer`, `Model`, `Year`.
+7. **TenantConfig** — Tenant settings, access gate, SFTP export config. **⚠️ SECURITY GAP — See Assessment doc: SFTP private keys must move to Key Vault.**
 
-**ServiceRequestAttachmentEmbedded** — Fields: `AttachmentId` (auto GUID), `BlobUri`, `FileName`, `ContentType`, `SizeBytes`, `CreatedAtUtc`.
+8. **LookupSet** — Reference data (issue categories, component types, failure modes).
 
-**ServiceEventEmbedded** — Section 10A structured data. Fields: `ComponentType`, `FailureMode`, `RepairAction`, `PartsUsed` (list), `LaborHours`, `ServiceDateUtc`. Populated progressively across phases; MVP captures `IssueCategory` and `ComponentType` only.
+**Embedding Strategy:**
+- Entities embed related data that is always retrieved together (no joins on hot paths)
+- Denormalized snapshots (e.g., `CustomerSnapshotEmbedded` in `ServiceRequest`) are point-in-time copies, by design — they do not auto-update
+- Array fields (e.g., `assetsOwned`, `diagnosticResponses`) are queryable via Cosmos indexing
 
-**DiagnosticResponseEmbedded** — Structured answer from the AI-guided intake wizard. Fields: `QuestionText` (string), `SelectedOptions` (List<string>), `FreeTextResponse` (string?). Embedded as a list in `ServiceRequest`. Used by `CategorizationService` to improve auto-categorization and technician summary quality.
-
-### 3.3 CustomerProfile (Tenant-Scoped Shadow Record)
-
-Shadow profile — created automatically on first intake submission at a corporation. One per customer per tenant (not per location). The customer never sees a "Sign Up" screen. Partitioned by `/tenantId`.
-
-| Field | Type | Description |
-|---|---|---|
-| `Type` | `string` | `"customerProfile"` |
-| `TenantId` | `string` | Corporation partition key |
-| `Email` | `string` | Customer email (normalized on input) |
-| `FirstName` / `LastName` / `Phone` | `string` | Contact info, updated on each intake |
-| `GlobalCustomerAcctId` | `string` | FK to global `GlobalCustomerAcct` |
-| `AssetsOwned` | `List<AssetsOwnedEmbedded>` | Full lifecycle of each customer ↔ asset relationship |
-| `TotalRequestCount` | `int` | Running count |
-
-Convenience helpers (not persisted): `GetActiveAssetIds()` returns asset identifiers with Active status. `GetOwnership(assetId)` returns the active ownership record for a specific asset.
-
-### 3.4 AssetsOwnedEmbedded (Embedded in CustomerProfile)
-
-Records a customer's relationship to a specific asset over time. Handles ownership transfers: when a different customer submits for the same asset, the previous owner's record is set to Inactive.
-
-| Field | Type | Description |
-|---|---|---|
-| `AssetId` | `string` | Compound asset key — format: `{AssetType}:{Identifier}` (e.g. `RV:1ABC234567`) |
-| `Manufacturer` / `Model` / `Year` | `string?` / `int?` | Asset details |
-| `Status` | `string` | `"Active"` or `"Inactive"` (string constants, not enum) |
-| `FirstSeenAtUtc` / `LastSeenAtUtc` | `DateTime` | Lifecycle timestamps |
-| `RequestCount` | `int` | Number of SRs for this asset |
-| `DeactivatedAtUtc` | `DateTime?` | When ownership was transferred |
-| `DeactivationReason` | `string?` | e.g. "Asset claimed by a different customer" |
-
-### 3.5 GlobalCustomerAcct (Cross-Dealer Global Record)
-
-Global customer identity — one record per real human (by email). Cross-tenant. Links all corporation-scoped profiles. Partitioned by `/email` for O(1) intake resolution.
-
-| Field | Type | Description |
-|---|---|---|
-| `Type` | `string` | `"globalCustomerAcct"` |
-| `Email` | `string` | Partition key (normalized on input) |
-| `FirstName` / `LastName` / `Phone` | `string` | Latest contact info |
-| `LinkedProfiles` | `List<LinkedProfileReferenceEmbedded>` | Pointers to all tenant-scoped profiles |
-| `AllKnownAssetIds` | `List<string>` | Every AssetId ever associated across all dealers (format: `{AssetType}:{Identifier}`). Capped at 200 items (most-recent first); older history is recoverable from `AssetLedgerEntry` by querying on `GlobalCustomerAcctId`. |
-| `MagicLinkToken` | `string?` | Global magic-link token for status page. Format: `base64url(SHA256(email)[0..8]):random_bytes` — the email-hash prefix encodes the partition key so token lookup is a single-partition point read (no cross-partition query). |
-| `MagicLinkExpiresAtUtc` | `DateTime?` | Token expiry |
-| `Auth0UserId` | `string?` | Phase 2+: linked Auth0 account (null during MVP) |
-
-**LinkedProfileReferenceEmbedded** — Lightweight pointer from global identity to a tenant-scoped profile. Fields: `TenantId`, `ProfileId`, `DealershipName`, `LocationId`, `LocationName`, `FirstSeenAtUtc`, `RequestCount`.
-
-### 3.6 AssetLedgerEntry (Append-Only Asset Event Log — Data Moat)
-
-Append-only service event record keyed by asset. One entry per service request, written at intake time. This is the **data moat**: proprietary, accumulating, non-replicable data that powers Section 10A service intelligence. Partitioned by `/assetId`.
-
-**AssetId format:** `{AssetType}:{Identifier}` — a normalized compound key that is globally unique, works across industries, and preserves VIN/HIN/serial semantics.
-
-| Asset Type | Example AssetId |
-|---|---|
-| RV | `RV:1ABC234567` |
-| Boat | `Boat:HIN123456789` |
-| Excavator | `Excavator:CAT320GX987654` |
-| Tractor | `Tractor:JD8R34012345` |
-
-| Field | Type | Description |
-|---|---|---|
-| `AssetId` | `string` | Partition key — format: `{AssetType}:{Identifier}` (e.g. `RV:1ABC234567`) |
-| `AssetType` | `string` | Asset category (e.g. `"RV"`, `"Boat"`, `"Excavator"`) |
-| `TenantId` | `string` | Which corporation |
-| `DealershipName` | `string` | Corporation display name |
-| `LocationId` / `LocationName` | `string` | Which physical location |
-| `ServiceRequestId` | `string` | FK back to the SR |
-| `GlobalCustomerAcctId` | `string` | Which customer (global) |
-| `Manufacturer` / `Model` / `Year` | `string?` / `int?` | Asset details |
-| `IssueCategory` / `IssueDescription` | `string?` | What was reported |
-| `FailureMode` / `RepairAction` / `PartsUsed` / `LaborHours` | various | Section 10A fields, populated progressively |
-| `Status` | `string` | SR status at time of write |
-| `SubmittedAtUtc` / `ServiceDateUtc` | `DateTime` / `DateTime?` | When submitted / when serviced |
-
-**TTL:** No TTL — entries are retained indefinitely by design. Partition size monitored per-asset. For assets with extreme service histories, the 20 GB logical partition limit is not a concern (each entry is ~1 KB, so you'd need ~20 million entries per asset).
-
-### 3.7 Dealership (Corporation / Dealer Group)
-
-Represents the corporation or dealer group — the Auth0 Organization boundary and Cosmos partition key. Follows the MF [Practice](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.Domain/Entities/Practice.cs) pattern.
-
-| Field | Type | Description |
-|---|---|---|
-| `Type` | `string` | `"dealership"` |
-| `Slug` | `string` | URL-safe identifier (e.g. `"blue-compass-rv"`) |
-| `CorporateName` | `string` | Display name (e.g. `"Blue Compass RV"`) |
-| `LogoUrl` | `string?` | Corporate logo |
-| `IsMultiLocation` | `bool` | `true` for Blue Compass, `false` for single-location independents |
-
-### 3.8 Location (Physical Service Location)
-
-A physical service site within a dealership group. Single-location dealers have exactly one. Multi-location groups have many. Partitioned by `/tenantId` — all locations for a corporation are co-located.
-
-| Field | Type | Description |
-|---|---|---|
-| `Type` | `string` | `"location"` |
-| `TenantId` | `string` | Parent corporation |
-| `Slug` | `string` | Globally unique intake URL slug (e.g. `"blue-compass-salt-lake"`) |
-| `DisplayName` | `string` | e.g. `"Blue Compass RV - Salt Lake City"` |
-| `Address` | `AddressEmbedded` | Street, City, State, Zip |
-| `ServiceEmail` / `Phone` | `string?` | Location contact info |
-| `LogoUrl` | `string?` | Location-specific logo (overrides corporate if set) |
-| `IntakeConfig` | `IntakeFormConfigEmbedded` | Accepted file types, max file size |
-| `RegionTag` | `string?` | e.g. `"west"`, `"southeast"` — for regional manager scoping |
-
-**AddressEmbedded** — Fields: `Street`, `City`, `State`, `Zip`.
-
-**IntakeFormConfigEmbedded** — Fields: `AcceptedFileTypes` (default: `.jpg`, `.png`, `.mp4`, `.m4a`, `.wav`), `MaxFileSizeMb` (default: 25), `MaxAttachmentCount` (default: 10), `RequiredFields` (List<string>, default: empty — all standard fields required), `ServiceInstructions` (string?, optional location-specific instructions shown on intake page), `AiContext` (string?, optional dealer-specific context appended to the Azure OpenAI system prompt for diagnostic question generation — e.g. "We specialize in Grand Design and Keystone brands" or "Always ask about extended warranty status").
-
-### 3.9 TenantConfig, LookupSet
-
-Follow MF patterns for [TenantConfig](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.Domain/Entities/TenantConfig.cs) and [LookupSet](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.Domain/Entities/LookupSet.cs). `TenantConfig` embeds `TenantAccessGateEmbedded` for onboarding flow control. No changes from MF baseline.
+For detailed entity specifications and DTOs, see `RVS.Domain/Entities/` and `RVS.Domain/DTOs/` source code.
 
 ---
 
@@ -453,162 +335,64 @@ One document cannot serve three different access patterns:
       "freeTextResponse": "Small puddle under the RV near the slide"
     }
   ],
-  "attachments": [
-    {
-      "attachmentId": "att_001",
-      "blobUri": "https://rvsstorage.blob.core.windows.net/...",
-      "fileName": "slide_issue.jpg",
-      "contentType": "image/jpeg",
-      "sizeBytes": 245000,
-      "createdAtUtc": "2026-03-08T10:00:00Z"
-    }
-  ],
-  "serviceEvent": {
-    "componentType": "Hydraulic System",
-    "failureMode": null,
-    "repairAction": null,
-    "partsUsed": [],
-    "laborHours": null,
-    "serviceDateUtc": null
-  },
-  "scheduledDateUtc": null,
-  "assignedBayId": null,
-  "assignedTechnicianId": null,
-  "requiredSkills": [],
-  "priority": null,
-  "createdAtUtc": "2026-03-08T10:00:00Z",
-  "createdByUserId": null,
-  "updatedAtUtc": "2026-03-08T10:00:00Z",
-  "updatedByUserId": null
-}
-```
+  ## 4. Data Layer: Cosmos DB
 
-> **Valid `status` values:** `"New"`, `"Scheduled"`, `"InDiagnosis"`, `"WaitingParts"`, `"InRepair"`, `"Completed"`, `"Closed"`, `"Cancelled"`. Allowed transitions are enforced by `StatusTransitions.cs` in `RVS.Domain/Validation/` (see Section 18.2 for the full transition table).
->
-> **Valid `priority` values:** `"Low"`, `"Normal"`, `"High"`, `"Urgent"`, or `null` (unset).
+  ### 4.1 Container Design
 
-**Location:**
+  | Container | Partition Key | RU Mode | Access Pattern |
+  |---|---|---|---|
+  | `serviceRequests` | `/tenantId` | Autoscale 400–4000 | Single-tenant SRs, location filtering |
+  | `customerProfiles` | `/tenantId` | Autoscale 400–1000 | Tenant-scoped profiles by identity |
+  | `globalCustomerAccts` | `/email` | Autoscale 400–1000 | Cross-dealer identity lookup |
+  | `assetLedger` | `/assetId` | Autoscale 400–1000 | Section 10A asset history (append-only) |
+  | `dealerships` | `/tenantId` | Manual 400 | Corp metadata (low cardinality) |
+  | `locations` | `/tenantId` | Autoscale 400–1000 | Location CRUD + regional filtering |
+  | `tenantConfigs` | `/tenantId` | Autoscale 400–1000 | Tenant settings read on every auth request (gateway-cached) |
+  | `lookupSets` | `/category` | Manual 400 | Reference data (gateway-cached) |
+  | `slugLookup` | `/slug` | Autoscale 400–1000 | O(1) intake URL resolution (gateway-cached) |
 
-```json
-{
-  "id": "loc_blue_compass_slc",
-  "type": "location",
-  "tenantId": "org_blue_compass_rv",
-  "slug": "blue-compass-salt-lake",
-  "displayName": "Blue Compass RV - Salt Lake City",
-  "address": {
-    "street": "1234 RV Parkway",
-    "city": "Salt Lake City",
-    "state": "UT",
-    "zip": "84101"
-  },
-  "serviceEmail": "service-slc@bluecompassrv.com",
-  "phone": "801-555-0100",
-  "logoUrl": "https://rvsstorage.blob.core.windows.net/logos/bc-slc.png",
-  "intakeConfig": {
-    "acceptedFileTypes": [".jpg", ".png", ".mp4"],
-    "maxFileSizeMb": 25,
-    "maxAttachmentCount": 10,
-    "requiredFields": [],
-    "serviceInstructions": null,
-    "aiContext": null
-  },
-  "regionTag": "west",
-  "isEnabled": true,
-  "createdAtUtc": "2026-01-15T08:00:00Z"
-}
-```
+  ### 4.2 Multi-Tenancy & Blue Compass Problem
 
-**Slug Lookup:**
+  **Tenant Mapping:**
+  - **Tenant = Corporation/Dealership (Auth0 Organization boundary)**
+  - **Partition key = `tenantId`** — all locations for a corporation share one partition
+  - **`locationId` is a filter, not a partition boundary** — enables cross-location analytics within a single partition
 
-```json
-{
-  "id": "blue-compass-salt-lake",
-  "slug": "blue-compass-salt-lake",
-  "tenantId": "org_blue_compass_rv",
-  "locationId": "loc_blue_compass_slc",
-  "isEnabled": true,
-  "updatedAtUtc": "2026-01-15T08:00:00Z"
-}
-```
+  This design solves the "Blue Compass problem": Blue Compass operates 100+ RV service locations. The alternative (partition by location) would scatter related data across 100 partitions, making corporate analytics queries fan out and become expensive. By partitioning by corporation, we keep corporate admin queries single-partition and cheap (~3–5 RU), while technicians at specific locations use location-scoped filters within the partition.
 
----
+  ### 4.3 Indexing & Query Patterns
 
-## 5. Domain Interfaces
+  **Key Indexes:**
+  - **`serviceRequests`**: Composite indexes for `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, status ASC]`, `[tenantId ASC, assignedTechnicianId ASC]` to support dashboard searches
+  - **`customerProfiles`**: Unique constraint on `[tenantId, email]` to prevent duplicates
+  - **`globalCustomerAccts`**: Primary index on `/email` (partition key); no secondary indexes needed
+  - **`assetLedger`**: Primary index on `/assetId` (partition key); enables append-only reads by asset
 
-### 5.1 Service Request
+  **RU Cost Estimates (per operation):**
+  - Slug resolution (point read, gateway-cached): ~1 RU cold / ~0 RU cached
+  - New customer intake (7 Cosmos operations): ~11.8 RU cold / ~10.8 RU with gateway caching
+  - Returning customer intake: ~10.8 RU
+  - Dealer dashboard search (single-partition query): ~3 RU
+  - Asset history query: ~1 RU (single-partition point read)
 
-**`IServiceRequestRepository`** — `GetByIdAsync(tenantId, serviceRequestId)`, `SearchAsync(tenantId, searchDto)`, `GetByProfileIdAsync(tenantId, profileId, limit)`, `CreateAsync`, `UpdateAsync`, `DeleteAsync(tenantId, serviceRequestId)`, `GetCountByStatusAsync(tenantId, status?, locationId?)`.
+  ### 4.4 Autoscale vs. Manual RU
 
-**`IServiceRequestService`** — `CreateServiceRequestAsync(tenantId, locationId, createDto)`, `GetServiceRequestAsync(tenantId, serviceRequestId)`, `SearchServiceRequestsAsync(tenantId, searchDto)`, `GetByProfileAsync(tenantId, profileId, limit)`, `UpdateServiceRequestAsync(tenantId, serviceRequestId, updateDto)`, `UpdateStatusAsync(tenantId, serviceRequestId, newStatus)` (validates transitions using `StatusTransitions.cs`), `BatchApplyOutcomeAsync(tenantId, batchDto)`, `DeleteServiceRequestAsync(tenantId, serviceRequestId)`.
+  ⚠️ **ASSESSMENT GAP:** The assessment recommends autoscaling **all** variable-load containers. Currently, `dealerships`, `tenantConfigs`, and `lookupSets` are Manual 400. These should be **Autoscale 400–1000** to:
+  - Reduce per-container monthly cost from ~$25 to ~$5.84 (billed at 10% minimum)
+  - Handle intake bursts without throttling
+  - For 9 containers, total floor drops from ~$225 to ~$52/month
 
-**`ServiceRequestSearchRequestDto`** — Supports the following filter fields: `LocationId` (string?), `Status` (string?), `Priority` (string? — filter by job priority; values: `"Low"`, `"Normal"`, `"High"`, `"Urgent"`), `IssueCategory` (string?), `CustomerName` (string?), `AssetId` (string? — enables VIN scan → job lookup on the technician mobile app), `AssignedTechnicianId` (string? — enables "My Jobs" queue for technicians), `AssignedBayId` (string? — enables bay-based tablet access), `CreatedAfterUtc` (DateTime?), `CreatedBeforeUtc` (DateTime?), `ScheduledAfterUtc` (DateTime? — filter by scheduled date range start), `ScheduledBeforeUtc` (DateTime? — filter by scheduled date range end), `HasOutcome` (bool? — when `false`, returns completed jobs where `serviceEvent.failureMode` or `serviceEvent.repairAction` is null; when `true`, returns completed jobs with outcome data populated), `SortBy` (string?, default: `"createdAtUtc"`), `SortDirection` (string?, default: `"desc"`), `PageNumber` (int, default: 1), `PageSize` (int, default: 25, max: 100). All filters are optional and combined with AND logic. Results are scoped by `ClaimsService.HasAccessToLocation()` in the service layer. For `dealer:technician` role, the service layer further restricts results to SRs where `AssignedTechnicianId` matches the current user's `userId` claim.
+  ### 4.5 Cosmos Gateway-Mode Caching
 
-**`ServiceRequestUpdateRequestDto`** — Includes all updatable fields: `Status`, `Priority` (`string?` — `"Low"`, `"Normal"`, `"High"`, `"Urgent"`), `IssueCategory`, `AssignedTechnicianId`, `AssignedBayId`, `ScheduledDateUtc`, `RequiredSkills`, and `ServiceEvent` sub-fields.
+  **`ConnectionMode.Gateway`** is enabled on `CosmosClient`. Server-side caching on stable containers (`slugLookup`, `tenantConfigs`, `lookupSets`) provides:
+  - Zero additional application-layer cache code
+  - Free after the first read per cache window (usually 5–30 minutes)
+  - No staleness concerns — cached entries invalidated on write
+  - Consistent behavior across all SDK replicas and deployments
 
-**`ServiceRequestDetailResponseDto`** and **`ServiceRequestSummaryResponseDto`** — Both include `Priority` (`string?`) in the response payload alongside `Status`, `AssignedTechnicianId`, `AssignedBayId`, `ScheduledDateUtc`, and other standard fields.
+  For a multi-location corporation, the first technician at Location A reads the `tenantConfig` (1 RU + cache), and the next technician at Location B in the same minute hits the cached response (0 RU).
 
-**`ServiceRequestBatchOutcomeRequestDto`** — Fields: `ServiceRequestIds` (`List<string>`, required, max 25 — requests exceeding 25 items return HTTP 400), `FailureMode` (`string?`), `RepairAction` (`string?`), `PartsUsed` (`List<string>?`), `LaborHours` (`decimal?`). Used by the `PATCH .../batch-outcome` endpoint to apply a shared repair outcome to multiple service requests in a single operation.
-
-**`ServiceRequestBatchOutcomeResponseDto`** — Fields: `Succeeded` (`List<string>` — IDs of successfully updated SRs), `Failed` (`List<BatchOutcomeFailureDto>` — IDs and error reasons for failed updates). `BatchOutcomeFailureDto` contains `ServiceRequestId` (`string`) and `Reason` (`string`).
-
-### 5.2 Customer Profile
-
-**`ICustomerProfileRepository`** — `GetByIdAsync(tenantId, profileId)`, `GetByIdentityIdAsync(tenantId, globalCustomerAcctId)`, `GetByActiveAssetIdAsync(tenantId, assetId)`, `CreateAsync`, `UpdateAsync`.
-
-**`ICustomerProfileService`** — `ResolveOrCreateProfileAsync(tenantId, identity, assetId?, assetInfo?)`. Resolves existing or creates shadow record. Handles asset ownership transfer detection within the tenant.
-
-### 5.3 Global Customer Acct
-
-**`IGlobalCustomerAcctRepository`** — `GetByEmailAsync(email)`, `GetByMagicLinkTokenAsync(emailPrefix, token)`, `CreateAsync`, `UpdateAsync`. Note: `GetByMagicLinkTokenAsync` accepts the email-hash prefix (extracted from the token) to derive the partition key, enabling a single-partition query instead of a cross-partition scan.
-
-**`IGlobalCustomerAcctService`** — `ResolveOrCreateIdentityAsync(email, firstName, lastName, phone?)`, `ValidateMagicLinkAsync(token)` (parses the email-hash prefix from the token to derive the partition key, then single-partition lookup + expiry check), `RotateMagicLinkTokenAsync(globalCustomerAcctId, email)` (generates a new token with format `base64url(SHA256(email)[0..8]):random_bytes`).
-
-### 5.4 Asset Ledger
-
-**`IAssetLedgerRepository`** — `AppendAsync(entry)`, `GetByAssetIdAsync(assetId, limit)`, `UpdateEntryAsync(entry)`.
-
-**`IAssetLedgerService`** — `RecordServiceEventAsync(request, dealershipName, locationId, locationName, globalCustomerAcctId)`, `GetAssetHistoryAsync(assetId, limit)`. Write-only in MVP; read in Phase 5-6.
-
-### 5.5 Location
-
-**`ILocationRepository`** — `GetByIdAsync(tenantId, locationId)`, `GetByTenantIdAsync(tenantId)`, `CreateAsync`, `UpdateAsync`.
-
-**`ILocationService`** — `GetByIdAsync(tenantId, locationId)`, `GetByTenantIdAsync(tenantId)`, `CreateLocationAsync(tenantId, createDto)`, `UpdateLocationAsync(tenantId, locationId, updateDto)`.
-
-**`ISlugLookupRepository`** — `GetBySlugAsync(slug)`, `UpsertAsync(slug, tenantId, locationId)`, `DeleteAsync(slug)`.
-
-### 5.6 Attachments & Blob Storage
-
-**`IAttachmentService`** — `UploadAttachmentAsync(tenantId, locationId, serviceRequestId, uploadDto, fileStream)`, `GetAttachmentStreamAsync(tenantId, serviceRequestId, attachmentId)`, `DeleteAttachmentAsync(tenantId, serviceRequestId, attachmentId)`, `GenerateSasUriAsync(tenantId, serviceRequestId, attachmentId, expiry)`.
-
-**`IBlobStorageRepository`** — `UploadAsync(containerPath, fileName, content, contentType)`, `DownloadAsync(blobUri)`, `DeleteAsync(blobUri)`, `GenerateSasUriAsync(blobUri, expiry)`.
-
-### 5.7 Dealership, Tenant, Lookup
-
-Follow standard MF CRUD patterns. `IDealershipRepository` / `IDealershipService`, `ITenantRepository` / `ITenantService`, `ILookupRepository` / `ILookupService`.
-
----
-
-## 6. Core Orchestration Flow: Intake Submission
-
-The most important flow in the system — the complete sequence when a customer submits a service request:
-
-```
-Customer submits intake form at location slug "blue-compass-salt-lake"
-                    │
-                    ▼
-┌──────────────────────────────────────────────────┐
-│ STEP 0: Resolve Location by Slug                 │
-│                                                  │
-│ Container: slugLookup                            │
-│ Query: point read by slug (partition key = slug) │
-│ Returns: tenantId + locationId                   │
-│ Cost: ~1 RU cold / ~0 RU gateway-cached          │
-└──────────────────┬───────────────────────────────┘
-                   │
-                   ▼
-┌──────────────────────────────────────────────────┐
+  See source code documentation (`RVS.Infra.AzCosmosRepository/`) for detailed indexing policies. DTO structure and field definitions are in `RVS.Domain/DTOs/`.
 │ STEP 1: Resolve GlobalCustomerAcct               │
 │                                                  │
 │ Container: globalCustomerAccts                   │
@@ -696,6 +480,21 @@ Total Cosmos cost per intake: ~11.8 RU (cold, gateway miss)
                               ~10.8 RU (gateway-cached slug)
 ```
 
+## 6. Intake Orchestration Flow
+
+**Six-step sequence when a customer submits a service request:**
+
+1. **Slug Resolution** — O(1) lookup in `slugLookup` container (gateway-cached) → returns `tenantId` + `locationId` (~1 RU cold, ~0 RU cached)
+2. **Global Identity Resolution** — Point read in `globalCustomerAccts` by email. Create if first visit. (~1 RU)
+3. **Profile Resolution & Asset Ownership** — Query `customerProfiles` by tenant + identity. Handle asset transfer logic (deactivate old owner, activate current). (~2–3 RU)
+4. **ServiceRequest Creation** — Create SR in `serviceRequests` container. Embed customer snapshot. Call `ICategorizationService` for issue categorization. (~1 RU)
+5. **Data Moat (Append-Only Ledger)** — Write `AssetLedgerEntry` to `assetLedger` container (partitioned by assetId). (~1 RU)
+6. **Linkage Updates** — Increment customer request count, rotate magic-link token, add linked profile reference to global identity. (~2 RU)
+7. **Notification** — Send confirmation email with magic-link (fire-and-forget, no Cosmos cost)
+
+**Total RU cost per intake: ~10.8–11.8 RU** (accounting for gateway caching and cold misses)
+
+For detailed implementation logic, see `ServiceRequestService.CreateServiceRequestAsync` and related service classes.
 ---
 
 ## 7. Service Layer
@@ -735,11 +534,24 @@ Also handles **reactivation** — if the current customer previously had an Inac
 
 Implements physical location CRUD for the dealer-facing API. `UpsertSlugLookupAsync(slug, tenantId, locationId)` is called within `CreateLocationAsync` and `UpdateLocationAsync`. On slug rename via `UpdateLocationAsync`, the old slug entry is deleted and the new one is written atomically before the `Location` document is updated — ensuring the lookup table is never stale.
 
+## 7. Service Layer Design
+
+Services follow MF patterns: sealed classes, dependency injection for repositories/interfaces, guard clauses first, return domain entities (not DTOs). See `.github/copilot-instructions.md` for detailed service layer conventions.
+
+**Key orchestration responsibilities** (delegated to specific service classes):
+- **`ServiceRequestService`** — Primary orchestrator. Implements the intake flow (Section 6), handles status transitions using `StatusTransitions` validation rules, executes batch outcome operations.
+- **`CustomerProfileService`** — Shadow profile resolution/creation, asset ownership tracking and transfer detection.
+- **`GlobalCustomerAcctService`** — Cross-dealer identity federation, magic-link token generation and validation.
+- **`AssetLedgerService`** — Append-only event recording for Section 10A data accumulation.
+- **`LocationService`** — Location CRUD with slug-lookup table synchronization (critical for intake URL consistency).
+- **`ICategorizationService`** — Issue categorization (Azure OpenAI with rule-based fallback) and technician summary generation.
+
+All services perform tenant isolation checks via `ClaimsService` before returning data. Authorization policies are enforced at the controller level and validated again in service layer (defense-in-depth).
 ---
 
 ## 8. Controllers
 
-Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RVS/blob/f1e1bc1a099c242cace68f515f6bdb8db9ea2418/.github/copilot-instructions.md) and [MF `ClaimsService` pattern](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.API/Services/ClaimsService.cs). Authorization policies referenced below are defined in **RVS_Auth0_Identity.md Section 10**.
+Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RVS/blob/f1e1bc1a099c242cace68f515f6bdb8db9ea2418/.github/copilot-instructions.md) and [MF `ClaimsService` pattern](https://github.com/markarnoldutah/MF/blob/8a37d47dd684403ea67176c3bb13c186c20c889d/MF.API/Services/ClaimsService.cs). Authorization policies referenced below are defined in **RVS_Auth0_Identity_Version2.md Section 10**.
 
 ### 8.1 Customer-Facing (Unauthenticated)
 
@@ -773,6 +585,20 @@ Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RV
 - **Response:** `ServiceRequestAnalyticsResponseDto` — covers all analytics dimensions needed by the Service Manager Desktop, including request counts by status/category/location, top failure modes, top repair actions, average repair time, top parts used, and average days to completion. See Section 12.1 for the full response DTO field definitions.
 - **Performance:** For MVP volumes (<200 jobs/month), a single-partition aggregate query is acceptable (~5–10 RU). Accelerate the Phase 2 change feed → Azure Tables aggregation (Section 15.3) if analytics query cost becomes measurable at higher volume.
 
+## 8. API Controllers
+
+**Customer-Facing (Unauthenticated):**
+- **IntakeController** — `api/intake/{locationSlug}` — GET (intake form config + prefill), POST diagnostic-questions (AI questions), POST service-requests (submit), POST attachments (upload)
+- **CustomerStatusController** — `api/status/{token}` — GET (cross-dealer service request summary via magic link)
+
+**Dealer-Facing (Authenticated):**
+- **ServiceRequestsController** — `api/dealerships/{dealershipId}/service-requests` — CRUD operations, search/filter, batch-outcome endpoint (up to 25 at once)
+- **AttachmentsController** — `api/.../attachments` — Upload (authenticated), retrieve SAS URLs, delete
+- **DealershipsController**, **LocationsController**, **TenantsController**, **LookupsController**, **AnalyticsController** — Standard CRUD and reporting operations
+
+All authenticated endpoints enforce authorization policies defined in `RVS_Auth0_Identity_Version2.md`. Location-based access control is enforced server-side via `ClaimsService.HasAccessToLocation()`. See Section 11 for the complete API route summary.
+
+⚠️ **SECURITY GAP:** Unauthenticated intake and attachment endpoints (`POST api/intake/{locationSlug}/service-requests` and file uploads) acceptlarge file uploads. See Assessment doc: **Azure Front Door WAF** is required to mitigate injection, traversal, and DDoS attacks on these high-risk surfaces.
 ---
 
 ## 9. Middleware Pipeline
@@ -792,6 +618,24 @@ Following the [RVS copilot-instructions.md pipeline order](https://github.com/ma
 
 > **Cosmos SDK connection mode:** `ConnectionMode.Gateway` is configured globally on `CosmosClient`. Gateway mode enables server-side result caching for point reads on stable-key containers (`slugLookup`, `tenantConfigs`, `lookupSets`), reducing effective RU consumption on repeated reads without application-layer cache code. `TenantAccessGateMiddleware` reads `TenantConfig` on every authenticated request — gateway caching makes this effectively free after the first read per tenant per cache window.
 
+## 9. Middleware Pipeline
+
+Middleware registration order (from `Program.cs`):
+1. Dev-only endpoints (Swagger/OpenAPI)
+2. HTTPS redirection (prod only)
+3. CORS (`AllowBlazorClient`)
+4. **Rate limiting** (protects public intake endpoints)
+5. **ExceptionHandlingMiddleware** (singleton, returns ProblemDetails)
+6. Authentication & Authorization (Auth0 JWT validation + policy checks)
+7. **TenantAccessGateMiddleware** (scoped, checks `TenantConfig.AccessGate` for tenant active status)
+8. Controller mapping
+
+**Cosmos Gateway-Mode Caching:** `ConnectionMode.Gateway` enables server-side caching for `slugLookup`, `tenantConfigs`, `lookupSets` — repeated reads hit cache (0 RU). Especially valuable for `TenantAccessGateMiddleware` reads on every authenticated request.
+
+⚠️ **ASSESSMENT GAPS:**
+- No Application Insights telemetry — **P0 before paying customers** (see Assessment doc for required instrumentation)
+- No health check endpoints — **add `/health` endpoint** to detect Cosmos/Blob connectivity issues
+- Per-tenant rate limiting missing on dealer API — **implement per-`tenantId` sliding-window limits** to prevent noisy neighbor issues
 ---
 
 ## 10. Azure Blob Storage Structure
@@ -811,6 +655,15 @@ rvs-attachments/
 - **Retention:** Configurable per-tenant in `TenantConfig`.
 - **Path includes `locationId`** for storage organization and future per-location retention policies.
 
+## 10. Blob Storage & File Upload
+
+**Structure:** `rvs-attachments/{tenantId}/{locationId}/{serviceRequestId}/` — tenant/location scoping enables future per-location retention policies.
+
+**Access:** Time-limited SAS URIs generated on demand. Container access set to `BlobContainerPublicAccessType.None` to prevent accidental public exposure.
+
+**Upload Strategy:** MVP routes uploads through API (streaming). Phase 2+: SAS pre-signed direct upload from client to Blob Storage (eliminates API thread blocking on large video files, see Assessment doc).
+
+⚠️ **ASSESSMENT GAP:** No SAS pre-signed direct upload. Large video uploads (25 MB) currently block API worker threads. Recommend **Phase 1 Sprint N: implement SAS pre-signed URLs** (~50 lines, high-impact performance improvement).
 ---
 
 ## 11. Complete API Route Summary
@@ -845,6 +698,15 @@ rvs-attachments/
 | `GET` | `api/tenants/access-gate` | Bearer | CanManageTenantConfig | Access gate check |
 | `GET` | `api/lookups/{lookupSetId}` | Bearer | CanReadLookups | Lookup values |
 
+## 11. API Reference
+
+**Public intake endpoints** — `api/intake/{locationSlug}` (GET config, POST submit, POST diagnostic-questions, POST attachments)
+**Status page** — `api/status/{token}` (GET cross-dealer service requests)
+**Service requests** — `api/dealerships/{id}/service-requests` (CRUD, search, batch-outcome)
+**Attachments** — `api/.../{srId}/attachments` (upload, retrieve, delete)
+**Dealerships, Locations, Tenants, Analytics** — Standard CRUD routes with policy-based access control
+
+See `.github/copilot-instructions.md` for route naming conventions and `Controllers/` source code for method signatures. Detailed API reference documentation should live in `Docs/API/` (not yet created).
 ---
 
 ## 12. RU Cost Analysis
@@ -885,6 +747,17 @@ rvs-attachments/
 
 > **Scaling note:** For MVP volumes (<200 jobs/month), a single-partition aggregate query is acceptable (~5–10 RU). If analytics queries become expensive at higher volume, accelerate the Phase 2 change feed → Azure Tables aggregation pattern (Section 15.3).
 
+## 12. Cost & Performance Characteristics
+
+**RU Consumption (Cosmos DB):**
+- Slug resolution: ~1 RU (cold) / ~0 RU (gateway-cached)
+- Intake submission: ~10.8–11.8 RU (6–7 Cosmos operations)
+- Dealer dashboard search: ~3 RU (single-partition query)
+- Asset history query: ~1 RU (point read)
+
+**Performance Optimization:** Gateway-mode caching on stable containers (`slugLookup`, `tenantConfigs`, `lookupSets`) provides free RU after first read. For MVP volumes (<200 jobs/month), on-demand Cosmos queries are acceptable. Phase 2: offload analytics to Azure Tables (change feed consumer, see Section 15).
+
+**Scaling:** All containers use autoscale except manual 400 RU on `dealerships`, `tenantConfigs`, `lookupSets`. Assessment recommends autoscaling all three to handle intake bursts (saves ~$170/month total floor cost).
 ---
 
 ## 13. Magic Link Security
@@ -899,6 +772,20 @@ rvs-attachments/
 | **PII exposure** | Status page returns first name + asset summaries only — no full email, no phone, no other customers' data |
 | **Cross-dealer visibility** | Customer sees their own requests across all corporations — intentional for customer convenience. No other customer's data is exposed. |
 
+## 13. Security & Magic Link Design
+
+**Magic-Link Pattern:**
+- Token format: `base64url(SHA256(email)[0..8]):random_bytes` — email-hash prefix enables O(1) partition-key derivation (no cross-partition query needed)
+- 32-byte random portion (256-bit entropy, URL-safe Base64)
+- 30-day expiry, rotated on each intake
+- Status page view limited to 10 req/min/IP
+- Cross-dealer visibility intentional (customer sees all their SRs across corporations)
+
+⚠️ **ASSESSMENT GAPS — CRITICAL SECURITY ISSUES:**
+1. **SFTP private keys in Cosmos DB** — Must move to Azure Key Vault. See Assessment: CRITICAL — SFTP security gap.
+2. **No Azure Front Door WAF** — Unauthenticated intake/upload endpoints are unprotected. See Assessment: CRITICAL — WAF missing.
+3. **No Key Vault for any secrets** — Auth0 client secret, Azure OpenAI API key should not be in `appsettings.json`. See Assessment: HIGH — Key Vault integration.
+4. **Blob container public access not hardened** — Container should be explicitly set to `BlobContainerPublicAccessType.None`. See Assessment: HIGH — add startup assertion.
 ---
 
 ## 14. Key Architectural Decisions Summary
@@ -923,6 +810,30 @@ rvs-attachments/
 | **`slugLookup` as a dedicated container** | Decouples slug resolution from the `locations` container partition scheme. Enables O(1) point reads partitioned by `/slug`. Gateway-cached on repeated reads. Autoscale floor ~$2.30/month. Invalidation is write-through on `CreateLocationAsync` / `UpdateLocationAsync`. |
 | **Azure OpenAI for diagnostic questions, not static templates** | Dynamic AI-generated questions adapt to category, description, and asset context. Eliminates need for per-category question template CRUD, admin UI, and ongoing curation. Cost: ~$0.0002/intake with GPT-4o-mini. Rule-based fallback if AI is unavailable. |
 
+## 14. Key Architectural Decisions
+
+**Multi-tenancy:** Tenant = Corporation, not Location. Enables Blue Compass (100+ locations) to have one partition, one Auth0 Org, cheap cross-location analytics. `locationId` is a filter, not a partition boundary.
+
+**Identity Separation:** Three containers (serviceRequests/tenantId, globalCustomerAccts/email, assetLedger/assetId) serve three different access patterns — each needs its own partition key for O(1) efficiency.
+
+**No Customer Sign-Up:** Shadow profiles created automatically on first intake. Zero friction.
+
+**Denormalization:** `CustomerSnapshotEmbedded` embedded in ServiceRequest eliminates joins on dashboard reads (~1 RU/view vs. ~5–10 RU with join).
+
+**Data Moat:** Append-only `AssetLedgerEntry` indexed by `assetId` accumulates proprietary service intelligence (Section 10A). Write-only in MVP; read-enabled Phase 5–6 when 10A analytics materialize.
+
+**Smart Token Design:** Magic-link token embeds email-hash prefix (`base64url(SHA256(email)[0..8]):random_bytes`), enabling single-partition token lookup without cross-partition scan.
+
+**Slug Lookup Table:** Dedicated O(1) container (gateway-cached) for intake URL resolution. Decouples from `locations` partition scheme, enables QR-code-per-location scalability.
+
+**Azure OpenAI Fallback:** Dynamic AI-generated diagnostic questions with rule-based fallback. No template CRUD Admin UI. Cost: ~$0.0002/intake (negligible).
+
+⚠️ **ASSESSMENT GAPS** — Architectural issues requiring resolution:
+- No IaC (Bicep/Terraform) for infrastructure → manual setup, drift, disaster recovery risk. See Assessment: CRITICAL P0 item.
+- No CI/CD pipeline (GitHub Actions) → cannot automate deployment or blue-green updates. See Assessment: CRITICAL P0 item.
+- No billing/metering infrastructure → cannot charge customers or enforce plan tiers. See Assessment: HIGH P1 item.
+- No Application Insights → no observability, cannot meet SaaS uptime commitments. See Assessment: CRITICAL P0 item.
+- Per-tenant rate limiting missing → vulnerable to noisy neighbor. See Assessment: HIGH P1 item.
 ---
 
 ## 15. Change Feed Strategy
@@ -965,6 +876,17 @@ Cosmos DB Change Feed is not used in MVP, but several architectural patterns cre
 
 **MVP stance:** Accept stale snapshots. The advisor can always look up the current profile. This consumer is only warranted if customer contact updates during open SRs become a reported pain point.
 
+## 15. Change Feed Strategy (Phase 2+)
+
+Not used in MVP. Planned consumers for future phases:
+
+1. **Asset Ledger Enrichment** (Phase 5–6, required) — Watch `serviceRequests` for status=Completed. Patch `assetLedger` with Section 10A fields (FailureMode, RepairAction, etc.). Eventual consistency acceptable (seconds-to-minutes latency).
+
+2. **Analytics Aggregation** (Phase 2, high) — Watch `serviceRequests`, maintain pre-aggregated counters in Azure Tables (partitioned by tenantId+locationId). Reduces analytics query cost from ~5–10 RU to ~0 RU Cosmos.
+
+3. **Snapshot Staleness Repair** (Phase 2+, low) — Watch `customerProfiles`, fan out updates to open `serviceRequests` if customer contact info changes. Minor UX benefit only; accept stale snapshots in MVP.
+
+*** End Patch
 ---
 
 ## 16. Azure OpenAI Integration
@@ -1083,6 +1005,26 @@ Authentication uses `DefaultAzureCredential` (consistent with Cosmos DB, Blob St
 | **`aiContext` on `IntakeFormConfigEmbedded`** | Dealers can customize AI behavior without a template admin UI. Simple string field, appended to system prompt. E.g. "We specialize in Grand Design and Keystone brands." |
 | **`diagnosticResponses` embedded in `ServiceRequest`** | Stored alongside the SR for full audit trail. Used by the categorization step for better results. Queryable via Cosmos indexing for future analytics on symptom patterns. |
 
+## 16. Azure OpenAI Integration
+
+**Purpose:** Two features powered by Azure OpenAI (GPT-4o-mini):
+1. Dynamic diagnostic question generation (replaces static templates)
+2. Issue auto-categorization + technician summary enhancement
+
+**Interface:** `ICategorizationService` with two methods — `CategorizeAsync` and `GenerateDiagnosticQuestionsAsync`. Rule-based fallback if AI unavailable (intake never blocks on external service).
+
+**Configuration:** `appsettings.json` contains endpoint, deployment name, token limits, timeout. Uses `DefaultAzureCredential` for authentication (consistent with Cosmos, Blob Storage).
+
+**Cost:** ~$0.0002 per intake with GPT-4o-mini. Negligible (~$0.20/month at 1,000 intakes/month).
+
+**Per-Tenant Customization:** `IntakeFormConfigEmbedded.AiContext` allows dealers to append custom context to system prompt (e.g., "We specialize in Grand Design and Keystone brands") — no template admin UI needed.
+
+### 16a. Diagnostic Response Capture (Two-Phase Intake Flow)
+
+**Phase 1** — `POST api/intake/{locationSlug}/diagnostic-questions` returns AI-generated 2–4 questions with checkbox options
+**Phase 2** — `POST api/intake/{locationSlug}/service-requests` submits SR with `diagnosticResponses[]` array embedded
+
+Responses are stored in `ServiceRequest` and used by categorization service to produce higher-quality results.
 ---
 
 ## 17. Technician Mobile App — API Readiness
@@ -1135,6 +1077,21 @@ GET api/predictions/labor?issueCategory={cat}&componentType={type}&manufacturer=
 
 For MVP, the mobile app uses static suggested labor times from the `LookupSet` data or hardcoded client-side values.
 
+## 17. Technician Mobile App
+
+**Resolved gaps (this version):**
+- Authenticated attachment upload (photo/video capture in field)
+- VIN scan → job lookup filter (`assetId` in search)
+- "My Jobs" queue filter (`assignedTechnicianId` in search)
+- Bay-based job assignment filter (`assignedBayId`)
+- Voice note support (`.m4a`, `.wav` file types)
+
+**Required seed data:** `LookupSet` categories for `failureModes`, `repairActions`, `componentTypes` (used by repair outcome picker). See `RVS.Data.Cosmos.Seed/` project.
+
+**Deferred to Phase 2:**
+- Batch update endpoint (offline sync currently uses sequential PUT calls)
+- Labor time prediction API (requires sufficient AssetLedger data accumulation)
+- Optimistic offline queue (MVP: client-side JSON queue, replay on reconnect)
 ---
 
 ## 18. Service Manager Desktop App — API Readiness

@@ -2,9 +2,9 @@
 
 # RV Service Flow (RVS) — Auth0 Identity & Authorization
 
-**As-of-Thread (ASOT) — March 10, 2026**
+**As-of-Thread (ASOT) — March 18, 2026**
 
-This document covers Auth0 configuration, RBAC roles and permissions, JWT design, ClaimsService, authorization policies, and the tenant provisioning flow. For domain model, data layer, and API surface, see the companion document **RVS_Core_Architecture.md**.
+This document covers Auth0 configuration, RBAC roles and permissions, JWT design, ClaimsService, authorization policies, and the tenant provisioning flow. For domain model, data layer, and API surface, see the companion document **RVS_Core_Architecture_Version3.md**.
 
 ---
 
@@ -631,3 +631,25 @@ Customer authentication does **not** use Auth0 Organizations (a customer is not 
 | **Magic link tokens** | 32-byte cryptographic random, 30-day expiry, rotated on every submission, rate-limited. |
 | **PII in JWTs** | No PII in access tokens. Only IDs, roles, and permissions. Email/name are in the ID token only (used client-side). |
 | **Org migration safety** | MVP `app_metadata` approach and Organizations approach produce the same JWT claims. No API code changes needed. |
+
+---
+
+## 15. Version History
+
+| Version | Date | Author | Changes |
+|---|---|---|---|
+| v2.0 | March 10, 2026 | GitHub Copilot | Initial Auth0 identity document. Roles, permissions, JWT design, ClaimsService, authorization policies, tenant provisioning flow. |
+| v2.1 | March 18, 2026 | GitHub Copilot | **Reconciled with RVS_Core_Architecture_Version3.md Section 17.1 (Technician Mobile App — API Readiness).** Date bumped. Two critical permission additions confirmed present (see below). Companion document reference updated to Version3. |
+
+### 15.1 V3 Reconciliation — Technician Mobile App Permission Fixes
+
+The following permissions were resolved as part of the V3 Core Architecture's Section 17.1 gap analysis and are confirmed present in this document:
+
+| Gap (from Section 17.1) | Fix | Location in This Document | Status |
+|---|---|---|---|
+| `dealer:technician` was missing `service-requests:search` | Added permission to role → permission matrix | Section 6 (row: `service-requests:search`, column: `dealer:technician` = ✅ ²) | ✅ Confirmed |
+| No authenticated attachment upload for dealer staff | `attachments:upload` added for `dealer:technician` | Section 6 (row: `attachments:upload`, column: `dealer:technician` = ✅) | ✅ Confirmed |
+
+**Footnote ²** in Section 6 documents the application-layer restriction that accompanies the `service-requests:search` grant: the service layer restricts technician search results to SRs where `AssignedTechnicianId` matches the technician's own `userId` claim. This powers the **My Jobs** queue (QR/VIN scan → job lookup, bay-based access) on the technician mobile app documented in `Docs/Research/FrontEnd/RVS_Features_Tech_Mobile.md`.
+
+**Section 8.4** (Sample JWT — Location Technician) confirms both permissions appear in the technician access token payload.
