@@ -5,14 +5,14 @@
 ### 1.1 Document title and version
 
 - PRD: RV Service Flow (RVS) — MVP
-- Version: 1.0
-- Date: March 18, 2026
+- Version: 1.1
+- Date: March 19, 2026
 
 ### 1.2 Product summary
 
 RV Service Flow (RVS) is a multi-tenant SaaS platform that digitizes the service intake workflow at RV dealerships and independent RV repair shops. The core problem is that service departments rely on phone calls, emails, and manual notes to collect repair information before an RV arrives, resulting in incomplete diagnostics, wasted technician time, and extended Repair Event Cycle Times (RECT).
 
-The MVP delivers two integrated surfaces: a frictionless, mobile-first customer intake portal that captures structured repair information (including photos, video, VIN, and an AI-guided issue wizard) before the RV arrives; and a dealer-facing dashboard where service advisors and technicians manage, triage, and act on incoming service requests. Customers are never required to create an account — a magic-link token gives them passive status visibility across all their dealerships.
+The MVP delivers three integrated surfaces: a frictionless, mobile-first customer intake portal (`Cust_Intake`) that captures structured repair information (including photos, video, VIN, and an AI-guided issue wizard) before the RV arrives; a manager and advisor dashboard (`Mngr_Desktop`) where service advisors and managers manage, triage, and act on incoming service requests from a desktop browser; and a technician mobile app (`Tech_Mobile`) purpose-built for service bay use with offline-first job access, native barcode scanning, voice notes, and a 3–5 second interaction target. Customers are never required to create an account — a magic-link token gives them passive status visibility across all their dealerships.
 
 The platform is designed as the intake layer that sits in front of existing Dealer Management Systems (DMS), not a DMS replacement. A simple SFTP-based DMS export makes it easy for dealers to pull structured service request data into their existing workflow on day one.
 
@@ -32,7 +32,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 
 - **Customers:** Submit a service request from a phone in under 3 minutes without creating an account; describe issues using speech-to-text and photo/video; check request status at any time via a magic link.
 - **Service advisors:** Replace the phone intake process with a structured queue; see AI-generated technician summaries for every request; update request status and communicate with customers through the dashboard.
-- **Technicians:** See an organized, AI-categorized queue with pre-diagnosis information and photos before the RV arrives; log repair actions and parts used against structured service event fields.
+- **Technicians:** See an organized, AI-categorized queue with pre-diagnosis information and photos before the RV arrives; access job data offline in service bays with poor connectivity; log repair actions and parts used via a glove-friendly native app in 3–5 seconds per job completion.
 - **Dealership managers and owners:** Monitor service request volume, status distribution, and technician workload across all locations from one dashboard.
 
 ### 2.3 Non-goals
@@ -44,7 +44,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - Customer Auth0 accounts and full customer login (Phase 2+); the MVP uses anonymous intake plus magic-link.
 - Warranty claim processing or warranty data lookups.
 - OEM or manufacturer data integrations.
-- Native mobile apps (iOS/Android); the MVP delivers a progressive-web-app-quality mobile Blazor experience.
+- Customer-facing native mobile apps (iOS/Android app store distribution); customer intake is browser-based (Blazor WASM) requiring zero install. The `Tech_Mobile` technician app is a MAUI Blazor Hybrid native app distributed to employer-provisioned devices — not a consumer app store release.
 
 ---
 
@@ -230,6 +230,10 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - The dealer dashboard is a desktop-primary layout with a responsive fallback for tablet/mobile use.
 - Status badges on the dealer queue use consistent color coding: New (blue), In Progress (amber), Completed (green), Cancelled (grey).
 - Attachment previews render inline on the service request detail page; video attachments autoplay muted on hover.
+- The `Tech_Mobile` technician app is glove-friendly with extra-large tap targets throughout the job list and outcome entry form.
+- QR/VIN scanning is the primary job access method in `Tech_Mobile` — one scan opens the assigned job immediately.
+- Outcome entries in `Tech_Mobile` store locally when the device goes offline and sync automatically when connectivity returns; no data is lost in poor-signal bays.
+- The `Mngr_Desktop` Service Board uses drag-and-drop status columns; status changes push to all connected sessions in real time via SignalR.
 
 ---
 
@@ -280,6 +284,26 @@ Maria, the service advisor, opens her dealer dashboard the next morning to find 
 - **Auth0 Organization migration:** Moving from `app_metadata` (MVP) to Auth0 Organizations (commercial launch) requires re-configuring existing user accounts. A migration script and Auth0 Login Action update handles the transition with zero downtime.
 - **Magic-link token abuse:** Anonymous endpoints that validate tokens require IP rate limiting and token expiry enforcement to prevent enumeration attacks.
 
+### 7.5 Front-end architecture
+
+The MVP comprises three distinct front-end applications, each optimized for its user class and device context, all sharing a common `RVS.Domain` library and a `RVS.UI.Shared` Razor Class Library.
+
+| Application | Framework | Rationale |
+|---|---|---|
+| **Cust_Intake** | Blazor WebAssembly (Interactive WebAssembly + Static SSR pages) | Zero install friction; customer accesses via dealer-specific URL. Dealer landing page and confirmation screens are Static SSR (instant load, SEO). The guided intake wizard (`@rendermode InteractiveWebAssembly`) runs entirely client-side — critical for multi-step form state and photo upload progress without round-trips. |
+| **Mngr_Desktop** | Blazor SSR (Interactive Server) | Desktop browser on reliable office network. SignalR connection enables real-time push updates to the Service Board when technicians complete jobs. All business logic executes server-side; no sensitive data ships to the client. |
+| **Tech_Mobile** | MAUI Blazor Hybrid (iOS + Android) | Offline-first mode is critical — service bays have poor connectivity. Outcome entries are queued locally and synced on reconnect. Native barcode SDK provides the fast, reliable VIN/QR scanning required for the 3–5 second interaction target. MAUI Essentials provides device speech-to-text for voice notes. Employer-provisioned install eliminates consumer app store friction. |
+
+**Code reuse strategy:**
+
+| Shared asset | Cust_Intake | Mngr_Desktop | Tech_Mobile |
+|---|---|---|---|
+| `RVS.Domain` (DTOs, entities, validation) | ✅ | ✅ | ✅ |
+| `RVS.UI.Shared` Razor component library | ✅ | ✅ | ✅ |
+| CSS / design tokens | ✅ | ✅ | ✅ |
+| API client (typed `HttpClient` services) | ✅ | ✅ (server-side) | ✅ + offline queue |
+| MAUI Essentials (camera, speech, local storage) | ❌ | ❌ | ✅ |
+
 ---
 
 ## 8. Milestones and sequencing
@@ -292,7 +316,7 @@ Maria, the service advisor, opens her dealer dashboard the next morning to find 
 ### 8.2 Team size and composition
 
 - **Team size:** 1 developer
-- **Roles:** Full-stack developer (ASP.NET Core API, Blazor WebAssembly, Azure infrastructure)
+- **Roles:** Full-stack developer (ASP.NET Core API, Blazor WebAssembly, Blazor SSR, MAUI Blazor Hybrid, Azure infrastructure)
 
 ### 8.3 Suggested phases
 
@@ -328,11 +352,10 @@ Maria, the service advisor, opens her dealer dashboard the next morning to find 
   - CSV export endpoint, scheduled SFTP push, SFTP config in TenantConfig, Azure Key Vault integration for SFTP keys.
   - Validates: Export generates correct CSV; SFTP push delivers file to configured endpoint.
 
-- **Phase 9: Blazor WebAssembly frontend** (Week 7–9)
-  - Customer intake form (VIN scan, AI wizard, speech-to-text, file upload, confirmation).
-  - Customer status page.
-  - Dealer dashboard (queue, search/filter, detail, status update, attachment viewer).
-  - Dealer settings (location management, QR code download).
+- **Phase 9: Front-end applications** (Week 7–9)
+  - **Cust_Intake (Blazor WASM):** Dealer landing page (Static SSR with WASM preload), 5-step guided intake wizard (Interactive WebAssembly — VIN scan, AI wizard, speech-to-text, photo/video upload), submission confirmation (Static SSR), magic-link status page (Static SSR).
+  - **Mngr_Desktop (Blazor SSR — Interactive Server):** Service request queue, drag-and-drop Service Board, search/filter, service request detail view, status update, attachment viewer, analytics dashboard, dealer settings (location management, QR code download), real-time push updates via SignalR.
+  - **Tech_Mobile (MAUI Blazor Hybrid):** Assigned job list, QR/VIN native barcode scan to open job, outcome entry form (offline queue + sync), voice notes via MAUI speech-to-text, photo capture, glove-friendly tap targets.
 
 - **Phase 10: QR codes, seed data, polish, and deployment** (Week 9–10)
   - QR code generation endpoint, comprehensive seed data (multi-tenant, VIN transfers), rate limiting fine-tuning, Swagger/OpenAPI documentation, structured logging, Azure App Service deployment.

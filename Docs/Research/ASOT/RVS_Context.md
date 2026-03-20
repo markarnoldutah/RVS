@@ -2,7 +2,7 @@
 
 **Authoritative Source of Truth (ASOT) — March 18, 2026**
 
-A comprehensive platform overview for developers, investors, partners, and stakeholders. For detailed architecture and identity specifics, see companion documents [**RVS_PRD.md**](RVS_PRD.md), [**RVS_Core_Architecture_Version3.md**](RVS_Core_Architecture_Version3.md), and [**RVS_Auth0_Identity_Version2.md**](RVS_Auth0_Identity_Version2.md).
+A comprehensive platform overview for developers, investors, partners, and stakeholders. For detailed architecture and identity specifics, see companion documents [**RVS_PRD.md**](RVS_PRD.md), [**RVS_Core_Architecture_Version3.1.md**](RVS_Core_Architecture_Version3.1.md), and [**RVS_Auth0_Identity_Version2.md**](RVS_Auth0_Identity_Version2.md).
 
 ---
 
@@ -34,12 +34,13 @@ RVS is a cloud-based **service intake and workflow platform** that sits in front
 
 ---
 
-## 2. Product Architecture: Three Core Surfaces
+## 2. Product Architecture: Three Applications, Four Surfaces
 
 ### 2.1 Customer Intake Portal (Mobile-First, Anonymous)
 
 **For RV owners — requires no account.**
 
+- **App:** `RVS.Cust_Intake` — Blazor WebAssembly. Dealer landing page and status pages use Static SSR (instant load, SEO-friendly); the guided intake wizard uses Interactive WebAssembly (full client-side interactivity, no mid-form state resets).
 - **URL:** `https://app.rvserviceflow.com/intake/{locationSlug}` (location-specific, accessible via QR code)
 - **Submits:** VIN (camera scan or manual entry), make/model/year, issue description (text or speech-to-text), photos/videos (up to 10 files), urgency level, RV usage (full-time vs. part-time)
 - **Flow:** AI-guided intake wizard presents contextual follow-up questions based on issue category (e.g., for Refrigerator → ask absorption vs. residential type, error codes, shore power; for Slide-out → which slide number, manual override attempted)
@@ -50,23 +51,35 @@ RVS is a cloud-based **service intake and workflow platform** that sits in front
 
 **For RV owners — check status any time, any dealership.**
 
+- **App:** Part of `RVS.Cust_Intake` — delivered as a Static SSR page (server-rendered, no WASM required).
 - **URL:** `https://app.rvserviceflow.com/status/{token}` (anonymous, rate-limited)
 - **Token:** Secure magic-link generated on intake submission, embedded in confirmation email
 - **Shows:** All active service requests from that customer **across all dealerships** where they've submitted
 - **Data:** Location name, status, issue summary, last-updated date, request total count
 - **Design principle:** Passive, cross-dealer visibility without account or login friction
 
-### 2.3 Dealer Dashboard (Authenticated, Multi-Role, Multi-Location)
+### 2.3 Service Manager Desktop — `RVS.Mngr_Desktop` (Blazor SSR, Interactive Server)
 
-**For service advisors, technicians, managers, and corporate staff.**
+**For service advisors, managers, regional managers, and corporate staff — desktop browser.**
 
+- **App:** `RVS.Mngr_Desktop` — Blazor SSR (Interactive Server). Optimized for large-screen desktop browsers on reliable office networks. SignalR connection enables real-time Service Board updates when technicians complete jobs. All business logic executes server-side.
 - **Authentication:** Auth0 JWT Bearer, organization-scoped
 - **For Service Advisors:** Create service requests, search/filter queue, view detail, update status, add notes, view attachments
-- **For Technicians:** See assigned service requests (My Jobs queue), view pre-diagnosis summaries and photos, log repair actions and parts (Section 10A fields)
-- **For Managers:** Monitor queue depth, status distribution, technician workload across their location or region
-- **For Corporate Admin / Owner:** Cross-location visibility, user management, intake config, reporting
+- **For Managers:** Drag-and-drop Service Board, triage intake queue, batch outcome entry, workload visibility across location or region
+- **For Corporate Admin / Owner:** Cross-location analytics dashboard, user management, intake config, reporting
 - **Data isolation:** Multi-tenant by corporation (Auth0 Organization), location-scoped roles filter within tenant
-- **Design principle:** Structured, permission-based, supports lean to enterprise dealer groups
+- **Design principle:** Structured, permission-based, real-time, supports lean to enterprise dealer groups
+
+### 2.4 Technician Mobile App — `RVS.Tech_Mobile` (MAUI Blazor Hybrid)
+
+**For technicians — phones and tablets in service bays.**
+
+- **App:** `RVS.Tech_Mobile` — MAUI Blazor Hybrid (iOS + Android). Employer-provisioned install via MDM or app store.
+- **Authentication:** Auth0 JWT Bearer, organization-scoped
+- **Offline-first:** Poor bay connectivity is expected. Outcome entries store locally (SQLite) and sync on reconnect via sequential `PUT` calls.
+- **Key interactions:** QR/VIN scan to open a job (native barcode SDK), photo capture, voice notes (platform speech-to-text via MAUI Essentials), log Section 10A repair fields (failure mode, action, parts, labor)
+- **Speed target:** 3–5 second total interaction per job completion (glove-friendly large tap targets, full-screen native experience)
+- **Design principle:** Minimal, fast, device-native; reuses shared Blazor components from `RVS.UI.Shared`
 
 ---
 
@@ -283,11 +296,12 @@ Used by every controller and service method to enforce tenant isolation, role ch
 
 ### 9.2 Frontend
 
-| Surface | Technology | Notes |
-|---|---|---|
-| **Intake Portal** | Blazor WASM | Mobile-first, PWA-quality, camera for VIN scan |
-| **Dealer Dashboard** | Blazor WASM | Authenticated, multi-role, real-time updates |
-| **Status Page** | Blazor WASM | Anonymous, magic-link scoped |
+| Application | Technology | Purpose | Notes |
+|---|---|---|---|
+| **`RVS.Cust_Intake`** | Blazor WebAssembly | Customer intake portal + status pages | Zero-install, URL-based. Landing page + status pages: Static SSR. Intake wizard: Interactive WebAssembly. Deployed to Azure Static Web Apps (CDN). |
+| **`RVS.Mngr_Desktop`** | Blazor SSR (Interactive Server) | Service manager desktop app | Service Board, triage, analytics, batch operations. Large-screen desktop browser. Real-time push via SignalR. Runs as App Service. |
+| **`RVS.Tech_Mobile`** | MAUI Blazor Hybrid (iOS + Android) | Technician mobile app | Offline-first, native barcode/QR/camera/voice. 3–5 sec interaction target. Employer-provisioned via MDM. Shares Razor components from `RVS.UI.Shared`. |
+| **`RVS.UI.Shared`** | Razor Class Library | Shared UI components | DTOs, Razor components, CSS design tokens, and typed API client services consumed by all three apps. |
 
 ### 9.3 Infrastructure
 
@@ -486,7 +500,7 @@ Building multi-region replication from day 1:
 This context document is a **platform overview**. For deep dives, see:
 
 - **[RVS_PRD.md](RVS_PRD.md)** — Product requirements, user personas, functional/non-functional goals, feature list, Phase 1 MVP scope
-- **[RVS_Core_Architecture_Version3.md](RVS_Core_Architecture_Version3.md)** — Domain entities, Cosmos schema, repository interfaces, data flows, middleware pipeline, API surface
+- **[RVS_Core_Architecture_Version3.1.md](RVS_Core_Architecture_Version3.1.md)** — Domain entities, Cosmos schema, repository interfaces, data flows, middleware pipeline, API surface, front-end application formats
 - **[RVS_Auth0_Identity_Version2.md](RVS_Auth0_Identity_Version2.md)** — Auth0 Organizations, RBAC matrix, JWT structure, ClaimsService, authorization policies, Login Action
 - **[RVS_implementation_plan.md](RVS_implementation_plan.md)** — 8-phase implementation roadmap, per-phase deliverables, validation criteria, suggested starting point
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)** — RVS-specific coding conventions, patterns, project structure
