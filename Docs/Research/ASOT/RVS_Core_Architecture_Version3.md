@@ -218,66 +218,9 @@ One document cannot serve three different access patterns:
       "freeTextResponse": "Small puddle under the RV near the slide"
     }
   ],
-  ``` 
-
-  ## 4. Data Layer: Cosmos DB
-
-  ### 4.1 Container Design
-
-  | Container | Partition Key | RU Mode | Access Pattern |
-  |---|---|---|---|
-  | `serviceRequests` | `/tenantId` | Autoscale 400–4000 | Single-tenant SRs, location filtering |
-  | `customerProfiles` | `/tenantId` | Autoscale 400–1000 | Tenant-scoped profiles by identity |
-  | `globalCustomerAccts` | `/email` | Autoscale 400–1000 | Cross-dealer identity lookup |
-  | `assetLedger` | `/assetId` | Autoscale 400–1000 | Section 10A asset history (append-only) |
-  | `dealerships` | `/tenantId` | Manual 400 | Corp metadata (low cardinality) |
-  | `locations` | `/tenantId` | Autoscale 400–1000 | Location CRUD + regional filtering |
-  | `tenantConfigs` | `/tenantId` | Autoscale 400–1000 | Tenant settings read on every auth request (gateway-cached) |
-  | `lookupSets` | `/category` | Manual 400 | Reference data (gateway-cached) |
-  | `slugLookup` | `/slug` | Autoscale 400–1000 | O(1) intake URL resolution (gateway-cached) |
-
-  ### 4.2 Multi-Tenancy & Blue Compass Problem
-
-  **Tenant Mapping:**
-  - **Tenant = Corporation/Dealership (Auth0 Organization boundary)**
-  - **Partition key = `tenantId`** — all locations for a corporation share one partition
-  - **`locationId` is a filter, not a partition boundary** — enables cross-location analytics within a single partition
-
-  This design solves the "Blue Compass problem": Blue Compass operates 100+ RV service locations. The alternative (partition by location) would scatter related data across 100 partitions, making corporate analytics queries fan out and become expensive. By partitioning by corporation, we keep corporate admin queries single-partition and cheap (~3–5 RU), while technicians at specific locations use location-scoped filters within the partition.
-
-  ### 4.3 Indexing & Query Patterns
-
-  **Key Indexes:**
-  - **`serviceRequests`**: Composite indexes for `[tenantId ASC, locationId ASC, createdAtUtc DESC]`, `[tenantId ASC, status ASC]`, `[tenantId ASC, assignedTechnicianId ASC]` to support dashboard searches
-  - **`customerProfiles`**: Unique constraint on `[tenantId, email]` to prevent duplicates
-  - **`globalCustomerAccts`**: Primary index on `/email` (partition key); no secondary indexes needed
-  - **`assetLedger`**: Primary index on `/assetId` (partition key); enables append-only reads by asset
-
-  **RU Cost Estimates (per operation):**
-  - Slug resolution (point read, gateway-cached): ~1 RU cold / ~0 RU cached
-  - New customer intake (7 Cosmos operations): ~11.8 RU cold / ~10.8 RU with gateway caching
-  - Returning customer intake: ~10.8 RU
-  - Dealer dashboard search (single-partition query): ~3 RU
-  - Asset history query: ~1 RU (single-partition point read)
-
-  ### 4.4 Autoscale vs. Manual RU
-
-  ⚠️ **ASSESSMENT GAP:** The assessment recommends autoscaling **all** variable-load containers. Currently, `dealerships`, `tenantConfigs`, and `lookupSets` are Manual 400. These should be **Autoscale 400–1000** to:
-  - Reduce per-container monthly cost from ~$25 to ~$5.84 (billed at 10% minimum)
-  - Handle intake bursts without throttling
-  - For 9 containers, total floor drops from ~$225 to ~$52/month
-
-  ### 4.5 Cosmos Gateway-Mode Caching
-
-  **`ConnectionMode.Gateway`** is enabled on `CosmosClient`. Server-side caching on stable containers (`slugLookup`, `tenantConfigs`, `lookupSets`) provides:
-  - Zero additional application-layer cache code
-  - Free after the first read per cache window (usually 5–30 minutes)
-  - No staleness concerns — cached entries invalidated on write
-  - Consistent behavior across all SDK replicas and deployments
-
-  For a multi-location corporation, the first technician at Location A reads the `tenantConfig` (1 RU + cache), and the next technician at Location B in the same minute hits the cached response (0 RU).
-
-  See source code documentation (`RVS.Infra.AzCosmosRepository/`) for detailed indexing policies. DTO structure and field definitions are in `RVS.Domain/DTOs/`.
+  // ... additional fields omitted
+}
+```
 
 ┌──────────────────────────────────────────────────┐
 │ STEP 1: Resolve GlobalCustomerAcct               │
@@ -440,19 +383,6 @@ Also handles **reactivation** — if the current customer previously had an Inac
 
 Implements physical location CRUD for the dealer-facing API. `UpsertSlugLookupAsync(slug, tenantId, locationId)` is called within `CreateLocationAsync` and `UpdateLocationAsync`. On slug rename via `UpdateLocationAsync`, the old slug entry is deleted and the new one is written atomically before the `Location` document is updated — ensuring the lookup table is never stale.
 
-## 7. Service Layer Design
-
-Services follow MF patterns: sealed classes, dependency injection for repositories/interfaces, guard clauses first, return domain entities (not DTOs). See `.github/copilot-instructions.md` for detailed service layer conventions.
-
-**Key orchestration responsibilities** (delegated to specific service classes):
-- **`ServiceRequestService`** — Primary orchestrator. Implements the intake flow (Section 6), handles status transitions using `StatusTransitions` validation rules, executes batch outcome operations.
-- **`CustomerProfileService`** — Shadow profile resolution/creation, asset ownership tracking and transfer detection.
-- **`GlobalCustomerAcctService`** — Cross-dealer identity federation, magic-link token generation and validation.
-- **`AssetLedgerService`** — Append-only event recording for Section 10A data accumulation.
-- **`LocationService`** — Location CRUD with slug-lookup table synchronization (critical for intake URL consistency).
-- **`ICategorizationService`** — Issue categorization (Azure OpenAI with rule-based fallback) and technician summary generation.
-
-All services perform tenant isolation checks via `ClaimsService` before returning data. Authorization policies are enforced at the controller level and validated again in service layer (defense-in-depth).
 ---
 
 ## 8. Controllers
@@ -491,20 +421,6 @@ Following the [RVS copilot-instructions.md](https://github.com/markarnoldutah/RV
 - **Response:** `ServiceRequestAnalyticsResponseDto` — covers all analytics dimensions needed by the Service Manager Desktop, including request counts by status/category/location, top failure modes, top repair actions, average repair time, top parts used, and average days to completion. See Section 12.1 for the full response DTO field definitions.
 - **Performance:** For MVP volumes (<200 jobs/month), a single-partition aggregate query is acceptable (~5–10 RU). Accelerate the Phase 2 change feed → Azure Tables aggregation (Section 15.3) if analytics query cost becomes measurable at higher volume.
 
-## 8. API Controllers
-
-**Customer-Facing (Unauthenticated):**
-- **IntakeController** — `api/intake/{locationSlug}` — GET (intake form config + prefill), POST diagnostic-questions (AI questions), POST service-requests (submit), POST attachments (upload)
-- **CustomerStatusController** — `api/status/{token}` — GET (cross-dealer service request summary via magic link)
-
-**Dealer-Facing (Authenticated):**
-- **ServiceRequestsController** — `api/dealerships/{dealershipId}/service-requests` — CRUD operations, search/filter, batch-outcome endpoint (up to 25 at once)
-- **AttachmentsController** — `api/.../attachments` — Upload (authenticated), retrieve SAS URLs, delete
-- **DealershipsController**, **LocationsController**, **TenantsController**, **LookupsController**, **AnalyticsController** — Standard CRUD and reporting operations
-
-All authenticated endpoints enforce authorization policies defined in `RVS_Auth0_Identity_Version2.md`. Location-based access control is enforced server-side via `ClaimsService.HasAccessToLocation()`. See Section 11 for the complete API route summary.
-
-⚠️ **SECURITY GAP:** Unauthenticated intake and attachment endpoints (`POST api/intake/{locationSlug}/service-requests` and file uploads) acceptlarge file uploads. See Assessment doc: **Azure Front Door WAF** is required to mitigate injection, traversal, and DDoS attacks on these high-risk surfaces.
 ---
 
 ## 9. Middleware Pipeline
@@ -524,24 +440,6 @@ Following the [RVS copilot-instructions.md pipeline order](https://github.com/ma
 
 > **Cosmos SDK connection mode:** `ConnectionMode.Gateway` is configured globally on `CosmosClient`. Gateway mode enables server-side result caching for point reads on stable-key containers (`slugLookup`, `tenantConfigs`, `lookupSets`), reducing effective RU consumption on repeated reads without application-layer cache code. `TenantAccessGateMiddleware` reads `TenantConfig` on every authenticated request — gateway caching makes this effectively free after the first read per tenant per cache window.
 
-## 9. Middleware Pipeline
-
-Middleware registration order (from `Program.cs`):
-1. Dev-only endpoints (Swagger/OpenAPI)
-2. HTTPS redirection (prod only)
-3. CORS (`AllowBlazorClient`)
-4. **Rate limiting** (protects public intake endpoints)
-5. **ExceptionHandlingMiddleware** (singleton, returns ProblemDetails)
-6. Authentication & Authorization (Auth0 JWT validation + policy checks)
-7. **TenantAccessGateMiddleware** (scoped, checks `TenantConfig.AccessGate` for tenant active status)
-8. Controller mapping
-
-**Cosmos Gateway-Mode Caching:** `ConnectionMode.Gateway` enables server-side caching for `slugLookup`, `tenantConfigs`, `lookupSets` — repeated reads hit cache (0 RU). Especially valuable for `TenantAccessGateMiddleware` reads on every authenticated request.
-
-⚠️ **ASSESSMENT GAPS:**
-- No Application Insights telemetry — **P0 before paying customers** (see Assessment doc for required instrumentation)
-- No health check endpoints — **add `/health` endpoint** to detect Cosmos/Blob connectivity issues
-- Per-tenant rate limiting missing on dealer API — **implement per-`tenantId` sliding-window limits** to prevent noisy neighbor issues
 ---
 
 ## 10. Azure Blob Storage Structure
@@ -561,15 +459,6 @@ rvs-attachments/
 - **Retention:** Configurable per-tenant in `TenantConfig`.
 - **Path includes `locationId`** for storage organization and future per-location retention policies.
 
-## 10. Blob Storage & File Upload
-
-**Structure:** `rvs-attachments/{tenantId}/{locationId}/{serviceRequestId}/` — tenant/location scoping enables future per-location retention policies.
-
-**Access:** Time-limited SAS URIs generated on demand. Container access set to `BlobContainerPublicAccessType.None` to prevent accidental public exposure.
-
-**Upload Strategy:** MVP routes uploads through API (streaming). Phase 2+: SAS pre-signed direct upload from client to Blob Storage (eliminates API thread blocking on large video files, see Assessment doc).
-
-⚠️ **ASSESSMENT GAP:** No SAS pre-signed direct upload. Large video uploads (25 MB) currently block API worker threads. Recommend **Phase 1 Sprint N: implement SAS pre-signed URLs** (~50 lines, high-impact performance improvement).
 ---
 
 ## 11. Complete API Route Summary
@@ -604,15 +493,6 @@ rvs-attachments/
 | `GET` | `api/tenants/access-gate` | Bearer | CanManageTenantConfig | Access gate check |
 | `GET` | `api/lookups/{lookupSetId}` | Bearer | CanReadLookups | Lookup values |
 
-## 11. API Reference
-
-**Public intake endpoints** — `api/intake/{locationSlug}` (GET config, POST submit, POST diagnostic-questions, POST attachments)
-**Status page** — `api/status/{token}` (GET cross-dealer service requests)
-**Service requests** — `api/dealerships/{id}/service-requests` (CRUD, search, batch-outcome)
-**Attachments** — `api/.../{srId}/attachments` (upload, retrieve, delete)
-**Dealerships, Locations, Tenants, Analytics** — Standard CRUD routes with policy-based access control
-
-See `.github/copilot-instructions.md` for route naming conventions and `Controllers/` source code for method signatures. Detailed API reference documentation should live in `Docs/API/` (not yet created).
 ---
 
 ## 12. RU Cost Analysis
@@ -653,17 +533,6 @@ See `.github/copilot-instructions.md` for route naming conventions and `Controll
 
 > **Scaling note:** For MVP volumes (<200 jobs/month), a single-partition aggregate query is acceptable (~5–10 RU). If analytics queries become expensive at higher volume, accelerate the Phase 2 change feed → Azure Tables aggregation pattern (Section 15.3).
 
-## 12. Cost & Performance Characteristics
-
-**RU Consumption (Cosmos DB):**
-- Slug resolution: ~1 RU (cold) / ~0 RU (gateway-cached)
-- Intake submission: ~10.8–11.8 RU (6–7 Cosmos operations)
-- Dealer dashboard search: ~3 RU (single-partition query)
-- Asset history query: ~1 RU (point read)
-
-**Performance Optimization:** Gateway-mode caching on stable containers (`slugLookup`, `tenantConfigs`, `lookupSets`) provides free RU after first read. For MVP volumes (<200 jobs/month), on-demand Cosmos queries are acceptable. Phase 2: offload analytics to Azure Tables (change feed consumer, see Section 15).
-
-**Scaling:** All containers use autoscale except manual 400 RU on `dealerships`, `tenantConfigs`, `lookupSets`. Assessment recommends autoscaling all three to handle intake bursts (saves ~$170/month total floor cost).
 ---
 
 ## 13. Magic Link Security
@@ -678,20 +547,6 @@ See `.github/copilot-instructions.md` for route naming conventions and `Controll
 | **PII exposure** | Status page returns first name + asset summaries only — no full email, no phone, no other customers' data |
 | **Cross-dealer visibility** | Customer sees their own requests across all corporations — intentional for customer convenience. No other customer's data is exposed. |
 
-## 13. Security & Magic Link Design
-
-**Magic-Link Pattern:**
-- Token format: `base64url(SHA256(email)[0..8]):random_bytes` — email-hash prefix enables O(1) partition-key derivation (no cross-partition query needed)
-- 32-byte random portion (256-bit entropy, URL-safe Base64)
-- 30-day expiry, rotated on each intake
-- Status page view limited to 10 req/min/IP
-- Cross-dealer visibility intentional (customer sees all their SRs across corporations)
-
-⚠️ **ASSESSMENT GAPS — CRITICAL SECURITY ISSUES:**
-1. **SFTP private keys in Cosmos DB** — Must move to Azure Key Vault. See Assessment: CRITICAL — SFTP security gap.
-2. **No Azure Front Door WAF** — Unauthenticated intake/upload endpoints are unprotected. See Assessment: CRITICAL — WAF missing.
-3. **No Key Vault for any secrets** — Auth0 client secret, Azure OpenAI API key should not be in `appsettings.json`. See Assessment: HIGH — Key Vault integration.
-4. **Blob container public access not hardened** — Container should be explicitly set to `BlobContainerPublicAccessType.None`. See Assessment: HIGH — add startup assertion.
 ---
 
 ## 14. Key Architectural Decisions Summary
@@ -716,30 +571,6 @@ See `.github/copilot-instructions.md` for route naming conventions and `Controll
 | **`slugLookup` as a dedicated container** | Decouples slug resolution from the `locations` container partition scheme. Enables O(1) point reads partitioned by `/slug`. Gateway-cached on repeated reads. Autoscale floor ~$2.30/month. Invalidation is write-through on `CreateLocationAsync` / `UpdateLocationAsync`. |
 | **Azure OpenAI for diagnostic questions, not static templates** | Dynamic AI-generated questions adapt to category, description, and asset context. Eliminates need for per-category question template CRUD, admin UI, and ongoing curation. Cost: ~$0.0002/intake with GPT-4o-mini. Rule-based fallback if AI is unavailable. |
 
-## 14. Key Architectural Decisions
-
-**Multi-tenancy:** Tenant = Corporation, not Location. Enables Blue Compass (100+ locations) to have one partition, one Auth0 Org, cheap cross-location analytics. `locationId` is a filter, not a partition boundary.
-
-**Identity Separation:** Three containers (serviceRequests/tenantId, globalCustomerAccts/email, assetLedger/assetId) serve three different access patterns — each needs its own partition key for O(1) efficiency.
-
-**No Customer Sign-Up:** Shadow profiles created automatically on first intake. Zero friction.
-
-**Denormalization:** `CustomerSnapshotEmbedded` embedded in ServiceRequest eliminates joins on dashboard reads (~1 RU/view vs. ~5–10 RU with join).
-
-**Data Moat:** Append-only `AssetLedgerEntry` indexed by `assetId` accumulates proprietary service intelligence (Section 10A). Write-only in MVP; read-enabled Phase 5–6 when 10A analytics materialize.
-
-**Smart Token Design:** Magic-link token embeds email-hash prefix (`base64url(SHA256(email)[0..8]):random_bytes`), enabling single-partition token lookup without cross-partition scan.
-
-**Slug Lookup Table:** Dedicated O(1) container (gateway-cached) for intake URL resolution. Decouples from `locations` partition scheme, enables QR-code-per-location scalability.
-
-**Azure OpenAI Fallback:** Dynamic AI-generated diagnostic questions with rule-based fallback. No template CRUD Admin UI. Cost: ~$0.0002/intake (negligible).
-
-⚠️ **ASSESSMENT GAPS** — Architectural issues requiring resolution:
-- No IaC (Bicep/Terraform) for infrastructure → manual setup, drift, disaster recovery risk. See Assessment: CRITICAL P0 item.
-- No CI/CD pipeline (GitHub Actions) → cannot automate deployment or blue-green updates. See Assessment: CRITICAL P0 item.
-- No billing/metering infrastructure → cannot charge customers or enforce plan tiers. See Assessment: HIGH P1 item.
-- No Application Insights → no observability, cannot meet SaaS uptime commitments. See Assessment: CRITICAL P0 item.
-- Per-tenant rate limiting missing → vulnerable to noisy neighbor. See Assessment: HIGH P1 item.
 ---
 
 ## 15. Change Feed Strategy
@@ -782,17 +613,6 @@ Cosmos DB Change Feed is not used in MVP, but several architectural patterns cre
 
 **MVP stance:** Accept stale snapshots. The advisor can always look up the current profile. This consumer is only warranted if customer contact updates during open SRs become a reported pain point.
 
-## 15. Change Feed Strategy (Phase 2+)
-
-Not used in MVP. Planned consumers for future phases:
-
-1. **Asset Ledger Enrichment** (Phase 5–6, required) — Watch `serviceRequests` for status=Completed. Patch `assetLedger` with Section 10A fields (FailureMode, RepairAction, etc.). Eventual consistency acceptable (seconds-to-minutes latency).
-
-2. **Analytics Aggregation** (Phase 2, high) — Watch `serviceRequests`, maintain pre-aggregated counters in Azure Tables (partitioned by tenantId+locationId). Reduces analytics query cost from ~5–10 RU to ~0 RU Cosmos.
-
-3. **Snapshot Staleness Repair** (Phase 2+, low) — Watch `customerProfiles`, fan out updates to open `serviceRequests` if customer contact info changes. Minor UX benefit only; accept stale snapshots in MVP.
-
-*** End Patch
 ---
 
 ## 16. Azure OpenAI Integration
@@ -911,26 +731,6 @@ Authentication uses `DefaultAzureCredential` (consistent with Cosmos DB, Blob St
 | **`aiContext` on `IntakeFormConfigEmbedded`** | Dealers can customize AI behavior without a template admin UI. Simple string field, appended to system prompt. E.g. "We specialize in Grand Design and Keystone brands." |
 | **`diagnosticResponses` embedded in `ServiceRequest`** | Stored alongside the SR for full audit trail. Used by the categorization step for better results. Queryable via Cosmos indexing for future analytics on symptom patterns. |
 
-## 16. Azure OpenAI Integration
-
-**Purpose:** Two features powered by Azure OpenAI (GPT-4o-mini):
-1. Dynamic diagnostic question generation (replaces static templates)
-2. Issue auto-categorization + technician summary enhancement
-
-**Interface:** `ICategorizationService` with two methods — `CategorizeAsync` and `GenerateDiagnosticQuestionsAsync`. Rule-based fallback if AI unavailable (intake never blocks on external service).
-
-**Configuration:** `appsettings.json` contains endpoint, deployment name, token limits, timeout. Uses `DefaultAzureCredential` for authentication (consistent with Cosmos, Blob Storage).
-
-**Cost:** ~$0.0002 per intake with GPT-4o-mini. Negligible (~$0.20/month at 1,000 intakes/month).
-
-**Per-Tenant Customization:** `IntakeFormConfigEmbedded.AiContext` allows dealers to append custom context to system prompt (e.g., "We specialize in Grand Design and Keystone brands") — no template admin UI needed.
-
-### 16a. Diagnostic Response Capture (Two-Phase Intake Flow)
-
-**Phase 1** — `POST api/intake/{locationSlug}/diagnostic-questions` returns AI-generated 2–4 questions with checkbox options
-**Phase 2** — `POST api/intake/{locationSlug}/service-requests` submits SR with `diagnosticResponses[]` array embedded
-
-Responses are stored in `ServiceRequest` and used by categorization service to produce higher-quality results.
 ---
 
 ## 17. Technician Mobile App — API Readiness
@@ -983,21 +783,6 @@ GET api/predictions/labor?issueCategory={cat}&componentType={type}&manufacturer=
 
 For MVP, the mobile app uses static suggested labor times from the `LookupSet` data or hardcoded client-side values.
 
-## 17. Technician Mobile App
-
-**Resolved gaps (this version):**
-- Authenticated attachment upload (photo/video capture in field)
-- VIN scan → job lookup filter (`assetId` in search)
-- "My Jobs" queue filter (`assignedTechnicianId` in search)
-- Bay-based job assignment filter (`assignedBayId`)
-- Voice note support (`.m4a`, `.wav` file types)
-
-**Required seed data:** `LookupSet` categories for `failureModes`, `repairActions`, `componentTypes` (used by repair outcome picker). See `RVS.Data.Cosmos.Seed/` project.
-
-**Deferred to Phase 2:**
-- Batch update endpoint (offline sync currently uses sequential PUT calls)
-- Labor time prediction API (requires sufficient AssetLedger data accumulation)
-- Optimistic offline queue (MVP: client-side JSON queue, replay on reconnect)
 ---
 
 ## 18. Service Manager Desktop App — API Readiness
