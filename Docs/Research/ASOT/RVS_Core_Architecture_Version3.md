@@ -1,34 +1,4 @@
 
-## 18. Service Manager Desktop App
-
-**Resolved gaps (this version):**
-- 8 status values (expanded from 4) with validated transitions (New → Scheduled → InDiagnosis → ... → Closed)
-- Batch outcome endpoint (apply repair outcome to up to 25 SRs at once)
-- Priority field (`"Low"`, `"Normal"`, `"High"`, `"Urgent"`) for work assignment
-- `HasOutcome` filter to find SRs missing repair outcome (Outcome Compliance Monitoring)
-- Scheduled date filters (`ScheduledAfterUtc`, `ScheduledBeforeUtc`)
-- Enhanced analytics (failure modes, repair time trends, parts usage)
-
-**Deferred to Phase 2:**
-- "Request Additional Information" flow (MVP: managers contact customers externally)
-
-**Reference:** See `StatusTransitions.cs` for allowed state transitions and `ServiceRequestBatchOutcomeRequestDto` for batch outcome operation details.
-## 5. Service & Repository Layer
-
-All services are `sealed`, injected via dependency injection. All repositories follow the repository pattern for data access abstraction. For detailed method signatures, DTOs, and implementation patterns, see:
-- Service interfaces in `RVS.Domain/Interfaces/`
-- Repository implementations in `RVS.Infra.AzCosmosRepository/`, `RVS.Infra.AzBlobRepository/`, `RVS.Infra.AzTablesRepository/`
-- Service implementations in `RVS.API/Services/`
-- DTO definitions in `RVS.Domain/DTOs/`
-
-**Key service responsibilities:**
-- **`IServiceRequestService`** — Orchestrates the core intake flow (Steps 1–6), status transitions, and batch outcome operations. Validates transitions via `StatusTransitions.cs`.
-- **`ICustomerProfileService`** — Profile resolution, asset ownership transfer, reactivation logic.
-- **`IGlobalCustomerAcctService`** — Global identity federation, magic-link token generation/validation.
-- **`IAssetLedgerService`** — Append-only event recording for the data moat.
-- **`IAttachmentService`** — Blob upload/download, SAS URI generation.
-- **`ICategorizationService`** — Issue auto-categorization (AI-powered with rule-based fallback) and technician summary generation.
-- **`ILocationService`** — Location CRUD with slug-lookup table synchronization.
 
 # RV Service Flow (RVS) — Core Backend Architecture
 
@@ -68,93 +38,6 @@ RVS is a B2B SaaS platform for RV dealership service management. The backend is 
 
 **Magic-Link Design:** Customer sees all their SRs across corporations via `api/status/{token}`. Token embeds email-hash prefix enabling O(1) partition-key derivation (no cross-partition query).
 
----
-
-## ⚠️ CRITICAL GAPS — Assessment Action Items
-
-The following issues are identified in `RVS_SaaS_Architecture_Assessment.md` and `RVS_Cloud_Arch_Assessment.md` and require resolution before commercialization. Organized by urgency:
-
-### 🔴 CRITICAL — P0 (Non-negotiable before paying customers)
-
-1. **No Infrastructure-as-Code (Bicep/Terraform)**
-  - Impact: Manual environment setup, infra drift, disaster recovery risk
-  - Action: Create Bicep templates for App Service, Cosmos DB (9 containers), Blob Storage, Key Vault, Application Insights, Static Web Apps
-  - See: Assessment "Operational Excellence" section, Cloud Arch Assessment
-
-2. **No CI/CD Pipeline (GitHub Actions)**
-  - Impact: Manual deployment, cannot safely release changes, tenant onboarding cannot auto-provision
-  - Action: Build GitHub Actions workflow with `build → test → deploy-staging → (manual approval) → deploy-prod`
-  - See: Assessment "Operational Excellence" section
-
-3. **Application Insights Missing (Zero Telemetry)**
-  - Impact: Cannot measure SLAs, cannot detect outages until customer complains, cannot troubleshoot issues
-  - Action: Wire Application Insights with tenant-tagged custom dimensions (TenantId, LocationId), Cosmos RU tracking, Azure OpenAI latency, error rates by tenant
-  - See: Assessment "Reliability" section
-
-4. **SFTP Private Keys Stored in Cosmos DB**
-  - Impact: Critical security violation, fails SOC 2 audit, private key exposed if DB compromised
-  - Action: Move SFTP credentials to Azure Key Vault. Store only `privateKeySecretUri` in `TenantConfig`.
-  - See: Assessment "Security" section
-
-5. **Billing/Metering Infrastructure Missing**
-  - Impact: Cannot charge customers, violates SaaS WAF principle "Understand your cost/revenue relationship"
-  - Action: Design lightweight metering layer: `PlanTier` field in `TenantConfig`, monthly SR count tracking (change feed or scheduled job), Stripe Billing integration, overage enforcement in `TenantAccessGateMiddleware`
-  - See: Assessment "Cost Optimization" section, Cloud Arch Assessment
-
-### 🟡 HIGH — P1 (Must have before MVP launch to production)
-
-1. **No Azure Front Door + WAF**
-  - Impact: Unauthenticated intake endpoints unprotected from injection, DDoS, bot attacks
-  - Action: Place Azure Front Door Standard in front of API, enable OWASP Core Rule Set
-  - Cost: ~$35/month at MVP scale
-  - See: Assessment "Security" section
-
-2. **No Azure Key Vault for Secrets**
-  - Impact: Auth0 client secret, Azure OpenAI API key, Stripe API key all in `appsettings.json` or environment variables (expo sure risk, no rotation)
-  - Action: Add `AddAzureKeyVault` to Program.cs, grant App Service managed identity `Key Vault Secrets User` RBAC
-  - See: Assessment "Security" section
-
-3. **No SAS Pre-Signed Direct Upload for Large Files**
-  - Impact: 25 MB video uploads block API worker threads (3–8 seconds on mobile LTE), causes request starvation
-  - Action: Add `GenerateUploadSasUriAsync` endpoint. Client uploads directly to Blob Storage, calls confirm endpoint afterward.
-  - See: Assessment "Performance Efficiency" section
-
-4. **Per-Tenant Rate Limiting Missing**
-  - Impact: "Noisy neighbor" — one tenant's batch queries can consume all Cosmos RU, degrading service for other tenants
-  - Action: Add per-`tenantId` sliding-window rate limiter (e.g., 300 req/min per tenant) on authenticated endpoints
-  - See: Assessment "Operational Excellence", Cloud Arch Assessment
-
-5. **No Health Check Endpoints**
-  - Impact: App Service cannot detect unhealthy API (Cosmos connection broken → 503 responses but health = OK)
-  - Action: Add `/health`, `/health/live`, `/health/ready` with Cosmos connectivity check
-  - See: Assessment "Reliability" section
-
-### 🟠 MEDIUM — P1 (Phase 1 Sprint N)
-
-1. **Autoscale Missing on Variable-Load Containers**
-  - Current: `dealerships`, `tenantConfigs`, `lookupSets` on Manual 400 RU
-  - Impact: Risk throttling (429) during intake bursts, higher cost ($225/month floor vs. $52/month for autoscale)
-  - Action: Change to Autoscale 400–1000 RU for all three
-  - See: Assessment "Cost Optimization" section
-
-2. **No CDN for Blazor WASM**
-  - Impact: 5–15 MB runtime + app download from single App Service instance, poor UX on mobile
-  - Action: Deploy Blazor WASM to Azure Static Web Apps (Free tier) or front with Azure Front Door CDN
-  - See: Assessment "Performance Efficiency" section
-
-3. **No Blob Storage Lifecycle Management**
-  - Impact: Storage costs grow linearly with service request volume (photos/videos retained indefinitely)
-  - Action: Define per-tier retention policies in `TenantConfig`, implement Blob lifecycle management (Hot→Cool→Archive)
-  - See: Assessment "Cost Optimization" section
-
-### 📋 Reference Documents
-
-- **RVS_SaaS_Architecture_Assessment.md** — Complete security, reliability, performance, cost, operational analysis
-- **RVS_Cloud_Arch_Assessment.md** — Document health issues, architecture gaps, incomplete designs, scope conflicts
-- **RVS_Auth0_Identity_Version2.md** — Companion doc: Auth0 setup, RBAC roles, JWT claims, permissions matrix
-- `.github/copilot-instructions.md` — ASP.NET Core, C# 14 coding patterns
-
----
 ---
 
 ## 1. Solution Structure and Layering
@@ -335,6 +218,8 @@ One document cannot serve three different access patterns:
       "freeTextResponse": "Small puddle under the RV near the slide"
     }
   ],
+  ``` 
+
   ## 4. Data Layer: Cosmos DB
 
   ### 4.1 Container Design
@@ -393,6 +278,8 @@ One document cannot serve three different access patterns:
   For a multi-location corporation, the first technician at Location A reads the `tenantConfig` (1 RU + cache), and the next technician at Location B in the same minute hits the cached response (0 RU).
 
   See source code documentation (`RVS.Infra.AzCosmosRepository/`) for detailed indexing policies. DTO structure and field definitions are in `RVS.Domain/DTOs/`.
+
+┌──────────────────────────────────────────────────┐
 │ STEP 1: Resolve GlobalCustomerAcct               │
 │                                                  │
 │ Container: globalCustomerAccts                   │
@@ -478,7 +365,26 @@ One document cannot serve three different access patterns:
 
 Total Cosmos cost per intake: ~11.8 RU (cold, gateway miss)
                               ~10.8 RU (gateway-cached slug)
-```
+
+---
+
+## 5. Service & Repository Layer
+
+All services are `sealed`, injected via dependency injection. All repositories follow the repository pattern for data access abstraction. For detailed method signatures, DTOs, and implementation patterns, see:
+- Service interfaces in `RVS.Domain/Interfaces/`
+- Repository implementations in `RVS.Infra.AzCosmosRepository/`, `RVS.Infra.AzBlobRepository/`, `RVS.Infra.AzTablesRepository/`
+- Service implementations in `RVS.API/Services/`
+- DTO definitions in `RVS.Domain/DTOs/`
+
+**Key service responsibilities:**
+- **`IServiceRequestService`** — Orchestrates the core intake flow (Steps 1–6), status transitions, and batch outcome operations. Validates transitions via `StatusTransitions.cs`.
+- **`ICustomerProfileService`** — Profile resolution, asset ownership transfer, reactivation logic.
+- **`IGlobalCustomerAcctService`** — Global identity federation, magic-link token generation/validation.
+- **`IAssetLedgerService`** — Append-only event recording for the data moat.
+- **`IAttachmentService`** — Blob upload/download, SAS URI generation.
+- **`ICategorizationService`** — Issue auto-categorization (AI-powered with rule-based fallback) and technician summary generation.
+- **`ILocationService`** — Location CRUD with slug-lookup table synchronization.
+---
 
 ## 6. Intake Orchestration Flow
 
@@ -1169,3 +1075,93 @@ The `ServiceRequest.Status` field has been expanded from 4 to 8 values to align 
 | `Failed` | `List<BatchOutcomeFailureDto>` | Items that failed, with reason |
 
 `BatchOutcomeFailureDto` — `ServiceRequestId` (`string`), `Reason` (`string`).
+
+---
+
+---
+
+## ⚠️ CRITICAL GAPS — Assessment Action Items
+
+The following issues are identified in `RVS_SaaS_Architecture_Assessment.md` and `RVS_Cloud_Arch_Assessment.md` and require resolution before commercialization. Organized by urgency:
+
+### 🔴 CRITICAL — P0 (Non-negotiable before paying customers)
+
+1. **No Infrastructure-as-Code (Bicep/Terraform)**
+  - Impact: Manual environment setup, infra drift, disaster recovery risk
+  - Action: Create Bicep templates for App Service, Cosmos DB (9 containers), Blob Storage, Key Vault, Application Insights, Static Web Apps
+  - See: Assessment "Operational Excellence" section, Cloud Arch Assessment
+
+2. **No CI/CD Pipeline (GitHub Actions)**
+  - Impact: Manual deployment, cannot safely release changes, tenant onboarding cannot auto-provision
+  - Action: Build GitHub Actions workflow with `build → test → deploy-staging → (manual approval) → deploy-prod`
+  - See: Assessment "Operational Excellence" section
+
+3. **Application Insights Missing (Zero Telemetry)**
+  - Impact: Cannot measure SLAs, cannot detect outages until customer complains, cannot troubleshoot issues
+  - Action: Wire Application Insights with tenant-tagged custom dimensions (TenantId, LocationId), Cosmos RU tracking, Azure OpenAI latency, error rates by tenant
+  - See: Assessment "Reliability" section
+
+4. **SFTP Private Keys Stored in Cosmos DB**
+  - Impact: Critical security violation, fails SOC 2 audit, private key exposed if DB compromised
+  - Action: Move SFTP credentials to Azure Key Vault. Store only `privateKeySecretUri` in `TenantConfig`.
+  - See: Assessment "Security" section
+
+5. **Billing/Metering Infrastructure Missing**
+  - Impact: Cannot charge customers, violates SaaS WAF principle "Understand your cost/revenue relationship"
+  - Action: Design lightweight metering layer: `PlanTier` field in `TenantConfig`, monthly SR count tracking (change feed or scheduled job), Stripe Billing integration, overage enforcement in `TenantAccessGateMiddleware`
+  - See: Assessment "Cost Optimization" section, Cloud Arch Assessment
+
+### 🟡 HIGH — P1 (Must have before MVP launch to production)
+
+1. **No Azure Front Door + WAF**
+  - Impact: Unauthenticated intake endpoints unprotected from injection, DDoS, bot attacks
+  - Action: Place Azure Front Door Standard in front of API, enable OWASP Core Rule Set
+  - Cost: ~$35/month at MVP scale
+  - See: Assessment "Security" section
+
+2. **No Azure Key Vault for Secrets**
+  - Impact: Auth0 client secret, Azure OpenAI API key, Stripe API key all in `appsettings.json` or environment variables (expo sure risk, no rotation)
+  - Action: Add `AddAzureKeyVault` to Program.cs, grant App Service managed identity `Key Vault Secrets User` RBAC
+  - See: Assessment "Security" section
+
+3. **No SAS Pre-Signed Direct Upload for Large Files**
+  - Impact: 25 MB video uploads block API worker threads (3–8 seconds on mobile LTE), causes request starvation
+  - Action: Add `GenerateUploadSasUriAsync` endpoint. Client uploads directly to Blob Storage, calls confirm endpoint afterward.
+  - See: Assessment "Performance Efficiency" section
+
+4. **Per-Tenant Rate Limiting Missing**
+  - Impact: "Noisy neighbor" — one tenant's batch queries can consume all Cosmos RU, degrading service for other tenants
+  - Action: Add per-`tenantId` sliding-window rate limiter (e.g., 300 req/min per tenant) on authenticated endpoints
+  - See: Assessment "Operational Excellence", Cloud Arch Assessment
+
+5. **No Health Check Endpoints**
+  - Impact: App Service cannot detect unhealthy API (Cosmos connection broken → 503 responses but health = OK)
+  - Action: Add `/health`, `/health/live`, `/health/ready` with Cosmos connectivity check
+  - See: Assessment "Reliability" section
+
+### 🟠 MEDIUM — P1 (Phase 1 Sprint N)
+
+1. **Autoscale Missing on Variable-Load Containers**
+  - Current: `dealerships`, `tenantConfigs`, `lookupSets` on Manual 400 RU
+  - Impact: Risk throttling (429) during intake bursts, higher cost ($225/month floor vs. $52/month for autoscale)
+  - Action: Change to Autoscale 400–1000 RU for all three
+  - See: Assessment "Cost Optimization" section
+
+2. **No CDN for Blazor WASM**
+  - Impact: 5–15 MB runtime + app download from single App Service instance, poor UX on mobile
+  - Action: Deploy Blazor WASM to Azure Static Web Apps (Free tier) or front with Azure Front Door CDN
+  - See: Assessment "Performance Efficiency" section
+
+3. **No Blob Storage Lifecycle Management**
+  - Impact: Storage costs grow linearly with service request volume (photos/videos retained indefinitely)
+  - Action: Define per-tier retention policies in `TenantConfig`, implement Blob lifecycle management (Hot→Cool→Archive)
+  - See: Assessment "Cost Optimization" section
+
+### 📋 Reference Documents
+
+- **RVS_SaaS_Architecture_Assessment.md** — Complete security, reliability, performance, cost, operational analysis
+- **RVS_Cloud_Arch_Assessment.md** — Document health issues, architecture gaps, incomplete designs, scope conflicts
+- **RVS_Auth0_Identity_Version2.md** — Companion doc: Auth0 setup, RBAC roles, JWT claims, permissions matrix
+- `.github/copilot-instructions.md` — ASP.NET Core, C# 14 coding patterns
+
+
