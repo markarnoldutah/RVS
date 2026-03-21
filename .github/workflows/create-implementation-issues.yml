@@ -1,0 +1,26 @@
+name: Create Implementation Plan Issues
+
+on:
+  push:
+    branches:
+      - 'copilot/add-high-level-features'
+    paths:
+      - '.github/workflows/create-implementation-issues.yml'
+      - 'scripts/create-issues.sh'
+
+permissions:
+  issues: write
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Feature Issues and Sub-Issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          bash scripts/create-issues.sh
