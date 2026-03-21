@@ -28,6 +28,15 @@ RV dealerships and independent service shops struggle with **service department 
 
 **Even small improvements in intake accuracy and technician preparation produce measurable gains in throughput and revenue.**
 
+
+#### Across these local options, a few recurring customer pain points emerge:
+
+- Poor communication between customers and service teams.
+- Uncertainty about repair status and delays.
+- Difficulty reaching advisors or technicians by phone.
+
+All three of these themes are directly addressable by structured intake processes, automated communication, and clear status tracking — core parts of the RVS product value-proposition.
+
 ### The Solution
 
 RVS is a cloud-based **service intake and workflow platform** that sits in front of existing Dealer Management Systems (DMS). It replaces phone-based intake with a structured, mobile-friendly, anonymous customer portal. Customers submit detailed repair information before the RV arrives. Technicians see pre-categorized issues and customer photos before opening the bay door. Service advisors manage a digitized queue instead of a waitlist spreadsheet.

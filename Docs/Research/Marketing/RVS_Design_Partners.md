@@ -11,7 +11,7 @@ Below is a **revised list of five better design partner candidates within roughl
 
 ---
 
-# 1. RVzz Repair Shop
+# 1. Lazy Days RV (formlery RVzz Repair Shop)
 
 **Address**
 1265 E Telegraph St
