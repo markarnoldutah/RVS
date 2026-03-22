@@ -58,7 +58,7 @@ The repo contains a fully implemented **healthcare benefits verification system*
 | Cosmos seed tool | Rewrite for RVS containers | 9 containers with test data |
 | `RVS.UI.Shared` Razor Class Library | Shared components, DTOs, CSS tokens | Foundation for all 3 frontends |
 | `Cust_Intake` Blazor WASM | 7-step intake wizard + status page | Most complex frontend |
-| `Mngr_Desktop` Blazor SSR | Dashboard + Service Board + analytics | Second priority frontend |
+| `Mngr_Desktop` Blazor WASM (Standalone) | Dashboard + Service Board + analytics | Second priority frontend |
 | `Tech_Mobile` MAUI Blazor Hybrid | My Jobs, Section 10A, photo capture | Third frontend, offline-first |
 | Rate limiting middleware | ASP.NET rate limiter | Per Tech PRD §5.3 |
 | Health check endpoint | Standard health checks | Cosmos + Blob probes |
@@ -102,7 +102,7 @@ This plan covers the **full MVP including all three frontend applications**. The
 
 | Feature | Reason |
 |---|---|
-| Real-time SignalR Service Board push | MVP ships with 30s polling; SignalR added post-MVP |
+| Dedicated SignalR Service Board hub | MVP ships with configurable long polling (default 5m); dedicated SignalR hub added in vNEXT |
 | DMS SFTP export (§10.7) | Manual CSV export sufficient for MVP |
 | SendGrid styled email templates | Intake confirmation = plain-text via `INotificationService`; styled templates post-MVP |
 | Azure Tables pre-aggregation (GAP-05) | Direct Cosmos analytics sufficient at MVP volume |
@@ -138,7 +138,7 @@ RVS.sln
 │   ├── RVS.Infra.AzBlobRepository/    (Blob Storage service)
 │   ├── RVS.UI.Shared/             (Razor Class Library — shared components, API clients)
 │   ├── RVS.Cust_Intake/           (Blazor WASM — customer portal)
-│   ├── RVS.Mngr_Desktop/          (Blazor SSR — manager dashboard)
+│   ├── RVS.Mngr_Desktop/          (Blazor WASM Standalone — manager dashboard)
 │   └── RVS.Tech_Mobile/           (MAUI Blazor Hybrid — technician app)
 ├── tools/
 │   └── RVS.Data.Cosmos.Seed/      (Cosmos seed tool)
@@ -518,15 +518,16 @@ Build the core intake experience. Each step is a separate Razor component with s
 
 ### Phase 6 — Manager Desktop Frontend (Days 36–45) {Weeks 7 second half – Week 9 start}
 
-**Goal:** `Mngr_Desktop` Blazor SSR delivers the advisor/manager dashboard with auth.
+**Goal:** `Mngr_Desktop` Blazor WASM (Standalone) delivers the advisor/manager dashboard with auth.
 
 #### 6.1 Project Setup
 
-Create `RVS.Mngr_Desktop` as Blazor SSR (Interactive Server):
-- Auth0 OIDC authentication (PKCE flow)
-- `HttpClient` with Bearer token injection
+Create `RVS.Mngr_Desktop` as Blazor WebAssembly (Standalone):
+- Auth0 OIDC authentication (PKCE flow) via `Microsoft.AspNetCore.Components.WebAssembly.Authentication`
+- `HttpClient` with Bearer token injection via `AuthorizationMessageHandler`
 - FluentUI component library
 - Reference `RVS.UI.Shared` for shared components and API clients
+- Same hosting model as `Cust_Intake` — deployed to Azure Static Web Apps, cached after first load
 
 #### 6.2 Core Pages
 
@@ -541,13 +542,13 @@ Create `RVS.Mngr_Desktop` as Blazor SSR (Interactive Server):
 | Locations | `/locations` | Location list; create/edit location; slug management; QR code download (FR-TENANT-04) |
 | Settings | `/settings` | Tenant config; intake form settings; access gate toggle |
 
-#### 6.3 Service Board (Polling MVP)
+#### 6.3 Service Board (Long Polling MVP)
 
 Service Board at `/board`:
 - Kanban-style columns: New → In Progress → Completed / Cancelled
 - Cards show SR summary (customer name, asset, category, age, priority badge)
 - Click card → SR Detail
-- **Polling refresh** every 30s (SignalR deferred per §2.2)
+- **Long polling refresh** at configurable interval (default 5m) to detect Tech_Mobile updates (dedicated SignalR hub deferred to vNEXT per §2.2)
 - Filter by location for multi-location tenants
 
 #### 6.4 Outcome Compliance Monitoring
@@ -708,7 +709,7 @@ Verify against Tech PRD §9:
 |---|---|
 | Azure App Service (API) | Deploy API; configure Managed Identity; Always On |
 | Azure Static Web Apps (`Cust_Intake`) | Deploy WASM; custom domain `app.rvserviceflow.com` |
-| Azure App Service (`Mngr_Desktop`) | Deploy SSR; sticky sessions for future SignalR |
+| Azure Static Web Apps (`Mngr_Desktop`) | Deploy WASM; same hosting pattern as Cust_Intake |
 | Cosmos DB | Provision account; run seed tool for 9 containers; verify index policies |
 | Azure Blob Storage | Create `rvs-attachments` container; configure CORS for direct SAS upload |
 | Azure Key Vault | Store: OpenAI key, SendGrid key; grant API Managed Identity `get` + `list` |
@@ -746,7 +747,7 @@ For each of the 5 design partner dealerships:
 
 | Priority | Item | Effort |
 |---|---|---|
-| P0 | SignalR real-time Service Board | 3–5 days |
+| P0 | Dedicated SignalR hub for real-time Service Board (replaces long polling) | 3–5 days |
 | P1 | `Tech_Mobile` voice notes (MAUI Essentials speech-to-text) | 3–5 days |
 | P1 | `Tech_Mobile` bay-based tablet kiosk mode | 3–5 days |
 | P1 | SendGrid styled email templates | 2–3 days |
@@ -771,8 +772,8 @@ For each of the 5 design partner dealerships:
 | **4** | Phase 3b–4a | Intake orchestration E2E + controllers started | **High** — orchestration complexity |
 | **5** | Phase 4b–5a | Controllers complete + RVS.UI.Shared + Cust_Intake scaffold | Medium — render mode mixing |
 | **6** | Phase 5b | Intake wizard complete (all 7 steps) | Medium — SAS upload integration |
-| **7** | Phase 5c–6a | Status page + Mngr_Desktop scaffold + auth + SR queue | Medium — SSR project setup |
-| **8** | Phase 6b | Mngr_Desktop Service Board + analytics + locations | Medium — SSR complexity |
+| **7** | Phase 5c–6a | Status page + Mngr_Desktop scaffold + auth + SR queue | Medium — WASM project setup |
+| **8** | Phase 6b | Mngr_Desktop Service Board + analytics + locations | Medium — long polling integration |
 | **9** | Phase 6c–7a | Mngr_Desktop polish + Tech_Mobile scaffold + auth + My Jobs | Medium — MAUI setup |
 | **10** | Phase 7b | Tech_Mobile Section 10A + photo + VIN scan + offline queue | **High** — native APIs + SQLite |
 | **11** | Phase 8 | Unit tests + integration tests + security hardening | Medium — coverage target |

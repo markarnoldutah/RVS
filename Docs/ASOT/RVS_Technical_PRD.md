@@ -49,7 +49,7 @@ RVS is a B2B SaaS platform for RV dealership service management. It digitizes th
 - **Identity:** Auth0 (JWT Bearer; Organizations-ready)
 - **AI:** Azure OpenAI (`gpt-4o-mini`) for issue categorization and diagnostic questions
 - **Notifications:** SendGrid (behind `INotificationService`)
-- **Frontend:** Blazor WebAssembly, Blazor SSR Interactive Server, MAUI Blazor Hybrid
+- **Frontend:** Blazor WebAssembly (Cust_Intake + Mngr_Desktop), MAUI Blazor Hybrid (Tech_Mobile)
 
 ### 2.2 Multi-Tenancy Model
 
@@ -70,7 +70,7 @@ Customer = Anonymous (MVP); no Auth0 account required
 | App | Framework | Users |
 |---|---|---|
 | `RVS.Cust_Intake` | Blazor WebAssembly (mixed SSR/WASM) | RV owners (anonymous) |
-| `RVS.Mngr_Desktop` | Blazor SSR Interactive Server | Advisors, managers, corporate admins |
+| `RVS.Mngr_Desktop` | Blazor WebAssembly (Standalone) | Advisors, managers, corporate admins |
 | `RVS.Tech_Mobile` | MAUI Blazor Hybrid (iOS + Android) | Technicians (offline-first) |
 | `RVS.UI.Shared` | Razor Class Library | Shared components, API clients |
 
@@ -193,8 +193,9 @@ The authenticated response MUST return all active service requests linked to the
 **FR-DASH-02 — Batch outcome**
 `PATCH api/dealerships/{id}/service-requests/batch-outcome` MUST apply a shared repair outcome to up to 25 service requests in one call. MUST validate all SR IDs belong to the caller's tenant before writing.
 
-**FR-DASH-03 — Real-time Service Board**
-The `Mngr_Desktop` Service Board MUST use SignalR to push status-change events to all connected sessions within a tenant. On technician SR update, all connected `Mngr_Desktop` sessions for that tenant MUST receive the update within 2 seconds.
+**FR-DASH-03 — Service Board updates**
+**MVP:** The `Mngr_Desktop` Service Board MUST use long polling (periodic `GET` or `POST search` calls) to detect status-change events. Polling interval MUST be configurable (default: 5 minutes). On technician SR update, the Service Board MUST reflect the change within one polling cycle.
+**vNEXT:** A dedicated SignalR hub MUST replace long polling to push status-change events to all connected `Mngr_Desktop` sessions within a tenant. On technician SR update, all connected sessions for that tenant MUST receive the update within 5 seconds.
 
 **FR-DASH-04 — Analytics**
 `GET api/dealerships/{id}/analytics/service-requests/summary` MUST return `ServiceRequestAnalyticsResponseDto` covering: total requests, by status, by category, by location, top failure modes, top repair actions, average repair time, top parts used, average days to complete. Supports optional `?from`, `?to`, `?locationId` query parameters.
@@ -708,7 +709,7 @@ Order is mandatory. Deviation MUST require architecture review sign-off.
 |---|---|---|---|
 | 1 | Dev endpoints | `UseSwaggerUI()` | Development only |
 | 2 | HTTPS redirect | `UseHttpsRedirection()` | Production only |
-| 3 | CORS | `UseCors("AllowBlazorClient")` | All origins (Cust_Intake WASM + Mngr_Desktop SSR) |
+| 3 | CORS | `UseCors("AllowBlazorClient")` | All origins (Cust_Intake WASM + Mngr_Desktop WASM) |
 | 4 | Rate limiting | `UseRateLimiter()` | Public intake + status endpoints |
 | 5 | Exception handling | `ExceptionHandlingMiddleware` (singleton) | All exceptions → ProblemDetails |
 | 6 | Authentication | `UseAuthentication()` | JWT validation |
@@ -770,7 +771,7 @@ Before MVP release, run load tests at:
 |---|---|---|
 | API | Azure App Service (B2/B3) or Container Apps (MVP) | Enable Always On |
 | `Cust_Intake` WASM | Azure Static Web Apps | CDN-enabled; custom domain `app.rvserviceflow.com` |
-| `Mngr_Desktop` SSR | Azure App Service (same or separate from API) | SignalR requires sticky sessions or Azure SignalR Service |
+| `Mngr_Desktop` WASM | Azure Static Web Apps | CDN-enabled; same hosting pattern as Cust_Intake |
 | Cosmos DB | Single account, single region (MVP) | 9 containers per spec |
 | Blob Storage | Single account | `rvs-attachments` container with per-tenant virtual paths |
 | Key Vault | 1 vault | All secrets; API Managed Identity granted `get` + `list` |
@@ -837,7 +838,7 @@ Secret values (API keys, connection strings) MUST be injected from Key Vault at 
 | GAP-05 | Analytics counters run against Cosmos directly; no Azure Tables pre-aggregation | Phase 2 | Performance risk at scale |
 | GAP-06 | Batch SR update endpoint (`POST batch-update`) for high-scale offline sync | Future | Low (sequential PUT sufficient for MVP) |
 | GAP-07 | Labor time prediction API | Phase 5–6 | Future |
-| GAP-08 | SignalR requires sticky sessions; `Mngr_Desktop` needs Azure SignalR Service at scale | Pre-scale | Medium |
+| GAP-08 | MVP uses long polling for Service Board updates; vNEXT introduces a dedicated SignalR hub (requires Azure SignalR Service at scale) | vNEXT | Medium |
 
 ---
 

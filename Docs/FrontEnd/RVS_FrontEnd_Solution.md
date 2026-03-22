@@ -49,23 +49,23 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
 
 ---
 
-## 2. Mngr_Desktop → **Blazor SSR (Interactive Server)**
+## 2. Mngr_Desktop → **Blazor WASM (Standalone)**
 
-### Why Blazor SSR
+### Why Blazor WASM Standalone
 
 | Factor | Rationale |
 |---|---|
-| **Optimized for large screens** | The docs state *"optimized for large screens and operational oversight."* This is a desktop browser on a reliable office network — the ideal SSR environment. |
-| **Complex stateful UI** | Drag-and-drop Service Board, intake queue triage, batch outcome entry, and analytics dashboards involve constant server state. SSR's persistent SignalR connection keeps UI and server perfectly synchronized. |
-| **Instant load, no WASM download** | Managers open the app throughout the day. SSR's tiny initial payload and fast first paint are superior to WASM's multi-MB download. |
-| **Reliable connectivity** | Service managers sit at desks with wired/Wi-Fi connections. SignalR latency is negligible. |
+| **Optimized for large screens** | The docs state *"optimized for large screens and operational oversight."* This is a desktop browser on a reliable office network. A standalone WASM app delivers a rich SPA experience for extended manager sessions. |
+| **Consistent architecture with Cust_Intake** | Both customer-facing and manager-facing apps use the same Blazor WASM hosting model. This simplifies the build/deploy pipeline, reduces operational complexity, and means one hosting pattern to learn and maintain. |
+| **No server-side session state** | All UI logic runs client-side. The API is the single source of truth. No SignalR connections to manage, no server memory pressure from concurrent manager sessions, and no state-loss risk from dropped connections. |
+| **Reliable connectivity** | Service managers sit at desks with wired/Wi-Fi connections. The WASM app calls the RVS.API directly — no intermediary server process needed. |
 | **No device APIs needed** | No camera, no barcode scanning, no voice notes. Everything is view/triage/assign/analyze — pure browser capabilities. |
-| **Security posture** | All logic executes server-side. No business logic, repository queries, or analytics computations ship to the client. This aligns with the `ExceptionHandlingMiddleware` and tenant-isolation patterns in your API architecture. |
-| **Real-time updates** | When a technician completes a job, the Service Board should reflect it immediately. SSR's SignalR channel enables push updates natively. |
+| **Cacheable after first load** | Managers open the app throughout the day. After the initial WASM download, the runtime is cached by the browser. Subsequent visits load instantly. |
+| **Real-time updates (phased)** | **MVP**: Long polling detects updates made by technicians in the Tech_Mobile app (e.g., job completions, status changes). Simple to implement, no additional infrastructure. **vNEXT**: A dedicated SignalR hub pushes real-time updates to the Service Board, eliminating polling latency and reducing unnecessary API calls. |
 
 ### Why NOT the others
 
-- **Blazor WASM**: The large initial download hurts first-load UX, and there's no offline or distribution benefit. The drag-and-drop board and analytics involve heavy server coordination anyway.
+- **Blazor SSR (Interactive Server)**: Adds operational complexity (server-side session state, SignalR connection management, server memory scaling per concurrent user). For a solo developer, maintaining a separate SSR hosting model alongside the WASM Cust_Intake app doubles the infrastructure surface area without meaningful benefit.
 - **MAUI / MAUI Blazor Hybrid**: No reason to distribute via app stores. No device APIs needed. This is a browser app for an office desktop.
 
 ---
@@ -102,13 +102,15 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
                │              │              │
     ┌──────────▼───┐  ┌──────▼───────┐  ┌──▼──────────────┐
     │  Cust_Intake │  │ Mngr_Desktop │  │   Tech_Mobile   │
-    │  Blazor WASM │  │  Blazor SSR  │  │ MAUI Blazor Hyb.│
-    │              │  │  (Interactive│  │ (iOS + Android) │
-    │              │  │   Server)    │  │                 │
+    │  Blazor WASM │  │  Blazor WASM │  │ MAUI Blazor Hyb.│
+    │              │  │ (Standalone) │  │ (iOS + Android) │
+    │              │  │              │  │                 │
     │ • Wizard form│  │ • Service Bd │  │ • QR/VIN scan   │
     │ • Photo upload│ │ • Drag/drop  │  │ • Offline sync  │
     │ • VIN scan   │  │ • Analytics  │  │ • Voice notes   │
     │ • Magic-link │  │ • Batch ops  │  │ • 3-sec outcome │
+    │              │  │ • Long poll  │  │                 │
+    │              │  │   (→SignalR) │  │                 │
     └──────┬───────┘  └──────┬───────┘  └──────┬──────────┘
            │                 │                 │
            └────────────┬────┘─────────────────┘
@@ -127,7 +129,7 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
 | `RVS.Domain` (DTOs, entities, validation) | ✅ | ✅ | ✅ |
 | Razor component library (`RVS.UI.Shared`) | ✅ | ✅ | ✅ |
 | CSS / design tokens | ✅ | ✅ | ✅ |
-| API client (HttpClient + typed services) | ✅ | ✅ (server-side) | ✅ + offline queue |
+| API client (HttpClient + typed services) | ✅ | ✅ | ✅ + offline queue |
 | Native device services | ❌ | ❌ | ✅ (MAUI Essentials) |
 
 By placing shared Razor components (job cards, status badges, outcome entry forms, photo viewers) in a `RVS.UI.Shared` Razor Class Library, all three apps consume the same UI building blocks while each host model (WASM, Server, MAUI Hybrid) handles platform concerns independently.
@@ -139,7 +141,7 @@ By placing shared Razor components (job cards, status badges, outcome entry form
 | Application | **Recommended Format** | Primary Justification |
 |---|---|---|
 | **Cust_Intake** | **Blazor WebAssembly** | Zero-install, URL-based, mobile-first, anonymous access, dealer-branded landing pages |
-| **Mngr_Desktop** | **Blazor SSR (Interactive Server)** | Large-screen, reliable network, complex stateful dashboards, real-time push, server-side security |
+| **Mngr_Desktop** | **Blazor WASM (Standalone)** | Large-screen, reliable network, consistent WASM architecture, long polling (MVP) → SignalR (vNEXT) for real-time updates |
 | **Tech_Mobile** | **MAUI Blazor Hybrid** | Offline-first, native camera/barcode/voice, 3-second interaction target, employer-provisioned install |
 
 
