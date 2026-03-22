@@ -122,3 +122,26 @@
 ## New Feature Checklist
 
 When adding a new resource: create Entity (`EntityBase`), DTOs (Create/Update/Search request + Detail/Summary response), `IResourceService`, `IResourceRepository` in Domain; repository in Infra; `ResourceMapper`, `ResourceService` (sealed), `ResourcesController` in API; register in `Program.cs`.
+
+## TDD — Test-Driven Development (Mandatory for All Issues)
+
+All feature implementation MUST follow Red → Green → Refactor. This is not optional.
+
+### Order of Implementation for Every Issue
+1. **Domain mapper/validator tests first** (`Tests/RVS.Domain.Tests`) — zero dependencies, pure logic
+2. **Service tests second** (`Tests/RVS.API.Tests/Services`) — mock `IRepository` + `IUserContextAccessor`
+3. **Middleware/exception tests** if new exception types are introduced
+4. **Implementation code** only after failing tests are written
+
+### Tests Go Here
+- `Tests/RVS.Domain.Tests/` — for anything in `RVS.Domain/` (mappers, validators, entities)
+- `Tests/RVS.API.Tests/` — for anything in `RVS.API/` (services, middleware, controllers)
+
+### Fakes Live Here
+- `Tests/RVS.API.Tests/Fakes/` — entity and DTO builders used across API tests
+- `Tests/RVS.Domain.Tests/Fakes/` — entity builders used across Domain tests
+
+### Never Do These
+- Never write production code without a failing test first
+- Never modify a failing test to make it pass — fix the implementation
+- Never skip the Refactor phase — guard clauses, trimming, and naming must comply with these instructions
