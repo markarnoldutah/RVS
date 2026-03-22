@@ -19,13 +19,13 @@ public class SlugLookup : EntityBase
     /// Lowercase, alphanumeric with hyphens only.
     /// </summary>
     [JsonProperty("slug")]
-    public string Slug { get; set; } = string.Empty;
+    public string Slug { get; init; } = string.Empty;
 
     /// <summary>
     /// The location ID this slug resolves to.
     /// </summary>
     [JsonProperty("locationId")]
-    public string LocationId { get; set; } = string.Empty;
+    public string LocationId { get; init; } = string.Empty;
 
     /// <summary>
     /// Dealership name for display purposes (denormalized).

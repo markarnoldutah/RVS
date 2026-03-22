@@ -21,6 +21,11 @@ public static class StatusTransitions
     /// <param name="from">The current status value.</param>
     /// <param name="to">The desired target status value.</param>
     /// <returns><c>true</c> if the transition is allowed; otherwise <c>false</c>.</returns>
-    public static bool IsValid(string from, string to) =>
-        _allowed.TryGetValue(from, out var targets) && targets.Contains(to);
+    public static bool IsValid(string from, string to)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(from);
+        ArgumentException.ThrowIfNullOrWhiteSpace(to);
+
+        return _allowed.TryGetValue(from, out var targets) && targets.Contains(to);
+    }
 }
