@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <!-- This project is scaffolded as a Razor library and will be converted to
+         a MAUI Blazor Hybrid app (Microsoft.NET.Sdk.Maui) once the maui workload
+         is installed. Target frameworks will change to net10.0-android;net10.0-ios;
+         net10.0-maccatalyst when the conversion happens. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RVS.UI.Shared\RVS.UI.Shared.csproj" />
+    <ProjectReference Include="..\RVS.Domain\RVS.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

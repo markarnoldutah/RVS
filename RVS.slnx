@@ -1,12 +1,18 @@
 <Solution>
   <Project Path="RVS.API/RVS.API.csproj" />
   <Project Path="RVS.BlazorWASM/RVS.BlazorWASM.csproj" />
+  <Project Path="RVS.Cust_Intake/RVS.Cust_Intake.csproj" />
   <Project Path="RVS.Data.Cosmos.Seed/RVS.Data.Cosmos.Seed.csproj" />
   <Project Path="RVS.Domain/RVS.Domain.csproj" Id="f0820481-269c-4025-8f65-7dc70c6f2ae2" />
   <Project Path="RVS.Infra.AzBlobRepository/RVS.Infra.AzBlobRepository.csproj" />
   <Project Path="RVS.Infra.AzCosmosRepository/RVS.Infra.AzCosmosRepository.csproj" />
   <Project Path="RVS.Infra.AzCredentials/RVS.Infra.AzCredentials.csproj" />
   <Project Path="RVS.Infra.AzTablesRepository/RVS.Infra.AzTablesRepository.csproj" />
+  <Project Path="RVS.Mngr_Desktop/RVS.Mngr_Desktop.csproj" />
+  <Project Path="RVS.Tech_Mobile/RVS.Tech_Mobile.csproj" />
+  <Project Path="RVS.UI.Shared/RVS.UI.Shared.csproj" />
   <Project Path="Tests/RVS.API.Tests/RVS.API.Tests.csproj" />
   <Project Path="Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj" />
+  <Project Path="Tests/RVS.Tests.Integration/RVS.Tests.Integration.csproj" />
+  <Project Path="Tests/RVS.Tests.Unit/RVS.Tests.Unit.csproj" />
 </Solution>
