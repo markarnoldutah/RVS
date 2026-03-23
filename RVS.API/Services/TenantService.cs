@@ -22,51 +22,51 @@ public class TenantService : ITenantService
         _userContext = userContext;
     }
 
-    public async Task<TenantConfig> CreateTenantConfigAsync(string tenantId, TenantConfigCreateRequestDto request)
+    public async Task<TenantConfig> CreateTenantConfigAsync(string tenantId, TenantConfigCreateRequestDto request, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentNullException.ThrowIfNull(request);
 
-        var existingConfig = await _configRepository.GetTenantConfigAsync(tenantId);
+        var existingConfig = await _configRepository.GetTenantConfigAsync(tenantId, cancellationToken);
         if (existingConfig != null)
             throw new InvalidOperationException($"Tenant config already exists for tenant {tenantId}.");
 
         var tenantConfig = request.ToEntity(tenantId, _userContext.UserId);
-        await _configRepository.CreateTenantConfigAsync(tenantConfig);
+        await _configRepository.CreateTenantConfigAsync(tenantConfig, cancellationToken);
 
         return tenantConfig;
     }
 
-    public async Task<TenantConfig> GetTenantConfigAsync(string tenantId)
+    public async Task<TenantConfig> GetTenantConfigAsync(string tenantId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
 
-        var tenantCfg = await _configRepository.GetTenantConfigAsync(tenantId);
+        var tenantCfg = await _configRepository.GetTenantConfigAsync(tenantId, cancellationToken);
         if (tenantCfg is null)
             throw new KeyNotFoundException("Tenant config not found.");
 
         return tenantCfg;
     }
 
-    public async Task<TenantConfig> UpdateTenantConfigAsync(string tenantId, TenantConfigUpdateRequestDto request)
+    public async Task<TenantConfig> UpdateTenantConfigAsync(string tenantId, TenantConfigUpdateRequestDto request, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentNullException.ThrowIfNull(request);
 
-        var tenantCfg = await _configRepository.GetTenantConfigAsync(tenantId);
+        var tenantCfg = await _configRepository.GetTenantConfigAsync(tenantId, cancellationToken);
         if (tenantCfg is null)
             throw new KeyNotFoundException("Tenant config not found.");
 
         tenantCfg.ApplyUpdateFromDto(request);
         tenantCfg.MarkAsUpdated(_userContext.UserId);
-        await _configRepository.SaveTenantConfigAsync(tenantCfg);
+        await _configRepository.SaveTenantConfigAsync(tenantCfg, cancellationToken);
 
         return tenantCfg;
     }
 
-    public async Task<TenantAccessGateEmbedded> GetAccessGateAsync(string tenantId)
+    public async Task<TenantAccessGateEmbedded> GetAccessGateAsync(string tenantId, CancellationToken cancellationToken = default)
     {
-        var cfg = await GetTenantConfigAsync(tenantId);
+        var cfg = await GetTenantConfigAsync(tenantId, cancellationToken);
 
         // Safe default: allow logins if access gate is missing.
         return cfg.AccessGate ?? new TenantAccessGateEmbedded { LoginsEnabled = true };
