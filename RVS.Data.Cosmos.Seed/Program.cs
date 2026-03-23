@@ -430,8 +430,8 @@ static List<Practice> BuildPractices() =>
             CreatedByUserId = "seed-process",
             Locations = new List<Location>
             {
-                new Location { Id = "loc_001", Name = "Main Street Clinic", Address1 = "123 Main Street", City = "Los Angeles", State = "CA", PostalCode = "90001", IsEnabled = true },
-                new Location { Id = "loc_002", Name = "Financial District", Address1 = "789 Corporate Plaza", City = "Los Angeles", State = "CA", PostalCode = "90071", IsEnabled = true }
+                new Location { Id = "loc_001", Name = "Main Street Clinic", Address = new AddressEmbedded { Address1 = "123 Main Street", City = "Los Angeles", State = "CA", PostalCode = "90001" }, IsEnabled = true },
+                new Location { Id = "loc_002", Name = "Financial District", Address = new AddressEmbedded { Address1 = "789 Corporate Plaza", City = "Los Angeles", State = "CA", PostalCode = "90071" }, IsEnabled = true }
             }
         },
         new Practice
@@ -445,7 +445,7 @@ static List<Practice> BuildPractices() =>
             CreatedByUserId = "seed-process",
             Locations = new List<Location>
             {
-                new Location { Id = "loc_101", Name = "Pasadena Eye Center", Address1 = "456 Colorado Blvd", City = "Pasadena", State = "CA", PostalCode = "91101", IsEnabled = true }
+                new Location { Id = "loc_101", Name = "Pasadena Eye Center", Address = new AddressEmbedded { Address1 = "456 Colorado Blvd", City = "Pasadena", State = "CA", PostalCode = "91101" }, IsEnabled = true }
             }
         },
         new Practice
@@ -459,7 +459,7 @@ static List<Practice> BuildPractices() =>
             CreatedByUserId = "seed-process",
             Locations = new List<Location>
             {
-                new Location { Id = "loc_201", Name = "Smith Family Eye Care", Address1 = "1010 Maple Drive", City = "Glendale", State = "CA", PostalCode = "91202", IsEnabled = true }
+                new Location { Id = "loc_201", Name = "Smith Family Eye Care", Address = new AddressEmbedded { Address1 = "1010 Maple Drive", City = "Glendale", State = "CA", PostalCode = "91202" }, IsEnabled = true }
             }
         },
         new Practice
@@ -473,7 +473,7 @@ static List<Practice> BuildPractices() =>
             CreatedByUserId = "seed-process",
             Locations = new List<Location>
             {
-                new Location { Id = "loc_301", Name = "Costco Burbank", Address1 = "1051 W Burbank Blvd", City = "Burbank", State = "CA", PostalCode = "91506", IsEnabled = true }
+                new Location { Id = "loc_301", Name = "Costco Burbank", Address = new AddressEmbedded { Address1 = "1051 W Burbank Blvd", City = "Burbank", State = "CA", PostalCode = "91506" }, IsEnabled = true }
             }
         }
     };
