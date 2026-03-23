@@ -1,4 +1,3 @@
-generate and insert Issues into the markarnoldutah\RVS repo as defined in the RVS\docs\ASOT\RVS_Implementation_Plan.md. Start with high level Features, adding each to GitHub one after the other. Include relevant code snippets. When finished, loop through each just added Feature, creating sub-issues from each Feature task.
+Assumes use of GitHub Issue Manager custom agent and the GitHub MCP server
 
-Proceed without Issue types
-
+Create GitHub Issues from  RVS\docs\ASOT\RVS_Implementation_Plan.md and insert into the markarnoldutah\RVS repo. Proceed without Issue types. Start with high level Features, adding each to GitHub one after the other. Include relevant code snippets. When finished, loop through each Feature just added, creating Sub-issues from each Feature task. Populate Acceptance Criteria instead of task lists.
