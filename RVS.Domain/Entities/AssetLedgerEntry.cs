@@ -38,8 +38,8 @@ public class AssetLedgerEntry
     [JsonProperty("serviceRequestId")]
     public string ServiceRequestId { get; init; } = string.Empty;
 
-    [JsonProperty("customerIdentityId")]
-    public string CustomerIdentityId { get; init; } = string.Empty;
+    [JsonProperty("globalCustomerAcctId")]
+    public string GlobalCustomerAcctId { get; init; } = string.Empty;
 
     [JsonProperty("manufacturer")]
     public string? Manufacturer { get; init; }
@@ -56,7 +56,32 @@ public class AssetLedgerEntry
     [JsonProperty("issueDescription")]
     public string? IssueDescription { get; init; }
 
-    // ── Section 10A fields — populated progressively ──
+    /// <summary>
+    /// Section 10A fields — populated progressively via change feed.
+    /// Null at write time; enriched in later phases.
+    /// </summary>
+    [JsonProperty("section10A")]
+    public Section10AEmbedded? Section10A { get; set; }
+
+    [JsonProperty("status")]
+    public string Status { get; set; } = "New";
+
+    [JsonProperty("submittedAtUtc")]
+    public DateTime SubmittedAtUtc { get; init; }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: Section10AEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// Structured Section 10A service event data.
+/// Enriched progressively across phases via change feed.
+/// </summary>
+public class Section10AEmbedded
+{
+    [JsonProperty("componentType")]
+    public string? ComponentType { get; set; }
 
     [JsonProperty("failureMode")]
     public string? FailureMode { get; set; }
@@ -69,12 +94,6 @@ public class AssetLedgerEntry
 
     [JsonProperty("laborHours")]
     public decimal? LaborHours { get; set; }
-
-    [JsonProperty("status")]
-    public string Status { get; set; } = "New";
-
-    [JsonProperty("submittedAtUtc")]
-    public DateTime SubmittedAtUtc { get; init; }
 
     [JsonProperty("serviceDateUtc")]
     public DateTime? ServiceDateUtc { get; set; }

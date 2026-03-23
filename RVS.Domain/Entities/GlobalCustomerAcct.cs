@@ -3,17 +3,17 @@ using Newtonsoft.Json;
 namespace RVS.Domain.Entities;
 
 /// <summary>
-/// Global customer identity — one record per real human (by email).
+/// Global customer account — one record per real human (by email).
 /// Cross-tenant. Links all dealership-scoped profiles.
 /// Partitioned by normalizedEmail for O(1) intake resolution.
 ///
 /// Cosmos DB partition key: /normalizedEmail
 /// </summary>
-public class CustomerIdentity : EntityBase
+public class GlobalCustomerAcct : EntityBase
 {
     /// <inheritdoc />
     [JsonProperty("type")]
-    public override string Type { get; init; } = "customerIdentity";
+    public override string Type { get; init; } = "globalCustomerAcct";
 
     [JsonProperty("normalizedEmail")]
     public string NormalizedEmail { get; set; } = string.Empty;
@@ -69,7 +69,7 @@ public class CustomerIdentity : EntityBase
 // ---------------------------------------------------------------------------
 
 /// <summary>
-/// Lightweight pointer from a global identity to a tenant-scoped profile.
+/// Lightweight pointer from a global customer account to a tenant-scoped profile.
 /// </summary>
 public class LinkedProfileEmbedded
 {

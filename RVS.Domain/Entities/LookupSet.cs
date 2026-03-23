@@ -11,6 +11,7 @@ namespace RVS.Domain.Entities;
 /// </summary>
 public class LookupSet : EntityBase
 {
+    [JsonProperty("type")]
     public override string Type { get; init; } = "lookupset";
 
     [JsonProperty("lookupSetId")]

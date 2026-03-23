@@ -32,18 +32,18 @@ public class CustomerProfile : EntityBase
     public string? Phone { get; set; }
 
     /// <summary>
-    /// FK to the global CustomerIdentity record.
-    /// All profiles for the same email point to the same identity.
+    /// FK to the global customer account record.
+    /// All profiles for the same email point to the same account.
     /// </summary>
-    [JsonProperty("customerIdentityId")]
-    public string CustomerIdentityId { get; set; } = string.Empty;
+    [JsonProperty("globalCustomerAcctId")]
+    public string GlobalCustomerAcctId { get; set; } = string.Empty;
 
     /// <summary>
     /// Tracks the full lifecycle of each customer ↔ VIN relationship.
     /// Replaces a flat KnownVins list to handle ownership transfers.
     /// </summary>
-    [JsonProperty("vehicleInteractions")]
-    public List<VehicleInteractionEmbedded> VehicleInteractions { get; set; } = [];
+    [JsonProperty("assetsOwned")]
+    public List<AssetOwnershipEmbedded> AssetsOwned { get; set; } = [];
 
     /// <summary>
     /// IDs of all service requests submitted by this customer at this dealership.
@@ -64,21 +64,21 @@ public class CustomerProfile : EntityBase
     /// </summary>
     [JsonIgnore]
     public List<string> ActiveVins =>
-        VehicleInteractions
-            .Where(v => v.Status == VehicleInteractionStatus.Active)
+        AssetsOwned
+            .Where(v => v.Status == AssetOwnershipStatus.Active)
             .Select(v => v.Vin)
             .ToList();
 
     /// <summary>
     /// Returns the active interaction for a VIN, or null.
     /// </summary>
-    public VehicleInteractionEmbedded? GetActiveInteraction(string vin) =>
-        VehicleInteractions.FirstOrDefault(
-            v => v.Vin == vin && v.Status == VehicleInteractionStatus.Active);
+    public AssetOwnershipEmbedded? GetActiveInteraction(string vin) =>
+        AssetsOwned.FirstOrDefault(
+            v => v.Vin == vin && v.Status == AssetOwnershipStatus.Active);
 }
 
 // ---------------------------------------------------------------------------
-// Embedded: VehicleInteractionEmbedded
+// Embedded: AssetOwnershipEmbedded
 // ---------------------------------------------------------------------------
 
 /// <summary>
@@ -86,7 +86,7 @@ public class CustomerProfile : EntityBase
 /// Handles ownership transfers: when a different customer submits for
 /// a VIN, the previous owner's interaction is set to Inactive.
 /// </summary>
-public class VehicleInteractionEmbedded
+public class AssetOwnershipEmbedded
 {
     [JsonProperty("vin")]
     public string Vin { get; set; } = string.Empty;
@@ -105,7 +105,7 @@ public class VehicleInteractionEmbedded
     /// Inactive = customer no longer associated (sold, traded, ownership transfer).
     /// </summary>
     [JsonProperty("status")]
-    public string Status { get; set; } = VehicleInteractionStatus.Active;
+    public string Status { get; set; } = AssetOwnershipStatus.Active;
 
     [JsonProperty("firstSeenAtUtc")]
     public DateTime FirstSeenAtUtc { get; set; }
@@ -124,13 +124,13 @@ public class VehicleInteractionEmbedded
 }
 
 // ---------------------------------------------------------------------------
-// VehicleInteractionStatus constants
+// AssetOwnershipStatus constants
 // ---------------------------------------------------------------------------
 
 /// <summary>
 /// String constants (not enum) for Cosmos DB serialization simplicity.
 /// </summary>
-public static class VehicleInteractionStatus
+public static class AssetOwnershipStatus
 {
     public const string Active = "Active";
     public const string Inactive = "Inactive";
