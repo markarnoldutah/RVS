@@ -9,10 +9,10 @@ public static class StatusTransitions
     private static readonly Dictionary<string, HashSet<string>> _allowed = new()
     {
         ["New"] = ["InProgress", "Cancelled"],
-        ["InProgress"] = ["Completed", "OnHold", "Cancelled"],
-        ["OnHold"] = ["InProgress", "Cancelled"],
+        ["InProgress"] = ["Completed", "Cancelled", "WaitingOnParts"],
+        ["WaitingOnParts"] = ["InProgress", "Cancelled"],
         ["Completed"] = [],
-        ["Cancelled"] = []
+        ["Cancelled"] = ["New"]
     };
 
     /// <summary>
