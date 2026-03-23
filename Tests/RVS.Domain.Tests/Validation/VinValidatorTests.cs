@@ -77,7 +77,7 @@ public class VinValidatorTests
     [Fact]
     public void Validate_InvalidCheckDigit_ReturnsFailure()
     {
-        // "1HGBH41J0MN109186" has check digit '0' instead of correct 'X'
+        // "1HGBH41JXMN109186" has check digit 'X' at position 9; replacing with '0' invalidates it
         var result = VinValidator.Validate("1HGBH41J0MN109186");
 
         result.IsValid.Should().BeFalse();

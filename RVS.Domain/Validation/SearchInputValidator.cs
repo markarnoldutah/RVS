@@ -6,7 +6,7 @@ namespace RVS.Domain.Validation;
 /// </summary>
 public static class SearchInputValidator
 {
-    private static readonly char[] BlockedCharacters = ['<', '>', ';', '\'', '"', '\\', '\0'];
+    private static readonly HashSet<char> BlockedCharacters = ['<', '>', ';', '\'', '"', '\\', '\0'];
 
     /// <summary>
     /// Validates the search input string. Rejects inputs containing dangerous characters
@@ -40,7 +40,7 @@ public static class SearchInputValidator
 
         foreach (var c in input)
         {
-            if (Array.IndexOf(BlockedCharacters, c) >= 0)
+            if (BlockedCharacters.Contains(c))
             {
                 return ValidationResult.Failure(
                     $"Search input contains a blocked character: '{(c == '\0' ? "\\0" : c.ToString())}'.");
