@@ -16,6 +16,12 @@ public class ServiceRequest : EntityBase
     public override string Type { get; init; } = "serviceRequest";
 
     /// <summary>
+    /// Unique identifier with <c>sr_</c> prefix convention for service requests.
+    /// </summary>
+    [JsonProperty("id")]
+    public new string Id { get; init; } = $"sr_{Guid.NewGuid()}";
+
+    /// <summary>
     /// Current workflow status. Transitions enforced by <see cref="Validation.StatusTransitions"/>.
     /// </summary>
     [JsonProperty("status")]
@@ -25,26 +31,26 @@ public class ServiceRequest : EntityBase
     /// Reference to the location where the service request was submitted.
     /// </summary>
     [JsonProperty("locationId")]
-    public string LocationId { get; set; } = string.Empty;
+    public string LocationId { get; init; } = string.Empty;
 
     /// <summary>
     /// Reference to the tenant-scoped customer profile.
     /// </summary>
     [JsonProperty("customerProfileId")]
-    public string CustomerProfileId { get; set; } = string.Empty;
+    public string CustomerProfileId { get; init; } = string.Empty;
 
     /// <summary>
     /// Point-in-time snapshot of customer info.
     /// Denormalized so dealer dashboard never joins to customer-profiles.
     /// </summary>
-    [JsonProperty("customer")]
-    public CustomerSnapshotEmbedded Customer { get; set; } = new();
+    [JsonProperty("customerSnapshot")]
+    public CustomerSnapshotEmbedded CustomerSnapshot { get; set; } = new();
 
     /// <summary>
-    /// Vehicle information associated with this service request.
+    /// Asset (vehicle/RV) information associated with this service request.
     /// </summary>
-    [JsonProperty("vehicle")]
-    public AssetInfoEmbedded Vehicle { get; set; } = new();
+    [JsonProperty("assetInfo")]
+    public AssetInfoEmbedded AssetInfo { get; set; } = new();
 
     /// <summary>
     /// Customer-provided description of the issue.
@@ -72,10 +78,10 @@ public class ServiceRequest : EntityBase
 
     /// <summary>
     /// Structured service event data per Section 10A.
-    /// Fields populated progressively across phases.
+    /// Null until service work begins.
     /// </summary>
     [JsonProperty("serviceEvent")]
-    public ServiceEventEmbedded ServiceEvent { get; set; } = new();
+    public ServiceEventEmbedded? ServiceEvent { get; set; }
 
     /// <summary>
     /// AI-generated diagnostic question responses from the intake wizard.
@@ -108,10 +114,10 @@ public class ServiceRequest : EntityBase
     public List<string> RequiredSkills { get; set; } = [];
 
     /// <summary>
-    /// Service priority level. Null until triaged.
+    /// Service priority level.
     /// </summary>
     [JsonProperty("priority")]
-    public string? Priority { get; set; }
+    public string Priority { get; set; } = default!;
 }
 
 // ---------------------------------------------------------------------------
