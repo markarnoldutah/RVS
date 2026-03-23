@@ -256,23 +256,4 @@ public static class ConfigMapper
             entity.Ui.AllowBypassEligibilityWithWarning = ui.AllowBypassEligibilityWithWarning;
         }
     }
-
-
-    public static PayerConfigDto ToDto(this PayerConfig config)
-    {
-        ArgumentNullException.ThrowIfNull(config);
-
-        return new PayerConfigDto
-        {
-            PayerId = config.PayerId,
-            DisplayNameOverride = config.DisplayName,
-            IsEnabled = config.IsEnabled,
-            Notes = null // TODO: Add Notes property to PayerConfig entity if needed
-        };
-    }
-
-    public static List<PayerConfigDto> ToDto(this List<PayerConfig> configs)
-    {
-        return configs.Select(ToDto).ToList();
-    }
 }
