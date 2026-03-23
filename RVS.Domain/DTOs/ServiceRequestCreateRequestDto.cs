@@ -1,0 +1,15 @@
+namespace RVS.Domain.DTOs;
+
+/// <summary>
+/// Request DTO for creating a new service request via customer intake.
+/// </summary>
+public sealed record ServiceRequestCreateRequestDto
+{
+    public required CustomerInfoDto Customer { get; init; }
+    public required AssetInfoDto Asset { get; init; }
+    public required string IssueCategory { get; init; }
+    public required string IssueDescription { get; init; }
+    public string? Urgency { get; init; }
+    public string? RvUsage { get; init; }
+    public List<DiagnosticResponseDto>? DiagnosticResponses { get; init; }
+}
