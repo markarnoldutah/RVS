@@ -21,7 +21,7 @@ namespace RVS.Infra.AzCosmosRepository.Repositories
         }
 
         /// <inheritdoc />
-        public async Task<TenantConfig> CreateTenantConfigAsync(TenantConfig tenantConfigEntity)
+        public async Task<TenantConfig> CreateTenantConfigAsync(TenantConfig tenantConfigEntity, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(tenantConfigEntity);
             ArgumentException.ThrowIfNullOrWhiteSpace(tenantConfigEntity.TenantId, nameof(tenantConfigEntity.TenantId));
@@ -29,13 +29,14 @@ namespace RVS.Infra.AzCosmosRepository.Repositories
 
             var response = await _tenantsContainer.CreateItemAsync(
                 tenantConfigEntity,
-                partitionKey: new PartitionKey(tenantConfigEntity.TenantId));
+                partitionKey: new PartitionKey(tenantConfigEntity.TenantId),
+                cancellationToken: cancellationToken);
 
             return response.Resource;
         }
 
         /// <inheritdoc />
-        public async Task<TenantConfig?> GetTenantConfigAsync(string tenantId)
+        public async Task<TenantConfig?> GetTenantConfigAsync(string tenantId, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
 
@@ -43,7 +44,8 @@ namespace RVS.Infra.AzCosmosRepository.Repositories
             {
                 var resp = await _tenantsContainer.ReadItemAsync<TenantConfig>(
                     id: $"{tenantId}_config",
-                    partitionKey: new PartitionKey(tenantId));
+                    partitionKey: new PartitionKey(tenantId),
+                    cancellationToken: cancellationToken);
 
                 return resp.Resource;
             }
@@ -54,14 +56,15 @@ namespace RVS.Infra.AzCosmosRepository.Repositories
         }
 
         /// <inheritdoc />
-        public async Task SaveTenantConfigAsync(TenantConfig tenant)
+        public async Task SaveTenantConfigAsync(TenantConfig tenant, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(tenant);
             ArgumentException.ThrowIfNullOrWhiteSpace(tenant.TenantId, nameof(tenant.TenantId));
 
             await _tenantsContainer.UpsertItemAsync(
                 tenant,
-                partitionKey: new PartitionKey(tenant.TenantId));
+                partitionKey: new PartitionKey(tenant.TenantId),
+                cancellationToken: cancellationToken);
         }
     }
 }

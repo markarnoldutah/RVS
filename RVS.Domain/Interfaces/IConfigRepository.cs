@@ -8,11 +8,17 @@ namespace RVS.Domain.Interfaces;
 public interface IConfigRepository
 {
     /// <summary>Creates a new tenant configuration.</summary>
-    Task<TenantConfig> CreateTenantConfigAsync(TenantConfig tenantConfigEntity);
+    /// <param name="tenantConfigEntity">The tenant config entity to create.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<TenantConfig> CreateTenantConfigAsync(TenantConfig tenantConfigEntity, CancellationToken cancellationToken = default);
 
-    /// <summary>Gets a tenant configuration by tenant ID.</summary>
-    Task<TenantConfig?> GetTenantConfigAsync(string tenantId);
+    /// <summary>Gets a tenant configuration by tenant ID. Returns <c>null</c> if not found.</summary>
+    /// <param name="tenantId">Tenant identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<TenantConfig?> GetTenantConfigAsync(string tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>Saves (upserts) a tenant configuration.</summary>
-    Task SaveTenantConfigAsync(TenantConfig tenantConfigEntity);
+    /// <param name="tenantConfigEntity">The tenant config entity to save.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task SaveTenantConfigAsync(TenantConfig tenantConfigEntity, CancellationToken cancellationToken = default);
 }
