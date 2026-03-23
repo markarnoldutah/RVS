@@ -3,18 +3,16 @@ using RVS.Domain.Entities;
 namespace RVS.Domain.Interfaces;
 
 /// <summary>
-/// Repository for managing tenant and payer configuration.
+/// Repository for managing tenant configuration.
 /// </summary>
 public interface IConfigRepository
 {
-    // Tenant config (stored in Tenants container)
+    /// <summary>Creates a new tenant configuration.</summary>
     Task<TenantConfig> CreateTenantConfigAsync(TenantConfig tenantConfigEntity);
+
+    /// <summary>Gets a tenant configuration by tenant ID.</summary>
     Task<TenantConfig?> GetTenantConfigAsync(string tenantId);
+
+    /// <summary>Saves (upserts) a tenant configuration.</summary>
     Task SaveTenantConfigAsync(TenantConfig tenantConfigEntity);
-
-    // Practice payer configs (stored in payerConfigs container, PK = tenantId)
-    Task<List<PayerConfig>> GetPayerConfigsAsync(string tenantId, string practiceId);
-    Task<PayerConfig?> GetPayerConfigAsync(string tenantId, string practiceId, string payerId);
-    Task SavePayerConfigAsync(string tenantId, PayerConfig payerConfig);
-
 }
