@@ -64,11 +64,11 @@ public class TenantService : ITenantService
         return tenantCfg;
     }
 
-    public async Task<TenantAccessGate> GetAccessGateAsync(string tenantId)
+    public async Task<TenantAccessGateEmbedded> GetAccessGateAsync(string tenantId)
     {
         var cfg = await GetTenantConfigAsync(tenantId);
 
         // Safe default: allow logins if access gate is missing.
-        return cfg.AccessGate ?? new TenantAccessGate { LoginsEnabled = true };
+        return cfg.AccessGate ?? new TenantAccessGateEmbedded { LoginsEnabled = true };
     }
 }

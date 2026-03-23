@@ -26,5 +26,5 @@ public interface ITenantService
     /// <summary>
     /// Retrieves the tenant access gate settings (login enabled/disabled state).
     /// </summary>
-    Task<TenantAccessGate> GetAccessGateAsync(string tenantId);
+    Task<TenantAccessGateEmbedded> GetAccessGateAsync(string tenantId);
 }

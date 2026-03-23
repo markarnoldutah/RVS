@@ -23,9 +23,15 @@ namespace RVS.Domain.Entities;
 /// Average document size: 124KB (4KB patient + 2KB coverages + 120KB encounters)
 /// Max document size: 304KB (well under 2MB limit)
 /// </summary>
-public class Patient : PracticeScopedEntityBase
+public class Patient : EntityBase
 {
     public override string Type { get; init; } = "patient";
+
+    /// <summary>
+    /// All PHI entities must be associated with a practice for HIPAA compliance
+    /// </summary>
+    [JsonProperty("practiceId")]
+    public required string PracticeId { get; init; }
 
     [JsonProperty("patientId")]
     public string PatientId => Id;
