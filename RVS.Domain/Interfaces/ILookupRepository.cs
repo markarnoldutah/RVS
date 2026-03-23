@@ -1,22 +1,25 @@
-using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 
 namespace RVS.Domain.Interfaces;
 
 /// <summary>
-/// Repository for managing lookup data (visit types, COB reasons, etc.).
+/// Repository for managing lookup data (issue categories, service types, etc.).
+/// For MVP, only <c>GLOBAL</c> tenant-level sets are supported.
 /// </summary>
 public interface ILookupRepository
 {
     /// <summary>
     /// Gets the global lookup set for the specified category.
-    /// For MVP, only "GLOBAL" sets are supported.
-    /// Returns null if not found.
+    /// Returns <c>null</c> when no matching document is found.
     /// </summary>
-    Task<LookupSet?> GetGlobalAsync(string category);
+    /// <param name="category">Lookup category identifier (e.g. "issue-categories").</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<LookupSet?> GetGlobalAsync(string category, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// MVP seeding/maintenance API: create or update the global lookup set.
+    /// Creates or replaces the global lookup set for seeding and maintenance.
     /// </summary>
-    Task UpsertGlobalAsync(LookupSet entity);
+    /// <param name="entity">The lookup set entity to upsert.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task UpsertGlobalAsync(LookupSet entity, CancellationToken cancellationToken = default);
 }

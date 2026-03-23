@@ -16,12 +16,12 @@ namespace RVS.API.Services
             _repository = repository;
         }
 
-        public async Task<LookupSetDto> GetLookupSetAsync(string tenantId, string lookupSetId)
+        public async Task<LookupSetDto> GetLookupSetAsync(string tenantId, string lookupSetId, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(lookupSetId);
 
             // MVP: only global lookups are supported.
-            var global = await _repository.GetGlobalAsync(lookupSetId)
+            var global = await _repository.GetGlobalAsync(lookupSetId, cancellationToken)
                 ?? throw new KeyNotFoundException($"LookupSetId '{lookupSetId}' was not found.");
 
             // In the future we will:

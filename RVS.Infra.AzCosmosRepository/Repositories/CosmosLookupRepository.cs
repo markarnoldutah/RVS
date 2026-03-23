@@ -22,7 +22,7 @@ namespace RVS.Infra.AzCosmosRepository.Repositories
             _container = client.GetContainer(databaseId, containerId);
         }
 
-        public async Task<LookupSet?> GetGlobalAsync(string lookupSetId)
+        public async Task<LookupSet?> GetGlobalAsync(string lookupSetId, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(lookupSetId);
 
@@ -30,7 +30,8 @@ namespace RVS.Infra.AzCosmosRepository.Repositories
             {
                 var response = await _container.ReadItemAsync<LookupSet>(
                     id: lookupSetId,
-                    partitionKey: new PartitionKey(GlobalTenantId));
+                    partitionKey: new PartitionKey(GlobalTenantId),
+                    cancellationToken: cancellationToken);
 
                 return response.Resource;
             }
@@ -40,7 +41,7 @@ namespace RVS.Infra.AzCosmosRepository.Repositories
             }
         }
 
-        public async Task UpsertGlobalAsync(LookupSet entity)
+        public async Task UpsertGlobalAsync(LookupSet entity, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(entity);
             ArgumentException.ThrowIfNullOrWhiteSpace(entity.Id, nameof(entity.Id));
@@ -51,7 +52,8 @@ namespace RVS.Infra.AzCosmosRepository.Repositories
 
             await _container.UpsertItemAsync(
                 item: entity,
-                partitionKey: new PartitionKey(GlobalTenantId));
+                partitionKey: new PartitionKey(GlobalTenantId),
+                cancellationToken: cancellationToken);
         }
 
         // TODO CreateGlobalAsync()
