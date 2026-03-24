@@ -46,4 +46,19 @@ public interface ICustomerProfileService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">Thrown when the profile is not found.</exception>
     Task<CustomerProfile> UpdateAsync(string tenantId, string id, CustomerProfile entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves an existing profile (or creates one) and tracks asset ownership.
+    /// Implements three-branch ownership transfer logic:
+    /// <list type="bullet">
+    ///   <item>Branch 1: Asset active under different profile → transfer ownership</item>
+    ///   <item>Branch 2: Asset is new to this tenant → add with Active status</item>
+    ///   <item>Branch 3: Asset already active under same profile → increment requestCount</item>
+    /// </list>
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="email">Customer email address.</param>
+    /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<CustomerProfile> ResolveAndTrackAssetAsync(string tenantId, string email, string assetId, CancellationToken cancellationToken = default);
 }

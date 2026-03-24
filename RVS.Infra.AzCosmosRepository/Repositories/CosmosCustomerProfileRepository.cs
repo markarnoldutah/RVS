@@ -114,4 +114,37 @@ public sealed class CosmosCustomerProfileRepository : CosmosRepositoryBase, ICus
         _logger.LogDebug("UpdateAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
         return response.Resource;
     }
+
+    /// <inheritdoc />
+    public async Task<CustomerProfile?> GetByActiveAssetIdAsync(string tenantId, string assetId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(assetId);
+
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.type = 'customerProfile' AND EXISTS(SELECT VALUE a FROM a IN c.assetsOwned WHERE a.assetId = @assetId AND a.status = 'Active')")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@assetId", assetId);
+
+        var options = new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId), MaxItemCount = 1 };
+        var iterator = _container.GetItemQueryIterator<CustomerProfile>(query, requestOptions: options);
+
+        double totalCharge = 0;
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(cancellationToken);
+            totalCharge += page.RequestCharge;
+
+            var item = page.FirstOrDefault();
+            if (item is not null)
+            {
+                _logger.LogDebug("GetByActiveAssetIdAsync [tenant={TenantId}, asset={AssetId}] — RequestCharge: {Charge} RU", tenantId, assetId, totalCharge);
+                return item;
+            }
+        }
+
+        _logger.LogDebug("GetByActiveAssetIdAsync [tenant={TenantId}, asset={AssetId}] not found — RequestCharge: {Charge} RU", tenantId, assetId, totalCharge);
+        return null;
+    }
 }

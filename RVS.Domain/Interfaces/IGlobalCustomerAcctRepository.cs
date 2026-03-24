@@ -37,4 +37,12 @@ public interface IGlobalCustomerAcctRepository
     /// <param name="entity">The updated global customer account entity.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<GlobalCustomerAcct> UpdateAsync(GlobalCustomerAcct entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Finds a global customer account by its magic-link token.
+    /// Returns <c>null</c> when no account matches.
+    /// </summary>
+    /// <param name="token">The magic-link token value.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<GlobalCustomerAcct?> GetByMagicLinkTokenAsync(string token, CancellationToken cancellationToken = default);
 }

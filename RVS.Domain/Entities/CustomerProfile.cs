@@ -76,6 +76,48 @@ public class CustomerProfile : EntityBase
     public AssetOwnershipEmbedded? GetActiveInteraction(string assetId) =>
         AssetsOwned.FirstOrDefault(
             a => a.AssetId == assetId && a.Status == AssetOwnershipStatus.Active);
+
+    /// <summary>
+    /// Deactivates the active ownership entry for the specified asset.
+    /// No-op if the asset is not actively owned by this profile.
+    /// </summary>
+    /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
+    public void DeactivateAsset(string assetId)
+    {
+        var active = GetActiveInteraction(assetId);
+        if (active is null) return;
+
+        active.Status = AssetOwnershipStatus.Inactive;
+        active.DeactivatedAtUtc = DateTime.UtcNow;
+        active.DeactivationReason = "OwnershipTransfer";
+    }
+
+    /// <summary>
+    /// Activates a new asset ownership or refreshes an existing active entry
+    /// by incrementing <see cref="AssetOwnershipEmbedded.RequestCount"/> and updating
+    /// <see cref="AssetOwnershipEmbedded.LastSeenAtUtc"/>.
+    /// </summary>
+    /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
+    public void ActivateOrRefreshAsset(string assetId)
+    {
+        var existing = GetActiveInteraction(assetId);
+        if (existing is not null)
+        {
+            existing.RequestCount++;
+            existing.LastSeenAtUtc = DateTime.UtcNow;
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        AssetsOwned.Add(new AssetOwnershipEmbedded
+        {
+            AssetId = assetId,
+            Status = AssetOwnershipStatus.Active,
+            FirstSeenAtUtc = now,
+            LastSeenAtUtc = now,
+            RequestCount = 1,
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
