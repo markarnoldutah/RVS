@@ -190,15 +190,15 @@ if (app.Environment.IsProduction())
 // 3. CORS
 app.UseCors("AllowBlazorClient");
 
-// 4. Structured logging — enriches log scope with tenantId, locationId, correlationId
-app.UseMiddleware<CorrelationLoggingMiddleware>();
-
-// 5. ExceptionHandlingMiddleware (IMiddleware, singleton)
+// 4. ExceptionHandlingMiddleware (IMiddleware, singleton)
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// 6. Authentication & Authorization
+// 5. Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
+
+// 6. Structured logging — enriches log scope with tenantId, locationId, correlationId (after auth so claims are populated)
+app.UseMiddleware<CorrelationLoggingMiddleware>();
 
 // 7. Tenant access gate
 app.UseMiddleware<TenantAccessGateMiddleware>();

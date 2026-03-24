@@ -22,7 +22,7 @@ public sealed class CosmosDbHealthCheck : IHealthCheck
         try
         {
             var response = await _cosmosClient.ReadAccountAsync();
-            return HealthCheckResult.Healthy($"Cosmos DB reachable. Account: {response.Id}");
+            return HealthCheckResult.Healthy("Cosmos DB reachable.");
         }
         catch (Exception ex)
         {
