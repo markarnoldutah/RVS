@@ -1,0 +1,77 @@
+using FluentAssertions;
+using RVS.API.Integrations;
+
+namespace RVS.API.Tests.Integrations;
+
+public class RuleBasedCategorizationServiceTests
+{
+    private readonly RuleBasedCategorizationService _sut = new();
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task CategorizeAsync_WhenDescriptionIsNullOrWhiteSpace_ShouldThrowArgumentException(string? description)
+    {
+        var act = () => _sut.CategorizeAsync(description!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("The battery is dead and won't charge", "Electrical")]
+    [InlineData("There is a water leak under the sink", "Plumbing")]
+    [InlineData("The furnace stopped working and won't heat", "HVAC")]
+    [InlineData("Crack in the roof near the slide-out", "Structural")]
+    [InlineData("The refrigerator stopped working", "Appliance")]
+    [InlineData("The awning mechanism is broken", "Exterior")]
+    public async Task CategorizeAsync_WhenDescriptionContainsKeyword_ShouldReturnMatchingCategory(string description, string expectedCategory)
+    {
+        var result = await _sut.CategorizeAsync(description);
+
+        result.Should().Be(expectedCategory);
+    }
+
+    [Fact]
+    public async Task CategorizeAsync_WhenNoKeywordsMatch_ShouldReturnGeneral()
+    {
+        var result = await _sut.CategorizeAsync("Something is wrong but I'm not sure what");
+
+        result.Should().Be("General");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenCategoryIsNullOrWhiteSpace_ShouldThrowArgumentException(string? category)
+    {
+        var act = () => _sut.SuggestDiagnosticQuestionsAsync(category!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("Electrical")]
+    [InlineData("Plumbing")]
+    [InlineData("HVAC")]
+    [InlineData("Structural")]
+    [InlineData("Appliance")]
+    [InlineData("Exterior")]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenKnownCategory_ShouldReturnThreeQuestions(string category)
+    {
+        var result = await _sut.SuggestDiagnosticQuestionsAsync(category);
+
+        result.Should().HaveCount(3);
+        result.Should().AllSatisfy(q => q.Should().NotBeNullOrWhiteSpace());
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenUnknownCategory_ShouldReturnDefaultQuestions()
+    {
+        var result = await _sut.SuggestDiagnosticQuestionsAsync("Unknown");
+
+        result.Should().HaveCount(3);
+        result[0].Should().Contain("describe the issue");
+    }
+}
