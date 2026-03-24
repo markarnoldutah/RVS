@@ -20,13 +20,13 @@ public interface IServiceRequestService
     Task<ServiceRequest> GetByIdAsync(string tenantId, string id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Searches service requests with paging support.
+    /// Searches service requests using up to 10 filter parameters with continuation-token pagination.
     /// </summary>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
-    /// <param name="pageSize">Maximum items to return.</param>
+    /// <param name="request">Filter criteria and page size (keyword, status, category, location, etc.).</param>
     /// <param name="continuationToken">Optional continuation token for the next page.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<PagedResult<ServiceRequest>> SearchAsync(string tenantId, int pageSize, string? continuationToken = null, CancellationToken cancellationToken = default);
+    Task<PagedResult<ServiceRequest>> SearchAsync(string tenantId, ServiceRequestSearchRequestDto request, string? continuationToken = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a new service request.

@@ -108,30 +108,78 @@ builder.Services.AddSingleton<BlobServiceClient>(sp =>
 });
 
 #region Repositories
+var cosmosDbId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvsdb";
+
 builder.Services.AddScoped<IConfigRepository>(sp =>
 {
     var client = sp.GetRequiredService<CosmosClient>();
-    var databaseId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvsdb";
-    return new CosmosConfigRepository(client, databaseId, "tenants");
+    return new CosmosConfigRepository(client, cosmosDbId, "tenants");
 });
 
 builder.Services.AddScoped<ILookupRepository>(sp =>
 {
     var client = sp.GetRequiredService<CosmosClient>();
-    var databaseId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvsdb";
-    return new CosmosLookupRepository(client, databaseId, "lookups");
+    return new CosmosLookupRepository(client, cosmosDbId, "lookups");
 });
 
-// TODO: Register repository implementations when Infra layer is complete
-// builder.Services.AddScoped<IServiceRequestRepository, CosmosServiceRequestRepository>();
-// builder.Services.AddScoped<ICustomerProfileRepository, CosmosCustomerProfileRepository>();
-// builder.Services.AddScoped<IGlobalCustomerAcctRepository, CosmosGlobalCustomerAcctRepository>();
-// builder.Services.AddScoped<IDealershipRepository, CosmosDealershipRepository>();
-// builder.Services.AddScoped<ILocationRepository, CosmosLocationRepository>();
-// builder.Services.AddScoped<IAssetLedgerRepository, CosmosAssetLedgerRepository>();
-// builder.Services.AddScoped<ISlugLookupRepository, CosmosSlugLookupRepository>();
+builder.Services.AddScoped<IServiceRequestRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosServiceRequestRepository>>();
+    return new CosmosServiceRequestRepository(client, cosmosDbId, logger);
+});
+
+builder.Services.AddScoped<ICustomerProfileRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosCustomerProfileRepository>>();
+    return new CosmosCustomerProfileRepository(client, cosmosDbId, logger);
+});
+
+builder.Services.AddScoped<IGlobalCustomerAcctRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosGlobalCustomerAcctRepository>>();
+    return new CosmosGlobalCustomerAcctRepository(client, cosmosDbId, logger);
+});
+
+builder.Services.AddScoped<IDealershipRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosDealershipRepository>>();
+    return new CosmosDealershipRepository(client, cosmosDbId, logger);
+});
+
+builder.Services.AddScoped<ILocationRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosLocationRepository>>();
+    return new CosmosLocationRepository(client, cosmosDbId, logger);
+});
+
+builder.Services.AddScoped<IAssetLedgerRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosAssetLedgerRepository>>();
+    return new CosmosAssetLedgerRepository(client, cosmosDbId, logger);
+});
+
+builder.Services.AddScoped<ISlugLookupRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosSlugLookupRepository>>();
+    return new CosmosSlugLookupRepository(client, cosmosDbId, logger);
+});
+
+builder.Services.AddScoped<ITenantConfigRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosTenantConfigRepository>>();
+    return new CosmosTenantConfigRepository(client, cosmosDbId, logger);
+});
+
+// ITenantAccessRepository — implemented in RVS.Infra.AzTablesRepository (registered separately when ready)
 // builder.Services.AddScoped<ITenantAccessRepository, TablesTenantAccessRepository>();
-// builder.Services.AddScoped<ITenantConfigRepository, CosmosTenantConfigRepository>();
 #endregion
 
 #region Services

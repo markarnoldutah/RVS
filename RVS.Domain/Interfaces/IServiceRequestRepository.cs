@@ -27,13 +27,13 @@ public interface IServiceRequestRepository
     Task<IReadOnlyList<ServiceRequest>> GetByLocationAsync(string tenantId, string locationId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Searches service requests with paging support.
+    /// Searches service requests using up to 10 filter parameters with Cosmos DB continuation-token pagination.
     /// </summary>
     /// <param name="tenantId">Tenant partition key.</param>
-    /// <param name="pageSize">Maximum items to return.</param>
+    /// <param name="request">Filter criteria and page size (keyword, status, category, location, etc.).</param>
     /// <param name="continuationToken">Optional Cosmos DB continuation token for the next page.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<PagedResult<ServiceRequest>> SearchAsync(string tenantId, int pageSize, string? continuationToken = null, CancellationToken cancellationToken = default);
+    Task<PagedResult<ServiceRequest>> SearchAsync(string tenantId, ServiceRequestSearchRequestDto request, string? continuationToken = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a new service request document.
