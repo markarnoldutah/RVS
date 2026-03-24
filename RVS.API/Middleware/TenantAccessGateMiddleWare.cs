@@ -42,7 +42,7 @@ public sealed class TenantAccessGateMiddleware
         // TenantId should come from token claims (adjust claim types to match your auth setup)
         var tenantId =
             ctx.User.FindFirst("tenantId")?.Value
-            ?? ctx.User.FindFirst("http://benefetch.com/tenantId")?.Value;
+            ?? ctx.User.FindFirst("https://rvserviceflow.com/tenantId")?.Value;
 
         if (string.IsNullOrWhiteSpace(tenantId))
         {

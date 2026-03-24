@@ -11,7 +11,7 @@ namespace RVS.API.Services;
 public sealed class ClaimsService
 {
 
-    public const string TenantIdClaimType = "http://benefetch.com/tenantId";
+    public const string TenantIdClaimType = "https://rvserviceflow.com/tenantId";
 
     private readonly IHttpContextAccessor _httpContextAccessor;
 
