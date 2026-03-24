@@ -11,8 +11,8 @@ using RVS.Domain.Shared;
 
 var configuration = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
-    .AddUserSecrets<Program>(optional: true)
+    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+    .AddUserSecrets<Program>(optional: false)
     .Build();
 
 var endpointUri = configuration["CosmosDb:Endpoint"] ?? throw new InvalidOperationException("CosmosDb:Endpoint is not configured.");
@@ -132,10 +132,6 @@ static List<ContainerProperties> BuildContainerDefinitions()
         {
             Id = "service-requests",
             PartitionKeyPath = "/tenantId",
-            UniqueKeyPolicy = new UniqueKeyPolicy
-            {
-                UniqueKeys = { new UniqueKey { Paths = { "/id" } } }
-            },
             IndexingPolicy = new IndexingPolicy
             {
                 IndexingMode = IndexingMode.Consistent,
