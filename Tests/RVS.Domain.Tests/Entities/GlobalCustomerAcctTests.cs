@@ -25,10 +25,10 @@ public class GlobalCustomerAcctTests
     }
 
     [Fact]
-    public void NewGlobalCustomerAcct_ShouldHaveEmptyAllKnownVins()
+    public void NewGlobalCustomerAcct_ShouldHaveEmptyAllKnownAssetIds()
     {
         var acct = new GlobalCustomerAcct();
 
-        acct.AllKnownVins.Should().NotBeNull().And.BeEmpty();
+        acct.AllKnownAssetIds.Should().NotBeNull().And.BeEmpty();
     }
 }

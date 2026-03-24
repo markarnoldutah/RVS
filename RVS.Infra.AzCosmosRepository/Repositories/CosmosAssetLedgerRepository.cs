@@ -8,7 +8,7 @@ namespace RVS.Infra.AzCosmosRepository.Repositories;
 
 /// <summary>
 /// Cosmos DB repository for <see cref="AssetLedgerEntry"/> entities.
-/// Container: <c>asset-ledger</c>. Partition key: <c>/vin</c>.
+/// Container: <c>asset-ledger</c>. Partition key: <c>/assetId</c>.
 /// Append-only — entries are immutable once created.
 /// </summary>
 public sealed class CosmosAssetLedgerRepository : CosmosRepositoryBase, IAssetLedgerRepository
@@ -30,15 +30,15 @@ public sealed class CosmosAssetLedgerRepository : CosmosRepositoryBase, IAssetLe
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<AssetLedgerEntry>> GetByVinAsync(string vin, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AssetLedgerEntry>> GetByAssetIdAsync(string assetId, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(vin);
+        ArgumentException.ThrowIfNullOrWhiteSpace(assetId);
 
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.vin = @vin ORDER BY c.submittedAtUtc ASC")
-            .WithParameter("@vin", vin);
+            "SELECT * FROM c WHERE c.assetId = @assetId ORDER BY c.submittedAtUtc ASC")
+            .WithParameter("@assetId", assetId);
 
-        var options = new QueryRequestOptions { PartitionKey = new PartitionKey(vin) };
+        var options = new QueryRequestOptions { PartitionKey = new PartitionKey(assetId) };
         var iterator = _container.GetItemQueryIterator<AssetLedgerEntry>(query, requestOptions: options);
 
         var results = new List<AssetLedgerEntry>();
@@ -51,27 +51,27 @@ public sealed class CosmosAssetLedgerRepository : CosmosRepositoryBase, IAssetLe
             results.AddRange(page);
         }
 
-        _logger.LogDebug("GetByVinAsync [vin={Vin}] — {Count} items, RequestCharge: {Charge} RU",
-            vin, results.Count, totalCharge);
+        _logger.LogDebug("GetByAssetIdAsync [assetId={AssetId}] — {Count} items, RequestCharge: {Charge} RU",
+            assetId, results.Count, totalCharge);
 
         return results;
     }
 
     /// <inheritdoc />
-    public async Task<AssetLedgerEntry?> GetByIdAsync(string vin, string id, CancellationToken cancellationToken = default)
+    public async Task<AssetLedgerEntry?> GetByIdAsync(string assetId, string id, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(vin);
+        ArgumentException.ThrowIfNullOrWhiteSpace(assetId);
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
         try
         {
             var response = await _container.ReadItemAsync<AssetLedgerEntry>(
                 id,
-                new PartitionKey(vin),
+                new PartitionKey(assetId),
                 cancellationToken: cancellationToken);
 
-            _logger.LogDebug("GetByIdAsync [vin={Vin}, id={Id}] — RequestCharge: {Charge} RU",
-                vin, id, response.RequestCharge);
+            _logger.LogDebug("GetByIdAsync [assetId={AssetId}, id={Id}] — RequestCharge: {Charge} RU",
+                assetId, id, response.RequestCharge);
             return response.Resource;
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -84,15 +84,15 @@ public sealed class CosmosAssetLedgerRepository : CosmosRepositoryBase, IAssetLe
     public async Task<AssetLedgerEntry> AppendAsync(AssetLedgerEntry entity, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentException.ThrowIfNullOrWhiteSpace(entity.Vin, nameof(entity.Vin));
+        ArgumentException.ThrowIfNullOrWhiteSpace(entity.AssetId, nameof(entity.AssetId));
 
         var response = await _container.CreateItemAsync(
             entity,
-            new PartitionKey(entity.Vin),
+            new PartitionKey(entity.AssetId),
             cancellationToken: cancellationToken);
 
-        _logger.LogDebug("AppendAsync [vin={Vin}, id={Id}] — RequestCharge: {Charge} RU",
-            entity.Vin, entity.Id, response.RequestCharge);
+        _logger.LogDebug("AppendAsync [assetId={AssetId}, id={Id}] — RequestCharge: {Charge} RU",
+            entity.AssetId, entity.Id, response.RequestCharge);
         return response.Resource;
     }
 }

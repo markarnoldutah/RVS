@@ -11,13 +11,13 @@ public class ServiceRequestDtoTests
         var dto = new ServiceRequestCreateRequestDto
         {
             Customer = new CustomerInfoDto { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
-            Asset = new AssetInfoDto { Vin = "1HGBH41JXMN109186" },
+            Asset = new AssetInfoDto { AssetId = "RV:1HGBH41JXMN109186" },
             IssueCategory = "Slide System",
             IssueDescription = "Slide won't retract"
         };
 
         dto.Customer.FirstName.Should().Be("Jane");
-        dto.Asset.Vin.Should().Be("1HGBH41JXMN109186");
+        dto.Asset.AssetId.Should().Be("RV:1HGBH41JXMN109186");
         dto.IssueCategory.Should().Be("Slide System");
         dto.IssueDescription.Should().Be("Slide won't retract");
         dto.Urgency.Should().BeNull();
@@ -86,7 +86,7 @@ public class ServiceRequestDtoTests
     public void ServiceRequestDetailResponseDto_WithExpression()
     {
         var customer = new CustomerInfoDto { FirstName = "Jane", LastName = "Doe", Email = "jane@test.com" };
-        var asset = new AssetInfoDto { Vin = "ABC123" };
+        var asset = new AssetInfoDto { AssetId = "RV:ABC123" };
 
         var dto = new ServiceRequestDetailResponseDto
         {

@@ -104,7 +104,7 @@ public static class ServiceRequestMapper
             },
             AssetInfo = new AssetInfoEmbedded
             {
-                Vin = dto.Asset.Vin.Trim(),
+                AssetId = dto.Asset.AssetId.Trim(),
                 Manufacturer = dto.Asset.Manufacturer?.Trim(),
                 Model = dto.Asset.Model?.Trim(),
                 Year = dto.Asset.Year
@@ -163,7 +163,7 @@ public static class ServiceRequestMapper
 
         return new AssetInfoDto
         {
-            Vin = asset.Vin,
+            AssetId = asset.AssetId,
             Manufacturer = asset.Manufacturer,
             Model = asset.Model,
             Year = asset.Year

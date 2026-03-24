@@ -73,7 +73,7 @@ try
     await SeedItemsAsync(containers["service-requests"], serviceRequests, sr => new PartitionKey(sr.TenantId), "service-requests");
     await SeedItemsAsync(containers["customer-profiles"], customerProfiles, cp => new PartitionKey(cp.TenantId), "customer-profiles");
     await SeedItemsAsync(containers["global-customer-accounts"], globalAccounts, ga => new PartitionKey(ga.Id), "global-customer-accounts");
-    await SeedItemsAsync(containers["asset-ledger"], assetLedgerEntries, ale => new PartitionKey(ale.Vin), "asset-ledger");
+    await SeedItemsAsync(containers["asset-ledger"], assetLedgerEntries, ale => new PartitionKey(ale.AssetId), "asset-ledger");
     await SeedItemsAsync(containers["slug-lookups"], slugLookups, sl => new PartitionKey(sl.Id), "slug-lookups");
     await SeedItemsAsync(containers["tenant-configs"], tenantConfigs, tc => new PartitionKey(tc.Id), "tenant-configs");
     await SeedItemsAsync(containers["lookup-sets"], lookupSets, ls => new PartitionKey(ls.Id), "lookup-sets");
@@ -223,18 +223,18 @@ static List<ContainerProperties> BuildContainerDefinitions()
             },
         },
 
-        // 4. asset-ledger — PK=/vin (write-once per service request)
+        // 4. asset-ledger — PK=/assetId (write-once per service request)
         new ContainerProperties
         {
             Id = "asset-ledger",
-            PartitionKeyPath = "/vin",
+            PartitionKeyPath = "/assetId",
             IndexingPolicy = new IndexingPolicy
             {
                 IndexingMode = IndexingMode.Consistent,
                 Automatic = true,
                 IncludedPaths =
                 {
-                    new IncludedPath { Path = "/vin/?" },
+                    new IncludedPath { Path = "/assetId/?" },
                     new IncludedPath { Path = "/tenantId/?" },
                     new IncludedPath { Path = "/serviceRequestId/?" },
                     new IncludedPath { Path = "/submittedAtUtc/?" },
@@ -416,12 +416,12 @@ const string CpMartinezBc = "cp_martinez_bc";
 const string CpWilliamsHt = "cp_williams_ht";
 const string CpThompsonHt = "cp_thompson_ht";
 
-// Sample VINs (valid 17-char format, no I/O/Q)
-const string Vin1 = "1FTFW1ET5EKE12345";
-const string Vin2 = "5TFCZ5AN3HX054321";
-const string Vin3 = "WBA3A5C55FK198765";
-const string Vin4 = "1C4RJFBG7EC234567";
-const string Vin5 = "2GCEC19T441345678";
+// Sample AssetIds (compound key format: {AssetType}:{VIN})
+const string AssetId1 = "RV:1FTFW1ET5EKE12345";
+const string AssetId2 = "RV:5TFCZ5AN3HX054321";
+const string AssetId3 = "RV:WBA3A5C55FK198765";
+const string AssetId4 = "RV:1C4RJFBG7EC234567";
+const string AssetId5 = "RV:2GCEC19T441345678";
 
 static DateTime SeedDate(int daysAgo) => DateTime.UtcNow.AddDays(-daysAgo);
 
@@ -667,7 +667,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_johnson_abc123def456",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownVins = [Vin1],
+        AllKnownAssetIds = [AssetId1],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -691,7 +691,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_smith_ghi789jkl012",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownVins = [Vin2],
+        AllKnownAssetIds = [AssetId2],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -715,7 +715,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_martinez_mno345pqr678",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownVins = [Vin3],
+        AllKnownAssetIds = [AssetId3],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -739,7 +739,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_williams_stu901vwx234",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownVins = [Vin4],
+        AllKnownAssetIds = [AssetId4],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -763,7 +763,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_thompson_yza567bcd890",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownVins = [Vin5],
+        AllKnownAssetIds = [AssetId5],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -801,7 +801,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         [
             new AssetOwnershipEmbedded
             {
-                Vin = Vin1,
+                AssetId = AssetId1,
                 Manufacturer = "Winnebago",
                 Model = "View 24D",
                 Year = 2023,
@@ -830,7 +830,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         [
             new AssetOwnershipEmbedded
             {
-                Vin = Vin2,
+                AssetId = AssetId2,
                 Manufacturer = "Airstream",
                 Model = "Interstate 24GL",
                 Year = 2022,
@@ -859,7 +859,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         [
             new AssetOwnershipEmbedded
             {
-                Vin = Vin3,
+                AssetId = AssetId3,
                 Manufacturer = "Thor Motor Coach",
                 Model = "Chateau 22E",
                 Year = 2024,
@@ -890,7 +890,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         [
             new AssetOwnershipEmbedded
             {
-                Vin = Vin4,
+                AssetId = AssetId4,
                 Manufacturer = "Jayco",
                 Model = "Jay Flight 28BHS",
                 Year = 2021,
@@ -919,7 +919,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         [
             new AssetOwnershipEmbedded
             {
-                Vin = Vin5,
+                AssetId = AssetId5,
                 Manufacturer = "Forest River",
                 Model = "Rockwood Ultra Lite 2608BS",
                 Year = 2023,
@@ -955,10 +955,10 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Mike.Johnson@example.com", Phone = "(801) 555-1001",
             IsReturningCustomer = true, PriorRequestCount = 2,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
     },
 
-    // SR 2 — InProgress (SLC)
+    // SR 2
     new ServiceRequest
     {
         Id = "sr_002",
@@ -979,7 +979,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Mike.Johnson@example.com", Phone = "(801) 555-1001",
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
         ServiceEvent = new ServiceEventEmbedded
         {
             ComponentType = "Slide-Out Mechanism",
@@ -1008,7 +1008,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Mike.Johnson@example.com", Phone = "(801) 555-1001",
             IsReturningCustomer = false, PriorRequestCount = 0,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
         ServiceEvent = new ServiceEventEmbedded
         {
             ComponentType = "Roof Assembly",
@@ -1040,7 +1040,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Sarah.Smith@example.com", Phone = "(303) 555-1002",
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin2, Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId2, Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022 },
         ServiceEvent = new ServiceEventEmbedded
         {
             ComponentType = "Furnace",
@@ -1068,10 +1068,10 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Sarah.Smith@example.com", Phone = "(303) 555-1002",
             IsReturningCustomer = false, PriorRequestCount = 0,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin2, Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId2, Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022 },
     },
 
-    // SR 6 — InProgress (Las Vegas)
+    // SR 6
     new ServiceRequest
     {
         Id = "sr_006",
@@ -1092,7 +1092,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Carlos.Martinez@example.com", Phone = "(702) 555-1003",
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin3, Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId3, Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024 },
         ServiceEvent = new ServiceEventEmbedded
         {
             ComponentType = "AC Compressor",
@@ -1119,10 +1119,10 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Carlos.Martinez@example.com", Phone = "(702) 555-1003",
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin3, Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId3, Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024 },
     },
 
-    // SR 8 — Completed (Boise — Happy Trails)
+    // SR 8
     new ServiceRequest
     {
         Id = "sr_008",
@@ -1143,7 +1143,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Jenny.Williams@example.com", Phone = "(208) 555-1004",
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin4, Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId4, Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021 },
         ServiceEvent = new ServiceEventEmbedded
         {
             ComponentType = "Tank Sensor",
@@ -1175,7 +1175,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Jenny.Williams@example.com", Phone = "(208) 555-1004",
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin4, Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId4, Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021 },
         ServiceEvent = new ServiceEventEmbedded
         {
             ComponentType = "Door Latch Assembly",
@@ -1202,24 +1202,24 @@ static List<ServiceRequest> BuildServiceRequests() =>
             Email = "Dave.Thompson@example.com", Phone = "(208) 555-1005",
             IsReturningCustomer = false, PriorRequestCount = 0,
         },
-        AssetInfo = new AssetInfoEmbedded { Vin = Vin5, Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023 },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId5, Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023 },
     },
 ];
 
-// ── Asset Ledger Entries (one per SR) ───────────────────────────────────
+// ── Asset Ledger Entries
 
 static List<AssetLedgerEntry> BuildAssetLedgerEntries() =>
 [
-    new AssetLedgerEntry { Id = "ale_001", Vin = Vin1, TenantId = TenantBlueCompass, ServiceRequestId = "sr_001", GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Water heater not igniting on LP gas.", Status = "New", SubmittedAtUtc = SeedDate(2) },
-    new AssetLedgerEntry { Id = "ale_002", Vin = Vin1, TenantId = TenantBlueCompass, ServiceRequestId = "sr_002", GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Slide-Out Systems", IssueDescription = "Slide-out not fully extending.", Status = "InProgress", SubmittedAtUtc = SeedDate(15) },
-    new AssetLedgerEntry { Id = "ale_003", Vin = Vin1, TenantId = TenantBlueCompass, ServiceRequestId = "sr_003", GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Roof/Exterior", IssueDescription = "Annual roof inspection and sealant check.", Status = "Completed", SubmittedAtUtc = SeedDate(35), Section10A = new Section10AEmbedded { ComponentType = "Roof Assembly", FailureMode = "Wear/Age", RepairAction = "Sealant Reapplication", LaborHours = 2.5m, ServiceDateUtc = SeedDate(28) } },
-    new AssetLedgerEntry { Id = "ale_004", Vin = Vin2, TenantId = TenantBlueCompass, ServiceRequestId = "sr_004", GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "HVAC", IssueDescription = "Furnace blowing cold air.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(10) },
-    new AssetLedgerEntry { Id = "ale_005", Vin = Vin2, TenantId = TenantBlueCompass, ServiceRequestId = "sr_005", GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Rear camera image flickering.", Status = "Cancelled", SubmittedAtUtc = SeedDate(25) },
-    new AssetLedgerEntry { Id = "ale_006", Vin = Vin3, TenantId = TenantBlueCompass, ServiceRequestId = "sr_006", GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "HVAC", IssueDescription = "AC compressor making loud clicking noise.", Status = "InProgress", SubmittedAtUtc = SeedDate(5) },
-    new AssetLedgerEntry { Id = "ale_007", Vin = Vin3, TenantId = TenantBlueCompass, ServiceRequestId = "sr_007", GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "Awning/Exterior", IssueDescription = "Awning fabric tearing along the seam.", Status = "New", SubmittedAtUtc = SeedDate(3) },
-    new AssetLedgerEntry { Id = "ale_008", Vin = Vin4, TenantId = TenantHappyTrails, ServiceRequestId = "sr_008", GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Fresh water tank sensor reading incorrectly.", Status = "Completed", SubmittedAtUtc = SeedDate(18), Section10A = new Section10AEmbedded { ComponentType = "Tank Sensor", FailureMode = "Sensor Malfunction", RepairAction = "Sensor Replacement", PartsUsed = ["Tank Sensor Kit P/N TS-2021"], LaborHours = 1.5m, ServiceDateUtc = SeedDate(12) } },
-    new AssetLedgerEntry { Id = "ale_009", Vin = Vin4, TenantId = TenantHappyTrails, ServiceRequestId = "sr_009", GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Doors/Locks", IssueDescription = "Entry door latch mechanism broken.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(7) },
-    new AssetLedgerEntry { Id = "ale_010", Vin = Vin5, TenantId = TenantHappyTrails, ServiceRequestId = "sr_010", GlobalCustomerAcctId = GcaThompson, DealershipName = "Happy Trails RV", Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023, IssueCategory = "Electrical", IssueDescription = "Generator not starting.", Status = "New", SubmittedAtUtc = SeedDate(1) },
+    new AssetLedgerEntry { Id = "ale_001", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = "sr_001", GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Water heater not igniting on LP gas.", Status = "New", SubmittedAtUtc = SeedDate(2) },
+    new AssetLedgerEntry { Id = "ale_002", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = "sr_002", GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Slide-Out Systems", IssueDescription = "Slide-out not fully extending.", Status = "InProgress", SubmittedAtUtc = SeedDate(15) },
+    new AssetLedgerEntry { Id = "ale_003", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = "sr_003", GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Roof/Exterior", IssueDescription = "Annual roof inspection and sealant check.", Status = "Completed", SubmittedAtUtc = SeedDate(35), Section10A = new Section10AEmbedded { ComponentType = "Roof Assembly", FailureMode = "Wear/Age", RepairAction = "Sealant Reapplication", LaborHours = 2.5m, ServiceDateUtc = SeedDate(28) } },
+    new AssetLedgerEntry { Id = "ale_004", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = "sr_004", GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "HVAC", IssueDescription = "Furnace blowing cold air.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(10) },
+    new AssetLedgerEntry { Id = "ale_005", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = "sr_005", GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Rear camera image flickering.", Status = "Cancelled", SubmittedAtUtc = SeedDate(25) },
+    new AssetLedgerEntry { Id = "ale_006", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = "sr_006", GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "HVAC", IssueDescription = "AC compressor making loud clicking noise.", Status = "InProgress", SubmittedAtUtc = SeedDate(5) },
+    new AssetLedgerEntry { Id = "ale_007", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = "sr_007", GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "Awning/Exterior", IssueDescription = "Awning fabric tearing along the seam.", Status = "New", SubmittedAtUtc = SeedDate(3) },
+    new AssetLedgerEntry { Id = "ale_008", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = "sr_008", GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Fresh water tank sensor reading incorrectly.", Status = "Completed", SubmittedAtUtc = SeedDate(18), Section10A = new Section10AEmbedded { ComponentType = "Tank Sensor", FailureMode = "Sensor Malfunction", RepairAction = "Sensor Replacement", PartsUsed = ["Tank Sensor Kit P/N TS-2021"], LaborHours = 1.5m, ServiceDateUtc = SeedDate(12) } },
+    new AssetLedgerEntry { Id = "ale_009", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = "sr_009", GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Doors/Locks", IssueDescription = "Entry door latch mechanism broken.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(7) },
+    new AssetLedgerEntry { Id = "ale_010", AssetId = AssetId5, TenantId = TenantHappyTrails, ServiceRequestId = "sr_010", GlobalCustomerAcctId = GcaThompson, DealershipName = "Happy Trails RV", Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023, IssueCategory = "Electrical", IssueDescription = "Generator not starting.", Status = "New", SubmittedAtUtc = SeedDate(1) },
 ];
 
 // ── Lookup Sets (4) ─────────────────────────────────────────────────────

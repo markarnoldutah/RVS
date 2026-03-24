@@ -92,7 +92,7 @@ public class ServiceRequestMapperTests
         {
             AssetInfo = new AssetInfoEmbedded
             {
-                Vin = "1HGBH41JXMN109186",
+                AssetId = "RV:1HGBH41JXMN109186",
                 Manufacturer = "Grand Design",
                 Model = "Momentum 395G",
                 Year = 2023
@@ -101,7 +101,7 @@ public class ServiceRequestMapperTests
 
         var dto = entity.ToDetailDto();
 
-        dto.Asset.Vin.Should().Be("1HGBH41JXMN109186");
+        dto.Asset.AssetId.Should().Be("RV:1HGBH41JXMN109186");
         dto.Asset.Manufacturer.Should().Be("Grand Design");
         dto.Asset.Model.Should().Be("Momentum 395G");
         dto.Asset.Year.Should().Be(2023);
@@ -209,7 +209,7 @@ public class ServiceRequestMapperTests
     {
         var entity = new ServiceRequest
         {
-            AssetInfo = new AssetInfoEmbedded { Vin = "1HGBH41JXMN109186" }
+            AssetInfo = new AssetInfoEmbedded { AssetId = "RV:1HGBH41JXMN109186" }
         };
 
         var dto = entity.ToSummaryDto();
@@ -286,7 +286,7 @@ public class ServiceRequestMapperTests
 
         var entity = dto.ToEntity("ten_1", "usr_1");
 
-        entity.AssetInfo.Vin.Should().Be("1HGBH41JXMN109186");
+        entity.AssetInfo.AssetId.Should().Be("RV:1HGBH41JXMN109186");
         entity.AssetInfo.Manufacturer.Should().Be("Grand Design");
         entity.AssetInfo.Model.Should().Be("Momentum 395G");
         entity.AssetInfo.Year.Should().Be(2023);
@@ -298,7 +298,7 @@ public class ServiceRequestMapperTests
         var dto = new ServiceRequestCreateRequestDto
         {
             Customer = new CustomerInfoDto { FirstName = "  Jane  ", LastName = " Doe ", Email = " jane@example.com " },
-            Asset = new AssetInfoDto { Vin = " 1HGBH41JXMN109186 " },
+            Asset = new AssetInfoDto { AssetId = " RV:1HGBH41JXMN109186 " },
             IssueCategory = "  Slide System  ",
             IssueDescription = "  Slide won't retract  "
         };
@@ -310,7 +310,7 @@ public class ServiceRequestMapperTests
         entity.CustomerSnapshot.FirstName.Should().Be("Jane");
         entity.CustomerSnapshot.LastName.Should().Be("Doe");
         entity.CustomerSnapshot.Email.Should().Be("jane@example.com");
-        entity.AssetInfo.Vin.Should().Be("1HGBH41JXMN109186");
+        entity.AssetInfo.AssetId.Should().Be("RV:1HGBH41JXMN109186");
     }
 
     [Fact]
@@ -434,7 +434,7 @@ public class ServiceRequestMapperTests
             },
             Asset = new AssetInfoDto
             {
-                Vin = "1HGBH41JXMN109186",
+                AssetId = "RV:1HGBH41JXMN109186",
                 Manufacturer = "Grand Design",
                 Model = "Momentum 395G",
                 Year = 2023

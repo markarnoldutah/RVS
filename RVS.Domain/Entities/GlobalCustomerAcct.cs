@@ -38,10 +38,10 @@ public class GlobalCustomerAcct : EntityBase
     public List<LinkedProfileEmbedded> LinkedProfiles { get; set; } = [];
 
     /// <summary>
-    /// All VINs ever associated with this person across all dealerships.
+    /// All asset identifiers ever associated with this person across all dealerships.
     /// </summary>
-    [JsonProperty("allKnownVins")]
-    public List<string> AllKnownVins { get; set; } = [];
+    [JsonProperty("allKnownAssetIds")]
+    public List<string> AllKnownAssetIds { get; set; } = [];
 
     /// <summary>
     /// Global magic-link token — resolves to the identity (not a single profile).

@@ -91,7 +91,7 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
         if (!string.IsNullOrWhiteSpace(request.AssignedBayId))
             conditions.Add("c.assignedBayId = @assignedBayId");
         if (!string.IsNullOrWhiteSpace(request.AssetId))
-            conditions.Add("c.assetInfo.vin = @assetId");
+            conditions.Add("c.assetInfo.assetId = @assetId");
         if (request.DateFrom.HasValue)
             conditions.Add("c.createdAtUtc >= @dateFrom");
         if (request.DateTo.HasValue)
@@ -99,7 +99,7 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
         if (!string.IsNullOrWhiteSpace(request.Priority))
             conditions.Add("c.priority = @priority");
         if (!string.IsNullOrWhiteSpace(request.Keyword))
-            conditions.Add("(CONTAINS(LOWER(c.customerSnapshot.firstName), LOWER(@keyword)) OR CONTAINS(LOWER(c.customerSnapshot.lastName), LOWER(@keyword)) OR CONTAINS(LOWER(c.issueDescription), LOWER(@keyword)) OR CONTAINS(LOWER(c.assetInfo.vin), LOWER(@keyword)))");
+            conditions.Add("(CONTAINS(LOWER(c.customerSnapshot.firstName), LOWER(@keyword)) OR CONTAINS(LOWER(c.customerSnapshot.lastName), LOWER(@keyword)) OR CONTAINS(LOWER(c.issueDescription), LOWER(@keyword)) OR CONTAINS(LOWER(c.assetInfo.assetId), LOWER(@keyword)))");
 
         var sql = $"SELECT * FROM c WHERE {string.Join(" AND ", conditions)} ORDER BY c.createdAtUtc DESC";
 

@@ -5,7 +5,7 @@ namespace RVS.Domain.DTOs;
 /// </summary>
 public sealed record AssetInfoDto
 {
-    public required string Vin { get; init; }
+    public required string AssetId { get; init; }
     public string? Manufacturer { get; init; }
     public string? Model { get; init; }
     public int? Year { get; init; }

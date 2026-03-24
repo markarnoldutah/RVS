@@ -25,44 +25,44 @@ public class CustomerProfileTests
     }
 
     [Fact]
-    public void ActiveVins_ShouldReturnOnlyActiveAssets()
+    public void ActiveAssetIds_ShouldReturnOnlyActiveAssets()
     {
         var profile = new CustomerProfile
         {
             AssetsOwned =
             [
-                new AssetOwnershipEmbedded { Vin = "VIN-1", Status = AssetOwnershipStatus.Active },
-                new AssetOwnershipEmbedded { Vin = "VIN-2", Status = AssetOwnershipStatus.Inactive },
-                new AssetOwnershipEmbedded { Vin = "VIN-3", Status = AssetOwnershipStatus.Active }
+                new AssetOwnershipEmbedded { AssetId = "RV:VIN-1", Status = AssetOwnershipStatus.Active },
+                new AssetOwnershipEmbedded { AssetId = "RV:VIN-2", Status = AssetOwnershipStatus.Inactive },
+                new AssetOwnershipEmbedded { AssetId = "RV:VIN-3", Status = AssetOwnershipStatus.Active }
             ]
         };
 
-        profile.ActiveVins.Should().BeEquivalentTo(["VIN-1", "VIN-3"]);
+        profile.ActiveAssetIds.Should().BeEquivalentTo(["RV:VIN-1", "RV:VIN-3"]);
     }
 
     [Fact]
-    public void GetActiveInteraction_ShouldReturnActiveAssetForVin()
+    public void GetActiveInteraction_ShouldReturnActiveAssetForAssetId()
     {
-        var active = new AssetOwnershipEmbedded { Vin = "VIN-1", Status = AssetOwnershipStatus.Active };
+        var active = new AssetOwnershipEmbedded { AssetId = "RV:VIN-1", Status = AssetOwnershipStatus.Active };
         var profile = new CustomerProfile
         {
             AssetsOwned = [active]
         };
 
-        profile.GetActiveInteraction("VIN-1").Should().BeSameAs(active);
+        profile.GetActiveInteraction("RV:VIN-1").Should().BeSameAs(active);
     }
 
     [Fact]
-    public void GetActiveInteraction_ShouldReturnNullForInactiveVin()
+    public void GetActiveInteraction_ShouldReturnNullForInactiveAssetId()
     {
         var profile = new CustomerProfile
         {
             AssetsOwned =
             [
-                new AssetOwnershipEmbedded { Vin = "VIN-1", Status = AssetOwnershipStatus.Inactive }
+                new AssetOwnershipEmbedded { AssetId = "RV:VIN-1", Status = AssetOwnershipStatus.Inactive }
             ]
         };
 
-        profile.GetActiveInteraction("VIN-1").Should().BeNull();
+        profile.GetActiveInteraction("RV:VIN-1").Should().BeNull();
     }
 }
