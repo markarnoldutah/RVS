@@ -3,37 +3,38 @@ using RVS.Domain.Entities;
 namespace RVS.Domain.Interfaces;
 
 /// <summary>
-/// Service for managing <see cref="GlobalCustomerAcct"/> (global customer account) entities.
-/// Cross-tenant — links dealership-scoped profiles to a single human identity.
-/// All lookups are guaranteed to return a non-null value; a
-/// <see cref="KeyNotFoundException"/> is thrown when the entity does not exist.
+/// Repository for persisting and retrieving <see cref="GlobalCustomerAcct"/> entities.
+/// Partition key: <c>/normalizedEmail</c>. Cross-tenant — not scoped by tenantId.
 /// </summary>
-public interface IGlobalCustomerAcctService
+public interface IGlobalCustomerAcctRepository
 {
     /// <summary>
-    /// Gets a global customer identity by normalized email.
+    /// Gets a global customer account by normalized email address.
+    /// Returns <c>null</c> when no matching document is found.
     /// </summary>
-    /// <param name="normalizedEmail">Lowercased, trimmed email address.</param>
+    /// <param name="normalizedEmail">Lowercased, trimmed email address used as partition key.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="KeyNotFoundException">Thrown when the identity is not found.</exception>
-    Task<GlobalCustomerAcct> GetByEmailAsync(string normalizedEmail, CancellationToken cancellationToken = default);
+    Task<GlobalCustomerAcct?> GetByEmailAsync(string normalizedEmail, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Retrieves an existing identity or creates one for a new customer.
+    /// Gets a global customer account by its identifier.
+    /// Returns <c>null</c> when no matching document is found.
     /// </summary>
-    /// <param name="email">Customer email address (will be normalized internally).</param>
-    /// <param name="firstName">Customer first name.</param>
-    /// <param name="lastName">Customer last name.</param>
+    /// <param name="id">Customer account identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<GlobalCustomerAcct> GetOrCreateAsync(string email, string firstName, string lastName, CancellationToken cancellationToken = default);
+    Task<GlobalCustomerAcct?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Links a tenant-scoped customer profile to this global identity.
+    /// Creates a new global customer account document.
     /// </summary>
-    /// <param name="identityId">Global customer identity identifier.</param>
-    /// <param name="tenantId">Tenant that owns the linked profile.</param>
-    /// <param name="profileId">Customer profile identifier within the tenant.</param>
+    /// <param name="entity">The global customer account entity to persist.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="KeyNotFoundException">Thrown when the identity is not found.</exception>
-    Task<GlobalCustomerAcct> LinkProfileAsync(string identityId, string tenantId, string profileId, CancellationToken cancellationToken = default);
+    Task<GlobalCustomerAcct> CreateAsync(GlobalCustomerAcct entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Replaces an existing global customer account document.
+    /// </summary>
+    /// <param name="entity">The updated global customer account entity.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<GlobalCustomerAcct> UpdateAsync(GlobalCustomerAcct entity, CancellationToken cancellationToken = default);
 }
