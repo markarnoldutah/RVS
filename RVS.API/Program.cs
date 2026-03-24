@@ -185,14 +185,14 @@ builder.Services.AddScoped<ITenantConfigRepository>(sp =>
 #region Services
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ILookupService, LookupService>();
+builder.Services.AddScoped<IDealershipService, DealershipService>();
+builder.Services.AddScoped<ILocationService, LocationService>();
+builder.Services.AddScoped<ITenantConfigService, TenantConfigService>();
 
 // TODO: Register service implementations when Service layer is complete
 // builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
 // builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 // builder.Services.AddScoped<IGlobalCustomerAcctService, GlobalCustomerAcctService>();
-// builder.Services.AddScoped<IDealershipService, DealershipService>();
-// builder.Services.AddScoped<ILocationService, LocationService>();
-// builder.Services.AddScoped<ITenantConfigService, TenantConfigService>();
 #endregion
 
 // Claims Management
