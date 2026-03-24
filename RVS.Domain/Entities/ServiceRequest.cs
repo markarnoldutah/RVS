@@ -175,8 +175,11 @@ public class CustomerSnapshotEmbedded
 /// </summary>
 public class AssetInfoEmbedded
 {
-    [JsonProperty("vin")]
-    public string Vin { get; set; } = string.Empty;
+    /// <summary>
+    /// Compound asset identifier. Format: <c>{AssetType}:{Identifier}</c> (e.g. <c>RV:1FTFW1ET5EKE12345</c>).
+    /// </summary>
+    [JsonProperty("assetId")]
+    public string AssetId { get; set; } = string.Empty;
 
     [JsonProperty("manufacturer")]
     public string? Manufacturer { get; set; }

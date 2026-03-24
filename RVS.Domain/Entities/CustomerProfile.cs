@@ -39,8 +39,9 @@ public class CustomerProfile : EntityBase
     public string GlobalCustomerAcctId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Tracks the full lifecycle of each customer ↔ VIN relationship.
-    /// Replaces a flat KnownVins list to handle ownership transfers.
+    /// Tracks the full lifecycle of each customer ↔ asset relationship.
+    /// Handles ownership transfers: when a different customer submits for
+    /// an asset, the previous owner's interaction is set to Inactive.
     /// </summary>
     [JsonProperty("assetsOwned")]
     public List<AssetOwnershipEmbedded> AssetsOwned { get; set; } = [];
@@ -60,21 +61,21 @@ public class CustomerProfile : EntityBase
     // ── Convenience helpers (not persisted) ──
 
     /// <summary>
-    /// Returns only VINs with Active status — used for intake prefill.
+    /// Returns only asset IDs with Active status — used for intake prefill.
     /// </summary>
     [JsonIgnore]
-    public List<string> ActiveVins =>
+    public List<string> ActiveAssetIds =>
         AssetsOwned
-            .Where(v => v.Status == AssetOwnershipStatus.Active)
-            .Select(v => v.Vin)
+            .Where(a => a.Status == AssetOwnershipStatus.Active)
+            .Select(a => a.AssetId)
             .ToList();
 
     /// <summary>
-    /// Returns the active interaction for a VIN, or null.
+    /// Returns the active interaction for an asset, or null.
     /// </summary>
-    public AssetOwnershipEmbedded? GetActiveInteraction(string vin) =>
+    public AssetOwnershipEmbedded? GetActiveInteraction(string assetId) =>
         AssetsOwned.FirstOrDefault(
-            v => v.Vin == vin && v.Status == AssetOwnershipStatus.Active);
+            a => a.AssetId == assetId && a.Status == AssetOwnershipStatus.Active);
 }
 
 // ---------------------------------------------------------------------------
@@ -82,14 +83,17 @@ public class CustomerProfile : EntityBase
 // ---------------------------------------------------------------------------
 
 /// <summary>
-/// Records a customer's relationship to a specific VIN over time.
+/// Records a customer's relationship to a specific asset over time.
 /// Handles ownership transfers: when a different customer submits for
-/// a VIN, the previous owner's interaction is set to Inactive.
+/// an asset, the previous owner's interaction is set to Inactive.
 /// </summary>
 public class AssetOwnershipEmbedded
 {
-    [JsonProperty("vin")]
-    public string Vin { get; set; } = string.Empty;
+    /// <summary>
+    /// Compound asset identifier. Format: <c>{AssetType}:{Identifier}</c> (e.g. <c>RV:1FTFW1ET5EKE12345</c>).
+    /// </summary>
+    [JsonProperty("assetId")]
+    public string AssetId { get; set; } = string.Empty;
 
     [JsonProperty("manufacturer")]
     public string? Manufacturer { get; set; }
@@ -101,7 +105,7 @@ public class AssetOwnershipEmbedded
     public int? Year { get; set; }
 
     /// <summary>
-    /// Active = customer currently associated with this VIN.
+    /// Active = customer currently associated with this asset.
     /// Inactive = customer no longer associated (sold, traded, ownership transfer).
     /// </summary>
     [JsonProperty("status")]

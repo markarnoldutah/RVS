@@ -3,12 +3,12 @@ using Newtonsoft.Json;
 namespace RVS.Domain.Entities;
 
 /// <summary>
-/// Append-only service event record linked to a VIN.
+/// Append-only service event record linked to an asset.
 /// One entry per service request, written at intake time.
 /// This is the data moat: proprietary, accumulating, non-replicable data
 /// that powers Section 10A service intelligence.
 ///
-/// Cosmos DB partition key: /vin
+/// Cosmos DB partition key: /assetId
 /// Write-once pattern — core fields are immutable after creation.
 /// Section 10A fields are enriched progressively via change feed.
 /// </summary>
@@ -18,10 +18,11 @@ public class AssetLedgerEntry
     public string Id { get; init; } = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// Vehicle Identification Number. Partition key — immutable after creation.
+    /// Compound asset identifier. Partition key — immutable after creation.
+    /// Format: <c>{AssetType}:{Identifier}</c> (e.g. <c>RV:1FTFW1ET5EKE12345</c>).
     /// </summary>
-    [JsonProperty("vin")]
-    public string Vin { get; init; } = string.Empty;
+    [JsonProperty("assetId")]
+    public string AssetId { get; init; } = string.Empty;
 
     /// <summary>
     /// Tenant (dealership) that created this ledger entry. Immutable after creation.
