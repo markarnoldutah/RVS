@@ -118,6 +118,18 @@ public class ServiceRequest : EntityBase
     /// </summary>
     [JsonProperty("priority")]
     public string Priority { get; set; } = default!;
+
+    /// <summary>
+    /// Customer-reported urgency from the intake form (e.g., "This week", "Today").
+    /// </summary>
+    [JsonProperty("urgency")]
+    public string? Urgency { get; set; }
+
+    /// <summary>
+    /// Customer's RV usage pattern (e.g., "Full-time", "Weekend trips").
+    /// </summary>
+    [JsonProperty("rvUsage")]
+    public string? RvUsage { get; set; }
 }
 
 // ---------------------------------------------------------------------------
