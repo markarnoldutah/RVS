@@ -119,7 +119,8 @@ builder.Services.AddScoped<IConfigRepository>(sp =>
 builder.Services.AddScoped<ILookupRepository>(sp =>
 {
     var client = sp.GetRequiredService<CosmosClient>();
-    return new CosmosLookupRepository(client, cosmosDbId, "lookups");
+    var logger = sp.GetRequiredService<ILogger<CosmosLookupRepository>>();
+    return new CosmosLookupRepository(client, cosmosDbId, logger);
 });
 
 builder.Services.AddScoped<IServiceRequestRepository>(sp =>

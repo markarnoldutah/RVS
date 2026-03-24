@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace RVS.API.Services
 {
-    public class LookupService : ILookupService
+    public sealed class LookupService : ILookupService
     {
         private readonly ILookupRepository _repository;
 
