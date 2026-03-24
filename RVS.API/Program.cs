@@ -1,10 +1,12 @@
+using Azure.Storage.Blobs;
+using RVS.API.HealthChecks;
 using RVS.API.Middleware;
 using RVS.API.Services;
 using RVS.Domain.Interfaces;
 using RVS.Infra.AzCosmosRepository.Repositories;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Azure.Cosmos;
@@ -12,17 +14,15 @@ using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
-// Configure CORS - Production uses restricted policy, Development uses open policy
+// Configure CORS — AllowBlazorClient for Cust_Intake WASM + Mngr_Desktop WASM
 if (builder.Environment.IsProduction())
 {
     builder.Services.AddCors(options =>
     {
-        options.AddPolicy("ProductionCors", corsBuilder =>
+        options.AddPolicy("AllowBlazorClient", corsBuilder =>
         {
             corsBuilder
-                .WithOrigins("https://portal.benefetch.com")
+                .WithOrigins("https://portal.rvserviceflow.com")
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
@@ -31,19 +31,18 @@ if (builder.Environment.IsProduction())
 }
 else
 {
-    // Development: Allow localhost for testing
     builder.Services.AddCors(options =>
     {
-        options.AddPolicy("DevelopmentCors", corsBuilder =>
+        options.AddPolicy("AllowBlazorClient", corsBuilder =>
         {
             corsBuilder
                 .WithOrigins(
-                    "https://localhost:7008",  // Blazor WASM app
-                    "http://localhost:7008",   // Blazor WASM app (HTTP)
-                    "https://localhost:5001",  // Alternative Blazor WASM port
-                    "http://localhost:5001",   // Alternative Blazor WASM port (HTTP)
-                    "https://localhost:7116",  // API (for Swagger)
-                    "http://localhost:5236"    // API (HTTP)
+                    "https://localhost:7008",
+                    "http://localhost:7008",
+                    "https://localhost:5001",
+                    "http://localhost:5001",
+                    "https://localhost:7116",
+                    "http://localhost:5236"
                 )
                 .AllowAnyHeader()
                 .AllowAnyMethod()
@@ -52,6 +51,7 @@ else
     });
 }
 
+// Auth0 JWT Bearer authentication — audience: https://api.rvserviceflow.com
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -65,76 +65,101 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
     {
-        // MODEL VALIDATION
-        // TODO confirm we need to correct model validation in API
         options.InvalidModelStateResponseFactory = actionContext =>
         {
             var actionExecutingContext = actionContext as Microsoft.AspNetCore.Mvc.Filters.ActionExecutingContext;
 
-            // if there are modelstate errors & all keys were correctly found/parsed we're dealing with validation errors.  
-            // By default a 400 BadRequest is returned; we modify below to return a more appropriate 422
             if (actionContext.ModelState.ErrorCount > 0
                 && actionExecutingContext?.ActionArguments.Count == actionContext.ActionDescriptor.Parameters.Count)
             {
                 return new UnprocessableEntityObjectResult(actionContext.ModelState);
             }
 
-            // if one of the keys wasn't correctly found / couldn't be parsed
-            // we're dealing with null/unparsable input so return 400 BadRequest
             return new BadRequestObjectResult(actionContext.ModelState);
         };
-
     });
 
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi(options =>
 {
-    // Add document transformer to configure OAuth2/JWT Bearer security
     options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
 });
 
 // Register Middleware
 builder.Services.AddSingleton<ExceptionHandlingMiddleware>();
 
-// Add CosmosClient
+// Cosmos DB client
 builder.Services.AddSingleton<CosmosClient>(sp =>
 {
-    var endpoint = builder.Configuration["CosmosDb:Endpoint"] 
+    var endpoint = builder.Configuration["CosmosDb:Endpoint"]
         ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration is missing.");
-    var key = builder.Configuration["CosmosDb:Key"] 
+    var key = builder.Configuration["CosmosDb:Key"]
         ?? throw new InvalidOperationException("CosmosDb:Key configuration is missing.");
-    
+
     return new CosmosClient(endpoint, key);
 });
 
-#region Add repositories
+// Blob Storage client
+builder.Services.AddSingleton<BlobServiceClient>(sp =>
+{
+    var connectionString = builder.Configuration["BlobStorage:ConnectionString"]
+        ?? throw new InvalidOperationException("BlobStorage:ConnectionString configuration is missing.");
+
+    return new BlobServiceClient(connectionString);
+});
+
+#region Repositories
 builder.Services.AddScoped<IConfigRepository>(sp =>
 {
     var client = sp.GetRequiredService<CosmosClient>();
-    var databaseId = builder.Configuration["CosmosDb:DatabaseId"] ?? "bfdb";
+    var databaseId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvsdb";
     return new CosmosConfigRepository(client, databaseId, "tenants");
 });
 
 builder.Services.AddScoped<ILookupRepository>(sp =>
 {
     var client = sp.GetRequiredService<CosmosClient>();
-    var databaseId = builder.Configuration["CosmosDb:DatabaseId"] ?? "bfdb";
+    var databaseId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvsdb";
     return new CosmosLookupRepository(client, databaseId, "lookups");
 });
+
+// TODO: Register repository implementations when Infra layer is complete
+// builder.Services.AddScoped<IServiceRequestRepository, CosmosServiceRequestRepository>();
+// builder.Services.AddScoped<ICustomerProfileRepository, CosmosCustomerProfileRepository>();
+// builder.Services.AddScoped<IGlobalCustomerAcctRepository, CosmosGlobalCustomerAcctRepository>();
+// builder.Services.AddScoped<IDealershipRepository, CosmosDealershipRepository>();
+// builder.Services.AddScoped<ILocationRepository, CosmosLocationRepository>();
+// builder.Services.AddScoped<IAssetLedgerRepository, CosmosAssetLedgerRepository>();
+// builder.Services.AddScoped<ISlugLookupRepository, CosmosSlugLookupRepository>();
+// builder.Services.AddScoped<ITenantAccessRepository, TablesTenantAccessRepository>();
+// builder.Services.AddScoped<ITenantConfigRepository, CosmosTenantConfigRepository>();
 #endregion
 
-// Add services
+#region Services
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ILookupService, LookupService>();
+
+// TODO: Register service implementations when Service layer is complete
+// builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
+// builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
+// builder.Services.AddScoped<IGlobalCustomerAcctService, GlobalCustomerAcctService>();
+// builder.Services.AddScoped<IDealershipService, DealershipService>();
+// builder.Services.AddScoped<ILocationService, LocationService>();
+// builder.Services.AddScoped<ITenantConfigService, TenantConfigService>();
+#endregion
 
 // Claims Management
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserContextAccessor, HttpUserContextAccessor>();
 builder.Services.AddScoped<ClaimsService>();
 
+// Health Checks — Cosmos DB + Blob Storage probes
+builder.Services.AddHealthChecks()
+    .AddCheck<CosmosDbHealthCheck>("cosmos-db", tags: ["ready"])
+    .AddCheck<BlobStorageHealthCheck>("blob-storage", tags: ["ready"]);
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// 1. Dev-only endpoints (OpenAPI, Swagger UI)
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -142,11 +167,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint("/openapi/v1.json", "v1");
-        options.DocumentTitle = "Beneftech API";
-        // OAuth configuration for Auth0
+        options.DocumentTitle = "RVS API";
         options.OAuthClientId(builder.Configuration["Auth0:ClientId"]);
         options.OAuthClientSecret(builder.Configuration["Auth0:ClientSecret"]);
-        options.OAuthAppName("Beneftech API");
+        options.OAuthAppName("RVS API");
         options.OAuthAdditionalQueryStringParams(new Dictionary<string, string>
          {
              { "audience", builder.Configuration["Auth0:Audience"] ?? "" }
@@ -157,20 +181,32 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// Production: Enforce HTTPS redirection
+// 2. HTTPS redirection (production only)
 if (app.Environment.IsProduction())
 {
     app.UseHttpsRedirection();
 }
 
-// Use environment-specific CORS policy
-app.UseCors(app.Environment.IsProduction() ? "ProductionCors" : "DevelopmentCors");
+// 3. CORS
+app.UseCors("AllowBlazorClient");
 
+// 4. ExceptionHandlingMiddleware (IMiddleware, singleton)
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
+// 5. Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
+// 6. Structured logging — enriches log scope with tenantId, locationId, correlationId (after auth so claims are populated)
+app.UseMiddleware<CorrelationLoggingMiddleware>();
+
+// 7. Tenant access gate
+app.UseMiddleware<TenantAccessGateMiddleware>();
+
+// 8. Health endpoint (no auth required)
+app.MapHealthChecks("/health");
+
+// 9. Map controllers
 app.MapControllers();
 
 app.Run();
