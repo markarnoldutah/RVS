@@ -212,9 +212,12 @@ else
     builder.Services.AddHttpClient<IVinDecoderService, NhtsaVinDecoderClient>(client =>
     {
         client.BaseAddress = new Uri("https://vpic.nhtsa.dot.gov/api/");
-        client.Timeout = TimeSpan.FromSeconds(3);
     })
-    .AddStandardResilienceHandler();
+    .AddStandardResilienceHandler(options =>
+    {
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(3);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(6);
+    });
 }
 
 // Categorization
@@ -231,9 +234,12 @@ else
         builder.Services.AddHttpClient<ICategorizationService, AzureOpenAiCategorizationService>(client =>
         {
             client.BaseAddress = new Uri(openAiEndpoint);
-            client.Timeout = TimeSpan.FromSeconds(5);
         })
-        .AddStandardResilienceHandler();
+        .AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
+        });
     }
     else
     {

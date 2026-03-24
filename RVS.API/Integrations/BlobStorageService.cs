@@ -15,7 +15,6 @@ public sealed class BlobStorageService : IBlobStorageService
     private readonly BlobServiceClient _blobServiceClient;
     private readonly ILogger<BlobStorageService> _logger;
 
-    private static readonly TimeSpan UploadSasDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan ReadSasDuration = TimeSpan.FromHours(1);
 
     public BlobStorageService(BlobServiceClient blobServiceClient, ILogger<BlobStorageService> logger)

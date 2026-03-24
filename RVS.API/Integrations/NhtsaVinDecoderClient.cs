@@ -28,7 +28,7 @@ public sealed class NhtsaVinDecoderClient : IVinDecoderService
             var response = await _httpClient.GetFromJsonAsync<NhtsaApiResponse>(
                 $"vehicles/DecodeVinValues/{vin}?format=json", cancellationToken);
 
-            var result = response?.Results?.FirstOrDefault();
+            var result = response?.Results.FirstOrDefault();
             if (result is null || string.IsNullOrWhiteSpace(result.Make))
             {
                 _logger.LogWarning("NHTSA VIN decode returned no results for VIN ending {VinSuffix}", vin[^4..]);
@@ -52,7 +52,7 @@ public sealed class NhtsaVinDecoderClient : IVinDecoderService
     internal sealed class NhtsaApiResponse
     {
         [JsonPropertyName("Results")]
-        public List<NhtsaVehicle>? Results { get; set; }
+        public List<NhtsaVehicle> Results { get; set; } = [];
     }
 
     /// <summary>
