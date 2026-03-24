@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Services;
 using RVS.Domain.Entities;
@@ -12,6 +13,7 @@ public class LocationServiceTests
     private readonly Mock<ISlugLookupRepository> _slugRepoMock = new();
     private readonly Mock<IDealershipRepository> _dealershipRepoMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
+    private readonly Mock<ILogger<LocationService>> _loggerMock = new();
     private readonly LocationService _sut;
 
     public LocationServiceTests()
@@ -21,7 +23,8 @@ public class LocationServiceTests
             _locationRepoMock.Object,
             _slugRepoMock.Object,
             _dealershipRepoMock.Object,
-            _userContextMock.Object);
+            _userContextMock.Object,
+            _loggerMock.Object);
     }
 
     // ── GetByIdAsync ─────────────────────────────────────────────────────────

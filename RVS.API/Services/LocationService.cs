@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
 
@@ -14,6 +15,7 @@ public sealed class LocationService : ILocationService
     private readonly ISlugLookupRepository _slugLookupRepository;
     private readonly IDealershipRepository _dealershipRepository;
     private readonly IUserContextAccessor _userContext;
+    private readonly ILogger<LocationService> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="LocationService"/>.
@@ -22,12 +24,14 @@ public sealed class LocationService : ILocationService
         ILocationRepository locationRepository,
         ISlugLookupRepository slugLookupRepository,
         IDealershipRepository dealershipRepository,
-        IUserContextAccessor userContext)
+        IUserContextAccessor userContext,
+        ILogger<LocationService> logger)
     {
         _locationRepository = locationRepository;
         _slugLookupRepository = slugLookupRepository;
         _dealershipRepository = dealershipRepository;
         _userContext = userContext;
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -80,9 +84,9 @@ public sealed class LocationService : ILocationService
             {
                 await _slugLookupRepository.DeleteAsync(entity.Slug, cancellationToken);
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort rollback — log would be ideal but we re-throw the original exception
+                _logger.LogWarning(ex, "Failed to rollback slug '{Slug}' after location creation failure", entity.Slug);
             }
 
             throw;
@@ -123,9 +127,9 @@ public sealed class LocationService : ILocationService
             {
                 await _slugLookupRepository.DeleteAsync(oldSlug, cancellationToken);
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort cleanup of old slug
+                _logger.LogWarning(ex, "Failed to delete old slug '{Slug}' during location update", oldSlug);
             }
         }
 
@@ -155,9 +159,9 @@ public sealed class LocationService : ILocationService
         {
             await _slugLookupRepository.DeleteAsync(existing.Slug, cancellationToken);
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort slug cleanup
+            _logger.LogWarning(ex, "Failed to delete slug '{Slug}' during location delete", existing.Slug);
         }
     }
 }
