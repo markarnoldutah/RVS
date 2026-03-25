@@ -68,8 +68,9 @@ public class LocationsController : ControllerBase
         [FromBody] LocationCreateRequestDto request, CancellationToken ct)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
+        var userId = _claimsService.GetUserIdOrThrow();
 
-        var entity = request.ToEntity(tenantId, tenantId);
+        var entity = request.ToEntity(tenantId, userId);
         var created = await _service.CreateAsync(tenantId, entity, ct);
 
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created.ToDetailDto());
@@ -87,9 +88,10 @@ public class LocationsController : ControllerBase
         string id, [FromBody] LocationCreateRequestDto request, CancellationToken ct)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
+        var userId = _claimsService.GetUserIdOrThrow();
 
         var existing = await _service.GetByIdAsync(tenantId, id, ct);
-        existing.ApplyUpdate(request, tenantId);
+        existing.ApplyUpdate(request, userId);
         var updated = await _service.UpdateAsync(tenantId, id, existing, ct);
 
         return Ok(updated.ToDetailDto());

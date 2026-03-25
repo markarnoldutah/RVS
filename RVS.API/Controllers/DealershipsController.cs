@@ -61,16 +61,16 @@ public class DealershipsController : ControllerBase
     /// Updates an existing dealership.
     /// </summary>
     /// <param name="id">Dealership identifier.</param>
-    /// <param name="entity">The updated dealership entity.</param>
+    /// <param name="request">The update request DTO.</param>
     /// <param name="ct">Cancellation token.</param>
     [HttpPut("{id}")]
     [Authorize(Policy = "CanUpdateDealerships")]
     public async Task<ActionResult<DealershipDetailDto>> Update(
-        string id, [FromBody] RVS.Domain.Entities.Dealership entity, CancellationToken ct)
+        string id, [FromBody] DealershipUpdateRequestDto request, CancellationToken ct)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
-        var updated = await _service.UpdateAsync(tenantId, id, entity, ct);
+        var updated = await _service.UpdateAsync(tenantId, id, request, ct);
 
         return Ok(updated.ToDetailDto());
     }

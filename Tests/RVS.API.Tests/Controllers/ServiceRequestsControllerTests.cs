@@ -65,10 +65,16 @@ public class ServiceRequestsControllerTests
     public async Task Update_ShouldReturnOkWithDetailDto()
     {
         var sr = BuildServiceRequest();
-        _serviceMock.Setup(s => s.UpdateAsync(TenantId, sr.Id, sr, It.IsAny<CancellationToken>()))
+        var request = new ServiceRequestUpdateRequestDto
+        {
+            Status = sr.Status,
+            IssueDescription = sr.IssueDescription,
+            Priority = sr.Priority
+        };
+        _serviceMock.Setup(s => s.UpdateAsync(TenantId, sr.Id, request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(sr);
 
-        var result = await _sut.Update("dlr_1", sr.Id, sr, CancellationToken.None);
+        var result = await _sut.Update("dlr_1", sr.Id, request, CancellationToken.None);
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().BeOfType<ServiceRequestDetailResponseDto>();

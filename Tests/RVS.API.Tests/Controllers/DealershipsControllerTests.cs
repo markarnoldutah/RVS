@@ -63,10 +63,16 @@ public class DealershipsControllerTests
     public async Task Update_ShouldReturnOkWithDetailDto()
     {
         var dealership = BuildDealership();
-        _serviceMock.Setup(s => s.UpdateAsync(TenantId, dealership.Id, dealership, It.IsAny<CancellationToken>()))
+        var request = new DealershipUpdateRequestDto
+        {
+            Name = dealership.Name,
+            Slug = dealership.Slug,
+            Phone = dealership.Phone
+        };
+        _serviceMock.Setup(s => s.UpdateAsync(TenantId, dealership.Id, request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(dealership);
 
-        var result = await _sut.Update(dealership.Id, dealership, CancellationToken.None);
+        var result = await _sut.Update(dealership.Id, request, CancellationToken.None);
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().BeOfType<DealershipDetailDto>();

@@ -114,7 +114,11 @@ public class LocationsControllerTests
 
     private static ClaimsService BuildClaimsService(string tenantId)
     {
-        var claims = new List<Claim> { new(ClaimsService.TenantIdClaimType, tenantId) };
+        var claims = new List<Claim>
+        {
+            new(ClaimsService.TenantIdClaimType, tenantId),
+            new(ClaimTypes.NameIdentifier, "usr_test")
+        };
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var principal = new ClaimsPrincipal(identity);
         var httpContext = new DefaultHttpContext { User = principal };

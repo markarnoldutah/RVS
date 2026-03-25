@@ -156,7 +156,7 @@ public class ServiceRequestServiceTests
     [InlineData("  ")]
     public async Task UpdateAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
     {
-        var act = () => _sut.UpdateAsync(tenantId!, "sr_1", BuildServiceRequest());
+        var act = () => _sut.UpdateAsync(tenantId!, "sr_1", BuildUpdateRequest());
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -167,7 +167,7 @@ public class ServiceRequestServiceTests
     [InlineData("  ")]
     public async Task UpdateAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
     {
-        var act = () => _sut.UpdateAsync("ten_1", id!, BuildServiceRequest());
+        var act = () => _sut.UpdateAsync("ten_1", id!, BuildUpdateRequest());
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -175,7 +175,7 @@ public class ServiceRequestServiceTests
     [Fact]
     public async Task UpdateAsync_WhenEntityIsNull_ShouldThrowArgumentNullException()
     {
-        var act = () => _sut.UpdateAsync("ten_1", "sr_1", null!);
+        var act = () => _sut.UpdateAsync("ten_1", "sr_1", (ServiceRequestUpdateRequestDto)null!);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
@@ -186,7 +186,7 @@ public class ServiceRequestServiceTests
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_missing", It.IsAny<CancellationToken>()))
             .ReturnsAsync((ServiceRequest?)null);
 
-        var act = () => _sut.UpdateAsync("ten_1", "sr_missing", BuildServiceRequest());
+        var act = () => _sut.UpdateAsync("ten_1", "sr_missing", BuildUpdateRequest());
 
         await act.Should().ThrowAsync<KeyNotFoundException>();
     }
@@ -196,13 +196,13 @@ public class ServiceRequestServiceTests
     {
         var existing = BuildServiceRequest();
         existing.Status = "New";
-        var updated = BuildServiceRequest();
-        updated.Status = "Completed";
 
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
 
-        var act = () => _sut.UpdateAsync("ten_1", existing.Id, updated);
+        var request = BuildUpdateRequest() with { Status = "Completed" };
+
+        var act = () => _sut.UpdateAsync("ten_1", existing.Id, request);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*Invalid status transition*");
@@ -215,14 +215,16 @@ public class ServiceRequestServiceTests
         existing.MarkAsUpdated("usr_other");
         var staleTimestamp = existing.UpdatedAtUtc!.Value.AddMinutes(-5);
 
-        var updated = BuildServiceRequest();
-        updated.Status = existing.Status;
-        updated.UpdatedAtUtc = staleTimestamp;
-
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
 
-        var act = () => _sut.UpdateAsync("ten_1", existing.Id, updated);
+        var request = BuildUpdateRequest() with
+        {
+            Status = existing.Status,
+            UpdatedAtUtc = staleTimestamp
+        };
+
+        var act = () => _sut.UpdateAsync("ten_1", existing.Id, request);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*concurrency conflict*");
@@ -234,17 +236,19 @@ public class ServiceRequestServiceTests
         var existing = BuildServiceRequest();
         existing.Status = "New";
 
-        var updated = BuildServiceRequest();
-        updated.Status = "InProgress";
-        updated.IssueDescription = "Updated description";
-        updated.Priority = "Low";
-
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
 
-        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+        var request = new ServiceRequestUpdateRequestDto
+        {
+            Status = "InProgress",
+            IssueDescription = "Updated description",
+            Priority = "Low"
+        };
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, request);
 
         result.Status.Should().Be("InProgress");
         result.IssueDescription.Should().Be("Updated description");
@@ -259,15 +263,14 @@ public class ServiceRequestServiceTests
         var existing = BuildServiceRequest();
         existing.Status = "New";
 
-        var updated = BuildServiceRequest();
-        updated.Status = "New";
-
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
 
-        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+        var request = BuildUpdateRequest() with { Status = "New" };
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, request);
 
         result.Status.Should().Be("New");
     }
@@ -525,6 +528,14 @@ public class ServiceRequestServiceTests
         Status = "New",
         LocationId = "loc_slc",
         CustomerProfileId = "cp_1",
+        IssueDescription = "Water heater not working",
+        IssueCategory = "Plumbing",
+        Priority = "High"
+    };
+
+    private static ServiceRequestUpdateRequestDto BuildUpdateRequest() => new()
+    {
+        Status = "New",
         IssueDescription = "Water heater not working",
         IssueCategory = "Plumbing",
         Priority = "High"

@@ -68,16 +68,16 @@ public class ServiceRequestsController : ControllerBase
     /// </summary>
     /// <param name="dealershipId">Dealership identifier (route segment).</param>
     /// <param name="srId">Service request identifier.</param>
-    /// <param name="entity">The updated service request entity.</param>
+    /// <param name="request">The update request DTO.</param>
     /// <param name="ct">Cancellation token.</param>
     [HttpPut("{srId}")]
     [Authorize(Policy = "CanUpdateServiceRequests")]
     public async Task<ActionResult<ServiceRequestDetailResponseDto>> Update(
-        string dealershipId, string srId, [FromBody] RVS.Domain.Entities.ServiceRequest entity, CancellationToken ct)
+        string dealershipId, string srId, [FromBody] ServiceRequestUpdateRequestDto request, CancellationToken ct)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
-        var updated = await _service.UpdateAsync(tenantId, srId, entity, ct);
+        var updated = await _service.UpdateAsync(tenantId, srId, request, ct);
 
         return Ok(updated.ToDetailDto());
     }
