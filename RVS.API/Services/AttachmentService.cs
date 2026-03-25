@@ -60,7 +60,7 @@ public sealed class AttachmentService : IAttachmentService
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
 
         var blobName = $"{tenantId}/{serviceRequestId}/{Guid.NewGuid()}_{fileName}";
-        var sasUrl = await _blobStorage.GenerateSasUrlAsync(ContainerName, blobName, cancellationToken);
+        var sasUrl = await _blobStorage.GenerateUploadSasUrlAsync(ContainerName, blobName, cancellationToken);
 
         return new AttachmentSasDto
         {
@@ -86,7 +86,7 @@ public sealed class AttachmentService : IAttachmentService
         var attachment = sr.Attachments.Find(a => a.AttachmentId == attachmentId)
             ?? throw new KeyNotFoundException($"Attachment '{attachmentId}' not found on service request '{serviceRequestId}'.");
 
-        var sasUrl = await _blobStorage.GenerateSasUrlAsync(ContainerName, attachment.BlobUri, cancellationToken);
+        var sasUrl = await _blobStorage.GenerateReadSasUrlAsync(ContainerName, attachment.BlobUri, cancellationToken);
 
         return new AttachmentSasDto
         {
