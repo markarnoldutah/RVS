@@ -26,6 +26,13 @@ public interface IDealershipRepository
     Task<Dealership?> GetBySlugAsync(string slug, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lists all dealerships belonging to a tenant.
+    /// </summary>
+    /// <param name="tenantId">Tenant partition key.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyList<Dealership>> ListByTenantAsync(string tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a new dealership document.
     /// </summary>
     /// <param name="entity">The dealership entity to persist.</param>

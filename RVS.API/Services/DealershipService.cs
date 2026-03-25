@@ -21,6 +21,14 @@ public sealed class DealershipService : IDealershipService
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Dealership>> ListByTenantAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        return await _repository.ListByTenantAsync(tenantId, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<Dealership> GetByIdAsync(string tenantId, string id, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);

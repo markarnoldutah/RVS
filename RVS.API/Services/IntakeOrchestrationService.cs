@@ -17,6 +17,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     private readonly ICustomerProfileRepository _customerProfileRepository;
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly IAssetLedgerRepository _assetLedgerRepository;
+    private readonly ILocationRepository _locationRepository;
+    private readonly ILookupRepository _lookupRepository;
     private readonly ICategorizationService _categorizationService;
     private readonly INotificationService _notificationService;
     private readonly ILogger<IntakeOrchestrationService> _logger;
@@ -30,6 +32,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         ICustomerProfileRepository customerProfileRepository,
         IServiceRequestRepository serviceRequestRepository,
         IAssetLedgerRepository assetLedgerRepository,
+        ILocationRepository locationRepository,
+        ILookupRepository lookupRepository,
         ICategorizationService categorizationService,
         INotificationService notificationService,
         ILogger<IntakeOrchestrationService> logger)
@@ -39,6 +43,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _customerProfileRepository = customerProfileRepository;
         _serviceRequestRepository = serviceRequestRepository;
         _assetLedgerRepository = assetLedgerRepository;
+        _locationRepository = locationRepository;
+        _lookupRepository = lookupRepository;
         _categorizationService = categorizationService;
         _notificationService = notificationService;
         _logger = logger;
@@ -300,5 +306,68 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             _logger.LogWarning(ex, "Intake Step 7: Failed to send confirmation notification for SR {ServiceRequestId}",
                 serviceRequestId);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<IntakeConfigResponseDto> GetIntakeConfigAsync(string slug, string? magicLinkToken = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slug);
+
+        var slugLookup = await _slugLookupRepository.GetBySlugAsync(slug.Trim().ToLowerInvariant(), cancellationToken)
+            ?? throw new KeyNotFoundException($"Location slug '{slug}' not found.");
+
+        var location = await _locationRepository.GetByIdAsync(slugLookup.TenantId, slugLookup.LocationId, cancellationToken);
+
+        var intakeConfig = location?.IntakeConfig ?? new IntakeFormConfigEmbedded();
+
+        var issueCategories = new List<LookupItemDto>();
+        var lookupSet = await _lookupRepository.GetGlobalAsync("issue-categories", cancellationToken);
+        if (lookupSet is not null)
+        {
+            issueCategories = lookupSet.Items
+                .Where(i => i.IsSelectable)
+                .Select(i => new LookupItemDto(i.Code, i.Name, i.Description, i.SortOrder, i.IsSelectable))
+                .ToList();
+        }
+
+        CustomerInfoDto? prefillCustomer = null;
+        if (!string.IsNullOrWhiteSpace(magicLinkToken))
+        {
+            var acct = await _globalCustomerAcctRepository.GetByMagicLinkTokenAsync(magicLinkToken, cancellationToken);
+            if (acct is not null && acct.MagicLinkExpiresAtUtc > DateTime.UtcNow)
+            {
+                prefillCustomer = new CustomerInfoDto
+                {
+                    FirstName = acct.FirstName,
+                    LastName = acct.LastName,
+                    Email = acct.Email,
+                    Phone = acct.Phone
+                };
+            }
+        }
+
+        return new IntakeConfigResponseDto
+        {
+            LocationName = slugLookup.LocationName,
+            LocationSlug = slugLookup.Slug,
+            DealershipName = slugLookup.DealershipName,
+            AcceptedFileTypes = intakeConfig.AcceptedFileTypes,
+            MaxFileSizeMb = intakeConfig.MaxFileSizeMb,
+            MaxAttachments = intakeConfig.MaxAttachments,
+            AllowAnonymousIntake = intakeConfig.AllowAnonymousIntake,
+            IssueCategories = issueCategories,
+            PrefillCustomer = prefillCustomer
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<string> ResolveSlugToTenantIdAsync(string slug, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slug);
+
+        var slugLookup = await _slugLookupRepository.GetBySlugAsync(slug.Trim().ToLowerInvariant(), cancellationToken)
+            ?? throw new KeyNotFoundException($"Location slug '{slug}' not found.");
+
+        return slugLookup.TenantId;
     }
 }

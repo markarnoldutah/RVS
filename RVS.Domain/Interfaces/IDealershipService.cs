@@ -27,6 +27,13 @@ public interface IDealershipService
     Task<Dealership> GetBySlugAsync(string slug, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lists all dealerships belonging to a tenant.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyList<Dealership>> ListByTenantAsync(string tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a new dealership.
     /// </summary>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>

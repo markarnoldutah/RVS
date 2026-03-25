@@ -51,4 +51,15 @@ public sealed class MockBlobStorageService : IBlobStorageService
 
         return Task.FromResult(fakeUri);
     }
+
+    /// <inheritdoc />
+    public Task DeleteAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
+
+        _logger.LogDebug("MockBlobStorageService pretending to delete {BlobName}", blobName);
+
+        return Task.CompletedTask;
+    }
 }

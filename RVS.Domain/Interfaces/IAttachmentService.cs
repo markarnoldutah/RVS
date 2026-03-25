@@ -54,4 +54,14 @@ public interface IAttachmentService
     /// <param name="declaredContentType">Content type declared by the client.</param>
     /// <exception cref="ArgumentException">Thrown when the detected MIME type does not match the declared type.</exception>
     Task ValidateMimeTypeAsync(Stream fileStream, string declaredContentType);
+
+    /// <summary>
+    /// Deletes an attachment from a service request and removes the backing blob.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="serviceRequestId">Service request that owns the attachment.</param>
+    /// <param name="attachmentId">Attachment identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the service request or attachment is not found.</exception>
+    Task DeleteAttachmentAsync(string tenantId, string serviceRequestId, string attachmentId, CancellationToken cancellationToken = default);
 }

@@ -114,4 +114,17 @@ public sealed class BlobStorageService : IBlobStorageService
 
         return blobClient.Uri.ToString();
     }
+
+    /// <inheritdoc />
+    public async Task DeleteAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
+
+        var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+        var blobClient = containerClient.GetBlobClient(blobName);
+        await blobClient.DeleteIfExistsAsync(cancellationToken: cancellationToken);
+
+        _logger.LogDebug("Deleted blob {BlobName} from container {ContainerName}", blobName, containerName);
+    }
 }

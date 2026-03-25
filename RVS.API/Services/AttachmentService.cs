@@ -169,6 +169,31 @@ public sealed class AttachmentService : IAttachmentService
         }
     }
 
+    /// <inheritdoc />
+    public async Task DeleteAttachmentAsync(
+        string tenantId,
+        string serviceRequestId,
+        string attachmentId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(attachmentId);
+
+        var sr = await _repository.GetByIdAsync(tenantId, serviceRequestId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Service request '{serviceRequestId}' not found.");
+
+        var attachment = sr.Attachments.Find(a => a.AttachmentId == attachmentId)
+            ?? throw new KeyNotFoundException($"Attachment '{attachmentId}' not found on service request '{serviceRequestId}'.");
+
+        await _blobStorage.DeleteAsync(ContainerName, attachment.BlobUri, cancellationToken);
+
+        sr.Attachments.Remove(attachment);
+        sr.MarkAsUpdated(_userContext.UserId);
+
+        await _repository.UpdateAsync(sr, cancellationToken);
+    }
+
     /// <summary>
     /// Detects MIME type from the first bytes of a file using magic byte signatures.
     /// </summary>

@@ -83,6 +83,34 @@ public sealed class CosmosDealershipRepository : CosmosRepositoryBase, IDealersh
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Dealership>> ListByTenantAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.type = 'dealership' ORDER BY c.name ASC")
+            .WithParameter("@tenantId", tenantId);
+
+        var options = new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) };
+        var iterator = _container.GetItemQueryIterator<Dealership>(query, requestOptions: options);
+
+        var results = new List<Dealership>();
+        double totalCharge = 0;
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(cancellationToken);
+            totalCharge += page.RequestCharge;
+            results.AddRange(page);
+        }
+
+        _logger.LogDebug("ListByTenantAsync [tenant={TenantId}] — {Count} items, RequestCharge: {Charge} RU",
+            tenantId, results.Count, totalCharge);
+
+        return results;
+    }
+
+    /// <inheritdoc />
     public async Task<Dealership> CreateAsync(Dealership entity, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
