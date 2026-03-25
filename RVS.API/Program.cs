@@ -144,6 +144,8 @@ builder.Services.AddOpenApi(options =>
 });
 
 // Rate limiting — protects public intake + status endpoints
+// Apply via [EnableRateLimiting("StatusEndpoint")] on StatusController
+// Apply via [EnableRateLimiting("IntakeEndpoint")] on IntakeController
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("StatusEndpoint", cfg =>

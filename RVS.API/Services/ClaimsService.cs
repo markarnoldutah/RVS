@@ -53,7 +53,14 @@ public sealed class ClaimsService
         if (string.IsNullOrWhiteSpace(raw))
             throw new UnauthorizedAccessException("locationIds claim is missing.");
 
-        return JsonSerializer.Deserialize<List<string>>(raw) ?? [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(raw) ?? [];
+        }
+        catch (JsonException)
+        {
+            throw new UnauthorizedAccessException("locationIds claim contains invalid JSON.");
+        }
     }
 
     /// <summary>

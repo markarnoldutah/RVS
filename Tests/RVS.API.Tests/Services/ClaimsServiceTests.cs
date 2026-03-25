@@ -135,4 +135,15 @@ public sealed class ClaimsServiceTests
         act.Should().Throw<UnauthorizedAccessException>()
             .WithMessage("locationIds claim is missing.");
     }
+
+    [Fact]
+    public void GetLocationIdsOrThrow_WhenClaimContainsMalformedJson_ShouldThrowUnauthorizedAccessException()
+    {
+        var sut = CreateService(new Claim(ClaimsService.LocationIdsClaimType, "not-valid-json"));
+
+        var act = () => sut.GetLocationIdsOrThrow();
+
+        act.Should().Throw<UnauthorizedAccessException>()
+            .WithMessage("locationIds claim contains invalid JSON.");
+    }
 }

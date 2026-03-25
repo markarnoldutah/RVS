@@ -18,7 +18,7 @@ public sealed partial class TenantAccessGateMiddleware
         "/swagger"
     };
 
-    [GeneratedRegex(@"^/api/service-requests/[^/]+/status$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^/api/service-requests/[a-zA-Z0-9_-]+/status$", RegexOptions.IgnoreCase)]
     private static partial Regex StatusEndpointPattern();
 
     public TenantAccessGateMiddleware(RequestDelegate next)
