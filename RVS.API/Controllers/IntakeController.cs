@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using RVS.API.Mappers;
 using RVS.Domain.DTOs;
 using RVS.Domain.Integrations;
@@ -13,6 +14,7 @@ namespace RVS.API.Controllers;
 [ApiController]
 [Route("api/intake/{locationSlug}")]
 [AllowAnonymous]
+[EnableRateLimiting("IntakeEndpoint")]
 public class IntakeController : ControllerBase
 {
     private readonly IIntakeOrchestrationService _intakeService;

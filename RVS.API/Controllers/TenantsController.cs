@@ -30,6 +30,7 @@ public class TenantsController : ControllerBase
     /// Creates the initial tenant configuration (bootstrap).
     /// </summary>
     [HttpPost("config")]
+    [Authorize(Policy = "CanManageTenantConfig")]
     public async Task<ActionResult<TenantConfigResponseDto>> CreateTenantConfig([FromBody] TenantConfigCreateRequestDto request)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
@@ -44,6 +45,7 @@ public class TenantsController : ControllerBase
     /// Retrieves the current tenant configuration.
     /// </summary>
     [HttpGet("config")]
+    [Authorize(Policy = "CanManageTenantConfig")]
     public async Task<ActionResult<TenantConfigResponseDto>> GetTenantConfig()
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
@@ -58,6 +60,7 @@ public class TenantsController : ControllerBase
     /// Updates the tenant configuration.
     /// </summary>
     [HttpPut("config")]
+    [Authorize(Policy = "CanManageTenantConfig")]
     public async Task<ActionResult<TenantConfigResponseDto>> UpdateTenantConfig([FromBody] TenantConfigUpdateRequestDto request)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
@@ -73,6 +76,7 @@ public class TenantsController : ControllerBase
     /// This endpoint allows client applications to check if logins are enabled for the tenant.
     /// </summary>
     [HttpGet("access-gate")]
+    [Authorize(Policy = "CanManageTenantConfig")]
     public async Task<ActionResult<TenantAccessGateDto>> GetAccessGate()
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();

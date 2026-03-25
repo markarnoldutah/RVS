@@ -34,6 +34,7 @@ public class LookupsController : ControllerBase
     /// GET /api/lookups/encounter-types
     /// </example>
     [HttpGet("{lookupSetId}")]
+    [Authorize(Policy = "CanReadLookups")]
     public async Task<ActionResult<LookupSetDto>> GetLookupAsync(string lookupSetId)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow(); 

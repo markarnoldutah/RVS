@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using RVS.API.Mappers;
 using RVS.Domain.DTOs;
 using RVS.Domain.Interfaces;
@@ -13,6 +14,7 @@ namespace RVS.API.Controllers;
 [ApiController]
 [Route("api/status")]
 [AllowAnonymous]
+[EnableRateLimiting("StatusEndpoint")]
 public class StatusController : ControllerBase
 {
     private readonly IGlobalCustomerAcctService _globalCustomerAcctService;
