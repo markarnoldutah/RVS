@@ -198,6 +198,7 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
+builder.Services.AddScoped<IIntakeOrchestrationService, IntakeOrchestrationService>();
 #endregion
 
 #region Integration Clients
