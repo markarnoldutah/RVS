@@ -194,6 +194,7 @@ builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<ITenantConfigService, TenantConfigService>();
 builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IGlobalCustomerAcctService, GlobalCustomerAcctService>();
+builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 // TODO: Register service implementations when Service layer is complete
 // builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
