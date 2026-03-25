@@ -211,6 +211,40 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
         _logger.LogDebug("DeleteAsync [{Id}] — RequestCharge: {Charge} RU", id, response.RequestCharge);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ServiceRequest>> GetForAnalyticsAsync(
+        string tenantId,
+        DateTime? from = null,
+        DateTime? to = null,
+        string? locationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        var conditions = new List<string> { "c.tenantId = @tenantId", "c.type = 'serviceRequest'" };
+
+        if (from.HasValue)
+            conditions.Add("c.createdAtUtc >= @from");
+        if (to.HasValue)
+            conditions.Add("c.createdAtUtc <= @to");
+        if (!string.IsNullOrWhiteSpace(locationId))
+            conditions.Add("c.locationId = @locationId");
+
+        var sql = $"SELECT * FROM c WHERE {string.Join(" AND ", conditions)}";
+
+        var definition = new QueryDefinition(sql)
+            .WithParameter("@tenantId", tenantId);
+
+        if (from.HasValue)
+            definition = definition.WithParameter("@from", from.Value);
+        if (to.HasValue)
+            definition = definition.WithParameter("@to", to.Value);
+        if (!string.IsNullOrWhiteSpace(locationId))
+            definition = definition.WithParameter("@locationId", locationId);
+
+        return await ExecuteQueryAsync(definition, tenantId, nameof(GetForAnalyticsAsync), cancellationToken);
+    }
+
     // ---------------------------------------------------------------------------
     // Private helpers
     // ---------------------------------------------------------------------------

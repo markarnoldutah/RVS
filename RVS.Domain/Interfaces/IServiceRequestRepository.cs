@@ -56,4 +56,20 @@ public interface IServiceRequestRepository
     /// <param name="id">Service request identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task DeleteAsync(string tenantId, string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retrieves service requests for analytics aggregation, filtered by optional date range and location.
+    /// Uses parameterized queries and is single-partition when <paramref name="locationId"/> is provided.
+    /// </summary>
+    /// <param name="tenantId">Tenant partition key (required).</param>
+    /// <param name="from">Inclusive start of the date range filter (UTC). Null to omit.</param>
+    /// <param name="to">Inclusive end of the date range filter (UTC). Null to omit.</param>
+    /// <param name="locationId">Optional location filter.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyList<ServiceRequest>> GetForAnalyticsAsync(
+        string tenantId,
+        DateTime? from = null,
+        DateTime? to = null,
+        string? locationId = null,
+        CancellationToken cancellationToken = default);
 }
