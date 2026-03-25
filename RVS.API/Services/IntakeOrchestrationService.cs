@@ -255,21 +255,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             globalAcct.Id);
 
         // ── Step 7: Fire-and-forget notification ─────────────────────────────
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await _notificationService.SendServiceRequestConfirmationAsync(
-                    request.Customer.Email.Trim(),
-                    serviceRequest.Id,
-                    CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Intake Step 7: Failed to send confirmation notification for SR {ServiceRequestId}",
-                    serviceRequest.Id);
-            }
-        }, CancellationToken.None);
+        _ = FireAndForgetNotificationAsync(request.Customer.Email.Trim(), serviceRequest.Id);
 
         return serviceRequest;
     }
@@ -294,5 +280,25 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         }
 
         return string.Join("\n", parts);
+    }
+
+    /// <summary>
+    /// Sends a confirmation notification without blocking the caller.
+    /// Exceptions are caught and logged as warnings.
+    /// </summary>
+    private async Task FireAndForgetNotificationAsync(string email, string serviceRequestId)
+    {
+        try
+        {
+            await _notificationService.SendServiceRequestConfirmationAsync(
+                email,
+                serviceRequestId,
+                CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Intake Step 7: Failed to send confirmation notification for SR {ServiceRequestId}",
+                serviceRequestId);
+        }
     }
 }
