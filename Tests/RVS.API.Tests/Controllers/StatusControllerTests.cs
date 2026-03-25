@@ -56,7 +56,6 @@ public class StatusControllerTests
             FirstName = "Jane",
             LastName = "Doe",
             Email = "jane@example.com",
-            NormalizedEmail = "jane@example.com",
             LinkedProfiles = [],
             CreatedByUserId = "system"
         };
@@ -77,7 +76,6 @@ public class StatusControllerTests
         FirstName = "Jane",
         LastName = "Doe",
         Email = "jane@example.com",
-        NormalizedEmail = "jane@example.com",
         MagicLinkToken = "valid-token",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
         CreatedByUserId = "system",
@@ -99,7 +97,6 @@ public class StatusControllerTests
         Id = "prof_1",
         TenantId = "ten_1",
         Email = "jane@example.com",
-        NormalizedEmail = "jane@example.com",
         FirstName = "Jane",
         LastName = "Doe",
         GlobalCustomerAcctId = "gca_1",

@@ -659,8 +659,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
     new GlobalCustomerAcct
     {
         Id = GcaJohnson,
-        NormalizedEmail = "mike.johnson@example.com",
-        Email = "Mike.Johnson@example.com",
+        Email = "mike.johnson@example.com",
         FirstName = "Mike",
         LastName = "Johnson",
         Phone = "(801) 555-1001",
@@ -683,8 +682,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
     new GlobalCustomerAcct
     {
         Id = GcaSmith,
-        NormalizedEmail = "sarah.smith@example.com",
-        Email = "Sarah.Smith@example.com",
+        Email = "sarah.smith@example.com",
         FirstName = "Sarah",
         LastName = "Smith",
         Phone = "(303) 555-1002",
@@ -707,8 +705,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
     new GlobalCustomerAcct
     {
         Id = GcaMartinez,
-        NormalizedEmail = "carlos.martinez@example.com",
-        Email = "Carlos.Martinez@example.com",
+        Email = "carlos.martinez@example.com",
         FirstName = "Carlos",
         LastName = "Martinez",
         Phone = "(702) 555-1003",
@@ -731,8 +728,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
     new GlobalCustomerAcct
     {
         Id = GcaWilliams,
-        NormalizedEmail = "jenny.williams@example.com",
-        Email = "Jenny.Williams@example.com",
+        Email = "jenny.williams@example.com",
         FirstName = "Jenny",
         LastName = "Williams",
         Phone = "(208) 555-1004",
@@ -755,8 +751,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
     new GlobalCustomerAcct
     {
         Id = GcaThompson,
-        NormalizedEmail = "dave.thompson@example.com",
-        Email = "Dave.Thompson@example.com",
+        Email = "dave.thompson@example.com",
         FirstName = "Dave",
         LastName = "Thompson",
         Phone = "(208) 555-1005",
@@ -788,8 +783,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         Id = CpJohnsonBc,
         TenantId = TenantBlueCompass,
         Name = "Mike Johnson",
-        Email = "Mike.Johnson@example.com",
-        NormalizedEmail = "mike.johnson@example.com",
+        Email = "mike.johnson@example.com",
         FirstName = "Mike",
         LastName = "Johnson",
         Phone = "(801) 555-1001",
@@ -817,8 +811,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         Id = CpSmithBc,
         TenantId = TenantBlueCompass,
         Name = "Sarah Smith",
-        Email = "Sarah.Smith@example.com",
-        NormalizedEmail = "sarah.smith@example.com",
+        Email = "sarah.smith@example.com",
         FirstName = "Sarah",
         LastName = "Smith",
         Phone = "(303) 555-1002",
@@ -846,8 +839,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         Id = CpMartinezBc,
         TenantId = TenantBlueCompass,
         Name = "Carlos Martinez",
-        Email = "Carlos.Martinez@example.com",
-        NormalizedEmail = "carlos.martinez@example.com",
+        Email = "carlos.martinez@example.com",
         FirstName = "Carlos",
         LastName = "Martinez",
         Phone = "(702) 555-1003",
@@ -877,8 +869,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         Id = CpWilliamsHt,
         TenantId = TenantHappyTrails,
         Name = "Jenny Williams",
-        Email = "Jenny.Williams@example.com",
-        NormalizedEmail = "jenny.williams@example.com",
+        Email = "jenny.williams@example.com",
         FirstName = "Jenny",
         LastName = "Williams",
         Phone = "(208) 555-1004",
@@ -906,8 +897,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         Id = CpThompsonHt,
         TenantId = TenantHappyTrails,
         Name = "Dave Thompson",
-        Email = "Dave.Thompson@example.com",
-        NormalizedEmail = "dave.thompson@example.com",
+        Email = "dave.thompson@example.com",
         FirstName = "Dave",
         LastName = "Thompson",
         Phone = "(208) 555-1005",

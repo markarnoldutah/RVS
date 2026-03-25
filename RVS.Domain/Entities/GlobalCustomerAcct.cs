@@ -5,18 +5,15 @@ namespace RVS.Domain.Entities;
 /// <summary>
 /// Global customer account — one record per real human (by email).
 /// Cross-tenant. Links all dealership-scoped profiles.
-/// Partitioned by normalizedEmail for O(1) intake resolution.
+/// Email is always stored in normalized form (trimmed, lowercased).
 ///
-/// Cosmos DB partition key: /normalizedEmail
+/// Cosmos DB partition key: /email
 /// </summary>
 public class GlobalCustomerAcct : EntityBase
 {
     /// <inheritdoc />
     [JsonProperty("type")]
     public override string Type { get; init; } = "globalCustomerAcct";
-
-    [JsonProperty("normalizedEmail")]
-    public string NormalizedEmail { get; set; } = string.Empty;
 
     [JsonProperty("email")]
     public string Email { get; set; } = string.Empty;

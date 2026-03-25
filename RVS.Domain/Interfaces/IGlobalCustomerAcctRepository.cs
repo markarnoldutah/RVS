@@ -4,17 +4,18 @@ namespace RVS.Domain.Interfaces;
 
 /// <summary>
 /// Repository for persisting and retrieving <see cref="GlobalCustomerAcct"/> entities.
-/// Partition key: <c>/normalizedEmail</c>. Cross-tenant — not scoped by tenantId.
+/// Partition key: <c>/email</c>. Cross-tenant — not scoped by tenantId.
+/// Email is always stored in normalized form (trimmed, lowercased).
 /// </summary>
 public interface IGlobalCustomerAcctRepository
 {
     /// <summary>
-    /// Gets a global customer account by normalized email address.
+    /// Gets a global customer account by email address.
     /// Returns <c>null</c> when no matching document is found.
     /// </summary>
-    /// <param name="normalizedEmail">Lowercased, trimmed email address used as partition key.</param>
+    /// <param name="email">Customer email address (expected to be already normalized).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<GlobalCustomerAcct?> GetByEmailAsync(string normalizedEmail, CancellationToken cancellationToken = default);
+    Task<GlobalCustomerAcct?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets a global customer account by its identifier.

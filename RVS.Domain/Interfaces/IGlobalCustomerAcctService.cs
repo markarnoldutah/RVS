@@ -11,12 +11,13 @@ namespace RVS.Domain.Interfaces;
 public interface IGlobalCustomerAcctService
 {
     /// <summary>
-    /// Gets a global customer account by normalized email.
+    /// Gets a global customer account by email address.
+    /// Email will be normalized internally (trimmed, lowercased).
     /// </summary>
-    /// <param name="normalizedEmail">Lowercased, trimmed email address.</param>
+    /// <param name="email">Customer email address.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">Thrown when the identity is not found.</exception>
-    Task<GlobalCustomerAcct> GetByEmailAsync(string normalizedEmail, CancellationToken cancellationToken = default);
+    Task<GlobalCustomerAcct> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Retrieves an existing identity or creates one for a new customer.

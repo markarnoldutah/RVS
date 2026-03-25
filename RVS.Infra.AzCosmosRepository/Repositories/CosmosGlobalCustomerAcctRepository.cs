@@ -2,14 +2,13 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
-using System.Net;
 
 namespace RVS.Infra.AzCosmosRepository.Repositories;
 
 /// <summary>
 /// Cosmos DB repository for <see cref="GlobalCustomerAcct"/> entities.
-/// Container: <c>global-customer-accounts</c>. Partition key: <c>/id</c>.
-/// Cross-tenant — not scoped by tenantId. NormalizedEmail is a unique key (not partition key).
+/// Container: <c>global-customer-accounts</c>. Partition key: <c>/email</c>.
+/// Cross-tenant — not scoped by tenantId. Email is stored in normalized form.
 /// </summary>
 public sealed class CosmosGlobalCustomerAcctRepository : CosmosRepositoryBase, IGlobalCustomerAcctRepository
 {
@@ -30,17 +29,18 @@ public sealed class CosmosGlobalCustomerAcctRepository : CosmosRepositoryBase, I
     }
 
     /// <inheritdoc />
-    public async Task<GlobalCustomerAcct?> GetByEmailAsync(string normalizedEmail, CancellationToken cancellationToken = default)
+    public async Task<GlobalCustomerAcct?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(normalizedEmail);
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
 
-        // Cross-partition query — partition key is /id, so a full scan is required when querying by email.
-        // NormalizedEmail has a unique key policy and an index, keeping this query efficient.
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+
+        // Single-partition query — partition key is /email, so this is an efficient indexed query.
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.normalizedEmail = @normalizedEmail AND c.type = 'globalCustomerAcct'")
-            .WithParameter("@normalizedEmail", normalizedEmail.Trim().ToLowerInvariant());
+            "SELECT * FROM c WHERE c.email = @email AND c.type = 'globalCustomerAcct'")
+            .WithParameter("@email", normalizedEmail);
 
-        var options = new QueryRequestOptions { MaxItemCount = 1 };
+        var options = new QueryRequestOptions { PartitionKey = new PartitionKey(normalizedEmail), MaxItemCount = 1 };
         var iterator = _container.GetItemQueryIterator<GlobalCustomerAcct>(query, requestOptions: options);
 
         double totalCharge = 0;
@@ -67,32 +67,42 @@ public sealed class CosmosGlobalCustomerAcctRepository : CosmosRepositoryBase, I
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
-        try
-        {
-            // Partition key is /id, so the partition key value equals the document id — O(1) point read.
-            var response = await _container.ReadItemAsync<GlobalCustomerAcct>(
-                id,
-                new PartitionKey(id),
-                cancellationToken: cancellationToken);
+        // Cross-partition query — partition key is /email, so a fan-out is required when querying by id.
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.id = @id AND c.type = 'globalCustomerAcct'")
+            .WithParameter("@id", id);
 
-            _logger.LogDebug("GetByIdAsync [{Id}] — RequestCharge: {Charge} RU", id, response.RequestCharge);
-            return response.Resource;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        var options = new QueryRequestOptions { MaxItemCount = 1 };
+        var iterator = _container.GetItemQueryIterator<GlobalCustomerAcct>(query, requestOptions: options);
+
+        double totalCharge = 0;
+
+        while (iterator.HasMoreResults)
         {
-            return null;
+            var page = await iterator.ReadNextAsync(cancellationToken);
+            totalCharge += page.RequestCharge;
+
+            var item = page.FirstOrDefault();
+            if (item is not null)
+            {
+                _logger.LogDebug("GetByIdAsync [{Id}] — RequestCharge: {Charge} RU", id, totalCharge);
+                return item;
+            }
         }
+
+        _logger.LogDebug("GetByIdAsync [{Id}] not found — RequestCharge: {Charge} RU", id, totalCharge);
+        return null;
     }
 
     /// <inheritdoc />
     public async Task<GlobalCustomerAcct> CreateAsync(GlobalCustomerAcct entity, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentException.ThrowIfNullOrWhiteSpace(entity.Id, nameof(entity.Id));
+        ArgumentException.ThrowIfNullOrWhiteSpace(entity.Email, nameof(entity.Email));
 
         var response = await _container.CreateItemAsync(
             entity,
-            new PartitionKey(entity.Id),
+            new PartitionKey(entity.Email),
             cancellationToken: cancellationToken);
 
         _logger.LogDebug("CreateAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
@@ -103,12 +113,12 @@ public sealed class CosmosGlobalCustomerAcctRepository : CosmosRepositoryBase, I
     public async Task<GlobalCustomerAcct> UpdateAsync(GlobalCustomerAcct entity, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentException.ThrowIfNullOrWhiteSpace(entity.Id, nameof(entity.Id));
+        ArgumentException.ThrowIfNullOrWhiteSpace(entity.Email, nameof(entity.Email));
 
         var response = await _container.ReplaceItemAsync(
             entity,
             entity.Id,
-            new PartitionKey(entity.Id),
+            new PartitionKey(entity.Email),
             cancellationToken: cancellationToken);
 
         _logger.LogDebug("UpdateAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
@@ -120,7 +130,7 @@ public sealed class CosmosGlobalCustomerAcctRepository : CosmosRepositoryBase, I
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(token);
 
-        // Cross-partition query — partition key is /id, magicLinkToken is unique.
+        // Cross-partition query — partition key is /email, magicLinkToken is unique.
         var query = new QueryDefinition(
             "SELECT * FROM c WHERE c.magicLinkToken = @token AND c.type = 'globalCustomerAcct'")
             .WithParameter("@token", token);

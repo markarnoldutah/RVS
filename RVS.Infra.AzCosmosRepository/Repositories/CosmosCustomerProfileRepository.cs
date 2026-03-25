@@ -57,9 +57,9 @@ public sealed class CosmosCustomerProfileRepository : CosmosRepositoryBase, ICus
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
 
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.normalizedEmail = @normalizedEmail AND c.type = 'customerProfile'")
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.email = @email AND c.type = 'customerProfile'")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@normalizedEmail", email.Trim().ToLowerInvariant());
+            .WithParameter("@email", email.Trim().ToLowerInvariant());
 
         var options = new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId), MaxItemCount = 1 };
         var iterator = _container.GetItemQueryIterator<CustomerProfile>(query, requestOptions: options);

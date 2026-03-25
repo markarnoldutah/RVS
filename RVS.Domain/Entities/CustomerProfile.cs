@@ -19,9 +19,6 @@ public class CustomerProfile : EntityBase
     [JsonProperty("email")]
     public string Email { get; set; } = string.Empty;
 
-    [JsonProperty("normalizedEmail")]
-    public string NormalizedEmail { get; set; } = string.Empty;
-
     [JsonProperty("firstName")]
     public string FirstName { get; set; } = string.Empty;
 

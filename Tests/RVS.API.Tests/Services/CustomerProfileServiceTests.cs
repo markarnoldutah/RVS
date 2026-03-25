@@ -160,8 +160,7 @@ public class CustomerProfileServiceTests
         var result = await _sut.GetOrCreateAsync("ten_1", "  Mike@Test.com  ", "  Mike  ", "  Johnson  ");
 
         result.TenantId.Should().Be("ten_1");
-        result.Email.Should().Be("Mike@Test.com");
-        result.NormalizedEmail.Should().Be("mike@test.com");
+        result.Email.Should().Be("mike@test.com");
         result.FirstName.Should().Be("Mike");
         result.LastName.Should().Be("Johnson");
         result.Name.Should().Be("Mike Johnson");
@@ -325,7 +324,6 @@ public class CustomerProfileServiceTests
             Id = "cp_old_owner",
             TenantId = "ten_1",
             Email = "old@test.com",
-            NormalizedEmail = "old@test.com",
             AssetsOwned =
             [
                 new AssetOwnershipEmbedded
@@ -376,8 +374,7 @@ public class CustomerProfileServiceTests
         var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "RV:VIN123");
 
         result.TenantId.Should().Be("ten_1");
-        result.Email.Should().Be("Mike@Test.com");
-        result.NormalizedEmail.Should().Be("mike@test.com");
+        result.Email.Should().Be("mike@test.com");
         result.AssetsOwned.Should().ContainSingle(a => a.AssetId == "RV:VIN123" && a.Status == AssetOwnershipStatus.Active);
 
         _repoMock.Verify(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -388,8 +385,7 @@ public class CustomerProfileServiceTests
     private static CustomerProfile BuildProfile() => new()
     {
         TenantId = "ten_1",
-        Email = "Mike@Test.com",
-        NormalizedEmail = "mike@test.com",
+        Email = "mike@test.com",
         FirstName = "Mike",
         LastName = "Johnson",
         Name = "Mike Johnson",

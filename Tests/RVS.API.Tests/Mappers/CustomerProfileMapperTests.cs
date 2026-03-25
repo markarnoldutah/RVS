@@ -27,7 +27,6 @@ public class CustomerProfileMapperTests
         {
             TenantId = "ten_1",
             Email = "jane@example.com",
-            NormalizedEmail = "jane@example.com",
             FirstName = "Jane",
             LastName = "Doe",
             Phone = "(801) 555-1234",
@@ -58,7 +57,6 @@ public class CustomerProfileMapperTests
         var entity = new CustomerProfile
         {
             Email = "jane@example.com",
-            NormalizedEmail = "jane@example.com",
             FirstName = "Jane",
             LastName = "Doe",
             Phone = null
@@ -87,7 +85,6 @@ public class CustomerProfileMapperTests
         var entity = new CustomerProfile
         {
             Email = "mike@example.com",
-            NormalizedEmail = "mike@example.com",
             FirstName = "Mike",
             LastName = "Johnson",
             Phone = "(801) 555-9999"
@@ -108,7 +105,6 @@ public class CustomerProfileMapperTests
         var entity = new CustomerProfile
         {
             Email = "mike@example.com",
-            NormalizedEmail = "mike@example.com",
             FirstName = "Mike",
             LastName = "Johnson"
         };

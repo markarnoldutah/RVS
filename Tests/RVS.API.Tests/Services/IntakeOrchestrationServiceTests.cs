@@ -93,7 +93,7 @@ public class IntakeOrchestrationServiceTests
         await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         _globalAcctRepoMock.Verify(r => r.CreateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.NormalizedEmail == "jane@example.com"),
+            It.Is<GlobalCustomerAcct>(a => a.Email == "jane@example.com"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -119,7 +119,7 @@ public class IntakeOrchestrationServiceTests
         await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         _profileRepoMock.Verify(r => r.CreateAsync(
-            It.Is<CustomerProfile>(p => p.TenantId == "ten_test" && p.NormalizedEmail == "jane@example.com"),
+            It.Is<CustomerProfile>(p => p.TenantId == "ten_test" && p.Email == "jane@example.com"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -490,7 +490,6 @@ public class IntakeOrchestrationServiceTests
             Id = id,
             TenantId = "ten_test",
             Email = "jane@example.com",
-            NormalizedEmail = "jane@example.com",
             FirstName = "Jane",
             LastName = "Doe",
             Name = "Jane Doe",
@@ -505,7 +504,6 @@ public class IntakeOrchestrationServiceTests
         {
             Id = "gca_test",
             Email = "jane@example.com",
-            NormalizedEmail = "jane@example.com",
             FirstName = "Jane",
             LastName = "Doe",
             CreatedByUserId = "intake",

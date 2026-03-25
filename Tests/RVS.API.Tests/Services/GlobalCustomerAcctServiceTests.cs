@@ -112,8 +112,7 @@ public class GlobalCustomerAcctServiceTests
 
         var result = await _sut.GetOrCreateAsync("  Mike@Test.com  ", "  Mike  ", "  Johnson  ");
 
-        result.Email.Should().Be("Mike@Test.com");
-        result.NormalizedEmail.Should().Be("mike@test.com");
+        result.Email.Should().Be("mike@test.com");
         result.FirstName.Should().Be("Mike");
         result.LastName.Should().Be("Johnson");
         result.CreatedByUserId.Should().Be("usr_test");
@@ -291,8 +290,7 @@ public class GlobalCustomerAcctServiceTests
 
         var account2 = new GlobalCustomerAcct
         {
-            NormalizedEmail = "jane@test.com",
-            Email = "Jane@Test.com",
+            Email = "jane@test.com",
             FirstName = "Jane",
             LastName = "Doe",
         };
@@ -383,8 +381,7 @@ public class GlobalCustomerAcctServiceTests
 
     private static GlobalCustomerAcct BuildAccount() => new()
     {
-        NormalizedEmail = "mike@test.com",
-        Email = "Mike@Test.com",
+        Email = "mike@test.com",
         FirstName = "Mike",
         LastName = "Johnson",
     };

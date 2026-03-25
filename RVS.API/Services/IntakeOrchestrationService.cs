@@ -74,8 +74,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         {
             globalAcct = new GlobalCustomerAcct
             {
-                Email = request.Customer.Email.Trim(),
-                NormalizedEmail = normalizedEmail,
+                Email = normalizedEmail,
                 FirstName = request.Customer.FirstName.Trim(),
                 LastName = request.Customer.LastName.Trim(),
                 CreatedByUserId = "intake",
@@ -98,8 +97,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             profile = new CustomerProfile
             {
                 TenantId = tenantId,
-                Email = request.Customer.Email.Trim(),
-                NormalizedEmail = normalizedEmail,
+                Email = normalizedEmail,
                 FirstName = request.Customer.FirstName.Trim(),
                 LastName = request.Customer.LastName.Trim(),
                 Name = $"{request.Customer.FirstName.Trim()} {request.Customer.LastName.Trim()}",

@@ -25,9 +25,11 @@ public sealed class GlobalCustomerAcctService : IGlobalCustomerAcctService
     }
 
     /// <inheritdoc />
-    public async Task<GlobalCustomerAcct> GetByEmailAsync(string normalizedEmail, CancellationToken cancellationToken = default)
+    public async Task<GlobalCustomerAcct> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(normalizedEmail);
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+
+        var normalizedEmail = email.Trim().ToLowerInvariant();
 
         return await _repository.GetByEmailAsync(normalizedEmail, cancellationToken)
             ?? throw new KeyNotFoundException($"Global customer account for email '{normalizedEmail}' not found.");
@@ -50,8 +52,7 @@ public sealed class GlobalCustomerAcctService : IGlobalCustomerAcctService
 
         var account = new GlobalCustomerAcct
         {
-            Email = email.Trim(),
-            NormalizedEmail = normalizedEmail,
+            Email = normalizedEmail,
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
             CreatedByUserId = _userContext.UserId,
@@ -127,9 +128,9 @@ public sealed class GlobalCustomerAcctService : IGlobalCustomerAcctService
     /// Generates a magic-link token in the format <c>base64url(SHA256(email)[0..8]):random_bytes</c>.
     /// The email-hash prefix enables O(1) partition-key derivation on read.
     /// </summary>
-    internal static string GenerateMagicLinkToken(string normalizedEmail)
+    internal static string GenerateMagicLinkToken(string email)
     {
-        var emailHash = SHA256.HashData(Encoding.UTF8.GetBytes(normalizedEmail));
+        var emailHash = SHA256.HashData(Encoding.UTF8.GetBytes(email));
         var prefix = Convert.ToBase64String(emailHash[..8])
             .Replace('+', '-')
             .Replace('/', '_')
