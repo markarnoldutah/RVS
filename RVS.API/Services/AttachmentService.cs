@@ -21,19 +21,19 @@ public sealed class AttachmentService : IAttachmentService
     private const string ContainerName = "rvs-attachments";
 
     /// <summary>
-    /// Known MIME type signatures mapped by magic byte headers.
+    /// Allowed MIME types for validation reference.
     /// </summary>
-    private static readonly Dictionary<string, byte[][]> MimeSignatures = new()
-    {
-        ["image/jpeg"] = [[0xFF, 0xD8, 0xFF]],
-        ["image/png"] = [[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]],
-        ["video/mp4"] = [],
-        ["audio/mp4"] = [],
-        ["audio/x-m4a"] = [],
-        ["audio/wav"] = [[0x52, 0x49, 0x46, 0x46]],
-        ["audio/x-wav"] = [[0x52, 0x49, 0x46, 0x46]],
-        ["application/pdf"] = [[0x25, 0x50, 0x44, 0x46]],
-    };
+    private static readonly HashSet<string> AllowedMimeTypes =
+    [
+        "image/jpeg",
+        "image/png",
+        "video/mp4",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/wav",
+        "audio/x-wav",
+        "application/pdf"
+    ];
 
     /// <summary>
     /// Initializes a new instance of <see cref="AttachmentService"/>.
@@ -201,13 +201,9 @@ public sealed class AttachmentService : IAttachmentService
             return "application/pdf";
         }
 
-        if (bytesRead >= 8)
+        if (bytesRead >= 8 && HasFtypSignature(header, bytesRead))
         {
-            int offset = FindFtypOffset(header, bytesRead);
-            if (offset >= 0)
-            {
-                return "video/mp4";
-            }
+            return "video/mp4";
         }
 
         return null;
@@ -216,14 +212,9 @@ public sealed class AttachmentService : IAttachmentService
     /// <summary>
     /// Checks for the 'ftyp' box signature common to MP4/M4A containers.
     /// </summary>
-    private static int FindFtypOffset(byte[] header, int bytesRead)
+    private static bool HasFtypSignature(byte[] header, int bytesRead)
     {
-        if (bytesRead >= 8
-            && header[4] == 0x66 && header[5] == 0x74 && header[6] == 0x79 && header[7] == 0x70)
-        {
-            return 4;
-        }
-
-        return -1;
+        return bytesRead >= 8
+            && header[4] == 0x66 && header[5] == 0x74 && header[6] == 0x79 && header[7] == 0x70;
     }
 }
