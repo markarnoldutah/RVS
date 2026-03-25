@@ -38,6 +38,7 @@ public class AnalyticsController : ControllerBase
     /// GET /api/dealerships/{id}/analytics/service-requests/summary?from=2025-01-01&amp;to=2025-12-31&amp;locationId=loc_slc
     /// </example>
     [HttpGet("service-requests/summary")]
+    [Authorize(Policy = "CanReadAnalytics")]
     public async Task<ActionResult<ServiceRequestAnalyticsResponseDto>> GetServiceRequestSummary(
         string dealershipId,
         [FromQuery] DateTime? from = null,

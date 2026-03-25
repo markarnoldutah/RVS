@@ -61,7 +61,7 @@ public sealed class TenantAccessGateMiddlewareTests
     [Fact]
     public async Task InvokeAsync_IntakeEndpoint_ShouldPassThrough()
     {
-        var ctx = CreateAuthenticatedContext("/api/service-requests/intake");
+        var ctx = CreateAuthenticatedContext("/api/intake/camping-world-slc");
 
         await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
 
@@ -71,7 +71,7 @@ public sealed class TenantAccessGateMiddlewareTests
     [Fact]
     public async Task InvokeAsync_IntakeSubpath_ShouldPassThrough()
     {
-        var ctx = CreateAuthenticatedContext("/api/service-requests/intake/attachments");
+        var ctx = CreateAuthenticatedContext("/api/intake/camping-world-slc/service-requests");
 
         await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
 
@@ -81,7 +81,7 @@ public sealed class TenantAccessGateMiddlewareTests
     [Fact]
     public async Task InvokeAsync_StatusEndpoint_ShouldPassThrough()
     {
-        var ctx = CreateAuthenticatedContext("/api/service-requests/sr-123/status");
+        var ctx = CreateAuthenticatedContext("/api/status/abc123def456");
 
         await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
 
