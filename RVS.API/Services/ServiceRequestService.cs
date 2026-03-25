@@ -1,3 +1,4 @@
+using RVS.API.Mappers;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
@@ -58,40 +59,28 @@ public sealed class ServiceRequestService : IServiceRequestService
     }
 
     /// <inheritdoc />
-    public async Task<ServiceRequest> UpdateAsync(string tenantId, string id, ServiceRequest entity, CancellationToken cancellationToken = default)
+    public async Task<ServiceRequest> UpdateAsync(string tenantId, string id, ServiceRequestUpdateRequestDto request, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(request);
 
         var existing = await _repository.GetByIdAsync(tenantId, id, cancellationToken)
             ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
 
-        if (entity.UpdatedAtUtc.HasValue && existing.UpdatedAtUtc.HasValue
-            && entity.UpdatedAtUtc.Value != existing.UpdatedAtUtc.Value)
+        if (request.UpdatedAtUtc.HasValue && existing.UpdatedAtUtc.HasValue
+            && request.UpdatedAtUtc.Value != existing.UpdatedAtUtc.Value)
         {
             throw new ArgumentException("Optimistic concurrency conflict: the service request has been modified since it was last read.");
         }
 
-        if (!string.Equals(existing.Status, entity.Status, StringComparison.Ordinal)
-            && !StatusTransitions.IsValid(existing.Status, entity.Status))
+        if (!string.Equals(existing.Status, request.Status, StringComparison.Ordinal)
+            && !StatusTransitions.IsValid(existing.Status, request.Status))
         {
-            throw new ArgumentException($"Invalid status transition from '{existing.Status}' to '{entity.Status}'.");
+            throw new ArgumentException($"Invalid status transition from '{existing.Status}' to '{request.Status}'.");
         }
 
-        existing.Status = entity.Status;
-        existing.IssueDescription = entity.IssueDescription;
-        existing.IssueCategory = entity.IssueCategory;
-        existing.TechnicianSummary = entity.TechnicianSummary;
-        existing.Priority = entity.Priority;
-        existing.Urgency = entity.Urgency;
-        existing.RvUsage = entity.RvUsage;
-        existing.AssignedTechnicianId = entity.AssignedTechnicianId;
-        existing.AssignedBayId = entity.AssignedBayId;
-        existing.ScheduledDateUtc = entity.ScheduledDateUtc;
-        existing.RequiredSkills = entity.RequiredSkills;
-        existing.ServiceEvent = entity.ServiceEvent;
-        existing.MarkAsUpdated(_userContext.UserId);
+        existing.ApplyUpdate(request, _userContext.UserId);
 
         return await _repository.UpdateAsync(existing, cancellationToken);
     }

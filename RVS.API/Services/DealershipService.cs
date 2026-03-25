@@ -1,3 +1,5 @@
+using RVS.API.Mappers;
+using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
 
@@ -57,22 +59,16 @@ public sealed class DealershipService : IDealershipService
     }
 
     /// <inheritdoc />
-    public async Task<Dealership> UpdateAsync(string tenantId, string id, Dealership entity, CancellationToken cancellationToken = default)
+    public async Task<Dealership> UpdateAsync(string tenantId, string id, DealershipUpdateRequestDto request, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(request);
 
         var existing = await _repository.GetByIdAsync(tenantId, id, cancellationToken)
             ?? throw new KeyNotFoundException($"Dealership '{id}' not found.");
 
-        existing.Name = entity.Name;
-        existing.Slug = entity.Slug;
-        existing.LogoUrl = entity.LogoUrl;
-        existing.ServiceEmail = entity.ServiceEmail;
-        existing.Phone = entity.Phone;
-        existing.IntakeConfig = entity.IntakeConfig;
-        existing.MarkAsUpdated(_userContext.UserId);
+        existing.ApplyUpdate(request, _userContext.UserId);
 
         return await _repository.UpdateAsync(existing, cancellationToken);
     }

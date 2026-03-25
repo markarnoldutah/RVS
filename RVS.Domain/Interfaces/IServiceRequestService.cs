@@ -41,10 +41,10 @@ public interface IServiceRequestService
     /// </summary>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
     /// <param name="id">Service request identifier.</param>
-    /// <param name="entity">The updated service request entity.</param>
+    /// <param name="request">The update request DTO containing changed values.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
-    Task<ServiceRequest> UpdateAsync(string tenantId, string id, ServiceRequest entity, CancellationToken cancellationToken = default);
+    Task<ServiceRequest> UpdateAsync(string tenantId, string id, ServiceRequestUpdateRequestDto request, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Transitions the status of a service request, validated by <see cref="RVS.Domain.Validation.StatusTransitions"/>.

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Moq;
 using RVS.API.Services;
+using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
 
@@ -143,7 +144,7 @@ public class DealershipServiceTests
     [InlineData("  ")]
     public async Task UpdateAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
     {
-        var act = () => _sut.UpdateAsync(tenantId!, "dlr_1", BuildDealership());
+        var act = () => _sut.UpdateAsync(tenantId!, "dlr_1", BuildUpdateRequest());
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -154,7 +155,7 @@ public class DealershipServiceTests
     [InlineData("  ")]
     public async Task UpdateAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
     {
-        var act = () => _sut.UpdateAsync("ten_1", id!, BuildDealership());
+        var act = () => _sut.UpdateAsync("ten_1", id!, BuildUpdateRequest());
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -162,7 +163,7 @@ public class DealershipServiceTests
     [Fact]
     public async Task UpdateAsync_WhenEntityIsNull_ShouldThrowArgumentNullException()
     {
-        var act = () => _sut.UpdateAsync("ten_1", "dlr_1", null!);
+        var act = () => _sut.UpdateAsync("ten_1", "dlr_1", (DealershipUpdateRequestDto)null!);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
@@ -173,7 +174,7 @@ public class DealershipServiceTests
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", "dlr_missing", It.IsAny<CancellationToken>()))
             .ReturnsAsync((Dealership?)null);
 
-        var act = () => _sut.UpdateAsync("ten_1", "dlr_missing", BuildDealership());
+        var act = () => _sut.UpdateAsync("ten_1", "dlr_missing", BuildUpdateRequest());
 
         await act.Should().ThrowAsync<KeyNotFoundException>();
     }
@@ -182,9 +183,8 @@ public class DealershipServiceTests
     public async Task UpdateAsync_ShouldApplyChangesAndCallMarkAsUpdated()
     {
         var existing = BuildDealership();
-        var updated = new Dealership
+        var request = new DealershipUpdateRequestDto
         {
-            TenantId = "ten_1",
             Name = "Updated Name",
             Slug = "updated-slug",
             LogoUrl = "https://cdn.example.com/new-logo.png",
@@ -197,7 +197,7 @@ public class DealershipServiceTests
         _repoMock.Setup(r => r.UpdateAsync(It.IsAny<Dealership>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Dealership e, CancellationToken _) => e);
 
-        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, request);
 
         result.Name.Should().Be("Updated Name");
         result.Slug.Should().Be("updated-slug");
@@ -213,6 +213,13 @@ public class DealershipServiceTests
     private static Dealership BuildDealership() => new()
     {
         TenantId = "ten_1",
+        Name = "Blue Compass RV",
+        Slug = "blue-compass",
+        Phone = "(801) 555-1000"
+    };
+
+    private static DealershipUpdateRequestDto BuildUpdateRequest() => new()
+    {
         Name = "Blue Compass RV",
         Slug = "blue-compass",
         Phone = "(801) 555-1000"

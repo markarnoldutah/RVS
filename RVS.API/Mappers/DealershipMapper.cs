@@ -45,4 +45,30 @@ public static class DealershipMapper
             Phone = entity.Phone
         };
     }
+
+    /// <summary>
+    /// Applies update values from a <see cref="DealershipUpdateRequestDto"/> to an existing
+    /// <see cref="Dealership"/> entity, mutating in place.
+    /// </summary>
+    /// <param name="entity">The dealership entity to update.</param>
+    /// <param name="dto">The request DTO containing updated values.</param>
+    /// <param name="updatedByUserId">The ID of the user performing the update.</param>
+    public static void ApplyUpdate(this Dealership entity, DealershipUpdateRequestDto dto, string? updatedByUserId)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(dto);
+
+        entity.Name = dto.Name.Trim();
+        entity.Slug = dto.Slug.Trim().ToLowerInvariant();
+        entity.LogoUrl = dto.LogoUrl?.Trim();
+        entity.ServiceEmail = dto.ServiceEmail?.Trim();
+        entity.Phone = dto.Phone?.Trim();
+
+        if (dto.IntakeConfig is not null)
+        {
+            entity.IntakeConfig = dto.IntakeConfig.ToEmbedded();
+        }
+
+        entity.MarkAsUpdated(updatedByUserId);
+    }
 }

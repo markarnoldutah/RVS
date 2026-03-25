@@ -121,6 +121,69 @@ public static class ServiceRequestMapper
     }
 
     /// <summary>
+    /// Applies update values from a <see cref="ServiceRequestUpdateRequestDto"/> to an existing
+    /// <see cref="ServiceRequest"/> entity, mutating in place.
+    /// </summary>
+    /// <param name="entity">The service request entity to update.</param>
+    /// <param name="dto">The request DTO containing updated values.</param>
+    /// <param name="updatedByUserId">The ID of the user performing the update.</param>
+    public static void ApplyUpdate(this ServiceRequest entity, ServiceRequestUpdateRequestDto dto, string? updatedByUserId)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(dto);
+
+        entity.Status = dto.Status.Trim();
+        entity.IssueDescription = dto.IssueDescription.Trim();
+        entity.IssueCategory = dto.IssueCategory?.Trim();
+        entity.TechnicianSummary = dto.TechnicianSummary?.Trim();
+        entity.Priority = dto.Priority.Trim();
+        entity.Urgency = dto.Urgency?.Trim();
+        entity.RvUsage = dto.RvUsage?.Trim();
+        entity.AssignedTechnicianId = dto.AssignedTechnicianId?.Trim();
+        entity.AssignedBayId = dto.AssignedBayId?.Trim();
+        entity.ScheduledDateUtc = dto.ScheduledDateUtc;
+        entity.RequiredSkills = dto.RequiredSkills;
+        entity.ServiceEvent = dto.ServiceEvent?.ToEmbedded();
+        entity.MarkAsUpdated(updatedByUserId);
+    }
+
+    /// <summary>
+    /// Maps a <see cref="ServiceEventDto"/> to a <see cref="ServiceEventEmbedded"/>.
+    /// </summary>
+    public static ServiceEventEmbedded ToEmbedded(this ServiceEventDto dto)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        return new ServiceEventEmbedded
+        {
+            ComponentType = dto.ComponentType?.Trim(),
+            FailureMode = dto.FailureMode?.Trim(),
+            RepairAction = dto.RepairAction?.Trim(),
+            PartsUsed = dto.PartsUsed,
+            LaborHours = dto.LaborHours,
+            ServiceDateUtc = dto.ServiceDateUtc
+        };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="ServiceEventEmbedded"/> to a <see cref="ServiceEventDto"/>.
+    /// </summary>
+    public static ServiceEventDto ToDto(this ServiceEventEmbedded entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new ServiceEventDto
+        {
+            ComponentType = entity.ComponentType,
+            FailureMode = entity.FailureMode,
+            RepairAction = entity.RepairAction,
+            PartsUsed = entity.PartsUsed,
+            LaborHours = entity.LaborHours,
+            ServiceDateUtc = entity.ServiceDateUtc
+        };
+    }
+
+    /// <summary>
     /// Maps a paged result of <see cref="ServiceRequest"/> entities to a paged result of summary DTOs.
     /// </summary>
     public static PagedResult<ServiceRequestSummaryResponseDto> ToSummaryPagedResult(

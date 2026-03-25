@@ -39,4 +39,18 @@ public sealed class ClaimsService
 
         return tenantId;
     }
+
+    /// <summary>
+    /// Retrieves the user ID from the current user's claims.
+    /// Throws UnauthorizedAccessException if the claim is missing or empty.
+    /// </summary>
+    public string GetUserIdOrThrow()
+    {
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new UnauthorizedAccessException("User identifier is missing.");
+
+        return userId;
+    }
 }

@@ -1,3 +1,4 @@
+using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 
 namespace RVS.Domain.Interfaces;
@@ -46,8 +47,8 @@ public interface IDealershipService
     /// </summary>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
     /// <param name="id">Dealership identifier.</param>
-    /// <param name="entity">The updated dealership entity.</param>
+    /// <param name="request">The update request DTO containing changed values.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">Thrown when the dealership is not found.</exception>
-    Task<Dealership> UpdateAsync(string tenantId, string id, Dealership entity, CancellationToken cancellationToken = default);
+    Task<Dealership> UpdateAsync(string tenantId, string id, DealershipUpdateRequestDto request, CancellationToken cancellationToken = default);
 }
