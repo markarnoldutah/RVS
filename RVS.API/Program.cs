@@ -1,7 +1,9 @@
 using Azure.Storage.Blobs;
 using RVS.API.HealthChecks;
+using RVS.API.Integrations;
 using RVS.API.Middleware;
 using RVS.API.Services;
+using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Infra.AzCosmosRepository.Repositories;
 using Microsoft.AspNetCore.Authentication;
@@ -10,6 +12,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -194,6 +197,84 @@ builder.Services.AddScoped<ITenantConfigService, TenantConfigService>();
 // builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
 // builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 // builder.Services.AddScoped<IGlobalCustomerAcctService, GlobalCustomerAcctService>();
+#endregion
+
+#region Integration Clients
+var useMockIntegrations = builder.Configuration.GetValue<bool>("Integrations:UseMocks");
+
+// VIN Decoder
+if (useMockIntegrations)
+{
+    builder.Services.AddSingleton<IVinDecoderService, MockVinDecoderService>();
+}
+else
+{
+    builder.Services.AddHttpClient<IVinDecoderService, NhtsaVinDecoderClient>(client =>
+    {
+        client.BaseAddress = new Uri("https://vpic.nhtsa.dot.gov/api/");
+    })
+    .AddStandardResilienceHandler(options =>
+    {
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(3);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(6);
+    });
+}
+
+// Categorization
+builder.Services.AddSingleton<RuleBasedCategorizationService>();
+if (useMockIntegrations)
+{
+    builder.Services.AddSingleton<ICategorizationService, MockCategorizationService>();
+}
+else
+{
+    var openAiEndpoint = builder.Configuration["AzureOpenAi:Endpoint"];
+    if (!string.IsNullOrWhiteSpace(openAiEndpoint))
+    {
+        builder.Services.AddHttpClient<ICategorizationService, AzureOpenAiCategorizationService>(client =>
+        {
+            client.BaseAddress = new Uri(openAiEndpoint);
+        })
+        .AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
+        });
+    }
+    else
+    {
+        builder.Services.AddSingleton<ICategorizationService>(sp => sp.GetRequiredService<RuleBasedCategorizationService>());
+    }
+}
+
+// Notifications
+if (useMockIntegrations)
+{
+    builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
+}
+else
+{
+    builder.Services.AddHttpClient<INotificationService, SendGridNotificationService>(client =>
+    {
+        client.BaseAddress = new Uri("https://api.sendgrid.com/");
+        var apiKey = builder.Configuration["SendGrid:ApiKey"];
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+        }
+    })
+    .AddStandardResilienceHandler();
+}
+
+// Blob Storage
+if (useMockIntegrations)
+{
+    builder.Services.AddSingleton<IBlobStorageService, MockBlobStorageService>();
+}
+else
+{
+    builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
+}
 #endregion
 
 // Claims Management
