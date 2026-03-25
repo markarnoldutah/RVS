@@ -25,6 +25,6 @@ public partial class StatusBadge : ComponentBase
         "awaiting-parts" => "rvs-status-awaiting-parts",
         "completed" => "rvs-status-completed",
         "cancelled" => "rvs-status-cancelled",
-        _ => "rvs-status-default"
+        null or _ => "rvs-status-default"
     };
 }

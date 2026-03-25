@@ -23,6 +23,6 @@ public partial class PriorityBadge : ComponentBase
         "high" => "rvs-priority-high",
         "medium" => "rvs-priority-medium",
         "low" => "rvs-priority-low",
-        _ => "rvs-priority-default"
+        null or _ => "rvs-priority-default"
     };
 }
