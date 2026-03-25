@@ -1,0 +1,26 @@
+﻿@page "/not-found"
+@layout MainLayout
+
+<PageTitle>Page Not Found</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
+    <FluentIcon Value="@(new Icons.Regular.Size48.QuestionCircle())" Color="Color.Neutral" />
+
+    <FluentLabel Typo="Typography.H3">
+        Page Not Found
+    </FluentLabel>
+
+    <FluentLabel Typo="Typography.Body">
+        Sorry, the content you are looking for does not exist.
+    </FluentLabel>
+
+    <FluentButton Appearance="Appearance.Accent"
+                  IconStart="@(new Icons.Regular.Size20.Home())"
+                  OnClick="@(() => Navigation.NavigateTo("/"))">
+        Return Home
+    </FluentButton>
+</FluentStack>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+}

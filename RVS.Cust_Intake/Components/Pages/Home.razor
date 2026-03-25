@@ -1,0 +1,40 @@
+﻿@page "/"
+
+<PageTitle>RV Service Flow — Customer Intake</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="24" HorizontalAlignment="HorizontalAlignment.Center">
+    <FluentIcon Value="@(new Icons.Regular.Size48.VehicleTruckProfile())" Color="Color.Accent" />
+
+    <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+        Welcome to RV Service Flow
+    </FluentLabel>
+
+    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+        Submit a new service request for your RV. No account required.
+    </FluentLabel>
+
+    <FluentButton Appearance="Appearance.Accent"
+                  IconStart="@(new Icons.Regular.Size20.ClipboardTextEdit())"
+                  OnClick="@(() => Navigation.NavigateTo("/intake"))">
+        Start Service Request
+    </FluentButton>
+
+    <FluentDivider Role="DividerRole.Separator" />
+
+    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+        Already submitted a request?
+    </FluentLabel>
+
+    <FluentButton Appearance="Appearance.Neutral"
+                  IconStart="@(new Icons.Regular.Size20.Search())"
+                  OnClick="@(() => Navigation.NavigateTo("/status"))">
+        Check Request Status
+    </FluentButton>
+</FluentStack>
+
+@* Preload WASM bundle so the interactive wizard loads instantly when navigated to *@
+<WasmPreload />
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+}
