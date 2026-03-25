@@ -1,0 +1,25 @@
+@namespace RVS.UI.Shared.Components
+
+<div class="rvs-attachment-thumbnail" title="@Attachment?.FileName">
+    @if (Attachment is not null)
+    {
+        <div class="rvs-attachment-thumbnail__icon">
+            @if (IsImage)
+            {
+                <span class="rvs-attachment-thumbnail__type rvs-attachment-thumbnail__type--image">🖼️</span>
+            }
+            else if (IsVideo)
+            {
+                <span class="rvs-attachment-thumbnail__type rvs-attachment-thumbnail__type--video">🎬</span>
+            }
+            else
+            {
+                <span class="rvs-attachment-thumbnail__type rvs-attachment-thumbnail__type--file">📄</span>
+            }
+        </div>
+        <div class="rvs-attachment-thumbnail__info">
+            <span class="rvs-attachment-thumbnail__name">@Attachment.FileName</span>
+            <span class="rvs-attachment-thumbnail__size">@FormatFileSize(Attachment.SizeBytes)</span>
+        </div>
+    }
+</div>

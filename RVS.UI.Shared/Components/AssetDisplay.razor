@@ -1,0 +1,31 @@
+@namespace RVS.UI.Shared.Components
+
+<div class="rvs-asset-display">
+    @if (Asset is not null)
+    {
+        <span class="rvs-asset-display__label">
+            @if (Asset.Year.HasValue)
+            {
+                @Asset.Year
+                @(" ")
+            }
+            @if (!string.IsNullOrWhiteSpace(Asset.Manufacturer))
+            {
+                @Asset.Manufacturer
+                @(" ")
+            }
+            @if (!string.IsNullOrWhiteSpace(Asset.Model))
+            {
+                @Asset.Model
+            }
+        </span>
+        @if (!string.IsNullOrWhiteSpace(Asset.AssetId))
+        {
+            <span class="rvs-asset-display__id" title="Asset ID">@Asset.AssetId</span>
+        }
+    }
+    else
+    {
+        <span class="rvs-asset-display__empty">No asset information</span>
+    }
+</div>

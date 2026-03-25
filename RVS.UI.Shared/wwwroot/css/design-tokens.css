@@ -1,0 +1,110 @@
+/* ============================================================
+   RVS Design Tokens — CSS Custom Properties
+   Consumed by all three frontends:
+     Cust_Intake, Mngr_Desktop, Tech_Mobile
+   ============================================================ */
+
+:root {
+    /* --------------------------------------------------------
+       Colors — Brand
+       -------------------------------------------------------- */
+    --rvs-color-primary: #0F6CBD;
+    --rvs-color-primary-hover: #0D5BA3;
+    --rvs-color-primary-active: #0A4A85;
+    --rvs-color-secondary: #6B6B6B;
+    --rvs-color-secondary-hover: #5A5A5A;
+
+    /* --------------------------------------------------------
+       Colors — Semantic / Status
+       -------------------------------------------------------- */
+    --rvs-color-success: #107C10;
+    --rvs-color-success-bg: #DFF6DD;
+    --rvs-color-warning: #FFB900;
+    --rvs-color-warning-bg: #FFF4CE;
+    --rvs-color-error: #D13438;
+    --rvs-color-error-bg: #FDE7E9;
+    --rvs-color-info: #0078D4;
+    --rvs-color-info-bg: #DEECF9;
+
+    /* --------------------------------------------------------
+       Colors — Status badges
+       -------------------------------------------------------- */
+    --rvs-status-new-bg: #E8F5E9;
+    --rvs-status-new-fg: #2E7D32;
+    --rvs-status-in-progress-bg: #E3F2FD;
+    --rvs-status-in-progress-fg: #1565C0;
+    --rvs-status-awaiting-parts-bg: #FFF3E0;
+    --rvs-status-awaiting-parts-fg: #E65100;
+    --rvs-status-completed-bg: #F3E5F5;
+    --rvs-status-completed-fg: #6A1B9A;
+    --rvs-status-cancelled-bg: #FAFAFA;
+    --rvs-status-cancelled-fg: #616161;
+    --rvs-status-default-bg: #F5F5F5;
+    --rvs-status-default-fg: #424242;
+
+    /* --------------------------------------------------------
+       Colors — Priority badges
+       -------------------------------------------------------- */
+    --rvs-priority-critical-bg: #D13438;
+    --rvs-priority-critical-fg: #FFFFFF;
+    --rvs-priority-high-bg: #FFB900;
+    --rvs-priority-high-fg: #3B3B3B;
+    --rvs-priority-medium-bg: #0078D4;
+    --rvs-priority-medium-fg: #FFFFFF;
+    --rvs-priority-low-bg: #E1DFDD;
+    --rvs-priority-low-fg: #424242;
+    --rvs-priority-default-bg: #F5F5F5;
+    --rvs-priority-default-fg: #424242;
+
+    /* --------------------------------------------------------
+       Colors — Surfaces & Text
+       -------------------------------------------------------- */
+    --rvs-color-surface: #FFFFFF;
+    --rvs-color-surface-secondary: #FAFAFA;
+    --rvs-color-border: #E1DFDD;
+    --rvs-color-text-primary: #242424;
+    --rvs-color-text-secondary: #616161;
+    --rvs-color-text-disabled: #A19F9D;
+
+    /* --------------------------------------------------------
+       Spacing — 4px base grid
+       -------------------------------------------------------- */
+    --rvs-space-xxs: 2px;
+    --rvs-space-xs: 4px;
+    --rvs-space-sm: 8px;
+    --rvs-space-md: 16px;
+    --rvs-space-lg: 24px;
+    --rvs-space-xl: 32px;
+    --rvs-space-xxl: 48px;
+
+    /* --------------------------------------------------------
+       Typography
+       -------------------------------------------------------- */
+    --rvs-font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
+    --rvs-font-size-xs: 0.75rem;    /* 12px */
+    --rvs-font-size-sm: 0.8125rem;  /* 13px */
+    --rvs-font-size-md: 0.875rem;   /* 14px */
+    --rvs-font-size-lg: 1rem;       /* 16px */
+    --rvs-font-size-xl: 1.25rem;    /* 20px */
+    --rvs-font-size-xxl: 1.5rem;    /* 24px */
+    --rvs-font-weight-regular: 400;
+    --rvs-font-weight-semibold: 600;
+    --rvs-font-weight-bold: 700;
+    --rvs-line-height-tight: 1.2;
+    --rvs-line-height-normal: 1.5;
+
+    /* --------------------------------------------------------
+       Border Radius
+       -------------------------------------------------------- */
+    --rvs-radius-sm: 2px;
+    --rvs-radius-md: 4px;
+    --rvs-radius-lg: 8px;
+    --rvs-radius-pill: 9999px;
+
+    /* --------------------------------------------------------
+       Shadows
+       -------------------------------------------------------- */
+    --rvs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);
+    --rvs-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.14);
+    --rvs-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.14);
+}
