@@ -7,7 +7,7 @@ namespace RVS.API.Integrations;
 
 /// <summary>
 /// Azure Blob Storage implementation of <see cref="IBlobStorageService"/>.
-/// Generates SAS URLs for upload (15 min) and read (1 hr) with tenant-scoped blob paths.
+/// Generates SAS URLs for upload (15 min, Write/Create) and read (1 hr, Read) with tenant-scoped blob paths.
 /// Blob path format: {tenantId}/{locationId}/{srId}/{attId}_{filename}
 /// </summary>
 public sealed class BlobStorageService : IBlobStorageService
@@ -15,6 +15,7 @@ public sealed class BlobStorageService : IBlobStorageService
     private readonly BlobServiceClient _blobServiceClient;
     private readonly ILogger<BlobStorageService> _logger;
 
+    private static readonly TimeSpan UploadSasDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan ReadSasDuration = TimeSpan.FromHours(1);
 
     public BlobStorageService(BlobServiceClient blobServiceClient, ILogger<BlobStorageService> logger)
@@ -24,7 +25,43 @@ public sealed class BlobStorageService : IBlobStorageService
     }
 
     /// <inheritdoc />
-    public async Task<string> GenerateSasUrlAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
+    public async Task<string> GenerateUploadSasUrlAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
+
+        var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+        await containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+
+        var blobClient = containerClient.GetBlobClient(blobName);
+
+        var userDelegationKey = await _blobServiceClient.GetUserDelegationKeyAsync(
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow.Add(UploadSasDuration),
+            cancellationToken);
+
+        var sasBuilder = new BlobSasBuilder
+        {
+            BlobContainerName = containerName,
+            BlobName = blobName,
+            Resource = "b",
+            StartsOn = DateTimeOffset.UtcNow,
+            ExpiresOn = DateTimeOffset.UtcNow.Add(UploadSasDuration)
+        };
+        sasBuilder.SetPermissions(BlobSasPermissions.Write | BlobSasPermissions.Create);
+
+        var uriBuilder = new BlobUriBuilder(blobClient.Uri)
+        {
+            Sas = sasBuilder.ToSasQueryParameters(userDelegationKey, _blobServiceClient.AccountName)
+        };
+
+        _logger.LogDebug("Generated upload SAS URL for blob {BlobName} in container {ContainerName}", blobName, containerName);
+
+        return uriBuilder.ToUri().ToString();
+    }
+
+    /// <inheritdoc />
+    public async Task<string> GenerateReadSasUrlAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
         ArgumentException.ThrowIfNullOrWhiteSpace(blobName);

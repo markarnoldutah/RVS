@@ -58,7 +58,7 @@ public class AttachmentServiceTests
     [Fact]
     public async Task GenerateUploadSasAsync_ShouldReturnSasUrlAndExpiry()
     {
-        _blobMock.Setup(b => b.GenerateSasUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _blobMock.Setup(b => b.GenerateUploadSasUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("https://blob.test/sas-url?sig=abc");
 
         var result = await _sut.GenerateUploadSasAsync("ten_1", "sr_1", "photo.jpg");
@@ -139,7 +139,7 @@ public class AttachmentServiceTests
         });
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(sr);
-        _blobMock.Setup(b => b.GenerateSasUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _blobMock.Setup(b => b.GenerateReadSasUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("https://blob.test/sas-url?sig=read");
 
         var result = await _sut.GenerateReadSasAsync("ten_1", sr.Id, "att_1");

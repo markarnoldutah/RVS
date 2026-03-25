@@ -9,13 +9,15 @@ public class MockBlobStorageServiceTests
 {
     private readonly MockBlobStorageService _sut = new(Mock.Of<ILogger<MockBlobStorageService>>());
 
+    // ── GenerateUploadSasUrlAsync ────────────────────────────────────────────
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
-    public async Task GenerateSasUrlAsync_WhenContainerNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? containerName)
+    public async Task GenerateUploadSasUrlAsync_WhenContainerNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? containerName)
     {
-        var act = () => _sut.GenerateSasUrlAsync(containerName!, "blob.jpg");
+        var act = () => _sut.GenerateUploadSasUrlAsync(containerName!, "blob.jpg");
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -24,22 +26,60 @@ public class MockBlobStorageServiceTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
-    public async Task GenerateSasUrlAsync_WhenBlobNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? blobName)
+    public async Task GenerateUploadSasUrlAsync_WhenBlobNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? blobName)
     {
-        var act = () => _sut.GenerateSasUrlAsync("attachments", blobName!);
+        var act = () => _sut.GenerateUploadSasUrlAsync("attachments", blobName!);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]
-    public async Task GenerateSasUrlAsync_ShouldReturnFakeSasUrl()
+    public async Task GenerateUploadSasUrlAsync_ShouldReturnFakeUploadSasUrl()
     {
-        var result = await _sut.GenerateSasUrlAsync("attachments", "ten_1/loc_1/sr_001/att_1_photo.jpg");
+        var result = await _sut.GenerateUploadSasUrlAsync("attachments", "ten_1/loc_1/sr_001/att_1_photo.jpg");
 
         result.Should().StartWith("https://mockblob.blob.core.windows.net/attachments/");
         result.Should().Contain("ten_1/loc_1/sr_001/att_1_photo.jpg");
+        result.Should().Contain("sp=wc");
         result.Should().Contain("sig=fakesig");
     }
+
+    // ── GenerateReadSasUrlAsync ──────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GenerateReadSasUrlAsync_WhenContainerNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? containerName)
+    {
+        var act = () => _sut.GenerateReadSasUrlAsync(containerName!, "blob.jpg");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GenerateReadSasUrlAsync_WhenBlobNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? blobName)
+    {
+        var act = () => _sut.GenerateReadSasUrlAsync("attachments", blobName!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GenerateReadSasUrlAsync_ShouldReturnFakeReadSasUrl()
+    {
+        var result = await _sut.GenerateReadSasUrlAsync("attachments", "ten_1/loc_1/sr_001/att_1_photo.jpg");
+
+        result.Should().StartWith("https://mockblob.blob.core.windows.net/attachments/");
+        result.Should().Contain("ten_1/loc_1/sr_001/att_1_photo.jpg");
+        result.Should().Contain("sp=r");
+        result.Should().Contain("sig=fakesig");
+    }
+
+    // ── UploadAsync ──────────────────────────────────────────────────────────
 
     [Fact]
     public async Task UploadAsync_WhenContentIsNull_ShouldThrowArgumentNullException()
