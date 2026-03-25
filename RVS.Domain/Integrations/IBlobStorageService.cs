@@ -36,4 +36,12 @@ public interface IBlobStorageService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The URI of the uploaded blob.</returns>
     Task<string> UploadAsync(string containerName, string blobName, Stream content, string contentType, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a blob from storage.
+    /// </summary>
+    /// <param name="containerName">Blob container name.</param>
+    /// <param name="blobName">Target blob name.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task DeleteAsync(string containerName, string blobName, CancellationToken cancellationToken = default);
 }

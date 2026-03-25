@@ -16,6 +16,8 @@ public class IntakeOrchestrationServiceTests
     private readonly Mock<ICustomerProfileRepository> _profileRepoMock = new();
     private readonly Mock<IServiceRequestRepository> _srRepoMock = new();
     private readonly Mock<IAssetLedgerRepository> _ledgerRepoMock = new();
+    private readonly Mock<ILocationRepository> _locationRepoMock = new();
+    private readonly Mock<ILookupRepository> _lookupRepoMock = new();
     private readonly Mock<ICategorizationService> _categorizationMock = new();
     private readonly Mock<INotificationService> _notificationMock = new();
     private readonly IntakeOrchestrationService _sut;
@@ -28,6 +30,8 @@ public class IntakeOrchestrationServiceTests
             _profileRepoMock.Object,
             _srRepoMock.Object,
             _ledgerRepoMock.Object,
+            _locationRepoMock.Object,
+            _lookupRepoMock.Object,
             _categorizationMock.Object,
             _notificationMock.Object,
             Mock.Of<ILogger<IntakeOrchestrationService>>());

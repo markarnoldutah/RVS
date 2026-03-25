@@ -28,4 +28,16 @@ public interface IIntakeOrchestrationService
     /// <returns>The created <see cref="ServiceRequest"/> entity.</returns>
     /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
     Task<ServiceRequest> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves the location slug and assembles the intake configuration DTO,
+    /// including dealership name, location details, accepted file types, and
+    /// optionally prefilled customer data from a magic-link token.
+    /// </summary>
+    /// <param name="slug">Location slug for resolving tenant and location.</param>
+    /// <param name="magicLinkToken">Optional magic-link token for customer prefill.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The intake configuration for rendering the customer form.</returns>
+    /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
+    Task<IntakeConfigResponseDto> GetIntakeConfigAsync(string slug, string? magicLinkToken = null, CancellationToken cancellationToken = default);
 }
