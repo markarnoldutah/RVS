@@ -1,0 +1,6 @@
+@* 
+    Renders a hidden link that triggers the browser to prefetch the WASM bundle.
+    Place this on Static SSR pages so the WASM runtime is already cached
+    when the user navigates to an Interactive WebAssembly page.
+*@
+<link rel="modulepreload" href="_framework/blazor.web.js" />

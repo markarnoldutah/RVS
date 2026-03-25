@@ -1,0 +1,25 @@
+@page "/confirmation"
+
+<PageTitle>Request Submitted</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="20" HorizontalAlignment="HorizontalAlignment.Center">
+    <FluentIcon Value="@(new Icons.Regular.Size48.CheckmarkCircle())" Color="Color.Success" />
+
+    <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+        Request Submitted Successfully
+    </FluentLabel>
+
+    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+        Your service request has been submitted. You will receive a confirmation number shortly.
+    </FluentLabel>
+
+    <FluentButton Appearance="Appearance.Accent"
+                  IconStart="@(new Icons.Regular.Size20.Home())"
+                  OnClick="@(() => Navigation.NavigateTo("/"))">
+        Return Home
+    </FluentButton>
+</FluentStack>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+}

@@ -1,0 +1,35 @@
+@page "/status"
+
+<PageTitle>Check Request Status</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="20" HorizontalAlignment="HorizontalAlignment.Center">
+    <FluentIcon Value="@(new Icons.Regular.Size48.Search())" Color="Color.Accent" />
+
+    <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+        Check Request Status
+    </FluentLabel>
+
+    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+        Enter your confirmation number to view the status of your service request.
+    </FluentLabel>
+
+    <FluentTextField @bind-Value="_confirmationNumber"
+                     Placeholder="Confirmation number"
+                     Style="max-width: 400px; width: 100%;" />
+
+    <FluentButton Appearance="Appearance.Accent"
+                  IconStart="@(new Icons.Regular.Size20.Search())"
+                  Disabled="@string.IsNullOrWhiteSpace(_confirmationNumber)"
+                  OnClick="LookupStatus">
+        Look Up Status
+    </FluentButton>
+</FluentStack>
+
+@code {
+    private string? _confirmationNumber;
+
+    private void LookupStatus()
+    {
+        // Status lookup will be implemented in a future issue
+    }
+}
