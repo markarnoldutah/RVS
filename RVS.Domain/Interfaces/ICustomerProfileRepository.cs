@@ -39,4 +39,13 @@ public interface ICustomerProfileRepository
     /// <param name="entity">The updated customer profile entity.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<CustomerProfile> UpdateAsync(CustomerProfile entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Finds the customer profile that has an active ownership entry for the specified asset.
+    /// Returns <c>null</c> when no profile actively owns the asset in this tenant.
+    /// </summary>
+    /// <param name="tenantId">Tenant partition key.</param>
+    /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<CustomerProfile?> GetByActiveAssetIdAsync(string tenantId, string assetId, CancellationToken cancellationToken = default);
 }

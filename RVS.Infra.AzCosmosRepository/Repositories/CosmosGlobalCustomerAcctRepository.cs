@@ -114,4 +114,36 @@ public sealed class CosmosGlobalCustomerAcctRepository : CosmosRepositoryBase, I
         _logger.LogDebug("UpdateAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
         return response.Resource;
     }
+
+    /// <inheritdoc />
+    public async Task<GlobalCustomerAcct?> GetByMagicLinkTokenAsync(string token, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+
+        // Cross-partition query — partition key is /id, magicLinkToken is unique.
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.magicLinkToken = @token AND c.type = 'globalCustomerAcct'")
+            .WithParameter("@token", token);
+
+        var options = new QueryRequestOptions { MaxItemCount = 1 };
+        var iterator = _container.GetItemQueryIterator<GlobalCustomerAcct>(query, requestOptions: options);
+
+        double totalCharge = 0;
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(cancellationToken);
+            totalCharge += page.RequestCharge;
+
+            var item = page.FirstOrDefault();
+            if (item is not null)
+            {
+                _logger.LogDebug("GetByMagicLinkTokenAsync — RequestCharge: {Charge} RU", totalCharge);
+                return item;
+            }
+        }
+
+        _logger.LogDebug("GetByMagicLinkTokenAsync not found — RequestCharge: {Charge} RU", totalCharge);
+        return null;
+    }
 }
