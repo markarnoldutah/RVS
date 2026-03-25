@@ -1,0 +1,47 @@
+.rvs-diagnostic-response-view {
+    display: flex;
+    flex-direction: column;
+    gap: var(--rvs-space-md);
+    font-family: var(--rvs-font-family);
+}
+
+.rvs-diagnostic-response-view__item {
+    padding: var(--rvs-space-sm) var(--rvs-space-md);
+    border-left: 3px solid var(--rvs-color-primary);
+    background-color: var(--rvs-color-surface-secondary);
+    border-radius: var(--rvs-radius-sm);
+}
+
+.rvs-diagnostic-response-view__question {
+    font-size: var(--rvs-font-size-md);
+    font-weight: var(--rvs-font-weight-semibold);
+    color: var(--rvs-color-text-primary);
+    margin-bottom: var(--rvs-space-xs);
+}
+
+.rvs-diagnostic-response-view__options {
+    margin: 0;
+    padding-left: var(--rvs-space-md);
+    font-size: var(--rvs-font-size-sm);
+    color: var(--rvs-color-text-primary);
+}
+
+.rvs-diagnostic-response-view__options li {
+    margin-bottom: var(--rvs-space-xxs);
+}
+
+.rvs-diagnostic-response-view__freetext {
+    margin-top: var(--rvs-space-xs);
+    padding: var(--rvs-space-xs) var(--rvs-space-sm);
+    background-color: var(--rvs-color-surface);
+    border-radius: var(--rvs-radius-sm);
+    font-size: var(--rvs-font-size-sm);
+    color: var(--rvs-color-text-secondary);
+    font-style: italic;
+}
+
+.rvs-diagnostic-response-view__empty {
+    font-size: var(--rvs-font-size-sm);
+    color: var(--rvs-color-text-disabled);
+    font-style: italic;
+}

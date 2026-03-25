@@ -1,0 +1,41 @@
+.rvs-status-badge {
+    display: inline-block;
+    padding: var(--rvs-space-xxs) var(--rvs-space-sm);
+    border-radius: var(--rvs-radius-pill);
+    font-family: var(--rvs-font-family);
+    font-size: var(--rvs-font-size-xs);
+    font-weight: var(--rvs-font-weight-semibold);
+    line-height: var(--rvs-line-height-normal);
+    text-transform: capitalize;
+    white-space: nowrap;
+}
+
+.rvs-status-new {
+    background-color: var(--rvs-status-new-bg);
+    color: var(--rvs-status-new-fg);
+}
+
+.rvs-status-in-progress {
+    background-color: var(--rvs-status-in-progress-bg);
+    color: var(--rvs-status-in-progress-fg);
+}
+
+.rvs-status-awaiting-parts {
+    background-color: var(--rvs-status-awaiting-parts-bg);
+    color: var(--rvs-status-awaiting-parts-fg);
+}
+
+.rvs-status-completed {
+    background-color: var(--rvs-status-completed-bg);
+    color: var(--rvs-status-completed-fg);
+}
+
+.rvs-status-cancelled {
+    background-color: var(--rvs-status-cancelled-bg);
+    color: var(--rvs-status-cancelled-fg);
+}
+
+.rvs-status-default {
+    background-color: var(--rvs-status-default-bg);
+    color: var(--rvs-status-default-fg);
+}

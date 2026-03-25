@@ -1,0 +1,30 @@
+@namespace RVS.UI.Shared.Components
+
+<div class="rvs-diagnostic-response-view">
+    @if (Responses is not null && Responses.Count > 0)
+    {
+        @foreach (var response in Responses)
+        {
+            <div class="rvs-diagnostic-response-view__item">
+                <div class="rvs-diagnostic-response-view__question">@response.QuestionText</div>
+                @if (response.SelectedOptions.Count > 0)
+                {
+                    <ul class="rvs-diagnostic-response-view__options">
+                        @foreach (var option in response.SelectedOptions)
+                        {
+                            <li>@option</li>
+                        }
+                    </ul>
+                }
+                @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
+                {
+                    <div class="rvs-diagnostic-response-view__freetext">@response.FreeTextResponse</div>
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <div class="rvs-diagnostic-response-view__empty">No diagnostic responses</div>
+    }
+</div>
