@@ -8,10 +8,10 @@ namespace RVS.Infra.AzCosmosRepository.Repositories;
 
 /// <summary>
 /// Cosmos DB repository for <see cref="TenantConfig"/> entities.
-/// Container: <c>tenant-configs</c>. Partition key: <c>/id</c>.
+/// Container: <c>tenant-configs</c>. Partition key: <c>/tenantId</c>.
 /// <para>
 /// Convention: document <c>id</c> = <c>{tenantId}_config</c> (e.g. "ten_bluecompass_config").
-/// The partition key equals the document id, enabling O(1) point reads by tenantId.
+/// The partition key is the tenant id, enabling O(1) point reads by tenantId.
 /// </para>
 /// </summary>
 public sealed class CosmosTenantConfigRepository : CosmosRepositoryBase, ITenantConfigRepository
@@ -37,14 +37,14 @@ public sealed class CosmosTenantConfigRepository : CosmosRepositoryBase, ITenant
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
 
-        // O(1) point read — document id and partition key both equal "{tenantId}_config".
+        // O(1) point read — partition key is the tenant id.
         var docId = BuildId(tenantId);
 
         try
         {
             var response = await _container.ReadItemAsync<TenantConfig>(
                 docId,
-                new PartitionKey(docId),
+                new PartitionKey(tenantId),
                 cancellationToken: cancellationToken);
 
             _logger.LogDebug("GetAsync [tenant={TenantId}] — RequestCharge: {Charge} RU", tenantId, response.RequestCharge);
@@ -65,7 +65,7 @@ public sealed class CosmosTenantConfigRepository : CosmosRepositoryBase, ITenant
 
         var response = await _container.CreateItemAsync(
             entity,
-            new PartitionKey(entity.Id),
+            new PartitionKey(entity.TenantId),
             cancellationToken: cancellationToken);
 
         _logger.LogDebug("CreateAsync [tenant={TenantId}] — RequestCharge: {Charge} RU", entity.TenantId, response.RequestCharge);
@@ -81,7 +81,7 @@ public sealed class CosmosTenantConfigRepository : CosmosRepositoryBase, ITenant
 
         var response = await _container.UpsertItemAsync(
             entity,
-            new PartitionKey(entity.Id),
+            new PartitionKey(entity.TenantId),
             cancellationToken: cancellationToken);
 
         _logger.LogDebug("SaveAsync [tenant={TenantId}] — RequestCharge: {Charge} RU", entity.TenantId, response.RequestCharge);

@@ -12,7 +12,7 @@ public interface ILookupRepository
     /// Gets the global lookup set for the specified category.
     /// Returns <c>null</c> when no matching document is found.
     /// </summary>
-    /// <param name="category">Lookup category identifier (e.g. "issue-categories").</param>
+    /// <param name="category">Lookup category identifier (e.g. "IssueCategory").</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<LookupSet?> GetGlobalAsync(string category, CancellationToken cancellationToken = default);
 

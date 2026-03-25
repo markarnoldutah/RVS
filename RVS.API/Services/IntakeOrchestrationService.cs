@@ -319,7 +319,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         var intakeConfig = location?.IntakeConfig ?? new IntakeFormConfigEmbedded();
 
         var issueCategories = new List<LookupItemDto>();
-        var lookupSet = await _lookupRepository.GetGlobalAsync("issue-categories", cancellationToken);
+        var lookupSet = await _lookupRepository.GetGlobalAsync("IssueCategory", cancellationToken);
         if (lookupSet is not null)
         {
             issueCategories = lookupSet.Items

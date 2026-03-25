@@ -99,14 +99,14 @@ Roles are **scoped to an Auth0 Organization** (a user at Corporation A may be an
 
 | Role | Scope | Description |
 |---|---|---|
-| `platform:admin` | Global (cross-org) | RVS platform operators. Can manage all tenants, access gates, and global lookups. Not scoped to any Organization. |
-| `dealer:corporate-admin` | Organization-wide | Multi-location corporate HQ staff. Full access to all locations, all data, user management. |
-| `dealer:owner` | Organization-wide | Dealership owner/GM. Full control of their corporation's config, users, analytics, and all service requests. Equivalent to `corporate-admin` for single-location dealers. |
-| `dealer:regional-manager` | Organization + region tag | Sees locations matching their `regionTag` claim. Cross-location visibility within a geographic region. |
-| `dealer:manager` | Location-scoped | Service department manager at one specific location. Manages SRs, views analytics, manages location settings. |
-| `dealer:advisor` | Location-scoped | Service advisor / front-desk at one specific location. Creates, updates, searches SRs. Primary daily user. |
-| `dealer:technician` | Location-scoped | Technician at one specific location. Views assigned SRs, updates Section 10A fields (repair action, parts, labor) only. |
-| `dealer:readonly` | Location-scoped | Read-only observer (e.g., accounting, external auditor). Can view SRs and analytics but cannot modify anything. |
+| `platform:admin` | Global (cross-org) | RVS internal staff. Full system access across all tenants. |
+| `dealer:corporate-admin` | Organization-wide | Corporate HQ employee with full access across all locations. |
+| `dealer:owner` | Organization-wide | Business owner or general manager with full control of their organization. |
+| `dealer:regional-manager` | Organization + region tag | Manager with visibility across multiple locations within their region. |
+| `dealer:manager` | Location-scoped | Service department manager at a single location. |
+| `dealer:advisor` | Location-scoped | Service advisor who creates and manages service requests day-to-day. |
+| `dealer:technician` | Location-scoped | Technician who views assigned work and logs repair details. |
+| `dealer:readonly` | Location-scoped | View-only access for observers such as accounting or auditors. |
 
 ---
 

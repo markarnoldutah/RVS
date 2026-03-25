@@ -8,10 +8,10 @@ namespace RVS.Infra.AzCosmosRepository.Repositories;
 
 /// <summary>
 /// Cosmos DB repository for <see cref="SlugLookup"/> entities.
-/// Container: <c>slug-lookups</c>. Partition key: <c>/id</c>.
+/// Container: <c>slug-lookups</c>. Partition key: <c>/slug</c>.
 /// <para>
 /// Convention: document <c>id</c> = <c>slug_{slug}</c> (e.g. "slug_blue-compass-slc").
-/// The partition key equals the document id, enabling O(1) point reads by slug.
+/// The partition key is the slug value, enabling O(1) point reads by slug.
 /// </para>
 /// </summary>
 public sealed class CosmosSlugLookupRepository : CosmosRepositoryBase, ISlugLookupRepository
@@ -37,14 +37,14 @@ public sealed class CosmosSlugLookupRepository : CosmosRepositoryBase, ISlugLook
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
 
-        // O(1) point read — document id and partition key both equal "slug_{slug}".
+        // O(1) point read — partition key is the slug value.
         var docId = BuildId(slug);
 
         try
         {
             var response = await _container.ReadItemAsync<SlugLookup>(
                 docId,
-                new PartitionKey(docId),
+                new PartitionKey(slug),
                 cancellationToken: cancellationToken);
 
             _logger.LogDebug("GetBySlugAsync [slug={Slug}] — RequestCharge: {Charge} RU", slug, response.RequestCharge);
@@ -64,7 +64,7 @@ public sealed class CosmosSlugLookupRepository : CosmosRepositoryBase, ISlugLook
 
         var response = await _container.UpsertItemAsync(
             entity,
-            new PartitionKey(entity.Id),
+            new PartitionKey(entity.Slug),
             cancellationToken: cancellationToken);
 
         _logger.LogDebug("UpsertAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
@@ -80,7 +80,7 @@ public sealed class CosmosSlugLookupRepository : CosmosRepositoryBase, ISlugLook
 
         var response = await _container.DeleteItemAsync<SlugLookup>(
             docId,
-            new PartitionKey(docId),
+            new PartitionKey(slug),
             cancellationToken: cancellationToken);
 
         _logger.LogDebug("DeleteAsync [slug={Slug}] — RequestCharge: {Charge} RU", slug, response.RequestCharge);

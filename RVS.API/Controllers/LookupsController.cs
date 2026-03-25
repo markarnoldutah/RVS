@@ -31,15 +31,15 @@ public class LookupsController : ControllerBase
     /// MVP: returns global-only values; tenant overrides will be honored later.
     /// </summary>
     /// <example>
-    /// GET /api/lookups/encounter-types
+    /// GET /api/lookups/IssueCategory
     /// </example>
-    [HttpGet("{lookupSetId}")]
+    [HttpGet("{category}")]
     [Authorize(Policy = "CanReadLookups")]
-    public async Task<ActionResult<LookupSetDto>> GetLookupAsync(string lookupSetId)
+    public async Task<ActionResult<LookupSetDto>> GetLookupAsync(string category)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow(); 
 
-        var result = await _lookupService.GetLookupSetAsync(tenantId, lookupSetId);
+        var result = await _lookupService.GetLookupSetAsync(tenantId, category);
 
         return Ok(result);
     }

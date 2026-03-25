@@ -5,8 +5,8 @@ using Newtonsoft.Json;
 namespace RVS.Domain.Entities;
 
 /// <summary>
-/// A named set of lookup items (e.g., "encounter-types").
-/// Stored in the Lookups container, partitioned by tenantId.
+/// A named set of lookup items (e.g., "IssueCategory").
+/// Stored in the lookup-sets container, partitioned by category.
 /// For MVP, only tenantId = "GLOBAL" is used, but the model supports tenant overrides later.
 /// </summary>
 public class LookupSet : EntityBase

@@ -2,13 +2,12 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
-using System.Net;
 
 namespace RVS.Infra.AzCosmosRepository.Repositories;
 
 /// <summary>
 /// Cosmos DB repository for <see cref="LookupSet"/> entities.
-/// Container: <c>lookup-sets</c>. Partition key: <c>/id</c>.
+/// Container: <c>lookup-sets</c>. Partition key: <c>/category</c>.
 /// </summary>
 public sealed class CosmosLookupRepository : CosmosRepositoryBase, ILookupRepository
 {
@@ -33,42 +32,46 @@ public sealed class CosmosLookupRepository : CosmosRepositoryBase, ILookupReposi
     }
 
     /// <inheritdoc />
-    public async Task<LookupSet?> GetGlobalAsync(string lookupSetId, CancellationToken cancellationToken = default)
+    public async Task<LookupSet?> GetGlobalAsync(string category, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(lookupSetId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(category);
 
-        try
-        {
-            var response = await _container.ReadItemAsync<LookupSet>(
-                id: lookupSetId,
-                partitionKey: new PartitionKey(GlobalTenantId),
-                cancellationToken: cancellationToken);
+        var query = new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.tenantId = @tenantId")
+            .WithParameter("@tenantId", GlobalTenantId);
 
-            _logger.LogDebug("GetGlobalAsync [lookupSetId={LookupSetId}] — RequestCharge: {Charge} RU", lookupSetId, response.RequestCharge);
-            return response.Resource;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        var options = new QueryRequestOptions
         {
-            return null;
+            PartitionKey = new PartitionKey(category),
+            MaxItemCount = 1,
+        };
+
+        using var iterator = _container.GetItemQueryIterator<LookupSet>(query, requestOptions: options);
+
+        if (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync(cancellationToken);
+            _logger.LogDebug("GetGlobalAsync [category={Category}] — RequestCharge: {Charge} RU", category, response.RequestCharge);
+            return response.FirstOrDefault();
         }
+
+        return null;
     }
 
     /// <inheritdoc />
     public async Task UpsertGlobalAsync(LookupSet entity, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentException.ThrowIfNullOrWhiteSpace(entity.Id, nameof(entity.Id));
+        ArgumentException.ThrowIfNullOrWhiteSpace(entity.Category, nameof(entity.Category));
 
-        // Ensure global partition + updated timestamp are consistent at the boundary.
-        // Note: entity.TenantId is init-only; lookup sets are stored under the GLOBAL partition key.
+        // Ensure updated timestamp is consistent at the boundary.
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         var response = await _container.UpsertItemAsync(
             item: entity,
-            partitionKey: new PartitionKey(GlobalTenantId),
+            partitionKey: new PartitionKey(entity.Category),
             cancellationToken: cancellationToken);
 
-        _logger.LogDebug("UpsertGlobalAsync [lookupSetId={LookupSetId}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
+        _logger.LogDebug("UpsertGlobalAsync [category={Category}] — RequestCharge: {Charge} RU", entity.Category, response.RequestCharge);
     }
 
     // TODO CreateGlobalAsync()

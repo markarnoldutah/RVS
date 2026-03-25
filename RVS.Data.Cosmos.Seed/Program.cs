@@ -72,11 +72,11 @@ try
     await SeedItemsAsync(containers["locations"], locations, l => new PartitionKey(l.TenantId), "locations");
     await SeedItemsAsync(containers["service-requests"], serviceRequests, sr => new PartitionKey(sr.TenantId), "service-requests");
     await SeedItemsAsync(containers["customer-profiles"], customerProfiles, cp => new PartitionKey(cp.TenantId), "customer-profiles");
-    await SeedItemsAsync(containers["global-customer-accounts"], globalAccounts, ga => new PartitionKey(ga.Id), "global-customer-accounts");
+    await SeedItemsAsync(containers["global-customer-accounts"], globalAccounts, ga => new PartitionKey(ga.Email), "global-customer-accounts");
     await SeedItemsAsync(containers["asset-ledger"], assetLedgerEntries, ale => new PartitionKey(ale.AssetId), "asset-ledger");
-    await SeedItemsAsync(containers["slug-lookups"], slugLookups, sl => new PartitionKey(sl.Id), "slug-lookups");
-    await SeedItemsAsync(containers["tenant-configs"], tenantConfigs, tc => new PartitionKey(tc.Id), "tenant-configs");
-    await SeedItemsAsync(containers["lookup-sets"], lookupSets, ls => new PartitionKey(ls.Id), "lookup-sets");
+    await SeedItemsAsync(containers["slug-lookups"], slugLookups, sl => new PartitionKey(sl.Slug), "slug-lookups");
+    await SeedItemsAsync(containers["tenant-configs"], tenantConfigs, tc => new PartitionKey(tc.TenantId), "tenant-configs");
+    await SeedItemsAsync(containers["lookup-sets"], lookupSets, ls => new PartitionKey(ls.Category), "lookup-sets");
 
     // Tenants go into the dealerships container (same PK /tenantId, discriminated by type)
     await SeedItemsAsync(containers["dealerships"], tenants, t => new PartitionKey(t.TenantId), "tenants (in dealerships container)");
@@ -168,14 +168,14 @@ static List<ContainerProperties> BuildContainerDefinitions()
             },
         },
 
-        // 2. customer-profiles — PK=/tenantId, unique on [/normalizedEmail]
+        // 2. customer-profiles — PK=/tenantId, unique on [/tenantId, /email]
         new ContainerProperties
         {
             Id = "customer-profiles",
             PartitionKeyPath = "/tenantId",
             UniqueKeyPolicy = new UniqueKeyPolicy
             {
-                UniqueKeys = { new UniqueKey { Paths = { "/normalizedEmail" } } }
+                UniqueKeys = { new UniqueKey { Paths = { "/tenantId", "/email" } } }
             },
             IndexingPolicy = new IndexingPolicy
             {
@@ -184,7 +184,7 @@ static List<ContainerProperties> BuildContainerDefinitions()
                 IncludedPaths =
                 {
                     new IncludedPath { Path = "/tenantId/?" },
-                    new IncludedPath { Path = "/normalizedEmail/?" },
+                    new IncludedPath { Path = "/email/?" },
                     new IncludedPath { Path = "/globalCustomerAcctId/?" },
                     new IncludedPath { Path = "/type/?" },
                 },
@@ -196,22 +196,18 @@ static List<ContainerProperties> BuildContainerDefinitions()
             },
         },
 
-        // 3. global-customer-accounts — PK=/id (point reads by id)
+        // 3. global-customer-accounts — PK=/email (one record per real human; email is always normalized)
         new ContainerProperties
         {
             Id = "global-customer-accounts",
-            PartitionKeyPath = "/id",
-            UniqueKeyPolicy = new UniqueKeyPolicy
-            {
-                UniqueKeys = { new UniqueKey { Paths = { "/normalizedEmail" } } }
-            },
+            PartitionKeyPath = "/email",
             IndexingPolicy = new IndexingPolicy
             {
                 IndexingMode = IndexingMode.Consistent,
                 Automatic = true,
                 IncludedPaths =
                 {
-                    new IncludedPath { Path = "/normalizedEmail/?" },
+                    new IncludedPath { Path = "/email/?" },
                     new IncludedPath { Path = "/magicLinkToken/?" },
                     new IncludedPath { Path = "/type/?" },
                 },
@@ -223,11 +219,15 @@ static List<ContainerProperties> BuildContainerDefinitions()
             },
         },
 
-        // 4. asset-ledger — PK=/assetId (write-once per service request)
+        // 4. asset-ledger — PK=/assetId, unique on [/assetId, /serviceRequestId] (write-once per SR)
         new ContainerProperties
         {
             Id = "asset-ledger",
             PartitionKeyPath = "/assetId",
+            UniqueKeyPolicy = new UniqueKeyPolicy
+            {
+                UniqueKeys = { new UniqueKey { Paths = { "/assetId", "/serviceRequestId" } } }
+            },
             IndexingPolicy = new IndexingPolicy
             {
                 IndexingMode = IndexingMode.Consistent,
@@ -280,14 +280,14 @@ static List<ContainerProperties> BuildContainerDefinitions()
             },
         },
 
-        // 6. locations — PK=/tenantId, unique on [/slug]
+        // 6. locations — PK=/tenantId, unique on [/tenantId, /slug]
         new ContainerProperties
         {
             Id = "locations",
             PartitionKeyPath = "/tenantId",
             UniqueKeyPolicy = new UniqueKeyPolicy
             {
-                UniqueKeys = { new UniqueKey { Paths = { "/slug" } } }
+                UniqueKeys = { new UniqueKey { Paths = { "/tenantId", "/slug" } } }
             },
             IndexingPolicy = new IndexingPolicy
             {
@@ -308,11 +308,11 @@ static List<ContainerProperties> BuildContainerDefinitions()
             },
         },
 
-        // 7. slug-lookups — PK=/id (point reads by slug id)
+        // 7. slug-lookups — PK=/slug (point reads by slug)
         new ContainerProperties
         {
             Id = "slug-lookups",
-            PartitionKeyPath = "/id",
+            PartitionKeyPath = "/slug",
             IndexingPolicy = new IndexingPolicy
             {
                 IndexingMode = IndexingMode.Consistent,
@@ -331,11 +331,11 @@ static List<ContainerProperties> BuildContainerDefinitions()
             },
         },
 
-        // 8. tenant-configs — PK=/id (point reads by tenantConfig id)
+        // 8. tenant-configs — PK=/tenantId (point reads by tenantId)
         new ContainerProperties
         {
             Id = "tenant-configs",
-            PartitionKeyPath = "/id",
+            PartitionKeyPath = "/tenantId",
             IndexingPolicy = new IndexingPolicy
             {
                 IndexingMode = IndexingMode.Consistent,
@@ -353,11 +353,11 @@ static List<ContainerProperties> BuildContainerDefinitions()
             },
         },
 
-        // 9. lookup-sets — PK=/id (point reads by lookupSet id)
+        // 9. lookup-sets — PK=/category (grouped by category for global + tenant override queries)
         new ContainerProperties
         {
             Id = "lookup-sets",
-            PartitionKeyPath = "/id",
+            PartitionKeyPath = "/category",
             IndexingPolicy = new IndexingPolicy
             {
                 IndexingMode = IndexingMode.Consistent,
