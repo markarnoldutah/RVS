@@ -58,14 +58,17 @@ public sealed class CustomerProfileService : ICustomerProfileService
             return existing;
         }
 
+        var trimmedFirst = firstName.Trim();
+        var trimmedLast = lastName.Trim();
+
         var profile = new CustomerProfile
         {
             TenantId = tenantId,
             Email = email.Trim(),
             NormalizedEmail = normalizedEmail,
-            FirstName = firstName.Trim(),
-            LastName = lastName.Trim(),
-            Name = $"{firstName.Trim()} {lastName.Trim()}",
+            FirstName = trimmedFirst,
+            LastName = trimmedLast,
+            Name = $"{trimmedFirst} {trimmedLast}",
             CreatedByUserId = _userContext.UserId,
         };
 
@@ -101,7 +104,7 @@ public sealed class CustomerProfileService : ICustomerProfileService
         var normalizedEmail = email.Trim().ToLowerInvariant();
 
         var profile = await _repository.GetByEmailAsync(tenantId, normalizedEmail, cancellationToken)
-            ?? await CreateProfileAsync(tenantId, email, cancellationToken);
+            ?? await CreateProfileAsync(tenantId, email, normalizedEmail, cancellationToken);
 
         var existingOwner = await _repository.GetByActiveAssetIdAsync(tenantId, assetId, cancellationToken);
 
@@ -119,10 +122,8 @@ public sealed class CustomerProfileService : ICustomerProfileService
         return await _repository.UpdateAsync(profile, cancellationToken);
     }
 
-    private async Task<CustomerProfile> CreateProfileAsync(string tenantId, string email, CancellationToken cancellationToken)
+    private async Task<CustomerProfile> CreateProfileAsync(string tenantId, string email, string normalizedEmail, CancellationToken cancellationToken)
     {
-        var normalizedEmail = email.Trim().ToLowerInvariant();
-
         var profile = new CustomerProfile
         {
             TenantId = tenantId,
