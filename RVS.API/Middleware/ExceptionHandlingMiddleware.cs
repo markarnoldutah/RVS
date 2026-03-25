@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace RVS.API.Middleware;
 
 /// <summary>
-/// Catches all unhandled exceptions and returns an RFC 7807 ProblemDetails response.
+/// Catches all unhandled exceptions and returns an RFC 9457 ProblemDetails response.
 /// Registered as a singleton <see cref="IMiddleware"/>.
 /// </summary>
 public sealed class ExceptionHandlingMiddleware : IMiddleware
@@ -42,10 +42,10 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
         var tenantId = context.User?.FindFirst(TenantIdClaimType)?.Value;
         var userId = context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-        // Map known exception types → status codes + RFC 7807 fields
+        // Map known exception types → status codes + RFC 9457 fields
         var (statusCode, title, errorType) = exception switch
         {
-            ArgumentException => (StatusCodes.Status400BadRequest, "Bad Request", "bad-request"),
+            ArgumentException => (StatusCodes.Status400BadRequest, "Bad Request", "validation"),
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized", "unauthorized"),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found", "not-found"),
             _ => (StatusCodes.Status500InternalServerError, "Internal Server Error", "internal-server-error")

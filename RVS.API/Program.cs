@@ -1,3 +1,4 @@
+using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using RVS.API.HealthChecks;
 using RVS.API.Integrations;
@@ -14,6 +15,8 @@ using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.OpenApi;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -140,6 +143,21 @@ builder.Services.AddOpenApi(options =>
     options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
 });
 
+// Rate limiting — protects public intake + status endpoints
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("StatusEndpoint", cfg =>
+    {
+        cfg.PermitLimit = 10;
+        cfg.Window = TimeSpan.FromMinutes(1);
+    });
+    options.AddFixedWindowLimiter("IntakeEndpoint", cfg =>
+    {
+        cfg.PermitLimit = 20;
+        cfg.Window = TimeSpan.FromMinutes(1);
+    });
+});
+
 // Register Middleware
 builder.Services.AddSingleton<ExceptionHandlingMiddleware>();
 
@@ -161,6 +179,15 @@ builder.Services.AddSingleton<BlobServiceClient>(sp =>
         ?? throw new InvalidOperationException("BlobStorage:ConnectionString configuration is missing.");
 
     return new BlobServiceClient(connectionString);
+});
+
+// Azure Tables client
+builder.Services.AddSingleton<TableServiceClient>(sp =>
+{
+    var connectionString = builder.Configuration["AzureTables:ConnectionString"]
+        ?? throw new InvalidOperationException("AzureTables:ConnectionString configuration is missing.");
+
+    return new TableServiceClient(connectionString);
 });
 
 #region Repositories
@@ -375,23 +402,26 @@ if (app.Environment.IsProduction())
 // 3. CORS
 app.UseCors("AllowBlazorClient");
 
-// 4. ExceptionHandlingMiddleware (IMiddleware, singleton)
+// 4. Rate limiting
+app.UseRateLimiter();
+
+// 5. ExceptionHandlingMiddleware (IMiddleware, singleton)
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// 5. Authentication & Authorization
+// 6. Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
-// 6. Structured logging — enriches log scope with tenantId, locationId, correlationId (after auth so claims are populated)
+// 7. Structured logging — enriches log scope with tenantId, locationId, correlationId (after auth so claims are populated)
 app.UseMiddleware<CorrelationLoggingMiddleware>();
 
-// 7. Tenant access gate
+// 8. Tenant access gate
 app.UseMiddleware<TenantAccessGateMiddleware>();
 
-// 8. Health endpoint (no auth required)
+// 9. Health endpoint (no auth required)
 app.MapHealthChecks("/health");
 
-// 9. Map controllers
+// 10. Map controllers
 app.MapControllers();
 
 app.Run();
