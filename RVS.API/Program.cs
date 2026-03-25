@@ -65,6 +65,59 @@ builder.Services.AddAuthentication(options =>
     options.Audience = builder.Configuration["Auth0:Audience"];
 });
 
+builder.Services.AddAuthorization(options =>
+{
+    // Service Requests
+    options.AddPolicy("CanReadServiceRequests", policy =>
+        policy.RequireClaim("permissions", "service-requests:read"));
+    options.AddPolicy("CanSearchServiceRequests", policy =>
+        policy.RequireClaim("permissions", "service-requests:search"));
+    options.AddPolicy("CanUpdateServiceRequests", policy =>
+        policy.RequireClaim("permissions", "service-requests:update"));
+    options.AddPolicy("CanUpdateServiceEvent", policy =>
+        policy.RequireClaim("permissions", "service-requests:update-service-event"));
+    options.AddPolicy("CanDeleteServiceRequests", policy =>
+        policy.RequireClaim("permissions", "service-requests:delete"));
+
+    // Attachments
+    options.AddPolicy("CanUploadAttachments", policy =>
+        policy.RequireClaim("permissions", "attachments:upload"));
+    options.AddPolicy("CanReadAttachments", policy =>
+        policy.RequireClaim("permissions", "attachments:read"));
+    options.AddPolicy("CanDeleteAttachments", policy =>
+        policy.RequireClaim("permissions", "attachments:delete"));
+
+    // Dealerships
+    options.AddPolicy("CanReadDealerships", policy =>
+        policy.RequireClaim("permissions", "dealerships:read"));
+    options.AddPolicy("CanUpdateDealerships", policy =>
+        policy.RequireClaim("permissions", "dealerships:update"));
+
+    // Locations
+    options.AddPolicy("CanReadLocations", policy =>
+        policy.RequireClaim("permissions", "locations:read"));
+    options.AddPolicy("CanCreateLocations", policy =>
+        policy.RequireClaim("permissions", "locations:create"));
+    options.AddPolicy("CanUpdateLocations", policy =>
+        policy.RequireClaim("permissions", "locations:update"));
+
+    // Analytics
+    options.AddPolicy("CanReadAnalytics", policy =>
+        policy.RequireClaim("permissions", "analytics:read"));
+
+    // Tenant Config — accepts any of tenants:config:read/create/update
+    options.AddPolicy("CanManageTenantConfig", policy =>
+        policy.RequireClaim("permissions", "tenants:config:read", "tenants:config:create", "tenants:config:update"));
+
+    // Lookups
+    options.AddPolicy("CanReadLookups", policy =>
+        policy.RequireClaim("permissions", "lookups:read"));
+
+    // Platform Admin
+    options.AddPolicy("PlatformAdmin", policy =>
+        policy.RequireClaim("permissions", "platform:tenants:manage"));
+});
+
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
     {
