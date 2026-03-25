@@ -1,5 +1,6 @@
 using System;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 
 namespace RVS.API.Services;
@@ -10,8 +11,8 @@ namespace RVS.API.Services;
 /// </summary>
 public sealed class ClaimsService
 {
-
     public const string TenantIdClaimType = "https://rvserviceflow.com/tenantId";
+    public const string LocationIdsClaimType = "app_metadata/locationIds";
 
     private readonly IHttpContextAccessor _httpContextAccessor;
 
@@ -39,4 +40,34 @@ public sealed class ClaimsService
 
         return tenantId;
     }
+
+    /// <summary>
+    /// Retrieves the location IDs from the current user's claims.
+    /// Throws <see cref="UnauthorizedAccessException"/> if the claim is missing or empty.
+    /// </summary>
+    /// <returns>A read-only list of location IDs.</returns>
+    public IReadOnlyList<string> GetLocationIdsOrThrow()
+    {
+        var raw = User.FindFirst(LocationIdsClaimType)?.Value;
+
+        if (string.IsNullOrWhiteSpace(raw))
+            throw new UnauthorizedAccessException("locationIds claim is missing.");
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(raw) ?? [];
+        }
+        catch (JsonException)
+        {
+            throw new UnauthorizedAccessException("locationIds claim contains invalid JSON.");
+        }
+    }
+
+    /// <summary>
+    /// Checks whether the current user has access to the specified location.
+    /// </summary>
+    /// <param name="locationId">The location ID to check access for.</param>
+    /// <returns><c>true</c> if the user has access; otherwise, <c>false</c>.</returns>
+    public bool HasAccessToLocation(string locationId) =>
+        GetLocationIdsOrThrow().Contains(locationId, StringComparer.OrdinalIgnoreCase);
 }

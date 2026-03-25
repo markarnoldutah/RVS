@@ -11,4 +11,8 @@
     <ProjectReference Include="..\RVS.Infra.AzCredentials\RVS.Infra.AzCredentials.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Azure.Data.Tables" Version="12.11.0" />
+  </ItemGroup>
+
 </Project>

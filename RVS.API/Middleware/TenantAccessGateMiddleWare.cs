@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using RVS.Domain.Interfaces;
 using Microsoft.AspNetCore.Http;
 
-public sealed class TenantAccessGateMiddleware
+public sealed partial class TenantAccessGateMiddleware
 {
     private readonly RequestDelegate _next;
 
@@ -12,9 +13,13 @@ public sealed class TenantAccessGateMiddleware
     private static readonly string[] AllowPrefixes =
     {
         "/api/tenants/config",
+        "/api/service-requests/intake",
         "/health",
         "/swagger"
     };
+
+    [GeneratedRegex(@"^/api/service-requests/[a-zA-Z0-9_-]+/status$", RegexOptions.IgnoreCase)]
+    private static partial Regex StatusEndpointPattern();
 
     public TenantAccessGateMiddleware(RequestDelegate next)
     {
@@ -25,8 +30,15 @@ public sealed class TenantAccessGateMiddleware
     {
         var path = ctx.Request.Path.Value ?? string.Empty;
 
-        // Allowlist
+        // Allowlist — prefix matches
         if (AllowPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        {
+            await _next(ctx);
+            return;
+        }
+
+        // Allowlist — pattern matches (e.g. /api/service-requests/{id}/status)
+        if (StatusEndpointPattern().IsMatch(path))
         {
             await _next(ctx);
             return;
@@ -49,8 +61,8 @@ public sealed class TenantAccessGateMiddleware
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
             await ctx.Response.WriteAsJsonAsync(new
             {
-                error = "TenantIdMissing",
-                message = "Tenant context is missing from the access token."
+                message = "Tenant context is missing from the access token.",
+                errorId = Guid.NewGuid().ToString()
             });
             return;
         }
@@ -63,10 +75,8 @@ public sealed class TenantAccessGateMiddleware
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
             await ctx.Response.WriteAsJsonAsync(new
             {
-                error = "TenantDisabled",
-                reason = gate.DisabledReason ?? "Disabled",
-                message = gate.DisabledMessage ?? "Tenant access is currently disabled.",
-                support = gate.SupportContactEmail
+                message = "Tenant disabled",
+                errorId = Guid.NewGuid().ToString()
             });
             return;
         }

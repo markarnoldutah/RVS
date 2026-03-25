@@ -32,7 +32,7 @@ public sealed class ExceptionHandlingMiddlewareTests
         var problem = await DeserializeProblemDetails(context);
         context.Response.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         context.Response.ContentType.Should().Contain("application/problem+json");
-        problem.Type.Should().Be("https://api.rvserviceflow.com/errors/bad-request");
+        problem.Type.Should().Be("https://api.rvserviceflow.com/errors/validation");
         problem.Title.Should().Be("Bad Request");
         problem.Status.Should().Be(400);
         problem.Detail.Should().Be("Invalid parameter");
