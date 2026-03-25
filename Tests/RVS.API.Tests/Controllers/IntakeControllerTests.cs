@@ -133,4 +133,56 @@ public class IntakeControllerTests
             Year = 2023
         }
     };
+
+    [Fact]
+    public async Task GetUploadSas_ShouldReturnOkWithUploadSasResponse()
+    {
+        _intakeServiceMock.Setup(s => s.ResolveSlugToTenantIdAsync("test-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("ten_test");
+        var sasResponse = new AttachmentUploadSasResponseDto
+        {
+            SasUrl = "https://blob.example.com/sas?sig=upload",
+            BlobName = "ten_test/sr_1/guid_photo.jpg",
+            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(15)
+        };
+        _attachmentServiceMock.Setup(s => s.GenerateUploadSasAsync("ten_test", "sr_1", "photo.jpg", "image/jpeg", 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sasResponse);
+
+        var result = await _sut.GetUploadSas("test-slug", "sr_1", "photo.jpg", "image/jpeg");
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AttachmentUploadSasResponseDto>().Subject;
+        dto.SasUrl.Should().Contain("blob.example.com");
+        dto.BlobName.Should().Contain("sr_1");
+    }
+
+    [Fact]
+    public async Task ConfirmUpload_ShouldReturnCreatedWithAttachmentDto()
+    {
+        _intakeServiceMock.Setup(s => s.ResolveSlugToTenantIdAsync("test-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("ten_test");
+        var attachmentDto = new AttachmentDto
+        {
+            AttachmentId = "att_1",
+            FileName = "photo.jpg",
+            ContentType = "image/jpeg",
+            SizeBytes = 1024,
+            BlobUri = "ten_test/sr_1/att_1_photo.jpg"
+        };
+        var request = new AttachmentConfirmRequestDto
+        {
+            BlobName = "ten_test/sr_1/att_1_photo.jpg",
+            FileName = "photo.jpg",
+            ContentType = "image/jpeg",
+            SizeBytes = 1024
+        };
+        _attachmentServiceMock.Setup(s => s.ConfirmAttachmentAsync("ten_test", "sr_1", request, 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(attachmentDto);
+
+        var result = await _sut.ConfirmUpload("test-slug", "sr_1", request);
+
+        var createdResult = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
+        var dto = createdResult.Value.Should().BeOfType<AttachmentDto>().Subject;
+        dto.FileName.Should().Be("photo.jpg");
+    }
 }

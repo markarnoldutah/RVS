@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using RVS.API.Mappers;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
 using RVS.Domain.Interfaces;
@@ -8,7 +7,8 @@ using RVS.Domain.Interfaces;
 namespace RVS.API.Controllers;
 
 /// <summary>
-/// Manages file attachments on service requests (upload, read SAS, delete).
+/// Manages file attachments on service requests (SAS upload, SAS read, confirm, delete).
+/// Clients upload directly to blob storage using SAS URLs — no binary proxying through the API.
 /// </summary>
 [ApiController]
 [Route("api/dealerships/{dealershipId}/service-requests/{srId}/attachments")]
@@ -28,24 +28,43 @@ public class AttachmentsController : ControllerBase
     }
 
     /// <summary>
-    /// Uploads a file attachment to a service request.
+    /// Generates a time-limited SAS URL for direct client-to-blob upload (15-minute expiry).
+    /// Validates the content type and max-attachment cap before issuing the SAS URL.
+    /// Returns the SAS URL and blob name needed for the subsequent confirm step.
     /// </summary>
     /// <param name="dealershipId">Dealership identifier (route segment).</param>
     /// <param name="srId">Service request identifier.</param>
-    /// <param name="file">The file to upload.</param>
+    /// <param name="fileName">Original file name for the attachment.</param>
+    /// <param name="contentType">MIME content type declared by the client (e.g. "image/jpeg").</param>
     /// <param name="ct">Cancellation token.</param>
-    [HttpPost]
+    [HttpPost("upload-url")]
     [Authorize(Policy = "CanUploadAttachments")]
-    public async Task<ActionResult<AttachmentDto>> Upload(
-        string dealershipId, string srId, IFormFile file, CancellationToken ct)
+    public async Task<ActionResult<AttachmentUploadSasResponseDto>> GetUploadSas(
+        string dealershipId, string srId, [FromQuery] string fileName, [FromQuery] string contentType, CancellationToken ct)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
-        using var stream = file.OpenReadStream();
-        var sr = await _service.CreateAttachmentAsync(
-            tenantId, srId, file.FileName, file.ContentType, stream, cancellationToken: ct);
+        var result = await _service.GenerateUploadSasAsync(tenantId, srId, fileName, contentType, cancellationToken: ct);
 
-        var attachment = sr.Attachments[^1].ToDto();
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Confirms a direct-upload attachment after the client has uploaded the blob via SAS URL.
+    /// Validates the blob exists, records the attachment on the service request.
+    /// </summary>
+    /// <param name="dealershipId">Dealership identifier (route segment).</param>
+    /// <param name="srId">Service request identifier.</param>
+    /// <param name="request">Confirmation details (blob name, file name, content type, size).</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpPost("confirm")]
+    [Authorize(Policy = "CanUploadAttachments")]
+    public async Task<ActionResult<AttachmentDto>> ConfirmUpload(
+        string dealershipId, string srId, [FromBody] AttachmentConfirmRequestDto request, CancellationToken ct)
+    {
+        var tenantId = _claimsService.GetTenantIdOrThrow();
+
+        var attachment = await _service.ConfirmAttachmentAsync(tenantId, srId, request, cancellationToken: ct);
 
         return CreatedAtAction(nameof(GetReadSas), new { dealershipId, srId, attachmentId = attachment.AttachmentId }, attachment);
     }

@@ -94,26 +94,43 @@ public class IntakeController : ControllerBase
     }
 
     /// <summary>
-    /// Uploads a file attachment to an existing service request created during intake.
+    /// Generates a time-limited SAS URL for direct client-to-blob upload of an attachment (15-minute expiry).
+    /// Validates the content type and max-attachment cap before issuing the SAS URL.
+    /// Returns the SAS URL and blob name needed for the subsequent confirm step.
     /// </summary>
     /// <param name="locationSlug">Location slug (route segment).</param>
     /// <param name="srId">Service request identifier.</param>
-    /// <param name="file">The file to upload.</param>
+    /// <param name="fileName">Original file name for the attachment.</param>
+    /// <param name="contentType">MIME content type declared by the client (e.g. "image/jpeg").</param>
     /// <param name="ct">Cancellation token.</param>
-    [HttpPost("service-requests/{srId}/attachments")]
-    public async Task<ActionResult<AttachmentDto>> UploadAttachment(
-        string locationSlug, string srId, IFormFile file, CancellationToken ct = default)
+    [HttpPost("service-requests/{srId}/attachments/upload-url")]
+    public async Task<ActionResult<AttachmentUploadSasResponseDto>> GetUploadSas(
+        string locationSlug, string srId, [FromQuery] string fileName, [FromQuery] string contentType, CancellationToken ct = default)
     {
         var tenantId = await _intakeService.ResolveSlugToTenantIdAsync(locationSlug, ct);
 
-        using var stream = file.OpenReadStream();
+        var result = await _attachmentService.GenerateUploadSasAsync(tenantId, srId, fileName, contentType, cancellationToken: ct);
 
-        var sr = await _attachmentService.CreateAttachmentAsync(
-            tenantId, srId, file.FileName, file.ContentType, stream, cancellationToken: ct);
+        return Ok(result);
+    }
 
-        var attachment = sr.Attachments[^1].ToDto();
+    /// <summary>
+    /// Confirms a direct-upload attachment after the client has uploaded the blob via SAS URL.
+    /// Validates the blob exists, records the attachment on the service request.
+    /// </summary>
+    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="srId">Service request identifier.</param>
+    /// <param name="request">Confirmation details (blob name, file name, content type, size).</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpPost("service-requests/{srId}/attachments/confirm")]
+    public async Task<ActionResult<AttachmentDto>> ConfirmUpload(
+        string locationSlug, string srId, [FromBody] AttachmentConfirmRequestDto request, CancellationToken ct = default)
+    {
+        var tenantId = await _intakeService.ResolveSlugToTenantIdAsync(locationSlug, ct);
 
-        return Ok(attachment);
+        var attachment = await _attachmentService.ConfirmAttachmentAsync(tenantId, srId, request, cancellationToken: ct);
+
+        return CreatedAtAction(nameof(GetConfig), new { locationSlug }, attachment);
     }
 }
 

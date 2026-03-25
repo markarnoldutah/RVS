@@ -6,7 +6,6 @@ using Moq;
 using RVS.API.Controllers;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
-using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
 
 namespace RVS.API.Tests.Controllers;
@@ -26,16 +25,47 @@ public class AttachmentsControllerTests
     }
 
     [Fact]
-    public async Task Upload_ShouldReturnCreatedAtActionWithAttachmentDto()
+    public async Task GetUploadSas_ShouldReturnOkWithUploadSasResponse()
     {
-        var sr = BuildServiceRequestWithAttachment();
-        _serviceMock.Setup(s => s.CreateAttachmentAsync(
-                TenantId, "sr_1", "photo.jpg", "image/jpeg", It.IsAny<Stream>(),
-                10, 25, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(sr);
+        var sasResponse = new AttachmentUploadSasResponseDto
+        {
+            SasUrl = "https://blob.example.com/sas?sig=upload",
+            BlobName = "ten_test/sr_1/guid_photo.jpg",
+            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(15)
+        };
+        _serviceMock.Setup(s => s.GenerateUploadSasAsync(TenantId, "sr_1", "photo.jpg", "image/jpeg", 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sasResponse);
 
-        var file = CreateFormFile("photo.jpg", "image/jpeg");
-        var result = await _sut.Upload("dlr_1", "sr_1", file, CancellationToken.None);
+        var result = await _sut.GetUploadSas("dlr_1", "sr_1", "photo.jpg", "image/jpeg", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AttachmentUploadSasResponseDto>().Subject;
+        dto.SasUrl.Should().Contain("blob.example.com");
+        dto.BlobName.Should().Contain("sr_1");
+    }
+
+    [Fact]
+    public async Task ConfirmUpload_ShouldReturnCreatedAtActionWithAttachmentDto()
+    {
+        var attachmentDto = new AttachmentDto
+        {
+            AttachmentId = "att_1",
+            FileName = "photo.jpg",
+            ContentType = "image/jpeg",
+            SizeBytes = 1024,
+            BlobUri = "ten_test/sr_1/att_1_photo.jpg"
+        };
+        var request = new AttachmentConfirmRequestDto
+        {
+            BlobName = "ten_test/sr_1/att_1_photo.jpg",
+            FileName = "photo.jpg",
+            ContentType = "image/jpeg",
+            SizeBytes = 1024
+        };
+        _serviceMock.Setup(s => s.ConfirmAttachmentAsync(TenantId, "sr_1", request, 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(attachmentDto);
+
+        var result = await _sut.ConfirmUpload("dlr_1", "sr_1", request, CancellationToken.None);
 
         var createdResult = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
         var dto = createdResult.Value.Should().BeOfType<AttachmentDto>().Subject;
@@ -65,47 +95,6 @@ public class AttachmentsControllerTests
         var result = await _sut.Delete("dlr_1", "sr_1", "att_1", CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
-    }
-
-    private static ServiceRequest BuildServiceRequestWithAttachment() => new()
-    {
-        Id = "sr_1",
-        TenantId = TenantId,
-        LocationId = "loc_1",
-        Status = "New",
-        IssueCategory = "Electrical",
-        IssueDescription = "Test",
-        CreatedByUserId = "intake",
-        CustomerSnapshot = new CustomerSnapshotEmbedded
-        {
-            FirstName = "Jane",
-            LastName = "Doe",
-            Email = "jane@example.com"
-        },
-        AssetInfo = new AssetInfoEmbedded { AssetId = "RV:1FTFW1ET5EKE12345" },
-        Attachments =
-        [
-            new ServiceRequestAttachmentEmbedded
-            {
-                AttachmentId = "att_1",
-                FileName = "photo.jpg",
-                ContentType = "image/jpeg",
-                SizeBytes = 1024,
-                BlobUri = "ten_test/sr_1/att_1_photo.jpg"
-            }
-        ]
-    };
-
-    private static IFormFile CreateFormFile(string fileName, string contentType)
-    {
-        var content = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 };
-        var stream = new MemoryStream(content);
-        var fileMock = new Mock<IFormFile>();
-        fileMock.Setup(f => f.FileName).Returns(fileName);
-        fileMock.Setup(f => f.ContentType).Returns(contentType);
-        fileMock.Setup(f => f.Length).Returns(content.Length);
-        fileMock.Setup(f => f.OpenReadStream()).Returns(stream);
-        return fileMock.Object;
     }
 
     private static ClaimsService BuildClaimsService(string tenantId)

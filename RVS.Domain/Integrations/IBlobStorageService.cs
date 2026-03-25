@@ -44,4 +44,13 @@ public interface IBlobStorageService
     /// <param name="blobName">Target blob name.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task DeleteAsync(string containerName, string blobName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Checks whether a blob exists in storage.
+    /// </summary>
+    /// <param name="containerName">Blob container name.</param>
+    /// <param name="blobName">Target blob name.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if the blob exists, otherwise false.</returns>
+    Task<bool> BlobExistsAsync(string containerName, string blobName, CancellationToken cancellationToken = default);
 }

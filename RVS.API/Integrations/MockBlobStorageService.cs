@@ -62,4 +62,15 @@ public sealed class MockBlobStorageService : IBlobStorageService
 
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc />
+    public Task<bool> BlobExistsAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
+
+        _logger.LogDebug("MockBlobStorageService pretending blob {BlobName} exists", blobName);
+
+        return Task.FromResult(true);
+    }
 }
