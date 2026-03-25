@@ -1,0 +1,24 @@
+.rvs-asset-display {
+    display: flex;
+    flex-direction: column;
+    gap: var(--rvs-space-xxs);
+    font-family: var(--rvs-font-family);
+}
+
+.rvs-asset-display__label {
+    font-size: var(--rvs-font-size-md);
+    font-weight: var(--rvs-font-weight-semibold);
+    color: var(--rvs-color-text-primary);
+}
+
+.rvs-asset-display__id {
+    font-size: var(--rvs-font-size-xs);
+    color: var(--rvs-color-text-secondary);
+    font-family: monospace;
+}
+
+.rvs-asset-display__empty {
+    font-size: var(--rvs-font-size-sm);
+    color: var(--rvs-color-text-disabled);
+    font-style: italic;
+}

@@ -1,0 +1,36 @@
+.rvs-priority-badge {
+    display: inline-block;
+    padding: var(--rvs-space-xxs) var(--rvs-space-sm);
+    border-radius: var(--rvs-radius-pill);
+    font-family: var(--rvs-font-family);
+    font-size: var(--rvs-font-size-xs);
+    font-weight: var(--rvs-font-weight-semibold);
+    line-height: var(--rvs-line-height-normal);
+    text-transform: capitalize;
+    white-space: nowrap;
+}
+
+.rvs-priority-critical {
+    background-color: var(--rvs-priority-critical-bg);
+    color: var(--rvs-priority-critical-fg);
+}
+
+.rvs-priority-high {
+    background-color: var(--rvs-priority-high-bg);
+    color: var(--rvs-priority-high-fg);
+}
+
+.rvs-priority-medium {
+    background-color: var(--rvs-priority-medium-bg);
+    color: var(--rvs-priority-medium-fg);
+}
+
+.rvs-priority-low {
+    background-color: var(--rvs-priority-low-bg);
+    color: var(--rvs-priority-low-fg);
+}
+
+.rvs-priority-default {
+    background-color: var(--rvs-priority-default-bg);
+    color: var(--rvs-priority-default-fg);
+}
