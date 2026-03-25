@@ -195,8 +195,8 @@ builder.Services.AddScoped<ITenantConfigService, TenantConfigService>();
 builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IGlobalCustomerAcctService, GlobalCustomerAcctService>();
 
-// TODO: Register service implementations when Service layer is complete
-// builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
+builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
+builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 #endregion
 
 #region Integration Clients
