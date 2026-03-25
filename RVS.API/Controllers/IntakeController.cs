@@ -102,10 +102,12 @@ public class IntakeController : ControllerBase
     public async Task<ActionResult<AttachmentDto>> UploadAttachment(
         string locationSlug, string srId, IFormFile file, CancellationToken ct = default)
     {
+        var tenantId = await _intakeService.ResolveSlugToTenantIdAsync(locationSlug, ct);
+
         using var stream = file.OpenReadStream();
 
         var sr = await _attachmentService.CreateAttachmentAsync(
-            string.Empty, srId, file.FileName, file.ContentType, stream, cancellationToken: ct);
+            tenantId, srId, file.FileName, file.ContentType, stream, cancellationToken: ct);
 
         var attachment = sr.Attachments[^1].ToDto();
 

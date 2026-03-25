@@ -40,4 +40,13 @@ public interface IIntakeOrchestrationService
     /// <returns>The intake configuration for rendering the customer form.</returns>
     /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
     Task<IntakeConfigResponseDto> GetIntakeConfigAsync(string slug, string? magicLinkToken = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves a location slug to the associated tenant identifier.
+    /// </summary>
+    /// <param name="slug">Location slug.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The tenant identifier for the location.</returns>
+    /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
+    Task<string> ResolveSlugToTenantIdAsync(string slug, CancellationToken cancellationToken = default);
 }

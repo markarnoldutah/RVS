@@ -359,4 +359,15 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             PrefillCustomer = prefillCustomer
         };
     }
+
+    /// <inheritdoc />
+    public async Task<string> ResolveSlugToTenantIdAsync(string slug, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slug);
+
+        var slugLookup = await _slugLookupRepository.GetBySlugAsync(slug.Trim().ToLowerInvariant(), cancellationToken)
+            ?? throw new KeyNotFoundException($"Location slug '{slug}' not found.");
+
+        return slugLookup.TenantId;
+    }
 }
