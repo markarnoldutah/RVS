@@ -56,4 +56,24 @@ public interface IServiceRequestService
     /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
     /// <exception cref="ArgumentException">Thrown when the status transition is invalid.</exception>
     Task<ServiceRequest> UpdateStatusAsync(string tenantId, string id, string newStatus, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Applies a shared repair outcome to up to 25 service requests in a single batch.
+    /// All service requests must belong to the specified tenant.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="request">Batch outcome request containing SR IDs and outcome fields.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="ArgumentException">Thrown when the batch exceeds 25 items.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+    Task<BatchOutcomeResponseDto> BatchOutcomeAsync(string tenantId, BatchOutcomeRequestDto request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a service request.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
+    Task DeleteAsync(string tenantId, string id, CancellationToken cancellationToken = default);
 }
