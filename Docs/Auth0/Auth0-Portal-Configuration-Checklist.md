@@ -1,7 +1,19 @@
 # Auth0 Portal Configuration Checklist
 
-**Generated:** March 25, 2026
-**Source:** RVS_Auth0_Identity_Version2.md, RVS_Technical_PRD.md, Program.cs, ClaimsService.cs
+**Updated:** March 25, 2026
+**Source:** RVS_Auth0_Identity_Version2.md (v2.2), RVS_Technical_PRD.md, Program.cs, ClaimsService.cs
+
+---
+
+## Architecture Note
+
+RVS does **not** use Auth0 Organizations. Tenant context is stored in each user's `app_metadata` and injected into the JWT via a Post-Login Action. This approach:
+
+- Runs on the **Auth0 Free plan** with no tenant/organization cap.
+- Supports unlimited dealer corporations without paid tier upgrades.
+- Keeps all tenant-scoping logic in the RVS service layer (via `ClaimsService`), not in Auth0.
+
+Each user's `app_metadata.tenantId` becomes the `tenantId` used throughout RVS — the Cosmos DB partition key, the blob storage path prefix, and the data isolation boundary.
 
 ---
 
@@ -196,11 +208,23 @@ The `permissions` are **not** requested as scopes — they're automatically incl
 
 ---
 
-## 11. Summary of Auth0 Portal Sections to Touch
+## 11. Design Tradeoffs (from ASOT)
+
+| Concern | How RVS Handles It |
+|---|---|
+| **User isolation** | Enforced by `ClaimsService` + Cosmos partition key, not by Auth0 membership boundaries |
+| **Role scoping** | Roles are global Auth0 roles (not per-org). A user belongs to exactly one tenant via `app_metadata.tenantId` |
+| **Invitation flows** | Handled via Auth0 Dashboard or Management API; owner invites staff by creating users with matching `tenantId` |
+| **Per-tenant IdP** | Not available without Organizations; all tenants share the same Auth0 login experience |
+| **Branded login** | Not available without Organizations; deferred to a future paid tier if needed |
+
+---
+
+## 12. Summary of Auth0 Portal Sections to Touch
 
 1. **APIs** — Create `RVS API` with audience, RS256, RBAC enabled, permissions defined
 2. **Applications** — Create SPA app with callback/logout/origin URLs
 3. **Roles** — Create 8 roles with correct permission assignments
 4. **Actions > Login Flow** — Deploy the Post-Login Action for custom claims
-5. **Users** — Set `app_metadata` (tenantId, locationIds, regionTag) per user
+5. **Users** — Set `app_metadata` (tenantId, orgName, locationIds, regionTag) per user
 6. **Organizations** — Not used. Tenant scoping is permanently via `app_metadata`
