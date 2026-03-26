@@ -41,10 +41,8 @@ public sealed class TenantAccessGateMiddleware
             return;
         }
 
-        // TenantId should come from token claims (adjust claim types to match your auth setup)
-        var tenantId =
-            ctx.User.FindFirst("tenantId")?.Value
-            ?? ctx.User.FindFirst("https://rvserviceflow.com/tenantId")?.Value;
+        // TenantId comes from the namespaced JWT claim set by the Auth0 Post-Login Action
+        var tenantId = ctx.User.FindFirst("https://rvserviceflow.com/tenantId")?.Value;
 
         if (string.IsNullOrWhiteSpace(tenantId))
         {

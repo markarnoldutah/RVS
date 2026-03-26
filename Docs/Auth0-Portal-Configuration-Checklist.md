@@ -96,16 +96,16 @@ All custom claims use the namespace: **`https://rvserviceflow.com/`**
 
 Create a Login Action named e.g. `Enrich Access Token` that injects these custom claims:
 
-| Claim | Namespace + Key | Source (MVP) | Source (Orgs) |
-|---|---|---|---|
-| **Tenant ID** | `https://rvserviceflow.com/tenantId` | `event.user.app_metadata.tenantId` | `event.organization.id` |
-| **Org Name** | `https://rvserviceflow.com/orgName` | `event.user.app_metadata.orgName` | `event.organization.display_name` |
-| **Roles** | `https://rvserviceflow.com/roles` | `event.authorization.roles` | `event.authorization.roles` |
-| **User ID** | `https://rvserviceflow.com/userId` | `event.user.user_id` | `event.user.user_id` |
-| **Location IDs** | `https://rvserviceflow.com/locationIds` | `event.user.app_metadata.locationIds` | `event.user.app_metadata.locationIds` |
-| **Region Tag** | `https://rvserviceflow.com/regionTag` | `event.user.app_metadata.regionTag` | `event.user.app_metadata.regionTag` |
+| Claim | Namespace + Key | Source |
+|---|---|---|
+| **Tenant ID** | `https://rvserviceflow.com/tenantId` | `event.user.app_metadata.tenantId` |
+| **Org Name** | `https://rvserviceflow.com/orgName` | `event.user.app_metadata.orgName` |
+| **Roles** | `https://rvserviceflow.com/roles` | `event.authorization.roles` |
+| **User ID** | `https://rvserviceflow.com/userId` | `event.user.user_id` |
+| **Location IDs** | `https://rvserviceflow.com/locationIds` | `event.user.app_metadata.locationIds` |
+| **Region Tag** | `https://rvserviceflow.com/regionTag` | `event.user.app_metadata.regionTag` |
 
-### Sample Action Code (MVP mode)
+### Sample Action Code
 
 ```javascript
 exports.onExecutePostLogin = async (event, api) => {
@@ -203,4 +203,4 @@ The `permissions` are **not** requested as scopes — they're automatically incl
 3. **Roles** — Create 8 roles with correct permission assignments
 4. **Actions > Login Flow** — Deploy the Post-Login Action for custom claims
 5. **Users** — Set `app_metadata` (tenantId, locationIds, regionTag) per user
-6. **Organizations** — Deferred to commercialization; MVP uses `app_metadata` for tenant scoping
+6. **Organizations** — Not used. Tenant scoping is permanently via `app_metadata`

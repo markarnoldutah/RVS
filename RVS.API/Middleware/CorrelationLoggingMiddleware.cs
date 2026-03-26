@@ -10,7 +10,7 @@ public sealed class CorrelationLoggingMiddleware
 
     private const string CorrelationIdHeader = "X-Correlation-ID";
     private const string TenantIdClaimType = "https://rvserviceflow.com/tenantId";
-    private const string LocationIdClaimType = "https://rvserviceflow.com/locationId";
+    private const string LocationIdsClaimType = "https://rvserviceflow.com/locationIds";
 
     public CorrelationLoggingMiddleware(RequestDelegate next)
     {
@@ -25,13 +25,13 @@ public sealed class CorrelationLoggingMiddleware
         context.Response.Headers[CorrelationIdHeader] = correlationId;
 
         var tenantId = context.User?.FindFirst(TenantIdClaimType)?.Value ?? "anonymous";
-        var locationId = context.User?.FindFirst(LocationIdClaimType)?.Value ?? "unknown";
+        var locationIds = context.User?.FindFirst(LocationIdsClaimType)?.Value ?? "unknown";
 
         using (logger.BeginScope(new Dictionary<string, object>
         {
             ["CorrelationId"] = correlationId,
             ["TenantId"] = tenantId,
-            ["LocationId"] = locationId
+            ["LocationIds"] = locationIds
         }))
         {
             await _next(context);

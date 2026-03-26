@@ -99,7 +99,7 @@ This summarizes how the **three user interfaces feed the RVS service intelligenc
 
 The system relies on **multiple Cosmos DB containers optimized for different access patterns** such as tenant-scoped service requests, global customer identity, and VIN-partitioned service history. 
 
-Dealer staff authentication and authorization is handled through **Auth0 organizations, roles, and JWT claims**, which enforce tenant and location-level access control in the API. 
+Dealer staff authentication and authorization is handled through **Auth0 roles, JWT claims, and `app_metadata` tenant scoping**, which enforce tenant and location-level access control in the API. 
 
 The customer intake app is intentionally **anonymous and frictionless**, using shadow customer profiles and magic-link status pages instead of accounts during the MVP phase. 
 

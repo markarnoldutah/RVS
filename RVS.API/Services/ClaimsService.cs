@@ -12,7 +12,7 @@ namespace RVS.API.Services;
 public sealed class ClaimsService
 {
     public const string TenantIdClaimType = "https://rvserviceflow.com/tenantId";
-    public const string LocationIdsClaimType = "app_metadata/locationIds";
+    public const string LocationIdsClaimType = "https://rvserviceflow.com/locationIds";
 
     private readonly IHttpContextAccessor _httpContextAccessor;
 
