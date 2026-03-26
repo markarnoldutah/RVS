@@ -12,7 +12,7 @@
 | Document | Purpose |
 |---|---|
 | [RVS_Core_Architecture_Version3.1.md](RVS_Core_Architecture_Version3.1.md) | Domain model, data layer, orchestration flows, API surface |
-| [RVS_Auth0_Identity_Version2.md](RVS_Auth0_Identity_Version2.md) | RBAC model, JWT structure, ClaimsService, Auth0 Organizations |
+| [RVS_Auth0_Identity_Version2.md](RVS_Auth0_Identity_Version2.md) | RBAC model, JWT structure, ClaimsService, `app_metadata` tenant scoping |
 | [RVS_Context.md](RVS_Context.md) | Platform overview, business model, investor/partner context |
 | [RVS_PRD.md](RVS_PRD.md) | Product goals, user personas, user stories (v1.1) |
 | [RVS_implementation_plan.md](RVS_implementation_plan.md) | 8-phase build roadmap |
@@ -46,7 +46,7 @@ RVS is a B2B SaaS platform for RV dealership service management. It digitizes th
 - **Backend:** ASP.NET Core (.NET 10, C# 14), RESTful API, OpenAPI/Swagger
 - **Database:** Azure Cosmos DB (SQL API, 9 containers)
 - **Storage:** Azure Blob Storage (attachments)
-- **Identity:** Auth0 (JWT Bearer; Organizations-ready)
+- **Identity:** Auth0 (JWT Bearer; `app_metadata` tenant scoping)
 - **AI:** Azure OpenAI (`gpt-4o-mini`) for issue categorization and diagnostic questions
 - **Notifications:** SendGrid (behind `INotificationService`)
 - **Frontend:** Blazor WebAssembly (Cust_Intake + Mngr_Desktop), MAUI Blazor Hybrid (Tech_Mobile)
@@ -55,8 +55,7 @@ RVS is a B2B SaaS platform for RV dealership service management. It digitizes th
 
 ```
 Tenant  = Corporation (e.g., Blue Compass RV)
-         → 1 Auth0 Organization
-         → 1 Cosmos DB partition (key: tenantId = org_id)
+         → 1 Cosmos DB partition (key: tenantId from app_metadata)
          → 1..N physical Locations per corporation
 
 Customer = Anonymous (MVP); no Auth0 account required
@@ -318,7 +317,7 @@ Standard error codes:
 | Field | Type | Constraints |
 |---|---|---|
 | `id` | string | Prefix `sr_`, globally unique |
-| `tenantId` | string | Partition key; must equal Auth0 `org_id`; required |
+| `tenantId` | string | Partition key; set from `app_metadata.tenantId`; required |
 | `locationId` | string | Prefix `loc_`; must exist in `locations` container |
 | `status` | enum | `New` → `InProgress` → `Completed` or `Cancelled`; enforced by `StatusTransitions.cs` |
 | `customer.email` | string | Lowercase, trimmed; required |
@@ -419,7 +418,7 @@ JWT validation requirements:
 - Issuer: `https://{auth0-domain}/`
 - Audience: `https://api.rvserviceflow.com` (configurable in `appsettings.json`)
 - Algorithm: RS256
-- Claims required: `sub`, `org_id` (or `app_metadata.tenantId` for MVP hybrid), `roles[]`, `locationIds[]`
+- Claims required: `sub`, `https://rvserviceflow.com/tenantId` (from `app_metadata`), `roles[]`, `locationIds[]`
 
 Customer-facing endpoints (`/intake/*`, `/status/*`) MUST be `[AllowAnonymous]`.
 
@@ -631,8 +630,8 @@ Search input validation: reject any `Keyword` containing `<`, `>`, `;`, `'`, `"`
 | JWT audience | `https://api.rvserviceflow.com` |
 | Algorithm | RS256 |
 | Custom claims namespace | `https://rvserviceflow.com/` |
-| MVP claim injection | Login Action injects `tenantId`, `locationIds`, `regionTag` from `app_metadata` |
-| Migration path | Auth0 Organizations (configuration-only; `ClaimsService` unchanged) |
+| MVP claim injection | Login Action injects `tenantId`, `orgName`, `locationIds`, `regionTag` from `app_metadata` |
+| Tenant scoping | `app_metadata.tenantId` per user; no Auth0 Organizations |
 | Token lifetime | Access token: 1 hour; Refresh token: 30 days (rolling) |
 
 ### 10.2 Azure Cosmos DB
@@ -862,7 +861,7 @@ The following are explicitly deferred and MUST NOT be implemented without a new 
 
 | # | Question | Owner | Due |
 |---|---|---|---|
-| OQ-01 | What is the Auth0 plan tier at commercialization? (Essentials B2B vs. Professional) | Business | Before Phase 2 |
+| OQ-01 | ~~What is the Auth0 plan tier at commercialization?~~ **Resolved:** Using Auth0 Free plan with `app_metadata` tenant scoping. No Organizations. | Business | Resolved |
 | OQ-02 | Should the magic-link token be stored hashed or plaintext in Cosmos? (Security hardening) | Engineering | Before MVP launch |
 | OQ-03 | What email template tool for SendGrid templates — managed in code or SendGrid Dynamic Templates UI? | Engineering | Phase 1 |
 | OQ-04 | When is Azure SignalR Service required vs. single-instance App Service sticky sessions sufficient? | Engineering | Before first multi-instance deploy |

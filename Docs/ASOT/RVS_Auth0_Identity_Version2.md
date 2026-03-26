@@ -2,13 +2,13 @@
 
 # RV Service Flow (RVS) — Auth0 Identity & Authorization
 
-**Authoritative Source of Truth (ASOT) — March 18, 2026**
+**Authoritative Source of Truth (ASOT) — March 25, 2026**
 
 This document covers Auth0 configuration, RBAC roles and permissions, JWT design, ClaimsService, authorization policies, and the tenant provisioning flow. For domain model, data layer, and API surface, see the companion document **RVS_Core_Architecture_Version3.md**.
 
 ---
 
-## 1. Auth0 Tenant & Organization Model
+## 1. Auth0 Tenant Model
 
 ### 1.1 Architecture Overview
 
@@ -17,55 +17,55 @@ RVS uses Auth0 as the identity provider for all dealer staff. Customers are **ne
 | Auth0 Concept | RVS Equivalent | Example |
 |---|---|---|
 | Auth0 Tenant | Single RVS Auth0 application instance | `rvserviceflow.auth0.com` |
-| Auth0 Organization | One corporation / dealer group (`Dealership`) | `org_blue_compass_rv` |
 | Auth0 API | `RVS.API` audience | `https://api.rvserviceflow.com` |
 | Custom claim namespace | All custom JWT claims | `https://rvserviceflow.com/` |
+| User `app_metadata` | Tenant context per user | `tenantId`, `orgName`, `locationIds`, `regionTag` |
 
-### 1.2 What Is an Auth0 Organization?
+### 1.2 Tenant Scoping via `app_metadata`
 
-An Auth0 Organization is a first-class feature designed for multi-tenant SaaS. It represents one of your business customers — in RVS's case, **one dealer corporation** (not one physical location). Each Organization provides:
+RVS does **not** use Auth0 Organizations. Tenant context is stored in each user's `app_metadata` and injected into the JWT via a Post-Login Action. This approach:
 
-- **Scoped membership** — a user belongs to an Organization explicitly. Users in Org A are invisible to Org B.
-- **Scoped roles** — Jane can be `dealer:manager` at Blue Compass but `dealer:readonly` at General RV. The role is per-Organization, not global.
-- **Invitation flows** — a dealership owner invites their own staff. The invite is scoped to that Organization.
-- **Per-org Identity Providers** — Blue Compass can use Google SSO while General RV uses Azure AD.
-- **Branded login** — each dealership gets their own login page (logo, colors).
+- Runs on the **Auth0 Free plan** with no tenant/organization cap.
+- Supports unlimited dealer corporations without paid tier upgrades.
+- Keeps all tenant-scoping logic in the RVS service layer (via `ClaimsService`), not in Auth0.
 
-Each Organization's `org_id` becomes the `tenantId` used throughout RVS — the Cosmos DB partition key, the blob storage path prefix, and the data isolation boundary.
+Each user's `app_metadata.tenantId` becomes the `tenantId` used throughout RVS — the Cosmos DB partition key, the blob storage path prefix, and the data isolation boundary.
 
-### 1.3 Organization ↔ RVS Mapping
+### 1.3 User ↔ Tenant Mapping
 
 ```
 Auth0 Tenant: rvserviceflow.auth0.com
 │
-├── Organization: "Blue Compass RV"        (org_id = org_blue_compass_rv)
-│   ├── User: jane@bluecompassrv.com       → dealer:corporate-admin
-│   ├── User: mike@bluecompassrv.com       → dealer:regional-manager (west)
-│   ├── User: tech1@bluecompassrv.com      → dealer:technician (SLC only)
-│   └── ... 100+ staff across 100+ locations
+├── User: jane@bluecompassrv.com       → dealer:corporate-admin
+│   app_metadata: { tenantId: "org_blue_compass_rv", orgName: "Blue Compass RV" }
 │
-├── Organization: "General RV"             (org_id = org_general_rv)
-│   ├── User: bob@generalrv.com            → dealer:owner
-│   └── User: sara@generalrv.com           → dealer:advisor
+├── User: mike@bluecompassrv.com       → dealer:regional-manager
+│   app_metadata: { tenantId: "org_blue_compass_rv", orgName: "Blue Compass RV",
+│                    locationIds: ["loc_slc", "loc_denver", "loc_boise"], regionTag: "west" }
 │
-├── Organization: "Happy Trails RV"        (org_id = org_happy_trails_rv)
-│   └── User: owner@happytrailsrv.com      → dealer:owner
+├── User: tech1@bluecompassrv.com      → dealer:technician
+│   app_metadata: { tenantId: "org_blue_compass_rv", orgName: "Blue Compass RV",
+│                    locationIds: ["loc_blue_compass_slc"] }
 │
-└── No Organization context:
-    └── User: admin@rvserviceflow.com       → platform:admin
+├── User: bob@generalrv.com            → dealer:owner
+│   app_metadata: { tenantId: "org_general_rv", orgName: "General RV" }
+│
+├── User: owner@happytrailsrv.com      → dealer:owner
+│   app_metadata: { tenantId: "org_happy_trails_rv", orgName: "Happy Trails RV" }
+│
+└── User: admin@rvserviceflow.com       → platform:admin
+    app_metadata: {}  (no tenantId — operates cross-tenant)
 ```
 
-### 1.4 MVP Hybrid Auth Strategy
+### 1.4 Design Tradeoffs
 
-Auth0 Organizations are available on the Free plan but capped at **5 Organizations**. To avoid this limit during development:
-
-| Phase | Auth0 Strategy | Cost | Org Limit |
-|---|---|---|---|
-| **MVP / Dev** | Store `tenantId` in Auth0 `app_metadata`, inject via Login Action | $0 (Free plan) | Unlimited tenants |
-| **Commercialization** | Migrate to Auth0 Organizations | ~$150/mo+ (Essentials B2B) | 50+ orgs |
-| **Scale** | Auth0 Professional or Enterprise | Scales with usage | Higher / unlimited |
-
-**Key point:** The RVS backend code does not change between these phases. `ClaimsService.GetTenantIdOrThrow()` reads the same `https://rvserviceflow.com/tenantId` claim regardless of whether it was injected from `app_metadata` or from an Auth0 Organization. The difference is purely Auth0-side configuration.
+| Concern | How RVS Handles It |
+|---|---|
+| **User isolation** | Enforced by `ClaimsService` + Cosmos partition key, not by Auth0 membership boundaries |
+| **Role scoping** | Roles are global Auth0 roles (not per-org). A user belongs to exactly one tenant via `app_metadata.tenantId` |
+| **Invitation flows** | Handled via Auth0 Dashboard or Management API; owner invites staff by creating users with matching `tenantId` |
+| **Per-tenant IdP** | Not available without Organizations; all tenants share the same Auth0 login experience |
+| **Branded login** | Not available without Organizations; deferred to a future paid tier if needed |
 
 ---
 
@@ -88,21 +88,21 @@ Auth0 Organizations are available on the Free plan but capped at **5 Organizatio
 | **Customer (intake form)** | `[AllowAnonymous]` + rate limiting | Shadow `CustomerProfile` auto-created | None at submission time |
 | **Customer (status page)** | `[AllowAnonymous]` + magic-link token | Existing `CustomerIdentity` | `GET /api/status/{token}` — cross-dealer |
 | **Customer (future Phase 2+)** | Auth0 OIDC (optional upgrade) | `CustomerIdentity.Auth0UserId` linked | Full account access |
-| **Dealer staff** | Auth0 JWT Bearer (Organization-scoped) | Auth0 user + tenant/role/location claims | Full dashboard access |
+| **Dealer staff** | Auth0 JWT Bearer (`app_metadata`-scoped) | Auth0 user + tenant/role/location claims | Full dashboard access |
 | **System / API-to-API (future)** | Auth0 M2M Client Credentials | N/A | DMS integration |
 
 ---
 
 ## 4. Roles
 
-Roles are **scoped to an Auth0 Organization** (a user at Corporation A may be an admin, but have no access to Corporation B). One global role exists for platform operations.
+Roles are global Auth0 roles. Tenant scoping is enforced by `app_metadata.tenantId` — a user at Corporation A has no access to Corporation B because their `tenantId` differs, not because of Auth0 membership. One global role exists for platform operations.
 
 | Role | Scope | Description |
 |---|---|---|
-| `platform:admin` | Global (cross-org) | RVS internal staff. Full system access across all tenants. |
-| `dealer:corporate-admin` | Organization-wide | Corporate HQ employee with full access across all locations. |
-| `dealer:owner` | Organization-wide | Business owner or general manager with full control of their organization. |
-| `dealer:regional-manager` | Organization + region tag | Manager with visibility across multiple locations within their region. |
+| `platform:admin` | Global (cross-tenant) | RVS internal staff. Full system access across all tenants. |
+| `dealer:corporate-admin` | Tenant-wide | Corporate HQ employee with full access across all locations. |
+| `dealer:owner` | Tenant-wide | Business owner or general manager with full control of their organization. |
+| `dealer:regional-manager` | Tenant + region tag | Manager with visibility across multiple locations within their region. |
 | `dealer:manager` | Location-scoped | Service department manager at a single location. |
 | `dealer:advisor` | Location-scoped | Service advisor who creates and manages service requests day-to-day. |
 | `dealer:technician` | Location-scoped | Technician who views assigned work and logs repair details. |
@@ -217,14 +217,12 @@ A Post-Login Action runs after every authentication and injects tenant context, 
 
 | Step | Source | Claim Set | Description |
 |---|---|---|---|
-| 1 | `event.organization.id` | `https://rvserviceflow.com/tenantId` | Corporation partition key |
-| 2 | `event.organization.name` | `https://rvserviceflow.com/orgName` | Corporation display name |
+| 1 | `event.user.app_metadata.tenantId` | `https://rvserviceflow.com/tenantId` | Corporation partition key |
+| 2 | `event.user.app_metadata.orgName` | `https://rvserviceflow.com/orgName` | Corporation display name |
 | 3 | `event.authorization.roles` | `https://rvserviceflow.com/roles` | Array of role strings |
 | 4 | `event.user.user_id` | `https://rvserviceflow.com/userId` | Auth0 user ID |
 | 5 | `event.user.app_metadata.locationIds` | `https://rvserviceflow.com/locationIds` | Array of location IDs (if present) |
 | 6 | `event.user.app_metadata.regionTag` | `https://rvserviceflow.com/regionTag` | Regional scope string (if present) |
-
-**MVP fallback (before Auth0 Organizations):** Step 1 reads `event.user.app_metadata.tenantId` instead of `event.organization.id`. All other steps are identical. The API-side code does not change.
 
 **Location scoping:** Location IDs are stored in `app_metadata` (not in Auth0 roles) because Auth0 roles are permission bundles, not data scopes. A `dealer:advisor` at Blue Compass SLC has `locationIds: ["loc_slc"]` in their `app_metadata`. A `dealer:corporate-admin` has no `locationIds` (which means "all locations").
 
@@ -239,7 +237,6 @@ A Post-Login Action runs after every authentication and injects tenant context, 
   "iss": "https://rvserviceflow.auth0.com/",
   "sub": "auth0|xyz789",
   "aud": "https://api.rvserviceflow.com",
-  "org_id": "org_blue_compass_rv",
   "https://rvserviceflow.com/tenantId": "org_blue_compass_rv",
   "https://rvserviceflow.com/orgName": "Blue Compass RV",
   "https://rvserviceflow.com/roles": ["dealer:regional-manager"],
@@ -273,7 +270,6 @@ A Post-Login Action runs after every authentication and injects tenant context, 
   "iss": "https://rvserviceflow.auth0.com/",
   "sub": "auth0|abc456",
   "aud": "https://api.rvserviceflow.com",
-  "org_id": "org_happy_trails_rv",
   "https://rvserviceflow.com/tenantId": "org_happy_trails_rv",
   "https://rvserviceflow.com/orgName": "Happy Trails RV",
   "https://rvserviceflow.com/roles": ["dealer:advisor"],
@@ -330,7 +326,7 @@ A Post-Login Action runs after every authentication and injects tenant context, 
 }
 ```
 
-Note: No `org_id` or `tenantId` claim — platform admins operate cross-tenant.
+Note: No `tenantId` claim — platform admins operate cross-tenant.
 
 ---
 
@@ -341,7 +337,6 @@ Note: No `org_id` or `tenantId` claim — platform admins operate cross-tenant.
   "iss": "https://rvserviceflow.auth0.com/",
   "sub": "auth0|tech001",
   "aud": "https://api.rvserviceflow.com",
-  "org_id": "org_blue_compass_rv",
   "https://rvserviceflow.com/tenantId": "org_blue_compass_rv",
   "https://rvserviceflow.com/orgName": "Blue Compass RV",
   "https://rvserviceflow.com/roles": ["dealer:technician"],
@@ -528,14 +523,11 @@ Authentication and authorization middleware run at position 6 in the pipeline (s
 When a new dealership signs up for RVS:
 
 ```
-Step 1: Create Auth0 Organization
-        ─────────────────────────
-        POST /api/v2/organizations
-        {
-          "name": "blue-compass-rv",
-          "display_name": "Blue Compass RV"
-        }
-        → Returns: org_id = "org_blue_compass_rv"
+Step 1: Generate Tenant ID
+        ───────────────────
+        Convention: "org_{slug}" (e.g., "org_blue_compass_rv")
+        This becomes the Cosmos partition key, blob path prefix,
+        and the tenantId claim in every user's JWT.
 
              │
              ▼
@@ -561,16 +553,20 @@ Step 2: Store in Cosmos
              │
              ▼
 
-Step 3: Invite Dealership Owner
-        ────────────────────────
-        POST /api/v2/organizations/{org_id}/invitations
+Step 3: Create Owner User in Auth0
+        ───────────────────────────
+        POST /api/v2/users  (Auth0 Management API)
         {
-          "inviter": { "name": "RVS Platform" },
-          "invitee": { "email": "owner@bluecompassrv.com" },
-          "roles": ["dealer:corporate-admin"]
+          "email": "owner@bluecompassrv.com",
+          "connection": "Username-Password-Authentication",
+          "app_metadata": {
+            "tenantId": "org_blue_compass_rv",
+            "orgName": "Blue Compass RV"
+          }
         }
 
-        Owner receives email → creates Auth0 account → lands in dashboard
+        Assign role: dealer:owner (global Auth0 role)
+        Owner receives password-reset email → sets password → lands in dashboard
 
              │
              ▼
@@ -578,7 +574,8 @@ Step 3: Invite Dealership Owner
 Step 4: Owner Invites Staff
         ───────────────────
         Via dashboard UI (future) or Auth0 Dashboard:
-        - Assign roles (dealer:manager, dealer:advisor, etc.)
+        - Create Auth0 user with matching app_metadata.tenantId
+        - Assign role (dealer:manager, dealer:advisor, etc.)
         - Set app_metadata.locationIds per user
         - Set app_metadata.regionTag for regional managers
 
@@ -590,18 +587,8 @@ Step 5: Ready
         Intake URL is live:
           rvserviceflow.com/intake/blue-compass-salt-lake
         Dashboard is accessible:
-          dashboard.rvserviceflow.com (org context: Blue Compass RV)
+          dashboard.rvserviceflow.com
 ```
-
-### 12.1 MVP Provisioning (Without Auth0 Organizations)
-
-During MVP, Steps 1 and 3 are simplified:
-
-1. **Create Auth0 user** for the owner with `app_metadata.tenantId = "org_blue_compass_rv"`.
-2. **Assign role** `dealer:owner` directly (not via Organization).
-3. **Set `app_metadata.locationIds`** if needed.
-
-The Cosmos documents (Step 2) are identical. The API behavior is identical. The only difference is the Auth0-side setup.
 
 ---
 
@@ -611,10 +598,10 @@ In MVP, customers are anonymous. In Phase 2+, customers who want persistent acco
 
 1. **Opt-in to create an Auth0 account** from the status page.
 2. Auth0 creates a user. The `CustomerIdentity.Auth0UserId` field is populated.
-3. A `customer` role is assigned (no Organization membership — customers are cross-dealer).
+3. A `customer` role is assigned. Customers have no `tenantId` in `app_metadata` — they are cross-dealer.
 4. The customer can now log in to see their status page without a magic link, access history, manage vehicles, etc.
 
-Customer authentication does **not** use Auth0 Organizations (a customer is not "in" any dealership). The customer's `CustomerIdentity` links to their tenant-scoped `CustomerProfile` records, which are what the dealer sees.
+Customer authentication does not use tenant scoping. The customer's `CustomerIdentity` links to their tenant-scoped `CustomerProfile` records, which are what the dealer sees.
 
 ---
 
@@ -626,11 +613,11 @@ Customer authentication does **not** use Auth0 Organizations (a customer is not 
 | **Location isolation** | `ClaimsService.HasAccessToLocation()` enforced in service layer. Location-scoped users cannot see other locations' data even within the same tenant. |
 | **Permission enforcement** | Two-layer: ASP.NET policy (permission check) + service layer (data scope check). |
 | **Token security** | RS256 signed, 1-hour expiry, audience-validated. |
-| **Claim injection** | All custom claims injected server-side by Auth0 Login Action. Client cannot forge claims. |
+| **Claim injection** | All custom claims injected server-side by Auth0 Login Action from `app_metadata`. Client cannot forge claims. |
 | **Platform admin scope** | `platform:admin` has no `tenantId` claim. API explicitly handles the cross-tenant case. |
 | **Magic link tokens** | 32-byte cryptographic random, 30-day expiry, rotated on every submission, rate-limited. |
 | **PII in JWTs** | No PII in access tokens. Only IDs, roles, and permissions. Email/name are in the ID token only (used client-side). |
-| **Org migration safety** | MVP `app_metadata` approach and Organizations approach produce the same JWT claims. No API code changes needed. |
+| **`app_metadata` integrity** | `app_metadata` is writable only via the Auth0 Management API (server-side). Users cannot modify their own `app_metadata` through client-side flows. |
 
 ---
 
@@ -640,6 +627,7 @@ Customer authentication does **not** use Auth0 Organizations (a customer is not 
 |---|---|---|---|
 | v2.0 | March 10, 2026 | GitHub Copilot | Initial Auth0 identity document. Roles, permissions, JWT design, ClaimsService, authorization policies, tenant provisioning flow. |
 | v2.1 | March 18, 2026 | GitHub Copilot | **Reconciled with RVS_Core_Architecture_Version3.md Section 17.1 (Technician Mobile App — API Readiness).** Date bumped. Two critical permission additions confirmed present (see below). Companion document reference updated to Version3. |
+| v2.2 | March 25, 2026 | GitHub Copilot | **Removed Auth0 Organizations.** Tenant scoping is permanently via `app_metadata`. Removed `org_id` from JWT samples. Rewrote Sections 1, 7, 12, 13, 14 to reflect `app_metadata`-only architecture. Simplified provisioning flow. |
 
 ### 15.1 V3 Reconciliation — Technician Mobile App Permission Fixes
 

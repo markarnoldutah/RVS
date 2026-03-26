@@ -82,7 +82,7 @@ Create under **Applications > Applications** (type: Single Page Application):
 | **Allowed Web Origins** | `https://localhost:7008`, `http://localhost:5050`, `https://app.rvserviceflow.com` |
 | **Token Endpoint Auth Method** | None (SPA) |
 | **Refresh Token Rotation** | Enabled |
-| **Refresh Token Expiration** | 30 days (rolling) |
+| **Refresh Token Expiration** | 15 days rolling (Auth0 default — adjust per UX requirements) |
 
 ---
 
@@ -159,7 +159,7 @@ Set on each user under **User Management > Users > {user} > app_metadata**:
 | Setting | Value |
 |---|---|
 | **Access Token Lifetime** | 3600 seconds (1 hour) |
-| **Refresh Token Lifetime** | 2,592,000 seconds (30 days, rolling) |
+| **Refresh Token Lifetime** | 1,296,000 seconds (15 days, rolling — Auth0 default; adjust per UX requirements) |
 | **ID Token Lifetime** | 36000 seconds (default) |
 | **Client storage** | Memory-only or `sessionStorage` — **never** `localStorage` |
 

@@ -7,6 +7,7 @@
     <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
     <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <UserSecretsId>ddc061e0-6ecd-4cd9-b38d-b4bbc7af72ac</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

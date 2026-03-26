@@ -59,7 +59,7 @@ Allowed Logout URLs	https://localhost:7116, https://app.rvserviceflow.com
 Allowed Web Origins	https://localhost:7116, https://app.rvserviceflow.com
 Token Endpoint Auth Method	None (SPA)
 Refresh Token Rotation	Enabled
-Refresh Token Expiration	30 days (rolling)
+Refresh Token Expiration	15 days rolling (Auth0 default)
 5. Custom Claims Namespace
 All custom claims use the namespace: https://rvserviceflow.com/
 
