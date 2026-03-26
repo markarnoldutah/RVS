@@ -77,9 +77,9 @@ Create under **Applications > Applications** (type: Single Page Application):
 |---|---|
 | **Name** | `RVS Blazor Client` |
 | **Application Type** | Single Page Application |
-| **Allowed Callback URLs** | `https://localhost:7116/authentication/login-callback`, `https://app.rvserviceflow.com/authentication/login-callback` |
-| **Allowed Logout URLs** | `https://localhost:7116`, `https://app.rvserviceflow.com` |
-| **Allowed Web Origins** | `https://localhost:7116`, `https://app.rvserviceflow.com` |
+| **Allowed Callback URLs** | `https://localhost:7008/authentication/login-callback`, `http://localhost:5050/authentication/login-callback`, `https://app.rvserviceflow.com/authentication/login-callback` |
+| **Allowed Logout URLs** | `https://localhost:7008`, `http://localhost:5050`, `https://app.rvserviceflow.com` |
+| **Allowed Web Origins** | `https://localhost:7008`, `http://localhost:5050`, `https://app.rvserviceflow.com` |
 | **Token Endpoint Auth Method** | None (SPA) |
 | **Refresh Token Rotation** | Enabled |
 | **Refresh Token Expiration** | 30 days (rolling) |
