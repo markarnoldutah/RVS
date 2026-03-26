@@ -13,11 +13,10 @@
         Submit a new service request for your RV. No account required.
     </FluentLabel>
 
-    <FluentButton Appearance="Appearance.Accent"
-                  IconStart="@(new Icons.Regular.Size20.ClipboardTextEdit())"
-                  OnClick="@(() => Navigation.NavigateTo("/intake"))">
+    <a href="/intake" data-enhance-nav="false" class="fluent-btn accent">
+        <FluentIcon Value="@(new Icons.Regular.Size20.ClipboardTextEdit())" Color="Color.Fill" />
         Start Service Request
-    </FluentButton>
+    </a>
 
     <FluentDivider Role="DividerRole.Separator" />
 
@@ -25,16 +24,11 @@
         Already submitted a request?
     </FluentLabel>
 
-    <FluentButton Appearance="Appearance.Neutral"
-                  IconStart="@(new Icons.Regular.Size20.Search())"
-                  OnClick="@(() => Navigation.NavigateTo("/status"))">
+    <a href="/status" data-enhance-nav="false" class="fluent-btn neutral">
+        <FluentIcon Value="@(new Icons.Regular.Size20.Search())" />
         Check Request Status
-    </FluentButton>
+    </a>
 </FluentStack>
 
 @* Preload WASM bundle so the interactive wizard loads instantly when navigated to *@
 <WasmPreload />
-
-@code {
-    [Inject] private NavigationManager Navigation { get; set; } = default!;
-}
