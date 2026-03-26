@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.JSInterop;
 using RVS.Domain.DTOs;
+using RVS.UI.Shared.Validation;
 
 namespace RVS.Cust_Intake.Client.State;
 
@@ -363,7 +364,7 @@ public sealed class IntakeWizardState
             errors.Add("Email is required.");
         else
         {
-            var emailResult = UI.Shared.Validation.EmailValidator.Validate(Email);
+            var emailResult = EmailValidator.Validate(Email);
             if (!emailResult.IsValid)
                 errors.Add(emailResult.ErrorMessage!);
         }
@@ -380,7 +381,7 @@ public sealed class IntakeWizardState
         }
         else
         {
-            var vinResult = UI.Shared.Validation.ClientVinValidator.Validate(Vin);
+            var vinResult = ClientVinValidator.Validate(Vin);
             if (!vinResult.IsValid)
                 errors.Add(vinResult.ErrorMessage!);
         }
