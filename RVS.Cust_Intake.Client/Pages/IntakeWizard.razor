@@ -19,8 +19,7 @@
                 var step = i;
                 <div style="width: @(step == _state.CurrentStep ? "28px" : "10px"); height: 10px;
                             border-radius: 5px;
-                            background: @(step < _state.CurrentStep ? "var(--accent-fill-rest, #0F6CBD)"
-                                        : step == _state.CurrentStep ? "var(--accent-fill-rest, #0F6CBD)"
+                            background: @(step <= _state.CurrentStep ? "var(--accent-fill-rest, #0F6CBD)"
                                         : "var(--neutral-stroke-rest, #E1DFDD)");
                             transition: all 0.3s ease;"></div>
             }
