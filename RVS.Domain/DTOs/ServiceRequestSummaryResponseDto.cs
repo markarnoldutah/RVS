@@ -7,6 +7,7 @@ public sealed record ServiceRequestSummaryResponseDto
 {
     public string Id { get; init; } = default!;
     public string LocationId { get; init; } = default!;
+    public string? LocationName { get; init; }
     public string Status { get; init; } = default!;
     public string CustomerFullName { get; init; } = default!;
     public string? AssetDisplay { get; init; }
