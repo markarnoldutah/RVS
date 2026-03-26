@@ -141,6 +141,7 @@ else if (_statusResponse is not null)
     [Parameter] public string Token { get; set; } = default!;
     [Inject] private HttpClient Http { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private ILogger<StatusPage> Logger { get; set; } = default!;
 
     private CustomerStatusResponseDto? _statusResponse;
     private bool _loading = true;
@@ -178,8 +179,9 @@ else if (_statusResponse is not null)
                 _errorState = ErrorState.Unexpected;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to load status for token");
             _errorState = ErrorState.Unexpected;
         }
         finally

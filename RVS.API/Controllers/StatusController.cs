@@ -80,7 +80,7 @@ public class StatusController : ControllerBase
         try
         {
             var location = await _locationService.GetByIdAsync(tenantId, locationId, ct);
-            if (!string.IsNullOrWhiteSpace(location.Address.City))
+            if (location.Address is not null && !string.IsNullOrWhiteSpace(location.Address.City))
             {
                 return string.IsNullOrWhiteSpace(location.Address.State)
                     ? location.Address.City.Trim()
@@ -98,13 +98,21 @@ public class StatusController : ControllerBase
     private static string HumanizeSlug(string slug)
     {
         if (string.IsNullOrWhiteSpace(slug))
+        {
             return string.Empty;
+        }
 
         var words = slug.Split('-', StringSplitOptions.RemoveEmptyEntries);
         for (var i = 0; i < words.Length; i++)
         {
-            if (words[i].Length > 0)
+            if (words[i].Length > 1)
+            {
                 words[i] = char.ToUpperInvariant(words[i][0]) + words[i][1..];
+            }
+            else if (words[i].Length == 1)
+            {
+                words[i] = char.ToUpperInvariant(words[i][0]).ToString();
+            }
         }
 
         return string.Join(' ', words);
