@@ -1,0 +1,72 @@
+@using RVS.Cust_Intake.Client.State
+@using RVS.UI.Shared.Validation
+
+<FluentCard Style="width: 100%; padding: 24px;">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentLabel Typo="Typography.H4">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Style="margin-right: 8px;" />
+            Contact Information
+        </FluentLabel>
+
+        @if (State.IsPrefilled)
+        {
+            <FluentMessageBar Intent="MessageIntent.Success">
+                Your information has been pre-filled from your previous visit.
+            </FluentMessageBar>
+        }
+
+        <FluentTextField @bind-Value="State.FirstName"
+                         Label="First Name"
+                         Required="true"
+                         Placeholder="Enter your first name"
+                         Style="width: 100%;" />
+
+        <FluentTextField @bind-Value="State.LastName"
+                         Label="Last Name"
+                         Required="true"
+                         Placeholder="Enter your last name"
+                         Style="width: 100%;" />
+
+        <FluentTextField @bind-Value="State.Email"
+                         Label="Email"
+                         Required="true"
+                         TextFieldType="TextFieldType.Email"
+                         Placeholder="you@example.com"
+                         Style="width: 100%;" />
+
+        <FluentTextField @bind-Value="State.Phone"
+                         Label="Phone (optional)"
+                         TextFieldType="TextFieldType.Tel"
+                         Placeholder="(555) 123-4567"
+                         Style="width: 100%;" />
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                     HorizontalAlignment="HorizontalAlignment.Right" Style="width: 100%; margin-top: 8px;">
+            <FluentButton Appearance="Appearance.Neutral" OnClick="HandleBack"
+                          IconStart="@(new Icons.Regular.Size16.ArrowLeft())">
+                Back
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Accent" OnClick="HandleNext"
+                          IconEnd="@(new Icons.Regular.Size16.ArrowRight())">
+                Next
+            </FluentButton>
+        </FluentStack>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+
+    private async Task HandleNext()
+    {
+        await State.NotifyAndPersistAsync();
+        await OnNext.InvokeAsync();
+    }
+
+    private async Task HandleBack()
+    {
+        await OnBack.InvokeAsync();
+    }
+}

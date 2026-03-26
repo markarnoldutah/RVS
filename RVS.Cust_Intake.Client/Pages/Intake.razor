@@ -3,7 +3,8 @@
 
 <PageTitle>Service Request Intake</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalGap="20" HorizontalAlignment="HorizontalAlignment.Center">
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="20" HorizontalAlignment="HorizontalAlignment.Center"
+             Style="max-width: 600px; margin: 0 auto; padding: 16px;">
     <FluentIcon Value="@(new Icons.Regular.Size48.ClipboardTextEdit())" Color="Color.Accent" />
 
     <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
@@ -11,13 +12,11 @@
     </FluentLabel>
 
     <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
-        Complete the steps below to submit your RV service request.
+        To start a service request, please use the location-specific link provided by your dealer
+        (e.g., from a QR code or email).
     </FluentLabel>
 
-    <FluentCard Style="max-width: 600px; width: 100%; padding: 24px;">
-        <FluentLabel Typo="Typography.H5">Step 1 of 4 — Contact Information</FluentLabel>
-        <FluentLabel Typo="Typography.Body" Style="margin-top: 8px;">
-            Intake wizard steps will be implemented in a future issue.
-        </FluentLabel>
-    </FluentCard>
+    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+        The link format is: <code>/intake/your-location-slug</code>
+    </FluentLabel>
 </FluentStack>
