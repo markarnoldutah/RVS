@@ -1,0 +1,133 @@
+@page "/intake/{Slug}"
+@rendermode InteractiveWebAssembly
+@using RVS.Cust_Intake.Client.State
+@using RVS.Cust_Intake.Client.Pages.Steps
+
+<PageTitle>Service Request Intake — @(_state.Config?.LocationName ?? "Loading...")</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center"
+             Style="max-width: 700px; margin: 0 auto; padding: 16px;">
+
+    @if (_state.CurrentStep > 1 && _state.CurrentStep < 7)
+    {
+        <FluentProgress Min="0" Max="100" Value="@StepProgress" Style="width: 100%;" />
+        <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+            Step @_state.CurrentStep of @_state.TotalSteps
+        </FluentLabel>
+    }
+
+    @if (_validationErrors.Count > 0)
+    {
+        <FluentMessageBar Intent="MessageIntent.Error" Style="width: 100%;">
+            <ul style="margin: 0; padding-left: 16px;">
+                @foreach (var error in _validationErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </FluentMessageBar>
+    }
+
+    @switch (_state.CurrentStep)
+    {
+        case 1:
+            <IntakeLanding State="_state"
+                           OnStart="HandleNextStep" />
+            break;
+        case 2:
+            <CustomerInfoStep State="_state"
+                              OnNext="HandleNextStep"
+                              OnBack="HandlePreviousStep" />
+            break;
+        case 3:
+            <AssetInfoStep State="_state"
+                           OnNext="HandleNextStep"
+                           OnBack="HandlePreviousStep" />
+            break;
+        case 4:
+            <IssueDescriptionStep State="_state"
+                                  OnNext="HandleNextStep"
+                                  OnBack="HandlePreviousStep" />
+            break;
+        case 5:
+            <DiagnosticQuestionsStep State="_state"
+                                     OnNext="HandleNextStep"
+                                     OnBack="HandlePreviousStep" />
+            break;
+        case 6:
+            <AttachmentUploadStep State="_state"
+                                  OnNext="HandleNextStep"
+                                  OnBack="HandlePreviousStep" />
+            break;
+        case 7:
+            <ReviewSubmitStep State="_state"
+                              OnEdit="HandleEditStep"
+                              OnSubmitted="HandleSubmitted" />
+            break;
+    }
+</FluentStack>
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+
+    [Inject] private IntakeWizardState _state { get; set; } = default!;
+    [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private List<string> _validationErrors = [];
+
+    private int StepProgress => (_state.CurrentStep - 1) * 100 / (_state.TotalSteps - 1);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _state.SetJsRuntime(JsRuntime);
+            await _state.RestoreAsync();
+
+            if (_state.Slug != Slug || _state.IsSubmitted)
+            {
+                await _state.ClearAsync();
+                _state.Slug = Slug;
+            }
+
+            _state.OnChange += StateHasChanged;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleNextStep()
+    {
+        _validationErrors = _state.ValidateCurrentStep();
+        if (_validationErrors.Count > 0)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        await _state.GoToNextStepAsync();
+        _validationErrors = [];
+    }
+
+    private async Task HandlePreviousStep()
+    {
+        _validationErrors = [];
+        await _state.GoToPreviousStepAsync();
+    }
+
+    private async Task HandleEditStep(int step)
+    {
+        _validationErrors = [];
+        await _state.GoToStepAsync(step);
+    }
+
+    private void HandleSubmitted()
+    {
+        Navigation.NavigateTo($"/confirmation?slug={Uri.EscapeDataString(Slug)}");
+    }
+
+    public void Dispose()
+    {
+        _state.OnChange -= StateHasChanged;
+    }
+}

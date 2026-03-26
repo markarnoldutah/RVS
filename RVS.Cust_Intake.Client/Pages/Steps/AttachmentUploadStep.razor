@@ -1,0 +1,215 @@
+@using RVS.Cust_Intake.Client.State
+@using Microsoft.AspNetCore.Components.Forms
+
+<FluentCard Style="width: 100%; padding: 24px;">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentLabel Typo="Typography.H4">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Attach())" Style="margin-right: 8px;" />
+            Attachments
+        </FluentLabel>
+
+        <FluentLabel Typo="Typography.Body">
+            Upload photos or videos of the issue. Drag and drop files or use the button below.
+        </FluentLabel>
+
+        @if (State.Config is not null)
+        {
+            <FluentLabel Typo="Typography.Subject" Color="Color.Neutral">
+                Max @State.Config.MaxAttachments files, up to @State.Config.MaxFileSizeMb MB each.
+                Accepted: @string.Join(", ", State.Config.AcceptedFileTypes)
+            </FluentLabel>
+        }
+        else
+        {
+            <FluentLabel Typo="Typography.Subject" Color="Color.Neutral">
+                Max 10 files, up to 25 MB each.
+            </FluentLabel>
+        }
+
+        <div class="drop-zone @(_isDragOver ? "drag-over" : "")"
+             @ondragenter="HandleDragEnter"
+             @ondragover="HandleDragOver"
+             @ondragover:preventDefault="true"
+             @ondragleave="HandleDragLeave"
+             style="border: 2px dashed var(--neutral-stroke-rest); border-radius: 8px; padding: 32px; text-align: center; cursor: pointer;">
+
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentIcon Value="@(new Icons.Regular.Size32.ArrowUpload())" Color="Color.Accent" />
+                <FluentLabel Typo="Typography.Body">
+                    Drag files here or click to browse
+                </FluentLabel>
+                <InputFile OnChange="HandleFilesSelected"
+                           multiple
+                           accept="@AcceptedTypes"
+                           style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer;" />
+            </FluentStack>
+        </div>
+
+        @if (State.Attachments.Count > 0)
+        {
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="width: 100%;">
+                @foreach (var file in State.Attachments)
+                {
+                    <FluentCard Style="width: 100%; padding: 8px;">
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                            <FluentIcon Value="@GetFileIcon(file.ContentType)" />
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="2" Style="flex: 1;">
+                                <FluentLabel Typo="Typography.Body">@file.FileName</FluentLabel>
+                                <FluentLabel Typo="Typography.Subject" Color="Color.Neutral">
+                                    @FormatFileSize(file.SizeBytes)
+                                </FluentLabel>
+                            </FluentStack>
+
+                            @if (!string.IsNullOrWhiteSpace(file.ErrorMessage))
+                            {
+                                <FluentBadge Appearance="Appearance.Lightweight" Color="Color.Error">Error</FluentBadge>
+                            }
+                            else if (file.IsUploaded)
+                            {
+                                <FluentBadge Appearance="Appearance.Lightweight" Color="Color.Success">Ready</FluentBadge>
+                            }
+
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          IconStart="@(new Icons.Regular.Size16.Delete())"
+                                          OnClick="() => RemoveFile(file)"
+                                          Title="Remove file" />
+                        </FluentStack>
+                    </FluentCard>
+                }
+            </FluentStack>
+        }
+
+        @if (_fileErrors.Count > 0)
+        {
+            <FluentMessageBar Intent="MessageIntent.Warning">
+                <ul style="margin: 0; padding-left: 16px;">
+                    @foreach (var error in _fileErrors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            </FluentMessageBar>
+        }
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                     HorizontalAlignment="HorizontalAlignment.Right" Style="width: 100%; margin-top: 8px;">
+            <FluentButton Appearance="Appearance.Neutral" OnClick="HandleBack"
+                          IconStart="@(new Icons.Regular.Size16.ArrowLeft())">
+                Back
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Accent" OnClick="HandleNext"
+                          IconEnd="@(new Icons.Regular.Size16.ArrowRight())">
+                Next
+            </FluentButton>
+        </FluentStack>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+
+    private bool _isDragOver;
+    private List<string> _fileErrors = [];
+
+    private static readonly HashSet<string> AllowedMimeTypes =
+    [
+        "image/jpeg", "image/png", "image/gif", "image/webp", "image/heic",
+        "video/mp4", "video/quicktime", "video/webm",
+        "application/pdf"
+    ];
+
+    private string AcceptedTypes => State.Config?.AcceptedFileTypes is { Count: > 0 } types
+        ? string.Join(",", types)
+        : "image/*,video/*,application/pdf";
+
+    private int MaxAttachments => State.Config?.MaxAttachments ?? 10;
+    private int MaxFileSizeMb => State.Config?.MaxFileSizeMb ?? 25;
+
+    private void HandleDragEnter() => _isDragOver = true;
+    private void HandleDragOver() { }
+    private void HandleDragLeave() => _isDragOver = false;
+
+    private void HandleFilesSelected(InputFileChangeEventArgs e)
+    {
+        _isDragOver = false;
+        _fileErrors = [];
+
+        var remainingSlots = MaxAttachments - State.Attachments.Count;
+        if (remainingSlots <= 0)
+        {
+            _fileErrors.Add($"Maximum {MaxAttachments} files allowed.");
+            return;
+        }
+
+        var files = e.GetMultipleFiles(MaxAttachments);
+
+        foreach (var file in files.Take(remainingSlots))
+        {
+            if (file.Size > MaxFileSizeMb * 1024L * 1024L)
+            {
+                _fileErrors.Add($"{file.Name}: exceeds {MaxFileSizeMb} MB limit.");
+                continue;
+            }
+
+            if (!AllowedMimeTypes.Contains(file.ContentType))
+            {
+                _fileErrors.Add($"{file.Name}: file type '{file.ContentType}' is not supported.");
+                continue;
+            }
+
+            State.Attachments.Add(new AttachmentFileInfo
+            {
+                FileName = file.Name,
+                ContentType = file.ContentType,
+                SizeBytes = file.Size,
+                IsUploaded = true
+            });
+        }
+
+        if (files.Count > remainingSlots)
+        {
+            _fileErrors.Add($"Only {remainingSlots} more file(s) can be added.");
+        }
+
+        StateHasChanged();
+    }
+
+    private void RemoveFile(AttachmentFileInfo file)
+    {
+        State.Attachments.Remove(file);
+        _fileErrors = [];
+        StateHasChanged();
+    }
+
+    private static Icon GetFileIcon(string contentType)
+    {
+        if (contentType.StartsWith("image/"))
+            return new Icons.Regular.Size16.Image();
+        if (contentType.StartsWith("video/"))
+            return new Icons.Regular.Size16.Video();
+        return new Icons.Regular.Size16.Document();
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        return bytes switch
+        {
+            < 1024 => $"{bytes} B",
+            < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+            _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
+        };
+    }
+
+    private async Task HandleNext()
+    {
+        await State.NotifyAndPersistAsync();
+        await OnNext.InvokeAsync();
+    }
+
+    private async Task HandleBack()
+    {
+        await OnBack.InvokeAsync();
+    }
+}

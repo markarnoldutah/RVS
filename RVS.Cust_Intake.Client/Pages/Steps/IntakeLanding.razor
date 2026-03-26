@@ -1,0 +1,95 @@
+@using RVS.Cust_Intake.Client.State
+
+<FluentCard Style="width: 100%; padding: 32px;">
+    @if (_isLoading)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentProgressRing />
+            <FluentLabel Typo="Typography.Body">Loading location information...</FluentLabel>
+        </FluentStack>
+    }
+    else if (_error is not null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size48.ErrorCircle())" Color="Color.Error" />
+            <FluentLabel Typo="Typography.H4" Color="Color.Error" Alignment="HorizontalAlignment.Center">
+                Location Not Found
+            </FluentLabel>
+            <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+                @_error
+            </FluentLabel>
+        </FluentStack>
+    }
+    else if (State.Config is not null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="20" HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size48.VehicleTruckProfile())" Color="Color.Accent" />
+
+            <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+                @State.Config.DealershipName
+            </FluentLabel>
+
+            <FluentLabel Typo="Typography.H5" Alignment="HorizontalAlignment.Center">
+                @State.Config.LocationName
+            </FluentLabel>
+
+            <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+                Submit a service request for your RV. No account required.
+            </FluentLabel>
+
+            <FluentDivider Role="DividerRole.Separator" Style="width: 100%;" />
+
+            <FluentButton Appearance="Appearance.Accent"
+                          Style="width: 100%; max-width: 300px;"
+                          IconStart="@(new Icons.Regular.Size20.ClipboardTextEdit())"
+                          OnClick="HandleStart">
+                Start Service Request
+            </FluentButton>
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnStart { get; set; }
+    [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+
+    private bool _isLoading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (State.Config is not null)
+        {
+            _isLoading = false;
+            return;
+        }
+
+        try
+        {
+            State.Config = await IntakeApi.GetConfigAsync(State.Slug);
+
+            if (State.Config.PrefillCustomer is not null)
+            {
+                State.ApplyPrefill(State.Config.PrefillCustomer);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Unable to find this service location. Please check the URL and try again.";
+        }
+        catch (InvalidOperationException)
+        {
+            _error = "Unable to load location configuration. Please try again later.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleStart()
+    {
+        await OnStart.InvokeAsync();
+    }
+}

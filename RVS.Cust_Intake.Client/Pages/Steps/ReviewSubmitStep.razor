@@ -1,0 +1,218 @@
+@using RVS.Cust_Intake.Client.State
+
+<FluentCard Style="width: 100%; padding: 24px;">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="20">
+        <FluentLabel Typo="Typography.H4">
+            <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Style="margin-right: 8px;" />
+            Review &amp; Submit
+        </FluentLabel>
+
+        <FluentLabel Typo="Typography.Body">
+            Please review your information before submitting.
+        </FluentLabel>
+
+        @* Customer Info Section *@
+        <FluentCard Style="width: 100%; padding: 16px;">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                         VerticalAlignment="VerticalAlignment.Center">
+                <FluentLabel Typo="Typography.H5">Contact Information</FluentLabel>
+                <FluentButton Appearance="Appearance.Stealth"
+                              IconStart="@(new Icons.Regular.Size16.Edit())"
+                              OnClick="() => EditStep(2)">
+                    Edit
+                </FluentButton>
+            </FluentStack>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
+                <FluentLabel Typo="Typography.Body"><strong>Name:</strong> @State.FirstName @State.LastName</FluentLabel>
+                <FluentLabel Typo="Typography.Body"><strong>Email:</strong> @State.Email</FluentLabel>
+                @if (!string.IsNullOrWhiteSpace(State.Phone))
+                {
+                    <FluentLabel Typo="Typography.Body"><strong>Phone:</strong> @State.Phone</FluentLabel>
+                }
+            </FluentStack>
+        </FluentCard>
+
+        @* Vehicle Info Section *@
+        <FluentCard Style="width: 100%; padding: 16px;">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                         VerticalAlignment="VerticalAlignment.Center">
+                <FluentLabel Typo="Typography.H5">Vehicle Information</FluentLabel>
+                <FluentButton Appearance="Appearance.Stealth"
+                              IconStart="@(new Icons.Regular.Size16.Edit())"
+                              OnClick="() => EditStep(3)">
+                    Edit
+                </FluentButton>
+            </FluentStack>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
+                <FluentLabel Typo="Typography.Body"><strong>VIN:</strong> @State.Vin</FluentLabel>
+                @if (!string.IsNullOrWhiteSpace(State.Manufacturer))
+                {
+                    <FluentLabel Typo="Typography.Body"><strong>Manufacturer:</strong> @State.Manufacturer</FluentLabel>
+                }
+                @if (!string.IsNullOrWhiteSpace(State.Model))
+                {
+                    <FluentLabel Typo="Typography.Body"><strong>Model:</strong> @State.Model</FluentLabel>
+                }
+                @if (State.Year.HasValue)
+                {
+                    <FluentLabel Typo="Typography.Body"><strong>Year:</strong> @State.Year</FluentLabel>
+                }
+            </FluentStack>
+        </FluentCard>
+
+        @* Issue Description Section *@
+        <FluentCard Style="width: 100%; padding: 16px;">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                         VerticalAlignment="VerticalAlignment.Center">
+                <FluentLabel Typo="Typography.H5">Issue Details</FluentLabel>
+                <FluentButton Appearance="Appearance.Stealth"
+                              IconStart="@(new Icons.Regular.Size16.Edit())"
+                              OnClick="() => EditStep(4)">
+                    Edit
+                </FluentButton>
+            </FluentStack>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
+                <FluentLabel Typo="Typography.Body"><strong>Category:</strong> @State.IssueCategory</FluentLabel>
+                <FluentLabel Typo="Typography.Body"><strong>Description:</strong> @State.IssueDescription</FluentLabel>
+                @if (!string.IsNullOrWhiteSpace(State.Urgency))
+                {
+                    <FluentLabel Typo="Typography.Body"><strong>Urgency:</strong> @State.Urgency</FluentLabel>
+                }
+                @if (!string.IsNullOrWhiteSpace(State.RvUsage))
+                {
+                    <FluentLabel Typo="Typography.Body"><strong>RV Usage:</strong> @State.RvUsage</FluentLabel>
+                }
+            </FluentStack>
+        </FluentCard>
+
+        @* Diagnostic Responses Section *@
+        @if (State.DiagnosticResponses.Count > 0)
+        {
+            <FluentCard Style="width: 100%; padding: 16px;">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                             VerticalAlignment="VerticalAlignment.Center">
+                    <FluentLabel Typo="Typography.H5">Diagnostic Responses</FluentLabel>
+                    <FluentButton Appearance="Appearance.Stealth"
+                                  IconStart="@(new Icons.Regular.Size16.Edit())"
+                                  OnClick="() => EditStep(5)">
+                        Edit
+                    </FluentButton>
+                </FluentStack>
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="margin-top: 8px;">
+                    @foreach (var response in State.DiagnosticResponses)
+                    {
+                        <div>
+                            <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">@response.QuestionText</FluentLabel>
+                            @if (response.SelectedOptions.Count > 0)
+                            {
+                                <FluentLabel Typo="Typography.Body">@string.Join(", ", response.SelectedOptions)</FluentLabel>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
+                            {
+                                <FluentLabel Typo="Typography.Subject">@response.FreeTextResponse</FluentLabel>
+                            }
+                        </div>
+                    }
+                </FluentStack>
+            </FluentCard>
+        }
+
+        @* Attachments Section *@
+        @if (State.Attachments.Count > 0)
+        {
+            <FluentCard Style="width: 100%; padding: 16px;">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                             VerticalAlignment="VerticalAlignment.Center">
+                    <FluentLabel Typo="Typography.H5">Attachments (@State.Attachments.Count)</FluentLabel>
+                    <FluentButton Appearance="Appearance.Stealth"
+                                  IconStart="@(new Icons.Regular.Size16.Edit())"
+                                  OnClick="() => EditStep(6)">
+                        Edit
+                    </FluentButton>
+                </FluentStack>
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
+                    @foreach (var attachment in State.Attachments)
+                    {
+                        <FluentLabel Typo="Typography.Body">@attachment.FileName (@FormatFileSize(attachment.SizeBytes))</FluentLabel>
+                    }
+                </FluentStack>
+            </FluentCard>
+        }
+
+        @* Submit Button *@
+        @if (_submitError is not null)
+        {
+            <FluentMessageBar Intent="MessageIntent.Error">
+                @_submitError
+            </FluentMessageBar>
+        }
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                     HorizontalAlignment="HorizontalAlignment.Center" Style="width: 100%; margin-top: 8px;">
+            <FluentButton Appearance="Appearance.Accent"
+                          Style="min-width: 200px;"
+                          Disabled="_isSubmitting"
+                          IconStart="@(new Icons.Regular.Size20.Send())"
+                          OnClick="HandleSubmit">
+                @(_isSubmitting ? "Submitting..." : "Submit Service Request")
+            </FluentButton>
+        </FluentStack>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback<int> OnEdit { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnSubmitted { get; set; }
+    [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+
+    private bool _isSubmitting;
+    private string? _submitError;
+
+    private async Task EditStep(int step)
+    {
+        await OnEdit.InvokeAsync(step);
+    }
+
+    private async Task HandleSubmit()
+    {
+        _isSubmitting = true;
+        _submitError = null;
+        StateHasChanged();
+
+        try
+        {
+            var request = State.BuildCreateRequest();
+            var result = await IntakeApi.SubmitServiceRequestAsync(State.Slug, request);
+
+            State.IsSubmitted = true;
+            State.CreatedServiceRequestId = result.Id;
+            await State.PersistAsync();
+
+            await OnSubmitted.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _submitError = $"Unable to submit your request. Please try again. ({ex.StatusCode})";
+        }
+        catch (Exception)
+        {
+            _submitError = "An unexpected error occurred. Please try again.";
+        }
+        finally
+        {
+            _isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        return bytes switch
+        {
+            < 1024 => $"{bytes} B",
+            < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+            _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
+        };
+    }
+}

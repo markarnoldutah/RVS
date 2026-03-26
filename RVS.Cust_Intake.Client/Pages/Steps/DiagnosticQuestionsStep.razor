@@ -1,0 +1,172 @@
+@using RVS.Cust_Intake.Client.State
+@using RVS.Domain.DTOs
+
+<FluentCard Style="width: 100%; padding: 24px;">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentLabel Typo="Typography.H4">
+            <FluentIcon Value="@(new Icons.Regular.Size20.BrainCircuit())" Style="margin-right: 8px;" />
+            AI Diagnostic Questions
+        </FluentLabel>
+
+        @if (_isLoading)
+        {
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentProgressRing />
+                <FluentLabel Typo="Typography.Body">Generating diagnostic questions based on your issue...</FluentLabel>
+            </FluentStack>
+        }
+        else if (_error is not null)
+        {
+            <FluentMessageBar Intent="MessageIntent.Warning">
+                @_error You can skip this step and continue.
+            </FluentMessageBar>
+        }
+        else
+        {
+            @if (!string.IsNullOrWhiteSpace(State.SmartSuggestion))
+            {
+                <FluentMessageBar Intent="MessageIntent.Info">
+                    <strong>Suggestion:</strong> @State.SmartSuggestion
+                </FluentMessageBar>
+            }
+
+            @for (var i = 0; i < State.DiagnosticQuestions.Count; i++)
+            {
+                var question = State.DiagnosticQuestions[i];
+                var questionIndex = i;
+
+                <FluentCard Style="width: 100%; padding: 16px; background: var(--neutral-layer-2);">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                        <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                            @question.QuestionText
+                        </FluentLabel>
+
+                        @if (!string.IsNullOrWhiteSpace(question.HelpText))
+                        {
+                            <FluentLabel Typo="Typography.Subject" Color="Color.Neutral">
+                                @question.HelpText
+                            </FluentLabel>
+                        }
+
+                        @if (question.Options.Count > 0)
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+                                @foreach (var option in question.Options)
+                                {
+                                    var isSelected = GetResponse(questionIndex)?.SelectedOptions.Contains(option) == true;
+                                    <FluentButton Appearance="@(isSelected ? Appearance.Accent : Appearance.Neutral)"
+                                                  OnClick="() => ToggleOption(questionIndex, option)"
+                                                  Style="margin-bottom: 4px;">
+                                        @option
+                                    </FluentButton>
+                                }
+                            </FluentStack>
+                        }
+
+                        @if (question.AllowFreeText)
+                        {
+                            <FluentTextArea Value="@(GetResponse(questionIndex)?.FreeTextResponse ?? "")"
+                                            ValueChanged="(value) => SetFreeText(questionIndex, value)"
+                                            Placeholder="Additional details..."
+                                            Rows="2"
+                                            Style="width: 100%;" />
+                        }
+                    </FluentStack>
+                </FluentCard>
+            }
+        }
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                     HorizontalAlignment="HorizontalAlignment.Right" Style="width: 100%; margin-top: 8px;">
+            <FluentButton Appearance="Appearance.Neutral" OnClick="HandleBack"
+                          IconStart="@(new Icons.Regular.Size16.ArrowLeft())">
+                Back
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Accent" OnClick="HandleNext"
+                          Disabled="_isLoading"
+                          IconEnd="@(new Icons.Regular.Size16.ArrowRight())">
+                @(_isLoading ? "Loading..." : "Next")
+            </FluentButton>
+        </FluentStack>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+    [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+
+    private bool _isLoading;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (State.DiagnosticQuestions.Count > 0) return;
+
+        _isLoading = true;
+        try
+        {
+            var request = State.BuildCreateRequest();
+            var response = await IntakeApi.GetDiagnosticQuestionsAsync(State.Slug, request);
+
+            State.DiagnosticQuestions = response.Questions;
+            State.SmartSuggestion = response.SmartSuggestion;
+
+            State.DiagnosticResponses = response.Questions.Select(q => new DiagnosticResponseDto
+            {
+                QuestionText = q.QuestionText,
+                SelectedOptions = [],
+                FreeTextResponse = null
+            }).ToList();
+        }
+        catch (Exception)
+        {
+            _error = "Unable to generate diagnostic questions.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private DiagnosticResponseDto? GetResponse(int index)
+    {
+        return index < State.DiagnosticResponses.Count ? State.DiagnosticResponses[index] : null;
+    }
+
+    private void ToggleOption(int questionIndex, string option)
+    {
+        if (questionIndex >= State.DiagnosticResponses.Count) return;
+
+        var response = State.DiagnosticResponses[questionIndex];
+        var options = response.SelectedOptions.ToList();
+
+        if (options.Contains(option))
+            options.Remove(option);
+        else
+            options.Add(option);
+
+        State.DiagnosticResponses[questionIndex] = response with { SelectedOptions = options };
+        StateHasChanged();
+    }
+
+    private void SetFreeText(int questionIndex, string? value)
+    {
+        if (questionIndex >= State.DiagnosticResponses.Count) return;
+
+        var response = State.DiagnosticResponses[questionIndex];
+        State.DiagnosticResponses[questionIndex] = response with { FreeTextResponse = value };
+    }
+
+    private async Task HandleNext()
+    {
+        await State.NotifyAndPersistAsync();
+        await OnNext.InvokeAsync();
+    }
+
+    private async Task HandleBack()
+    {
+        await OnBack.InvokeAsync();
+    }
+}

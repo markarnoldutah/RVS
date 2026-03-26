@@ -1,0 +1,109 @@
+@using RVS.Cust_Intake.Client.State
+@using RVS.Domain.DTOs
+
+<FluentCard Style="width: 100%; padding: 24px;">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentLabel Typo="Typography.H4">
+            <FluentIcon Value="@(new Icons.Regular.Size20.NoteEdit())" Style="margin-right: 8px;" />
+            Describe the Issue
+        </FluentLabel>
+
+        @if (_categories.Count > 0)
+        {
+            <FluentSelect TOption="LookupItemDto"
+                          Items="@_categories"
+                          OptionValue="@(c => c.Code)"
+                          OptionText="@(c => c.Name)"
+                          Label="Issue Category"
+                          @bind-SelectedOption="_selectedCategory"
+                          Style="width: 100%;" />
+        }
+        else
+        {
+            <FluentTextField @bind-Value="State.IssueCategory"
+                             Label="Issue Category"
+                             Required="true"
+                             Placeholder="e.g., Electrical, Plumbing, HVAC"
+                             Style="width: 100%;" />
+        }
+
+        <div style="width: 100%;">
+            <FluentTextArea @bind-Value="State.IssueDescription"
+                            Label="Description"
+                            Required="true"
+                            Placeholder="Describe the issue in detail..."
+                            Rows="5"
+                            MaxLength="2000"
+                            Style="width: 100%;" />
+            <FluentLabel Typo="Typography.Subject" Style="text-align: right; display: block;">
+                @(State.IssueDescription?.Length ?? 0) / 2000
+            </FluentLabel>
+        </div>
+
+        <FluentSelect TOption="string"
+                      Items="@_urgencyOptions"
+                      Label="Urgency"
+                      @bind-Value="State.Urgency"
+                      Style="width: 100%;" />
+
+        <FluentSelect TOption="string"
+                      Items="@_rvUsageOptions"
+                      Label="RV Usage"
+                      @bind-Value="State.RvUsage"
+                      Style="width: 100%;" />
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                     HorizontalAlignment="HorizontalAlignment.Right" Style="width: 100%; margin-top: 8px;">
+            <FluentButton Appearance="Appearance.Neutral" OnClick="HandleBack"
+                          IconStart="@(new Icons.Regular.Size16.ArrowLeft())">
+                Back
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Accent" OnClick="HandleNext"
+                          IconEnd="@(new Icons.Regular.Size16.ArrowRight())">
+                Next
+            </FluentButton>
+        </FluentStack>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+
+    private List<LookupItemDto> _categories = [];
+    private LookupItemDto? _selectedCategory;
+
+    private readonly List<string> _urgencyOptions = ["Low", "Medium", "High", "Critical"];
+    private readonly List<string> _rvUsageOptions = ["Full-Time", "Part-Time", "Seasonal", "Occasional"];
+
+    protected override void OnInitialized()
+    {
+        if (State.Config?.IssueCategories is { Count: > 0 } categories)
+        {
+            _categories = categories.Where(c => c.IsSelectable).ToList();
+            _selectedCategory = _categories.FirstOrDefault(c => c.Code == State.IssueCategory);
+        }
+    }
+
+    private async Task HandleNext()
+    {
+        if (_selectedCategory is not null)
+        {
+            State.IssueCategory = _selectedCategory.Code;
+        }
+
+        await State.NotifyAndPersistAsync();
+        await OnNext.InvokeAsync();
+    }
+
+    private async Task HandleBack()
+    {
+        if (_selectedCategory is not null)
+        {
+            State.IssueCategory = _selectedCategory.Code;
+        }
+
+        await OnBack.InvokeAsync();
+    }
+}
