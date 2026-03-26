@@ -26,10 +26,15 @@
 </FluentStack>
 
 @code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
     private string? _confirmationNumber;
 
     private void LookupStatus()
     {
-        // Status lookup will be implemented in a future issue
+        if (!string.IsNullOrWhiteSpace(_confirmationNumber))
+        {
+            Navigation.NavigateTo($"/status/{Uri.EscapeDataString(_confirmationNumber.Trim())}");
+        }
     }
 }

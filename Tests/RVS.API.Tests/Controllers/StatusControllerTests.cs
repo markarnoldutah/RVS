@@ -14,6 +14,7 @@ public class StatusControllerTests
     private readonly Mock<IGlobalCustomerAcctService> _globalAcctServiceMock = new();
     private readonly Mock<ICustomerProfileService> _profileServiceMock = new();
     private readonly Mock<IServiceRequestService> _srServiceMock = new();
+    private readonly Mock<ILocationService> _locationServiceMock = new();
     private readonly StatusController _sut;
 
     public StatusControllerTests()
@@ -21,7 +22,8 @@ public class StatusControllerTests
         _sut = new StatusController(
             _globalAcctServiceMock.Object,
             _profileServiceMock.Object,
-            _srServiceMock.Object);
+            _srServiceMock.Object,
+            _locationServiceMock.Object);
     }
 
     [Fact]
@@ -39,12 +41,74 @@ public class StatusControllerTests
         _srServiceMock.Setup(s => s.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(sr);
 
+        var location = BuildLocation();
+        _locationServiceMock.Setup(s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
         var result = await _sut.GetStatus("valid-token", CancellationToken.None);
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
         dto.FirstName.Should().Be("Jane");
         dto.ServiceRequests.Should().HaveCount(1);
+        dto.ServiceRequests[0].LocationName.Should().Be("Salt Lake City, UT");
+    }
+
+    [Fact]
+    public async Task GetStatus_WhenLocationNotFound_ShouldReturnNullLocationName()
+    {
+        var acct = BuildGlobalCustomerAcct();
+        _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        var profile = BuildCustomerProfile();
+        _profileServiceMock.Setup(s => s.GetByIdAsync("ten_1", "prof_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(profile);
+
+        var sr = BuildServiceRequest();
+        _srServiceMock.Setup(s => s.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        _locationServiceMock.Setup(s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new KeyNotFoundException());
+
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
+        dto.ServiceRequests[0].LocationName.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetStatus_WhenLocationHasNoCityButHasSlug_ShouldUseHumanizedSlug()
+    {
+        var acct = BuildGlobalCustomerAcct();
+        _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        var profile = BuildCustomerProfile();
+        _profileServiceMock.Setup(s => s.GetByIdAsync("ten_1", "prof_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(profile);
+
+        var sr = BuildServiceRequest();
+        _srServiceMock.Setup(s => s.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var location = new Location
+        {
+            Id = "loc_1",
+            TenantId = "ten_1",
+            Slug = "camping-world-service-center",
+            CreatedByUserId = "system"
+        };
+        _locationServiceMock.Setup(s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
+        dto.ServiceRequests[0].LocationName.Should().Be("Camping World Service Center");
     }
 
     [Fact]
@@ -126,6 +190,19 @@ public class StatusControllerTests
             Manufacturer = "Thor",
             Model = "Ace",
             Year = 2023
+        }
+    };
+
+    private static Location BuildLocation() => new()
+    {
+        Id = "loc_1",
+        TenantId = "ten_1",
+        Slug = "salt-lake-service-center",
+        CreatedByUserId = "system",
+        Address = new AddressEmbedded
+        {
+            City = "Salt Lake City",
+            State = "UT"
         }
     };
 }

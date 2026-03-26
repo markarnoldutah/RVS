@@ -1,0 +1,205 @@
+@page "/status/{Token}"
+
+<PageTitle>Your Service Requests</PageTitle>
+
+@if (_loading)
+{
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
+        <FluentProgressRing />
+        <FluentLabel Typo="Typography.Body">Loading your service requests…</FluentLabel>
+    </FluentStack>
+}
+else if (_errorState == ErrorState.InvalidToken)
+{
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size48.ErrorCircle())" Color="Color.Error" />
+
+        <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+            Invalid Link
+        </FluentLabel>
+
+        <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+            This status link is not valid. Please check the link in your email and try again.
+        </FluentLabel>
+
+        <FluentButton Appearance="Appearance.Accent"
+                      IconStart="@(new Icons.Regular.Size20.Home())"
+                      OnClick="@(() => Navigation.NavigateTo("/"))">
+            Return Home
+        </FluentButton>
+    </FluentStack>
+}
+else if (_errorState == ErrorState.ExpiredToken)
+{
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size48.Clock())" Color="Color.Warning" />
+
+        <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+            Link Expired
+        </FluentLabel>
+
+        <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+            This status link has expired. Please request a new status link from the dealership
+            or submit a new service request to receive an updated link.
+        </FluentLabel>
+
+        <FluentButton Appearance="Appearance.Accent"
+                      IconStart="@(new Icons.Regular.Size20.Home())"
+                      OnClick="@(() => Navigation.NavigateTo("/"))">
+            Return Home
+        </FluentButton>
+    </FluentStack>
+}
+else if (_errorState == ErrorState.Unexpected)
+{
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
+
+        <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+            Something Went Wrong
+        </FluentLabel>
+
+        <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+            We were unable to load your service requests. Please try again later.
+        </FluentLabel>
+
+        <FluentButton Appearance="Appearance.Accent"
+                      IconStart="@(new Icons.Regular.Size20.ArrowCounterclockwise())"
+                      OnClick="RetryLoad">
+            Try Again
+        </FluentButton>
+    </FluentStack>
+}
+else if (_statusResponse is not null)
+{
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="24">
+        <FluentLabel Typo="Typography.H3">
+            Hi @_statusResponse.FirstName, here are your service requests
+        </FluentLabel>
+
+        @if (_statusResponse.ServiceRequests.Count == 0)
+        {
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentIcon Value="@(new Icons.Regular.Size48.ClipboardTextEdit())" Color="Color.Neutral" />
+
+                <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+                    You have no active service requests at this time.
+                </FluentLabel>
+            </FluentStack>
+        }
+        else
+        {
+            <div class="sr-grid">
+                @foreach (var sr in _statusResponse.ServiceRequests)
+                {
+                    <FluentCard class="sr-card">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentStack Orientation="Orientation.Horizontal"
+                                         HorizontalGap="8"
+                                         VerticalAlignment="VerticalAlignment.Center"
+                                         Wrap="true">
+                                <StatusBadge Status="@sr.Status" />
+                                @if (!string.IsNullOrWhiteSpace(sr.LocationName))
+                                {
+                                    <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                                        @sr.LocationName
+                                    </FluentLabel>
+                                }
+                            </FluentStack>
+
+                            <FluentDivider Role="DividerRole.Separator" />
+
+                            <div class="sr-details">
+                                <div class="sr-detail-row">
+                                    <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">Issue Category</FluentLabel>
+                                    <FluentLabel Typo="Typography.Body">@(string.IsNullOrWhiteSpace(sr.IssueCategory) ? "—" : sr.IssueCategory)</FluentLabel>
+                                </div>
+
+                                <div class="sr-detail-row">
+                                    <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">Submitted</FluentLabel>
+                                    <FluentLabel Typo="Typography.Body">@sr.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</FluentLabel>
+                                </div>
+
+                                <div class="sr-detail-row">
+                                    <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">Last Updated</FluentLabel>
+                                    <FluentLabel Typo="Typography.Body">
+                                        @(sr.UpdatedAtUtc.HasValue
+                                            ? sr.UpdatedAtUtc.Value.ToLocalTime().ToString("MMM d, yyyy")
+                                            : "—")
+                                    </FluentLabel>
+                                </div>
+                            </div>
+                        </FluentStack>
+                    </FluentCard>
+                }
+            </div>
+        }
+    </FluentStack>
+}
+
+@code {
+    [Parameter] public string Token { get; set; } = default!;
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private ILogger<StatusPage> Logger { get; set; } = default!;
+
+    private CustomerStatusResponseDto? _statusResponse;
+    private bool _loading = true;
+    private ErrorState _errorState = ErrorState.None;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatusAsync();
+    }
+
+    private async Task LoadStatusAsync()
+    {
+        _loading = true;
+        _errorState = ErrorState.None;
+        _statusResponse = null;
+
+        try
+        {
+            var response = await Http.GetAsync($"api/status/{Uri.EscapeDataString(Token)}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                _statusResponse = await response.Content.ReadFromJsonAsync<CustomerStatusResponseDto>();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _errorState = ErrorState.InvalidToken;
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Gone)
+            {
+                _errorState = ErrorState.ExpiredToken;
+            }
+            else
+            {
+                _errorState = ErrorState.Unexpected;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load status for token");
+            _errorState = ErrorState.Unexpected;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RetryLoad()
+    {
+        await LoadStatusAsync();
+    }
+
+    private enum ErrorState
+    {
+        None,
+        InvalidToken,
+        ExpiredToken,
+        Unexpected
+    }
+}
