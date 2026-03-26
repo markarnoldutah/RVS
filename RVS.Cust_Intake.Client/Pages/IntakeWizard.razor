@@ -11,7 +11,20 @@
 
     @if (_state.CurrentStep > 1 && _state.CurrentStep < 7)
     {
-        <FluentProgress Min="0" Max="100" Value="@StepProgress" Style="width: 100%;" />
+        <div role="progressbar" aria-valuenow="@_state.CurrentStep" aria-valuemin="1" aria-valuemax="@_state.TotalSteps"
+             aria-label="Step @_state.CurrentStep of @_state.TotalSteps"
+             style="display: flex; align-items: center; gap: 6px; width: 100%; justify-content: center;">
+            @for (var i = 1; i <= _state.TotalSteps; i++)
+            {
+                var step = i;
+                <div style="width: @(step == _state.CurrentStep ? "28px" : "10px"); height: 10px;
+                            border-radius: 5px;
+                            background: @(step < _state.CurrentStep ? "var(--accent-fill-rest, #0F6CBD)"
+                                        : step == _state.CurrentStep ? "var(--accent-fill-rest, #0F6CBD)"
+                                        : "var(--neutral-stroke-rest, #E1DFDD)");
+                            transition: all 0.3s ease;"></div>
+            }
+        </div>
         <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
             Step @_state.CurrentStep of @_state.TotalSteps
         </FluentLabel>
@@ -29,43 +42,45 @@
         </FluentMessageBar>
     }
 
-    @switch (_state.CurrentStep)
-    {
-        case 1:
-            <IntakeLanding State="_state"
-                           OnStart="HandleNextStep" />
-            break;
-        case 2:
-            <CustomerInfoStep State="_state"
-                              OnNext="HandleNextStep"
-                              OnBack="HandlePreviousStep" />
-            break;
-        case 3:
-            <AssetInfoStep State="_state"
-                           OnNext="HandleNextStep"
-                           OnBack="HandlePreviousStep" />
-            break;
-        case 4:
-            <IssueDescriptionStep State="_state"
+    <div class="wizard-step" @key="_state.CurrentStep">
+        @switch (_state.CurrentStep)
+        {
+            case 1:
+                <IntakeLanding State="_state"
+                               OnStart="HandleNextStep" />
+                break;
+            case 2:
+                <CustomerInfoStep State="_state"
                                   OnNext="HandleNextStep"
                                   OnBack="HandlePreviousStep" />
-            break;
-        case 5:
-            <DiagnosticQuestionsStep State="_state"
-                                     OnNext="HandleNextStep"
-                                     OnBack="HandlePreviousStep" />
-            break;
-        case 6:
-            <AttachmentUploadStep State="_state"
-                                  OnNext="HandleNextStep"
-                                  OnBack="HandlePreviousStep" />
-            break;
-        case 7:
-            <ReviewSubmitStep State="_state"
-                              OnEdit="HandleEditStep"
-                              OnSubmitted="HandleSubmitted" />
-            break;
-    }
+                break;
+            case 3:
+                <AssetInfoStep State="_state"
+                               OnNext="HandleNextStep"
+                               OnBack="HandlePreviousStep" />
+                break;
+            case 4:
+                <IssueDescriptionStep State="_state"
+                                      OnNext="HandleNextStep"
+                                      OnBack="HandlePreviousStep" />
+                break;
+            case 5:
+                <DiagnosticQuestionsStep State="_state"
+                                         OnNext="HandleNextStep"
+                                         OnBack="HandlePreviousStep" />
+                break;
+            case 6:
+                <AttachmentUploadStep State="_state"
+                                      OnNext="HandleNextStep"
+                                      OnBack="HandlePreviousStep" />
+                break;
+            case 7:
+                <ReviewSubmitStep State="_state"
+                                  OnEdit="HandleEditStep"
+                                  OnSubmitted="HandleSubmitted" />
+                break;
+        }
+    </div>
 </FluentStack>
 
 @code {

@@ -3,9 +3,14 @@
 <FluentCard Style="width: 100%; padding: 32px;">
     @if (_isLoading)
     {
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
-            <FluentProgressRing />
-            <FluentLabel Typo="Typography.Body">Loading location information...</FluentLabel>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="20" HorizontalAlignment="HorizontalAlignment.Center"
+                     aria-busy="true" aria-label="Loading location information">
+            <div class="skeleton skeleton-icon" style="margin: 0 auto;"></div>
+            <div class="skeleton skeleton-text skeleton-text--title" style="margin: 0 auto;"></div>
+            <div class="skeleton skeleton-text skeleton-text--subtitle" style="margin: 0 auto;"></div>
+            <div class="skeleton skeleton-text skeleton-text--body" style="margin: 0 auto;"></div>
+            <div style="width: 100%; height: 1px; background: var(--neutral-stroke-rest, #E1DFDD);"></div>
+            <div class="skeleton skeleton-button" style="margin: 0 auto;"></div>
         </FluentStack>
     }
     else if (_error is not null)

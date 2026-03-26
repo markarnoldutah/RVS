@@ -14,6 +14,7 @@
     </FluentLabel>
 
     <FluentButton Appearance="Appearance.Accent"
+                  Style="width: 100%; max-width: 300px;"
                   IconStart="@(new Icons.Regular.Size20.ClipboardTextEdit())"
                   OnClick="@(() => Navigation.NavigateTo("/intake"))">
         Start Service Request
@@ -26,6 +27,7 @@
     </FluentLabel>
 
     <FluentButton Appearance="Appearance.Neutral"
+                  Style="width: 100%; max-width: 300px;"
                   IconStart="@(new Icons.Regular.Size20.Search())"
                   OnClick="@(() => Navigation.NavigateTo("/status"))">
         Check Request Status

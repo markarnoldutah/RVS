@@ -19,12 +19,14 @@
                          Label="First Name"
                          Required="true"
                          Placeholder="Enter your first name"
+                         Autocomplete="given-name"
                          Style="width: 100%;" />
 
         <FluentTextField @bind-Value="State.LastName"
                          Label="Last Name"
                          Required="true"
                          Placeholder="Enter your last name"
+                         Autocomplete="family-name"
                          Style="width: 100%;" />
 
         <FluentTextField @bind-Value="State.Email"
@@ -32,12 +34,14 @@
                          Required="true"
                          TextFieldType="TextFieldType.Email"
                          Placeholder="you@example.com"
+                         Autocomplete="email"
                          Style="width: 100%;" />
 
         <FluentTextField @bind-Value="State.Phone"
                          Label="Phone (optional)"
                          TextFieldType="TextFieldType.Tel"
                          Placeholder="(555) 123-4567"
+                         Autocomplete="tel"
                          Style="width: 100%;" />
 
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"

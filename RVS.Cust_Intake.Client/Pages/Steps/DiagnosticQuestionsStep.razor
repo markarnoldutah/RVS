@@ -10,9 +10,20 @@
 
         @if (_isLoading)
         {
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" HorizontalAlignment="HorizontalAlignment.Center">
-                <FluentProgressRing />
-                <FluentLabel Typo="Typography.Body">Generating diagnostic questions based on your issue...</FluentLabel>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Style="width: 100%;"
+                         aria-busy="true" aria-label="Generating diagnostic questions">
+                <div class="skeleton skeleton-text skeleton-text--body" style="width: 90%;"></div>
+                @for (var i = 0; i < 3; i++)
+                {
+                    <div class="skeleton skeleton-card" style="width: 100%;">
+                        <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 12px;"></div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <div class="skeleton" style="width: 80px; height: 36px; border-radius: 4px;"></div>
+                            <div class="skeleton" style="width: 100px; height: 36px; border-radius: 4px;"></div>
+                            <div class="skeleton" style="width: 60px; height: 36px; border-radius: 4px;"></div>
+                        </div>
+                    </div>
+                }
             </FluentStack>
         }
         else if (_error is not null)
