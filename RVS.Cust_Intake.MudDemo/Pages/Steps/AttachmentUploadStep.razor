@@ -1,0 +1,160 @@
+@using Microsoft.AspNetCore.Components.Forms
+
+<MudPaper Elevation="3" Class="pa-6">
+    <MudStack Spacing="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">Attachments</MudText>
+        </MudStack>
+
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            Upload photos or videos of the issue. Drag and drop files or use the button below.
+        </MudText>
+
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            Max 10 files, up to 25 MB each. Accepted: images, videos, PDF
+        </MudText>
+
+        <MudPaper Elevation="0" Outlined="true"
+                  Class="pa-8 d-flex flex-column align-center justify-center"
+                  Style="border-style: dashed; border-width: 2px; min-height: 140px; cursor: pointer;
+                         border-color: var(--mud-palette-primary); position: relative;">
+            <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Primary"
+                     Style="font-size: 3rem;" />
+            <MudText Typo="Typo.body1" Class="mt-2">
+                Drag files here or click to browse
+            </MudText>
+            <InputFile OnChange="HandleFilesChanged"
+                       multiple
+                       accept="image/*,video/*,application/pdf"
+                       style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0;" />
+        </MudPaper>
+
+        @if (State.Attachments.Count > 0)
+        {
+            <MudStack Spacing="2">
+                @foreach (var file in State.Attachments)
+                {
+                    <MudPaper Elevation="1" Class="pa-3">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@GetFileIcon(file.ContentType)" Color="Color.Primary" />
+                            <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
+                                <MudText Typo="Typo.body2" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                    @file.FileName
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @FormatFileSize(file.SizeBytes)
+                                </MudText>
+                            </MudStack>
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">
+                                Ready
+                            </MudChip>
+                            <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="() => RemoveFile(file)"
+                                           aria-label="Remove file" />
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+        }
+
+        @if (_fileErrors.Count > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                <ul style="margin: 0; padding-left: 16px;">
+                    @foreach (var error in _fileErrors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            </MudAlert>
+        }
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="HandleBack"
+                       Style="text-transform: none;">
+                Back
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       EndIcon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="HandleNext"
+                       Style="text-transform: none;">
+                Next
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+
+    private List<string> _fileErrors = [];
+
+    private void HandleFilesChanged(InputFileChangeEventArgs e)
+    {
+        _fileErrors = [];
+        var remainingSlots = 10 - State.Attachments.Count;
+
+        if (remainingSlots <= 0)
+        {
+            _fileErrors.Add("Maximum 10 files allowed.");
+            return;
+        }
+
+        var files = e.GetMultipleFiles(10);
+        foreach (var file in files.Take(remainingSlots))
+        {
+            if (file.Size > 25 * 1024L * 1024L)
+            {
+                _fileErrors.Add($"{file.Name}: exceeds 25 MB limit.");
+                continue;
+            }
+
+            State.Attachments.Add(new MockAttachment
+            {
+                FileName = file.Name,
+                ContentType = file.ContentType,
+                SizeBytes = file.Size
+            });
+        }
+
+        if (files.Count > remainingSlots)
+        {
+            _fileErrors.Add($"Only {remainingSlots} more file(s) can be added.");
+        }
+
+        StateHasChanged();
+    }
+
+    private void RemoveFile(MockAttachment file)
+    {
+        State.Attachments.Remove(file);
+        _fileErrors = [];
+        StateHasChanged();
+    }
+
+    private static string GetFileIcon(string contentType)
+    {
+        if (contentType.StartsWith("image/")) return Icons.Material.Filled.Image;
+        if (contentType.StartsWith("video/")) return Icons.Material.Filled.VideoFile;
+        return Icons.Material.Filled.InsertDriveFile;
+    }
+
+    private static string FormatFileSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+        _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
+    };
+
+    private async Task HandleNext() => await OnNext.InvokeAsync();
+    private async Task HandleBack() => await OnBack.InvokeAsync();
+}

@@ -1,0 +1,36 @@
+<MudPaper Elevation="3" Class="pa-8">
+    <MudStack AlignItems="AlignItems.Center" Spacing="5">
+        <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary"
+                 Style="font-size: 4rem;" />
+
+        <MudText Typo="Typo.h4" Align="Align.Center">
+            @State.DealershipName
+        </MudText>
+
+        <MudText Typo="Typo.h6" Align="Align.Center" Color="Color.Secondary">
+            @State.LocationName
+        </MudText>
+
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            Submit a service request for your RV. No account required.
+        </MudText>
+
+        <MudDivider Class="my-2" Style="width: 100%;" />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Size="Size.Large"
+                   StartIcon="@Icons.Material.Filled.EditNote"
+                   OnClick="HandleStart"
+                   Style="text-transform: none; min-width: 300px;">
+            Start Service Request
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnStart { get; set; }
+
+    private async Task HandleStart() => await OnStart.InvokeAsync();
+}

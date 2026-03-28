@@ -1,0 +1,98 @@
+@page "/status/{Token}"
+
+<PageTitle>Your Service Requests</PageTitle>
+
+<MudStack Spacing="6" Class="mt-4">
+    <MudText Typo="Typo.h4">
+        Hi Jane, here are your service requests
+    </MudText>
+
+    @* Mock service request cards *@
+    <MudGrid>
+        <MudItem xs="12" sm="6">
+            <MudCard Elevation="3">
+                <MudCardContent>
+                    <MudStack Spacing="3">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                            <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">
+                                In Progress
+                            </MudChip>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                Salt Lake City Service Bay
+                            </MudText>
+                        </MudStack>
+
+                        <MudDivider />
+
+                        <MudSimpleTable Dense="true" Elevation="0">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Issue Category</strong></td>
+                                    <td>Electrical</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Submitted</strong></td>
+                                    <td>Mar 20, 2026</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Last Updated</strong></td>
+                                    <td>Mar 25, 2026</td>
+                                </tr>
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6">
+            <MudCard Elevation="3">
+                <MudCardContent>
+                    <MudStack Spacing="3">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">
+                                Completed
+                            </MudChip>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                Denver Service Center
+                            </MudText>
+                        </MudStack>
+
+                        <MudDivider />
+
+                        <MudSimpleTable Dense="true" Elevation="0">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Issue Category</strong></td>
+                                    <td>Plumbing</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Submitted</strong></td>
+                                    <td>Feb 14, 2026</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Last Updated</strong></td>
+                                    <td>Mar 1, 2026</td>
+                                </tr>
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudStack AlignItems="AlignItems.Center">
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Home"
+                   Href="/"
+                   Style="text-transform: none;">
+            Return Home
+        </MudButton>
+    </MudStack>
+</MudStack>
+
+@code {
+    [Parameter] public string Token { get; set; } = default!;
+}
