@@ -1,5 +1,7 @@
 using RVS.Cust_Intake.Components;
 using Microsoft.FluentUI.AspNetCore.Components;
+using RVS.Cust_Intake.Client.State;
+using RVS.UI.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +22,12 @@ builder.Services.AddHttpClient("RVS.API", client =>
 // Provide a default HttpClient via IHttpClientFactory for DI consumers
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API"));
+
+// Services shared with the WASM client — registered here for server-side prerendering
+builder.Services.AddScoped<IntakeWizardState>();
+builder.Services.AddScoped<IntakeApiClient>();
+builder.Services.AddScoped<LookupApiClient>();
+builder.Services.AddScoped<AttachmentApiClient>();
 
 var app = builder.Build();
 

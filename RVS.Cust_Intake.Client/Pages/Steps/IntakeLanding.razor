@@ -70,6 +70,13 @@
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(State.Slug))
+        {
+            _error = "Location not specified. Please use a valid intake link.";
+            _isLoading = false;
+            return;
+        }
+
         try
         {
             State.Config = await IntakeApi.GetConfigAsync(State.Slug);

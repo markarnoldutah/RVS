@@ -93,6 +93,16 @@
 
     private int StepProgress => (_state.CurrentStep - 1) * 100 / (_state.TotalSteps - 1);
 
+    protected override void OnInitialized()
+    {
+        _state.OnChange += StateHasChanged;
+    }
+
+    protected override void OnParametersSet()
+    {
+        _state.Slug = Slug;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -106,7 +116,6 @@
                 _state.Slug = Slug;
             }
 
-            _state.OnChange += StateHasChanged;
             StateHasChanged();
         }
     }
