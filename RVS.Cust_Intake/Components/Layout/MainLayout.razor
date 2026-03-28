@@ -6,7 +6,7 @@
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="2" Color="Color.Primary" Fixed="false">
+    <MudAppBar Elevation="2" Color="Color.Primary">
         <MudIconButton Icon="@Icons.Material.Filled.RvHookup"
                        Color="Color.Inherit"
                        Href="/"
@@ -17,8 +17,8 @@
         <MudSpacer />
     </MudAppBar>
 
-    <MudMainContent Class="pa-4">
-        <MudContainer MaxWidth="MaxWidth.Medium">
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Medium" Class="py-4 px-4">
             <ErrorBoundary>
                 <ChildContent>
                     @Body
@@ -30,7 +30,7 @@
         </MudContainer>
     </MudMainContent>
 
-    <MudAppBar Bottom="true" Fixed="false" Elevation="0" Color="Color.Transparent" Dense="true"
+    <MudAppBar Bottom="true" Elevation="0" Color="Color.Transparent" Dense="true"
                Style="background: var(--mud-palette-background-gray);">
         <MudText Typo="Typo.caption" Color="Color.Secondary">
             &copy; @DateTime.UtcNow.Year RV Service Flow

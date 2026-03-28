@@ -65,3 +65,14 @@ h1:focus {
     .blazor-error-boundary::after {
         content: "An error has occurred."
     }
+/* --------------------------------------------------------
+   AppBar offset — MudBlazor sets --mud-appbar-height via JS,
+   which is too late during static SSR prerender. Override
+   with explicit pixel values so layout is correct on first paint.
+   Top AppBar: 64px (standard MudAppBar default)
+   Bottom AppBar: 48px (Dense MudAppBar default)
+   -------------------------------------------------------- */
+.mud-main-content {
+    padding-top: 64px !important;
+    padding-bottom: 48px !important;
+}

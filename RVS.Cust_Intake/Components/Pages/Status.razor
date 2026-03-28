@@ -14,34 +14,30 @@
         Enter your confirmation number to view the status of your service request.
     </MudText>
 
-    <MudTextField @bind-Value="_confirmationNumber"
-                  Label="Confirmation Number"
-                  Variant="Variant.Outlined"
-                  Adornment="Adornment.Start"
-                  AdornmentIcon="@Icons.Material.Filled.ConfirmationNumber"
-                  Placeholder="e.g., SR-2026-00742"
-                  Style="max-width: 400px; width: 100%;" />
+    <form method="post" action="/status/lookup" style="width: 100%; max-width: 400px;">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3" Style="width: 100%;">
 
-    <MudButton Variant="Variant.Filled"
-               Color="Color.Primary"
-               StartIcon="@Icons.Material.Filled.Search"
-               Disabled="@string.IsNullOrWhiteSpace(_confirmationNumber)"
-               OnClick="LookupStatus"
-               Style="text-transform: none; min-width: 200px;">
-        Look Up Status
-    </MudButton>
+            <MudPaper Outlined="true" Class="d-flex align-center pa-3 gap-2"
+                      Style="width: 100%; border-radius: var(--mud-default-borderradius);">
+                <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber"
+                         Color="Color.Default" Size="Size.Small" />
+                <input type="text"
+                       name="confirmationNumber"
+                       placeholder="e.g., SR-2026-00742"
+                       autocomplete="off"
+                       style="flex: 1; border: none; outline: none; font-size: 1rem;
+                              font-family: inherit; background: transparent;
+                              color: var(--mud-palette-text-primary); width: 100%;" />
+            </MudPaper>
+
+            <MudButton ButtonType="ButtonType.Submit"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Search"
+                       Style="text-transform: none; min-width: 200px;">
+                Look Up Status
+            </MudButton>
+
+        </MudStack>
+    </form>
 </MudStack>
-
-@code {
-    [Inject] private NavigationManager Navigation { get; set; } = default!;
-
-    private string? _confirmationNumber;
-
-    private void LookupStatus()
-    {
-        if (!string.IsNullOrWhiteSpace(_confirmationNumber))
-        {
-            Navigation.NavigateTo($"/status/{Uri.EscapeDataString(_confirmationNumber.Trim())}");
-        }
-    }
-}

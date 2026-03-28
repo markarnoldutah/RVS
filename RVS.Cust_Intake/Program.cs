@@ -46,6 +46,16 @@ app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
+// Customer status lookup — receives confirmation number and redirects to the token-based
+// status page. DisableAntiforgery: this route only performs a read-only redirect.
+app.MapPost("/status/lookup", (IFormCollection form) =>
+{
+    var token = form["confirmationNumber"].ToString().Trim();
+    return string.IsNullOrWhiteSpace(token)
+        ? Results.Redirect("/status")
+        : Results.Redirect($"/status/{Uri.EscapeDataString(token)}");
+}).DisableAntiforgery();
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveWebAssemblyRenderMode()
