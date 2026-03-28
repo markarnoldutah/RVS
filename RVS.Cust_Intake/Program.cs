@@ -1,5 +1,5 @@
 using RVS.Cust_Intake.Components;
-using Microsoft.FluentUI.AspNetCore.Components;
+using MudBlazor.Services;
 using RVS.Cust_Intake.Client.State;
 using RVS.UI.Shared.Services;
 
@@ -9,8 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveWebAssemblyComponents();
 
-// FluentUI component library
-builder.Services.AddFluentUIComponents();
+// MudBlazor component library
+builder.Services.AddMudServices();
 
 // Anonymous HttpClient pointing to RVS.API — no authentication required
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7116";

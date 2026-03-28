@@ -1,44 +1,37 @@
 @using RVS.Cust_Intake.Client.State
 @using RVS.Domain.DTOs
 
-<FluentCard Style="width: 100%; padding: 24px;">
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentLabel Typo="Typography.H4">
-            <FluentIcon Value="@(new Icons.Regular.Size20.BrainCircuit())" Style="margin-right: 8px;" />
-            AI Diagnostic Questions
-        </FluentLabel>
+<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+    <MudStack Spacing="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">AI Diagnostic Questions</MudText>
+        </MudStack>
 
         @if (_isLoading)
         {
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Style="width: 100%;"
-                         aria-busy="true" aria-label="Generating diagnostic questions">
-                <div class="skeleton skeleton-text skeleton-text--body" style="width: 90%;"></div>
-                @for (var i = 0; i < 3; i++) // 3 placeholder cards to approximate a typical question set
+            <MudStack Spacing="3" aria-busy="true" aria-label="Generating diagnostic questions">
+                <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" />
+                @for (var i = 0; i < 3; i++)
                 {
-                    <div class="skeleton skeleton-card" style="width: 100%;">
-                        <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 12px;"></div>
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <div class="skeleton" style="width: 80px; height: 36px; border-radius: 4px;"></div>
-                            <div class="skeleton" style="width: 100px; height: 36px; border-radius: 4px;"></div>
-                            <div class="skeleton" style="width: 60px; height: 36px; border-radius: 4px;"></div>
-                        </div>
-                    </div>
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="100px" />
                 }
-            </FluentStack>
+            </MudStack>
         }
         else if (_error is not null)
         {
-            <FluentMessageBar Intent="MessageIntent.Warning">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
                 @_error You can skip this step and continue.
-            </FluentMessageBar>
+            </MudAlert>
         }
         else
         {
             @if (!string.IsNullOrWhiteSpace(State.SmartSuggestion))
             {
-                <FluentMessageBar Intent="MessageIntent.Info">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true"
+                          Icon="@Icons.Material.Filled.Lightbulb">
                     <strong>Suggestion:</strong> @State.SmartSuggestion
-                </FluentMessageBar>
+                </MudAlert>
             }
 
             @for (var i = 0; i < State.DiagnosticQuestions.Count; i++)
@@ -46,61 +39,74 @@
                 var question = State.DiagnosticQuestions[i];
                 var questionIndex = i;
 
-                <FluentCard Style="width: 100%; padding: 16px; background: var(--neutral-layer-2);">
-                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-                        <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                    <MudStack Spacing="3">
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 500;">
                             @question.QuestionText
-                        </FluentLabel>
+                        </MudText>
 
                         @if (!string.IsNullOrWhiteSpace(question.HelpText))
                         {
-                            <FluentLabel Typo="Typography.Subject" Color="Color.Neutral">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 @question.HelpText
-                            </FluentLabel>
+                            </MudText>
                         }
 
                         @if (question.Options.Count > 0)
                         {
-                            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
                                 @foreach (var option in question.Options)
                                 {
-                                    var isSelected = GetResponse(questionIndex)?.SelectedOptions.Contains(option) == true;
-                                    <FluentButton Appearance="@(isSelected ? Appearance.Accent : Appearance.Neutral)"
-                                                  OnClick="() => ToggleOption(questionIndex, option)"
-                                                  Style="margin-bottom: 4px;">
-                                        @option
-                                    </FluentButton>
+                                    var opt = option;
+                                    var isSelected = GetResponse(questionIndex)?.SelectedOptions.Contains(opt) == true;
+                                    <MudButton Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                                               Color="@(isSelected ? Color.Primary : Color.Default)"
+                                               Size="Size.Small"
+                                               OnClick="() => ToggleOption(questionIndex, opt)"
+                                               Style="text-transform: none;">
+                                        @if (isSelected)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small"
+                                                     Class="mr-1" />
+                                        }
+                                        @opt
+                                    </MudButton>
                                 }
-                            </FluentStack>
+                            </MudStack>
                         }
 
                         @if (question.AllowFreeText)
                         {
-                            <FluentTextArea Value="@(GetResponse(questionIndex)?.FreeTextResponse ?? "")"
-                                            ValueChanged="(value) => SetFreeText(questionIndex, value)"
-                                            Placeholder="Additional details..."
-                                            Rows="2"
-                                            Style="width: 100%;" />
+                            <MudTextField Value="@(GetResponse(questionIndex)?.FreeTextResponse ?? "")"
+                                          ValueChanged="(string value) => SetFreeText(questionIndex, value)"
+                                          Placeholder="Additional details..."
+                                          Lines="2"
+                                          Variant="Variant.Outlined" />
                         }
-                    </FluentStack>
-                </FluentCard>
+                    </MudStack>
+                </MudPaper>
             }
         }
 
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
-                     HorizontalAlignment="HorizontalAlignment.Right" Style="width: 100%; margin-top: 8px;">
-            <FluentButton Appearance="Appearance.Neutral" OnClick="HandleBack"
-                          IconStart="@(new Icons.Regular.Size16.ArrowLeft())">
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="HandleBack"
+                       Style="text-transform: none;">
                 Back
-            </FluentButton>
-            <FluentButton Appearance="Appearance.Accent" OnClick="HandleNext"
-                          Disabled="_isLoading"
-                          IconEnd="@(new Icons.Regular.Size16.ArrowRight())">
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       EndIcon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="HandleNext"
+                       Disabled="_isLoading"
+                       Style="text-transform: none;">
                 @(_isLoading ? "Loading..." : "Next")
-            </FluentButton>
-        </FluentStack>
-    </FluentStack>
-</FluentCard>
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;

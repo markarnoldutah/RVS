@@ -2,33 +2,42 @@
 
 <PageTitle>RV Service Flow — Customer Intake</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalGap="24" HorizontalAlignment="HorizontalAlignment.Center">
-    <FluentIcon Value="@(new Icons.Regular.Size48.VehicleTruckProfile())" Color="Color.Accent" />
+<MudStack AlignItems="AlignItems.Center" Spacing="6" Class="mt-8">
+    <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary" Size="Size.Large"
+             Style="font-size: 4rem;" />
 
-    <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+    <MudText Typo="Typo.h3" Align="Align.Center" GutterBottom="true">
         Welcome to RV Service Flow
-    </FluentLabel>
+    </MudText>
 
-    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
         Submit a new service request for your RV. No account required.
-    </FluentLabel>
+    </MudText>
 
-    <a href="/intake" data-enhance-nav="false" class="fluent-btn accent">
-        <FluentIcon Value="@(new Icons.Regular.Size20.ClipboardTextEdit())" Color="Color.Fill" />
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               Size="Size.Large"
+               StartIcon="@Icons.Material.Filled.EditNote"
+               Href="/intake"
+               Style="text-transform: none; min-width: 250px;">
         Start Service Request
-    </a>
+    </MudButton>
 
-    <FluentDivider Role="DividerRole.Separator" />
+    <MudDivider Class="my-4" Style="width: 300px;" />
 
-    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
         Already submitted a request?
-    </FluentLabel>
+    </MudText>
 
-    <a href="/status" data-enhance-nav="false" class="fluent-btn neutral">
-        <FluentIcon Value="@(new Icons.Regular.Size20.Search())" />
+    <MudButton Variant="Variant.Outlined"
+               Color="Color.Primary"
+               Size="Size.Large"
+               StartIcon="@Icons.Material.Filled.Search"
+               Href="/status"
+               Style="text-transform: none; min-width: 250px;">
         Check Request Status
-    </a>
-</FluentStack>
+    </MudButton>
+</MudStack>
 
 @* Preload WASM bundle so the interactive wizard loads instantly when navigated to *@
 <WasmPreload />

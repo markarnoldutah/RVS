@@ -3,20 +3,21 @@
 
 <PageTitle>Service Request Intake</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalGap="20" HorizontalAlignment="HorizontalAlignment.Center"
-             Style="max-width: 600px; margin: 0 auto; padding: 16px;">
-    <FluentIcon Value="@(new Icons.Regular.Size48.ClipboardTextEdit())" Color="Color.Accent" />
+<MudStack AlignItems="AlignItems.Center" Spacing="5" Class="mt-8"
+          Style="max-width: 600px; margin: 0 auto;">
+    <MudIcon Icon="@Icons.Material.Filled.EditNote" Color="Color.Primary"
+             Style="font-size: 4rem;" />
 
-    <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+    <MudText Typo="Typo.h4" Align="Align.Center">
         Service Request Intake
-    </FluentLabel>
+    </MudText>
 
-    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
         To start a service request, please use the location-specific link provided by your dealer
         (e.g., from a QR code or email).
-    </FluentLabel>
+    </MudText>
 
-    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+    <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
         The link format is: <code>/intake/your-location-slug</code>
-    </FluentLabel>
-</FluentStack>
+    </MudText>
+</MudStack>

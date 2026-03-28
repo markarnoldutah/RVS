@@ -3,6 +3,7 @@
   <Project Path="RVS.Cust_Intake.Client/RVS.Cust_Intake.Client.csproj">
     <Build Solution="Debug|*" Project="false" />
   </Project>
+  <Project Path="RVS.Cust_Intake.MudDemo/RVS.Cust_Intake.MudDemo.csproj" />
   <Project Path="RVS.Cust_Intake/RVS.Cust_Intake.csproj">
     <Build Solution="Debug|*" Project="false" />
   </Project>

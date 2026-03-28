@@ -3,20 +3,21 @@
 
 <PageTitle>Error</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
-    <FluentIcon Value="@(new Icons.Regular.Size48.ErrorCircle())" Color="Color.Error" />
+<MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
+    <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
+             Style="font-size: 4rem;" />
 
-    <FluentLabel Typo="Typography.H3" Color="Color.Error">
+    <MudText Typo="Typo.h4" Color="Color.Error" Align="Align.Center">
         An error occurred while processing your request.
-    </FluentLabel>
+    </MudText>
 
     @if (ShowRequestId)
     {
-        <FluentLabel Typo="Typography.Body">
+        <MudText Typo="Typo.body1">
             <strong>Request ID:</strong> <code>@RequestId</code>
-        </FluentLabel>
+        </MudText>
     }
-</FluentStack>
+</MudStack>
 
 @code {
     [CascadingParameter]

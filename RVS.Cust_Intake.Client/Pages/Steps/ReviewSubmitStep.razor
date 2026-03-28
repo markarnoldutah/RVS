@@ -1,164 +1,215 @@
 @using RVS.Cust_Intake.Client.State
 
-<FluentCard Style="width: 100%; padding: 24px;">
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="20">
-        <FluentLabel Typo="Typography.H4">
-            <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Style="margin-right: 8px;" />
-            Review &amp; Submit
-        </FluentLabel>
+<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+    <MudStack Spacing="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">Review &amp; Submit</MudText>
+        </MudStack>
 
-        <FluentLabel Typo="Typography.Body">
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
             Please review your information before submitting.
-        </FluentLabel>
+        </MudText>
 
-        @* Customer Info Section *@
-        <FluentCard Style="width: 100%; padding: 16px;">
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
-                         VerticalAlignment="VerticalAlignment.Center">
-                <FluentLabel Typo="Typography.H5">Contact Information</FluentLabel>
-                <FluentButton Appearance="Appearance.Stealth"
-                              IconStart="@(new Icons.Regular.Size16.Edit())"
-                              OnClick="() => EditStep(2)">
-                    Edit
-                </FluentButton>
-            </FluentStack>
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
-                <FluentLabel Typo="Typography.Body"><strong>Name:</strong> @State.FirstName @State.LastName</FluentLabel>
-                <FluentLabel Typo="Typography.Body"><strong>Email:</strong> @State.Email</FluentLabel>
-                @if (!string.IsNullOrWhiteSpace(State.Phone))
-                {
-                    <FluentLabel Typo="Typography.Body"><strong>Phone:</strong> @State.Phone</FluentLabel>
-                }
-            </FluentStack>
-        </FluentCard>
-
-        @* Vehicle Info Section *@
-        <FluentCard Style="width: 100%; padding: 16px;">
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
-                         VerticalAlignment="VerticalAlignment.Center">
-                <FluentLabel Typo="Typography.H5">Vehicle Information</FluentLabel>
-                <FluentButton Appearance="Appearance.Stealth"
-                              IconStart="@(new Icons.Regular.Size16.Edit())"
-                              OnClick="() => EditStep(3)">
-                    Edit
-                </FluentButton>
-            </FluentStack>
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
-                <FluentLabel Typo="Typography.Body"><strong>VIN:</strong> @State.Vin</FluentLabel>
-                @if (!string.IsNullOrWhiteSpace(State.Manufacturer))
-                {
-                    <FluentLabel Typo="Typography.Body"><strong>Manufacturer:</strong> @State.Manufacturer</FluentLabel>
-                }
-                @if (!string.IsNullOrWhiteSpace(State.Model))
-                {
-                    <FluentLabel Typo="Typography.Body"><strong>Model:</strong> @State.Model</FluentLabel>
-                }
-                @if (State.Year.HasValue)
-                {
-                    <FluentLabel Typo="Typography.Body"><strong>Year:</strong> @State.Year</FluentLabel>
-                }
-            </FluentStack>
-        </FluentCard>
-
-        @* Issue Description Section *@
-        <FluentCard Style="width: 100%; padding: 16px;">
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
-                         VerticalAlignment="VerticalAlignment.Center">
-                <FluentLabel Typo="Typography.H5">Issue Details</FluentLabel>
-                <FluentButton Appearance="Appearance.Stealth"
-                              IconStart="@(new Icons.Regular.Size16.Edit())"
-                              OnClick="() => EditStep(4)">
-                    Edit
-                </FluentButton>
-            </FluentStack>
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
-                <FluentLabel Typo="Typography.Body"><strong>Category:</strong> @State.IssueCategory</FluentLabel>
-                <FluentLabel Typo="Typography.Body"><strong>Description:</strong> @State.IssueDescription</FluentLabel>
-                @if (!string.IsNullOrWhiteSpace(State.Urgency))
-                {
-                    <FluentLabel Typo="Typography.Body"><strong>Urgency:</strong> @State.Urgency</FluentLabel>
-                }
-                @if (!string.IsNullOrWhiteSpace(State.RvUsage))
-                {
-                    <FluentLabel Typo="Typography.Body"><strong>RV Usage:</strong> @State.RvUsage</FluentLabel>
-                }
-            </FluentStack>
-        </FluentCard>
-
-        @* Diagnostic Responses Section *@
-        @if (State.DiagnosticResponses.Count > 0)
-        {
-            <FluentCard Style="width: 100%; padding: 16px;">
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
-                             VerticalAlignment="VerticalAlignment.Center">
-                    <FluentLabel Typo="Typography.H5">Diagnostic Responses</FluentLabel>
-                    <FluentButton Appearance="Appearance.Stealth"
-                                  IconStart="@(new Icons.Regular.Size16.Edit())"
-                                  OnClick="() => EditStep(5)">
-                        Edit
-                    </FluentButton>
-                </FluentStack>
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="margin-top: 8px;">
-                    @foreach (var response in State.DiagnosticResponses)
-                    {
-                        <div>
-                            <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">@response.QuestionText</FluentLabel>
-                            @if (response.SelectedOptions.Count > 0)
+        <MudExpansionPanels MultiExpansion="true">
+            @* Contact Information *@
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1"><strong>Contact Information</strong></MudText>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       OnClick="() => EditStep(2)"
+                                       aria-label="Edit contact info" />
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    <MudSimpleTable Dense="true" Elevation="0">
+                        <tbody>
+                            <tr><td><strong>Name</strong></td><td>@State.FirstName @State.LastName</td></tr>
+                            <tr><td><strong>Email</strong></td><td>@State.Email</td></tr>
+                            @if (!string.IsNullOrWhiteSpace(State.Phone))
                             {
-                                <FluentLabel Typo="Typography.Body">@string.Join(", ", response.SelectedOptions)</FluentLabel>
+                                <tr><td><strong>Phone</strong></td><td>@State.Phone</td></tr>
                             }
-                            @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
+                        </tbody>
+                    </MudSimpleTable>
+                </ChildContent>
+            </MudExpansionPanel>
+
+            @* Vehicle Information *@
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.DirectionsCarFilled" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1"><strong>Vehicle Information</strong></MudText>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       OnClick="() => EditStep(3)"
+                                       aria-label="Edit vehicle info" />
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    <MudSimpleTable Dense="true" Elevation="0">
+                        <tbody>
+                            <tr><td><strong>VIN</strong></td><td>@State.Vin</td></tr>
+                            @if (!string.IsNullOrWhiteSpace(State.Manufacturer))
                             {
-                                <FluentLabel Typo="Typography.Subject">@response.FreeTextResponse</FluentLabel>
+                                <tr><td><strong>Manufacturer</strong></td><td>@State.Manufacturer</td></tr>
                             }
-                        </div>
-                    }
-                </FluentStack>
-            </FluentCard>
-        }
+                            @if (!string.IsNullOrWhiteSpace(State.Model))
+                            {
+                                <tr><td><strong>Model</strong></td><td>@State.Model</td></tr>
+                            }
+                            @if (State.Year.HasValue)
+                            {
+                                <tr><td><strong>Year</strong></td><td>@State.Year</td></tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </ChildContent>
+            </MudExpansionPanel>
 
-        @* Attachments Section *@
-        @if (State.Attachments.Count > 0)
-        {
-            <FluentCard Style="width: 100%; padding: 16px;">
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
-                             VerticalAlignment="VerticalAlignment.Center">
-                    <FluentLabel Typo="Typography.H5">Attachments (@State.Attachments.Count)</FluentLabel>
-                    <FluentButton Appearance="Appearance.Stealth"
-                                  IconStart="@(new Icons.Regular.Size16.Edit())"
-                                  OnClick="() => EditStep(6)">
-                        Edit
-                    </FluentButton>
-                </FluentStack>
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
-                    @foreach (var attachment in State.Attachments)
-                    {
-                        <FluentLabel Typo="Typography.Body">@attachment.FileName (@FormatFileSize(attachment.SizeBytes))</FluentLabel>
-                    }
-                </FluentStack>
-            </FluentCard>
-        }
+            @* Issue Details *@
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Description" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1"><strong>Issue Details</strong></MudText>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       OnClick="() => EditStep(4)"
+                                       aria-label="Edit issue details" />
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    <MudSimpleTable Dense="true" Elevation="0">
+                        <tbody>
+                            <tr><td><strong>Category</strong></td><td>@State.IssueCategory</td></tr>
+                            <tr><td><strong>Description</strong></td><td>@State.IssueDescription</td></tr>
+                            @if (!string.IsNullOrWhiteSpace(State.Urgency))
+                            {
+                                <tr><td><strong>Urgency</strong></td><td>@State.Urgency</td></tr>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(State.RvUsage))
+                            {
+                                <tr><td><strong>RV Usage</strong></td><td>@State.RvUsage</td></tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </ChildContent>
+            </MudExpansionPanel>
 
-        @* Submit Button *@
+            @* Diagnostic Responses *@
+            @if (State.DiagnosticResponses.Count > 0)
+            {
+                <MudExpansionPanel Expanded="true">
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Primary" Size="Size.Small" />
+                            <MudText Typo="Typo.subtitle1"><strong>Diagnostic Responses</strong></MudText>
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           Color="Color.Primary"
+                                           OnClick="() => EditStep(5)"
+                                           aria-label="Edit diagnostic responses" />
+                        </MudStack>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudStack Spacing="3">
+                            @foreach (var response in State.DiagnosticResponses)
+                            {
+                                <div>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">
+                                        @response.QuestionText
+                                    </MudText>
+                                    @if (response.SelectedOptions.Count > 0)
+                                    {
+                                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
+                                            @foreach (var option in response.SelectedOptions)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Primary"
+                                                         Variant="Variant.Outlined">
+                                                    @option
+                                                </MudChip>
+                                            }
+                                        </MudStack>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                            @response.FreeTextResponse
+                                        </MudText>
+                                    }
+                                </div>
+                            }
+                        </MudStack>
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
+
+            @* Attachments *@
+            @if (State.Attachments.Count > 0)
+            {
+                <MudExpansionPanel Expanded="true">
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" Size="Size.Small" />
+                            <MudText Typo="Typo.subtitle1">
+                                <strong>Attachments (@State.Attachments.Count)</strong>
+                            </MudText>
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           Color="Color.Primary"
+                                           OnClick="() => EditStep(6)"
+                                           aria-label="Edit attachments" />
+                        </MudStack>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudStack Spacing="1">
+                            @foreach (var attachment in State.Attachments)
+                            {
+                                <MudText Typo="Typo.body2">
+                                    📎 @attachment.FileName (@FormatFileSize(attachment.SizeBytes))
+                                </MudText>
+                            }
+                        </MudStack>
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+
+        @* Submit error *@
         @if (_submitError is not null)
         {
-            <FluentMessageBar Intent="MessageIntent.Error">
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" role="alert">
                 @_submitError
-            </FluentMessageBar>
+            </MudAlert>
         }
 
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
-                     HorizontalAlignment="HorizontalAlignment.Center" Style="width: 100%; margin-top: 8px;">
-            <FluentButton Appearance="Appearance.Accent"
-                          Style="min-width: 200px;"
-                          Disabled="_isSubmitting"
-                          IconStart="@(new Icons.Regular.Size20.Send())"
-                          OnClick="HandleSubmit">
+        @* Submit button *@
+        <MudStack AlignItems="AlignItems.Center" Class="mt-4">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Size="Size.Large"
+                       StartIcon="@Icons.Material.Filled.Send"
+                       Disabled="_isSubmitting"
+                       OnClick="HandleSubmit"
+                       Style="text-transform: none; min-width: 250px;">
                 @(_isSubmitting ? "Submitting..." : "Submit Service Request")
-            </FluentButton>
-        </FluentStack>
-    </FluentStack>
-</FluentCard>
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
@@ -206,13 +257,10 @@
         }
     }
 
-    private static string FormatFileSize(long bytes)
+    private static string FormatFileSize(long bytes) => bytes switch
     {
-        return bytes switch
-        {
-            < 1024 => $"{bytes} B",
-            < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
-            _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
-        };
-    }
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+        _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
+    };
 }

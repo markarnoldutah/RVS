@@ -145,3 +145,45 @@ All feature implementation MUST follow Red → Green → Refactor. This is not o
 - Never write production code without a failing test first
 - Never modify a failing test to make it pass — fix the implementation
 - Never skip the Refactor phase — guard clauses, trimming, and naming must comply with these instructions
+
+## Blazor Frontend
+
+### UI Component Library — MudBlazor
+
+All Blazor frontend projects (`RVS.Cust_Intake`, `RVS.Cust_Intake.Client`, `RVS.Mngr_Desktop`, `RVS.Tech_Mobile`) use **MudBlazor 9.x** (Material Design 3). Do not use Microsoft.FluentUI.AspNetCore.Components.
+
+### Setup (per project)
+- `wwwroot/index.html` (WASM) or `App.razor` (hosted): link `MudBlazor.min.css`, Roboto font, `MudBlazor.min.js`
+- `Program.cs`: call `builder.Services.AddMudServices()`
+- `_Imports.razor`: add `@using MudBlazor`
+- Root layout: wrap body content in `<MudThemeProvider>`, `<MudPopoverProvider>`, `<MudDialogProvider>`, `<MudSnackbarProvider>`
+
+### Theme
+- Define a single `MudTheme` in `MainLayout.razor` with `PaletteLight` (Primary `#1565C0`, Secondary `#00897B`)
+- Apply `<MudThemeProvider Theme="_theme" />` — never inline ad-hoc colours
+
+### Component Conventions
+- Layout: `MudLayout` → `MudAppBar` → `MudMainContent`
+- Typography: `<MudText Typo="Typo.h3">` (not `<h3>` raw HTML for headings in components)
+- Cards / surfaces: `<MudPaper Elevation="2">` for containers; `<MudCard>` / `<MudCardContent>` for content cards
+- Stacks: `<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">`
+- Buttons: `Variant.Filled` + `Color.Primary` for primary CTA; `Variant.Outlined` for secondary; `Variant.Text` for tertiary
+- Text inputs: always `Variant.Outlined` with `Label=` for floating labels; use `Adornment` for icons
+- Selects: `<MudSelect>` / `<MudSelectItem T="string">`
+- Alerts / banners: `<MudAlert Severity="Severity.Error|Warning|Info|Success">`
+- Icons: `@Icons.Material.Filled.*` or `@Icons.Material.Outlined.*`
+- B adges / chips: `<MudChip T="string">`
+- Skeletons: `<MudSkeleton SkeletonType="SkeletonType.Text|Rectangle">`
+- Expansion panels: `<MudExpansionPanel Expanded="true">` (not `IsInitiallyExpanded` — removed in v9)
+- Icon buttons: use `aria-label="..."` (not `Title=` — removed in v9)
+- File upload: overlay a hidden `<InputFile>` absolutely on a dashed `<MudPaper>` drop zone — `MudFileUpload` template fragments were removed in v9
+
+### MudBlazor v9 Breaking-Change Notes
+- `MudExpansionPanel.IsInitiallyExpanded` → `Expanded`
+- `MudIconButton.Title` → `aria-label` attribute
+- `MudFileUpload` activator/button template fragments removed — use hidden `<InputFile>` overlay
+- `MudFileUpload.InputStyle` obsolete — remove it
+- Complex C# expressions in `Style=` Razor attributes cause RZ9986 — extract to a C# helper method in `@code`
+
+### `RVS.Cust_Intake.MudDemo`
+This project is the approved MudBlazor prototype for the full wizard flow. Use it as the reference implementation when migrating or building new pages in `RVS.Cust_Intake` and `RVS.Cust_Intake.Client`.

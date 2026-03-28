@@ -1,116 +1,123 @@
 @using RVS.Cust_Intake.Client.State
 @using Microsoft.AspNetCore.Components.Forms
 
-<FluentCard Style="width: 100%; padding: 24px;">
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentLabel Typo="Typography.H4">
-            <FluentIcon Value="@(new Icons.Regular.Size20.Attach())" Style="margin-right: 8px;" />
-            Attachments
-        </FluentLabel>
+<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+    <MudStack Spacing="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">Attachments</MudText>
+        </MudStack>
 
-        <FluentLabel Typo="Typography.Body">
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
             Upload photos or videos of the issue. Drag and drop files or use the button below.
-        </FluentLabel>
+        </MudText>
 
         @if (State.Config is not null)
         {
-            <FluentLabel Typo="Typography.Subject" Color="Color.Neutral">
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
                 Max @State.Config.MaxAttachments files, up to @State.Config.MaxFileSizeMb MB each.
                 Accepted: @string.Join(", ", State.Config.AcceptedFileTypes)
-            </FluentLabel>
+            </MudText>
         }
         else
         {
-            <FluentLabel Typo="Typography.Subject" Color="Color.Neutral">
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
                 Max 10 files, up to 25 MB each.
-            </FluentLabel>
+            </MudText>
         }
 
-        <div class="drop-zone @(_isDragOver ? "drag-over" : "")"
-             @ondragenter="HandleDragEnter"
-             @ondragover="HandleDragOver"
-             @ondragover:preventDefault="true"
-             @ondragleave="HandleDragLeave"
-             style="border: 2px dashed var(--neutral-stroke-rest); border-radius: 8px; padding: 32px; text-align: center; cursor: pointer;">
-
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" HorizontalAlignment="HorizontalAlignment.Center">
-                <FluentIcon Value="@(new Icons.Regular.Size32.ArrowUpload())" Color="Color.Accent" />
-                <FluentLabel Typo="Typography.Body">
-                    Drag files here or click to browse
-                </FluentLabel>
-                <InputFile OnChange="HandleFilesSelected"
-                           multiple
-                           accept="@AcceptedTypes"
-                           style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer;" />
-            </FluentStack>
-        </div>
+        <MudPaper Elevation="0" Outlined="true"
+                  Class="pa-8 d-flex flex-column align-center justify-center"
+                  Style="border-style: dashed; border-width: 2px; min-height: 140px; cursor: pointer;
+                         border-color: var(--mud-palette-primary); position: relative;">
+            <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Primary"
+                     Style="font-size: 3rem;" />
+            <MudText Typo="Typo.body1" Class="mt-2">
+                Drag files here or click to browse
+            </MudText>
+            <InputFile OnChange="HandleFilesSelected"
+                       multiple
+                       accept="@AcceptedTypes"
+                       style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0;" />
+        </MudPaper>
 
         @if (State.Attachments.Count > 0)
         {
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="width: 100%;">
+            <MudStack Spacing="2">
                 @foreach (var file in State.Attachments)
                 {
-                    <FluentCard Style="width: 100%; padding: 8px;">
-                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
-                            <FluentIcon Value="@GetFileIcon(file.ContentType)" />
-                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="2" Style="flex: 1;">
-                                <FluentLabel Typo="Typography.Body">@file.FileName</FluentLabel>
-                                <FluentLabel Typo="Typography.Subject" Color="Color.Neutral">
+                    <MudPaper Elevation="1" Class="pa-3">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@GetFileIcon(file.ContentType)" Color="Color.Primary" />
+                            <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
+                                <MudText Typo="Typo.body2" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                    @file.FileName
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
                                     @FormatFileSize(file.SizeBytes)
-                                </FluentLabel>
-                            </FluentStack>
+                                </MudText>
+                            </MudStack>
 
                             @if (!string.IsNullOrWhiteSpace(file.ErrorMessage))
                             {
-                                <FluentBadge Appearance="Appearance.Lightweight" Color="Color.Error">Error</FluentBadge>
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Text">
+                                    Error
+                                </MudChip>
                             }
                             else if (file.IsUploaded)
                             {
-                                <FluentBadge Appearance="Appearance.Lightweight" Color="Color.Success">Ready</FluentBadge>
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">
+                                    Ready
+                                </MudChip>
                             }
 
-                            <FluentButton Appearance="Appearance.Stealth"
-                                          IconStart="@(new Icons.Regular.Size16.Delete())"
-                                          OnClick="() => RemoveFile(file)"
-                                          Title="Remove file" />
-                        </FluentStack>
-                    </FluentCard>
+                            <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="() => RemoveFile(file)"
+                                           aria-label="Remove file" />
+                        </MudStack>
+                    </MudPaper>
                 }
-            </FluentStack>
+            </MudStack>
         }
 
         @if (_fileErrors.Count > 0)
         {
-            <FluentMessageBar Intent="MessageIntent.Warning">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
                 <ul style="margin: 0; padding-left: 16px;">
                     @foreach (var error in _fileErrors)
                     {
                         <li>@error</li>
                     }
                 </ul>
-            </FluentMessageBar>
+            </MudAlert>
         }
 
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
-                     HorizontalAlignment="HorizontalAlignment.Right" Style="width: 100%; margin-top: 8px;">
-            <FluentButton Appearance="Appearance.Neutral" OnClick="HandleBack"
-                          IconStart="@(new Icons.Regular.Size16.ArrowLeft())">
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="HandleBack"
+                       Style="text-transform: none;">
                 Back
-            </FluentButton>
-            <FluentButton Appearance="Appearance.Accent" OnClick="HandleNext"
-                          IconEnd="@(new Icons.Regular.Size16.ArrowRight())">
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       EndIcon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="HandleNext"
+                       Style="text-transform: none;">
                 Next
-            </FluentButton>
-        </FluentStack>
-    </FluentStack>
-</FluentCard>
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
     [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
 
-    private bool _isDragOver;
     private List<string> _fileErrors = [];
 
     private static readonly HashSet<string> AllowedMimeTypes =
@@ -127,13 +134,8 @@
     private int MaxAttachments => State.Config?.MaxAttachments ?? 10;
     private int MaxFileSizeMb => State.Config?.MaxFileSizeMb ?? 25;
 
-    private void HandleDragEnter() => _isDragOver = true;
-    private void HandleDragOver() { }
-    private void HandleDragLeave() => _isDragOver = false;
-
     private void HandleFilesSelected(InputFileChangeEventArgs e)
     {
-        _isDragOver = false;
         _fileErrors = [];
 
         var remainingSlots = MaxAttachments - State.Attachments.Count;
@@ -183,24 +185,19 @@
         StateHasChanged();
     }
 
-    private static Icon GetFileIcon(string contentType)
+    private static string GetFileIcon(string contentType)
     {
-        if (contentType.StartsWith("image/"))
-            return new Icons.Regular.Size16.Image();
-        if (contentType.StartsWith("video/"))
-            return new Icons.Regular.Size16.Video();
-        return new Icons.Regular.Size16.Document();
+        if (contentType.StartsWith("image/")) return Icons.Material.Filled.Image;
+        if (contentType.StartsWith("video/")) return Icons.Material.Filled.VideoFile;
+        return Icons.Material.Filled.InsertDriveFile;
     }
 
-    private static string FormatFileSize(long bytes)
+    private static string FormatFileSize(long bytes) => bytes switch
     {
-        return bytes switch
-        {
-            < 1024 => $"{bytes} B",
-            < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
-            _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
-        };
-    }
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+        _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
+    };
 
     private async Task HandleNext()
     {

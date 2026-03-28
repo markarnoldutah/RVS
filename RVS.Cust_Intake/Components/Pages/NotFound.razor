@@ -3,24 +3,23 @@
 
 <PageTitle>Page Not Found</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
-    <FluentIcon Value="@(new Icons.Regular.Size48.QuestionCircle())" Color="Color.Neutral" />
+<MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
+    <MudIcon Icon="@Icons.Material.Filled.HelpOutline" Color="Color.Default"
+             Style="font-size: 4rem;" />
 
-    <FluentLabel Typo="Typography.H3">
+    <MudText Typo="Typo.h4" Align="Align.Center">
         Page Not Found
-    </FluentLabel>
+    </MudText>
 
-    <FluentLabel Typo="Typography.Body">
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
         Sorry, the content you are looking for does not exist.
-    </FluentLabel>
+    </MudText>
 
-    <FluentButton Appearance="Appearance.Accent"
-                  IconStart="@(new Icons.Regular.Size20.Home())"
-                  OnClick="@(() => Navigation.NavigateTo("/"))">
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Home"
+               Href="/"
+               Style="text-transform: none;">
         Return Home
-    </FluentButton>
-</FluentStack>
-
-@code {
-    [Inject] private NavigationManager Navigation { get; set; } = default!;
-}
+    </MudButton>
+</MudStack>

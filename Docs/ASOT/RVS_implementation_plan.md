@@ -42,7 +42,7 @@ The repo contains a fully implemented **healthcare benefits verification system*
 | Cosmos DI registration pattern | ✅ Copy pattern | Same singleton client, scoped repos |
 | Mapper convention (static extension methods) | ✅ Copy pattern | Same `ToDetailDto()`, `ToEntity()` convention |
 | DTOs as records pattern | ✅ Copy pattern | Same naming convention |
-| Blazor WASM project structure | ✅ Fork for `Cust_Intake` | Auth, HttpClient, FluentUI already wired |
+| Blazor WASM project structure | ✅ Fork for `Cust_Intake` | Auth, HttpClient, MudBlazor already wired |
 
 ### 1.2 What Must Be Built New
 
@@ -473,7 +473,7 @@ Create `RVS.UI.Shared` as the shared foundation consumed by all three frontends:
 
 Create `RVS.Cust_Intake` as Blazor WebAssembly:
 - Remove healthcare check-in components from forked project
-- Keep: FluentUI, HttpClient setup, layout skeleton
+- Keep: MudBlazor, HttpClient setup, layout skeleton
 - Update `Program.cs`: anonymous HttpClient (no Auth0 OIDC), pointing to RVS.API
 - Configure mixed render modes per FrontEnd Solution doc:
   - **Static SSR:** landing page, confirmation page, status page
@@ -525,7 +525,7 @@ Build the core intake experience. Each step is a separate Razor component with s
 Create `RVS.Mngr_Desktop` as Blazor WebAssembly (Standalone):
 - Auth0 OIDC authentication (PKCE flow) via `Microsoft.AspNetCore.Components.WebAssembly.Authentication`
 - `HttpClient` with Bearer token injection via `AuthorizationMessageHandler`
-- FluentUI component library
+- MudBlazor component library
 - Reference `RVS.UI.Shared` for shared components and API clients
 - Same hosting model as `Cust_Intake` — deployed to Azure Static Web Apps, cached after first load
 

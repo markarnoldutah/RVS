@@ -1,62 +1,76 @@
 @using RVS.Cust_Intake.Client.State
 @using RVS.UI.Shared.Validation
 
-<FluentCard Style="width: 100%; padding: 24px;">
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentLabel Typo="Typography.H4">
-            <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Style="margin-right: 8px;" />
-            Contact Information
-        </FluentLabel>
+<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+    <MudStack Spacing="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">Contact Information</MudText>
+        </MudStack>
 
         @if (State.IsPrefilled)
         {
-            <FluentMessageBar Intent="MessageIntent.Success">
+            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
                 Your information has been pre-filled from your previous visit.
-            </FluentMessageBar>
+            </MudAlert>
         }
 
-        <FluentTextField @bind-Value="State.FirstName"
-                         Label="First Name"
-                         Required="true"
-                         Placeholder="Enter your first name"
-                         Autocomplete="given-name"
-                         Style="width: 100%;" />
+        <MudTextField @bind-Value="State.FirstName"
+                      Label="First Name"
+                      Required="true"
+                      RequiredError="First name is required"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Badge"
+                      autocomplete="given-name" />
 
-        <FluentTextField @bind-Value="State.LastName"
-                         Label="Last Name"
-                         Required="true"
-                         Placeholder="Enter your last name"
-                         Autocomplete="family-name"
-                         Style="width: 100%;" />
+        <MudTextField @bind-Value="State.LastName"
+                      Label="Last Name"
+                      Required="true"
+                      RequiredError="Last name is required"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Badge"
+                      autocomplete="family-name" />
 
-        <FluentTextField @bind-Value="State.Email"
-                         Label="Email"
-                         Required="true"
-                         TextFieldType="TextFieldType.Email"
-                         Placeholder="you@example.com"
-                         Autocomplete="email"
-                         Style="width: 100%;" />
+        <MudTextField @bind-Value="State.Email"
+                      Label="Email"
+                      Required="true"
+                      RequiredError="Email is required"
+                      InputType="InputType.Email"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Email"
+                      Placeholder="you@example.com"
+                      autocomplete="email" />
 
-        <FluentTextField @bind-Value="State.Phone"
-                         Label="Phone (optional)"
-                         TextFieldType="TextFieldType.Tel"
-                         Placeholder="(555) 123-4567"
-                         Autocomplete="tel"
-                         Style="width: 100%;" />
+        <MudTextField @bind-Value="State.Phone"
+                      Label="Phone (optional)"
+                      InputType="InputType.Telephone"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Phone"
+                      Placeholder="(555) 123-4567"
+                      autocomplete="tel" />
 
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
-                     HorizontalAlignment="HorizontalAlignment.Right" Style="width: 100%; margin-top: 8px;">
-            <FluentButton Appearance="Appearance.Neutral" OnClick="HandleBack"
-                          IconStart="@(new Icons.Regular.Size16.ArrowLeft())">
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="HandleBack"
+                       Style="text-transform: none;">
                 Back
-            </FluentButton>
-            <FluentButton Appearance="Appearance.Accent" OnClick="HandleNext"
-                          IconEnd="@(new Icons.Regular.Size16.ArrowRight())">
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       EndIcon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="HandleNext"
+                       Style="text-transform: none;">
                 Next
-            </FluentButton>
-        </FluentStack>
-    </FluentStack>
-</FluentCard>
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;

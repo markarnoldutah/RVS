@@ -2,23 +2,26 @@
 
 <PageTitle>Request Submitted</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalGap="20" HorizontalAlignment="HorizontalAlignment.Center">
-    <FluentIcon Value="@(new Icons.Regular.Size48.CheckmarkCircle())" Color="Color.Success" />
+<MudStack AlignItems="AlignItems.Center" Spacing="5" Class="mt-8">
+    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success"
+             Style="font-size: 5rem;" />
 
-    <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+    <MudText Typo="Typo.h3" Align="Align.Center" GutterBottom="true">
         Request Submitted Successfully
-    </FluentLabel>
+    </MudText>
 
-    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
-        Your service request has been submitted. You will receive a confirmation number shortly.
-    </FluentLabel>
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+        Your service request has been submitted. You will receive a confirmation email shortly.
+    </MudText>
 
-    <FluentButton Appearance="Appearance.Accent"
-                  IconStart="@(new Icons.Regular.Size20.Home())"
-                  OnClick="@(() => Navigation.NavigateTo("/"))">
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Home"
+               Href="/"
+               Style="text-transform: none;">
         Return Home
-    </FluentButton>
-</FluentStack>
+    </MudButton>
+</MudStack>
 
 @code {
     [Inject] private NavigationManager Navigation { get; set; } = default!;

@@ -1,67 +1,83 @@
 @using RVS.Cust_Intake.Client.State
 @using RVS.UI.Shared.Validation
 
-<FluentCard Style="width: 100%; padding: 24px;">
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentLabel Typo="Typography.H4">
-            <FluentIcon Value="@(new Icons.Regular.Size20.VehicleTruckProfile())" Style="margin-right: 8px;" />
-            Vehicle Information
-        </FluentLabel>
+<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+    <MudStack Spacing="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.DirectionsCarFilled" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">Vehicle Information</MudText>
+        </MudStack>
 
-        <FluentTextField @bind-Value="State.Vin"
-                         Label="VIN (Vehicle Identification Number)"
-                         Required="true"
-                         Placeholder="17-character VIN"
-                         MaxLength="17"
-                         Style="width: 100%;" />
+        <MudTextField @bind-Value="State.Vin"
+                      Label="VIN (Vehicle Identification Number)"
+                      Required="true"
+                      RequiredError="VIN is required"
+                      MaxLength="17"
+                      Counter="17"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Pin"
+                      Placeholder="17-character VIN"
+                      HelperText="Enter the 17-character Vehicle Identification Number" />
 
         @if (!string.IsNullOrWhiteSpace(State.Vin))
         {
             var vinResult = ClientVinValidator.Validate(State.Vin);
             if (vinResult.IsValid)
             {
-                <FluentMessageBar Intent="MessageIntent.Success">
+                <MudAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true">
                     VIN format is valid.
-                </FluentMessageBar>
+                </MudAlert>
             }
             else if (State.Vin.Length == 17)
             {
-                <FluentMessageBar Intent="MessageIntent.Warning">
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
                     @vinResult.ErrorMessage
-                </FluentMessageBar>
+                </MudAlert>
             }
         }
 
-        <FluentTextField @bind-Value="State.Manufacturer"
-                         Label="Manufacturer (optional)"
-                         Placeholder="e.g., Winnebago, Thor, Jayco"
-                         Style="width: 100%;" />
+        <MudTextField @bind-Value="State.Manufacturer"
+                      Label="Manufacturer (optional)"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Factory"
+                      Placeholder="e.g., Winnebago, Thor, Jayco" />
 
-        <FluentTextField @bind-Value="State.Model"
-                         Label="Model (optional)"
-                         Placeholder="e.g., Vista, Aria, Eagle"
-                         Style="width: 100%;" />
+        <MudTextField @bind-Value="State.Model"
+                      Label="Model (optional)"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.DirectionsCar"
+                      Placeholder="e.g., Vista, Aria, Eagle" />
 
-        <FluentNumberField @bind-Value="State.Year"
-                           Label="Year (optional)"
-                           Placeholder="e.g., 2023"
-                           Min="@("1900")"
-                           Max="@((DateTime.UtcNow.Year + 2).ToString())"
-                           Style="width: 100%;" />
+        <MudNumericField @bind-Value="State.Year"
+                         Label="Year (optional)"
+                         Variant="Variant.Outlined"
+                         Adornment="Adornment.Start"
+                         AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                         Placeholder="e.g., 2023"
+                         Min="1900"
+                         Max="@(DateTime.UtcNow.Year + 2)" />
 
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
-                     HorizontalAlignment="HorizontalAlignment.Right" Style="width: 100%; margin-top: 8px;">
-            <FluentButton Appearance="Appearance.Neutral" OnClick="HandleBack"
-                          IconStart="@(new Icons.Regular.Size16.ArrowLeft())">
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="HandleBack"
+                       Style="text-transform: none;">
                 Back
-            </FluentButton>
-            <FluentButton Appearance="Appearance.Accent" OnClick="HandleNext"
-                          IconEnd="@(new Icons.Regular.Size16.ArrowRight())">
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       EndIcon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="HandleNext"
+                       Style="text-transform: none;">
                 Next
-            </FluentButton>
-        </FluentStack>
-    </FluentStack>
-</FluentCard>
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;

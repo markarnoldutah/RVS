@@ -3,7 +3,7 @@ GET /
      └─ MapRazorComponents<App>()
          └─ App.razor  [HTML shell, SSR]
              └─ Routes.razor  [Router scans server + client assemblies]
-                 └─ MainLayout.razor  [FluentUI chrome, SSR]
+                 └─ MainLayout.razor  [MudBlazor chrome, SSR]
                      └─ Home.razor  [Static SSR — no rendermode]
                          └─ <WasmPreload />  ← modulepreload hint fires
  └─ Complete HTML sent to browser

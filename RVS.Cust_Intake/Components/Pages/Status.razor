@@ -2,28 +2,35 @@
 
 <PageTitle>Check Request Status</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalGap="20" HorizontalAlignment="HorizontalAlignment.Center">
-    <FluentIcon Value="@(new Icons.Regular.Size48.Search())" Color="Color.Accent" />
+<MudStack AlignItems="AlignItems.Center" Spacing="5" Class="mt-8">
+    <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Primary"
+             Style="font-size: 4rem;" />
 
-    <FluentLabel Typo="Typography.H3" Alignment="HorizontalAlignment.Center">
+    <MudText Typo="Typo.h4" Align="Align.Center">
         Check Request Status
-    </FluentLabel>
+    </MudText>
 
-    <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
         Enter your confirmation number to view the status of your service request.
-    </FluentLabel>
+    </MudText>
 
-    <FluentTextField @bind-Value="_confirmationNumber"
-                     Placeholder="Confirmation number"
-                     Style="max-width: 400px; width: 100%;" />
+    <MudTextField @bind-Value="_confirmationNumber"
+                  Label="Confirmation Number"
+                  Variant="Variant.Outlined"
+                  Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.ConfirmationNumber"
+                  Placeholder="e.g., SR-2026-00742"
+                  Style="max-width: 400px; width: 100%;" />
 
-    <FluentButton Appearance="Appearance.Accent"
-                  IconStart="@(new Icons.Regular.Size20.Search())"
-                  Disabled="@string.IsNullOrWhiteSpace(_confirmationNumber)"
-                  OnClick="LookupStatus">
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Search"
+               Disabled="@string.IsNullOrWhiteSpace(_confirmationNumber)"
+               OnClick="LookupStatus"
+               Style="text-transform: none; min-width: 200px;">
         Look Up Status
-    </FluentButton>
-</FluentStack>
+    </MudButton>
+</MudStack>
 
 @code {
     [Inject] private NavigationManager Navigation { get; set; } = default!;

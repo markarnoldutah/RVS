@@ -6,42 +6,64 @@
 
 <PageTitle>Service Request Intake — @(_state.Config?.LocationName ?? "Loading...")</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center"
-             Style="max-width: 700px; margin: 0 auto; padding: 16px;">
+<MudStack AlignItems="AlignItems.Center" Spacing="4"
+          Style="max-width: 700px; margin: 0 auto;">
 
+    @* Step progress indicator — visible on steps 2–6 *@
     @if (_state.CurrentStep > 1 && _state.CurrentStep < 7)
     {
-        <div role="progressbar" aria-valuenow="@_state.CurrentStep" aria-valuemin="1" aria-valuemax="@_state.TotalSteps"
-             aria-label="Step @_state.CurrentStep of @_state.TotalSteps"
-             style="display: flex; align-items: center; gap: 6px; width: 100%; justify-content: center;">
-            @for (var i = 1; i <= _state.TotalSteps; i++)
-            {
-                var step = i;
-                <div style="width: @(step == _state.CurrentStep ? "28px" : "10px"); height: 10px;
-                            border-radius: 5px;
-                            background: @(step <= _state.CurrentStep ? "var(--accent-fill-rest, #0F6CBD)"
-                                        : "var(--neutral-stroke-rest, #E1DFDD)");
-                            transition: all 0.3s ease;"></div>
-            }
-        </div>
-        <FluentLabel Typo="Typography.Body" Alignment="HorizontalAlignment.Center">
-            Step @_state.CurrentStep of @_state.TotalSteps
-        </FluentLabel>
+        <MudPaper Elevation="0" Class="pa-3" Style="width: 100%; background: transparent;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="0">
+                @for (var i = 1; i <= _state.TotalSteps; i++)
+                {
+                    var step = i;
+                    @if (i > 1)
+                    {
+                        <div style="width: 28px; height: 2px;
+                                    background: @(step <= _state.CurrentStep
+                                        ? "var(--mud-palette-primary)"
+                                        : "var(--mud-palette-lines-default)");
+                                    transition: background 0.3s ease;"
+                             aria-hidden="true"></div>
+                    }
+                    <MudAvatar Size="Size.Small"
+                               Style="@GetStepStyle(step)"
+                               Color="@(step <= _state.CurrentStep ? Color.Primary : Color.Default)"
+                               Variant="@(step <= _state.CurrentStep ? Variant.Filled : Variant.Outlined)"
+                               aria-label="@($"Step {step}{(step < _state.CurrentStep ? " completed" : step == _state.CurrentStep ? " current" : "")}")">
+                        @if (step < _state.CurrentStep)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                        }
+                        else
+                        {
+                            @step
+                        }
+                    </MudAvatar>
+                }
+            </MudStack>
+            <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-2">
+                Step @_state.CurrentStep of @_state.TotalSteps
+            </MudText>
+        </MudPaper>
     }
 
+    @* Validation errors *@
     @if (_validationErrors.Count > 0)
     {
-        <FluentMessageBar Intent="MessageIntent.Error" Style="width: 100%;">
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-2" Style="width: 100%;"
+                  role="alert">
             <ul style="margin: 0; padding-left: 16px;">
                 @foreach (var error in _validationErrors)
                 {
                     <li>@error</li>
                 }
             </ul>
-        </FluentMessageBar>
+        </MudAlert>
     }
 
-    <div class="wizard-step" @key="_state.CurrentStep">
+    @* Wizard step content *@
+    <div style="width: 100%;" @key="_state.CurrentStep" class="wizard-step">
         @switch (_state.CurrentStep)
         {
             case 1:
@@ -80,7 +102,7 @@
                 break;
         }
     </div>
-</FluentStack>
+</MudStack>
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
@@ -91,7 +113,13 @@
 
     private List<string> _validationErrors = [];
 
-    private int StepProgress => (_state.CurrentStep - 1) * 100 / (_state.TotalSteps - 1);
+    private string GetStepStyle(int step)
+    {
+        var baseStyle = "width:32px;height:32px;font-size:0.8rem;transition:all 0.3s ease;";
+        return step == _state.CurrentStep
+            ? baseStyle + "box-shadow: 0 0 0 3px var(--mud-palette-primary-lighten);"
+            : baseStyle;
+    }
 
     protected override void OnInitialized()
     {
