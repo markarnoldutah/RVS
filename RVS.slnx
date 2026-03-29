@@ -3,12 +3,6 @@
   <Project Path="RVS.Blazor.Intake/RVS.Blazor.Intake.csproj">
     <Build Solution="Debug|*" Project="false" />
   </Project>
-  <Project Path="RVS.Cust_Intake.Client/RVS.Cust_Intake.Client.csproj">
-    <Build Solution="Debug|*" Project="false" />
-  </Project>
-  <Project Path="RVS.Cust_Intake/RVS.Cust_Intake.csproj">
-    <Build Solution="Debug|*" Project="false" />
-  </Project>
   <Project Path="RVS.Data.Cosmos.Seed/RVS.Data.Cosmos.Seed.csproj" />
   <Project Path="RVS.Domain/RVS.Domain.csproj" Id="f0820481-269c-4025-8f65-7dc70c6f2ae2" />
   <Project Path="RVS.Infra.AzBlobRepository/RVS.Infra.AzBlobRepository.csproj" />

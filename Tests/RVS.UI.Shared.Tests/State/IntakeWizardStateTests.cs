@@ -1,5 +1,5 @@
 using FluentAssertions;
-using RVS.Cust_Intake.Client.State;
+using RVS.Blazor.Intake.State;
 using RVS.Domain.DTOs;
 
 namespace RVS.UI.Shared.Tests.State;
