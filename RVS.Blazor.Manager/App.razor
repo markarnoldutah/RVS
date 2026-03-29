@@ -1,0 +1,55 @@
+@inject NavigationManager Navigation
+
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <UnauthorizedAccess />
+                }
+                else
+                {
+                    <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
+                        <MudPaper Elevation="2" Class="pa-8 text-center" Style="max-width: 500px; width: 100%;">
+                            <MudIcon Icon="@Icons.Material.Filled.Block"
+                                     Color="Color.Error" Size="Size.Large" Class="mb-4"
+                                     aria-hidden="true" />
+                            <MudText Typo="Typo.h5" Class="mb-2">Access Denied</MudText>
+                            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4" role="alert">
+                                You are not authorized to access this resource.
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                                       Href="/">
+                                Return to Home
+                            </MudButton>
+                        </MudPaper>
+                    </MudContainer>
+                }
+            </NotAuthorized>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
+                <MudPaper Elevation="2" Class="pa-8 text-center" Style="max-width: 500px; width: 100%;">
+                    <MudIcon Icon="@Icons.Material.Filled.HelpOutline"
+                             Color="Color.Default" Size="Size.Large" Class="mb-4"
+                             aria-hidden="true" />
+                    <MudText Typo="Typo.h5" Class="mb-2">Page Not Found</MudText>
+                    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4" role="alert">
+                        Sorry, there's nothing at this address.
+                    </MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Home"
+                               Href="/">
+                        Go to Home
+                    </MudButton>
+                </MudPaper>
+            </MudContainer>
+        </LayoutView>
+    </NotFound>
+</Router>

@@ -50,7 +50,9 @@ else
                     "https://localhost:7116",
                     "http://localhost:5236",
                     "https://localhost:7200",
-                    "http://localhost:5200"
+                    "http://localhost:5200",
+                    "https://localhost:7300",
+                    "http://localhost:5300"
                 )
                 .AllowAnyHeader()
                 .AllowAnyMethod()

@@ -1,0 +1,49 @@
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject NavigationManager Navigation
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
+    <MudPaper Elevation="2" Class="pa-8 text-center" Style="max-width: 500px; width: 100%;">
+        <MudIcon Icon="@Icons.Material.Filled.Lock"
+                 Color="Color.Primary" Size="Size.Large" Class="mb-4"
+                 aria-hidden="true" />
+        <MudText Typo="Typo.h5" Class="mb-2">Authentication Required</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+            You need to sign in to access this page.
+        </MudText>
+        <MudStack Row="true" Justify="Justify.Center" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Person"
+                       OnClick="BeginLogin">
+                Sign In
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.Home"
+                       OnClick="GoHome">
+                Go to Home
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    [Parameter]
+    public string? ReturnUrl { get; set; }
+
+    private void BeginLogin()
+    {
+        var returnUrl = ReturnUrl ?? Navigation.Uri;
+
+        var requestOptions = new InteractiveRequestOptions
+        {
+            Interaction = InteractionType.SignIn,
+            ReturnUrl = returnUrl
+        };
+
+        Navigation.NavigateToLogin("authentication/login", requestOptions);
+    }
+
+    private void GoHome()
+    {
+        Navigation.NavigateTo("/");
+    }
+}

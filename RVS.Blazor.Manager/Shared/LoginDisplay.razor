@@ -1,0 +1,81 @@
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject NavigationManager Navigation
+
+<AuthorizeView>
+    <Authorized Context="authState">
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                 aria-label="User menu">
+            <ActivatorContent>
+                <MudAvatar Color="Color.Secondary" Size="Size.Small"
+                           aria-label="@GetDisplayName(authState)">
+                    @GetUserInitials(authState)
+                </MudAvatar>
+            </ActivatorContent>
+            <ChildContent>
+                <MudMenuItem Disabled="true">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.subtitle2">@GetDisplayName(authState)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@GetUserEmail(authState)</MudText>
+                    </MudStack>
+                </MudMenuItem>
+                <MudDivider />
+                <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="BeginLogout">
+                    Sign Out
+                </MudMenuItem>
+            </ChildContent>
+        </MudMenu>
+    </Authorized>
+    <NotAuthorized>
+        <MudButton Variant="Variant.Text" Color="Color.Inherit"
+                   StartIcon="@Icons.Material.Filled.Login"
+                   OnClick="BeginLogin">
+            Log in
+        </MudButton>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private void BeginLogin()
+    {
+        Navigation.NavigateToLogin("authentication/login");
+    }
+
+    private void BeginLogout()
+    {
+        Navigation.NavigateToLogout("authentication/logout");
+    }
+
+    private static string GetDisplayName(AuthenticationState context)
+    {
+        return context.User.Identity?.Name
+            ?? context.User.FindFirst("email")?.Value
+            ?? context.User.FindFirst("preferred_username")?.Value
+            ?? "User";
+    }
+
+    private static string GetUserInitials(AuthenticationState context)
+    {
+        var fullName = GetDisplayName(context);
+        var nameParts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (nameParts.Length >= 2)
+        {
+            return $"{nameParts[0][0]}{nameParts[^1][0]}".ToUpper();
+        }
+
+        if (nameParts.Length == 1 && nameParts[0].Length > 0)
+        {
+            return nameParts[0][..Math.Min(2, nameParts[0].Length)].ToUpper();
+        }
+
+        return "U";
+    }
+
+    private static string GetUserEmail(AuthenticationState context)
+    {
+        return context.User.FindFirst("email")?.Value
+            ?? context.User.FindFirst("preferred_username")?.Value
+            ?? context.User.FindFirst("upn")?.Value
+            ?? string.Empty;
+    }
+}
