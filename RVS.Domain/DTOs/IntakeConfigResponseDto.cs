@@ -25,4 +25,10 @@ public sealed record IntakeConfigResponseDto
     /// Empty for anonymous (no token) customers.
     /// </summary>
     public List<AssetInfoDto> KnownAssets { get; init; } = [];
+
+    /// <summary>
+    /// True when a magic-link token was provided but has expired.
+    /// The UI should inform the customer that their link expired while still allowing anonymous intake.
+    /// </summary>
+    public bool TokenExpired { get; init; }
 }
