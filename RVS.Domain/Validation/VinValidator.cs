@@ -37,12 +37,12 @@ public static class VinValidator
     /// </example>
     public static ValidationResult Validate(string vin)
     {
-        if (string.IsNullOrEmpty(vin))
+        if (string.IsNullOrWhiteSpace(vin))
         {
             return ValidationResult.Failure("VIN must not be null or empty.");
         }
 
-        var normalized = vin.ToUpperInvariant();
+        var normalized = vin.Trim().ToUpperInvariant();
 
         if (normalized.Length != VinLength)
         {
@@ -68,7 +68,7 @@ public static class VinValidator
         if (!IsCheckDigitValid(normalized))
         {
             return ValidationResult.Failure(
-                "VIN has an invalid check digit.");
+                "This VIN does not appear to be valid. Please double-check it for typos.");
         }
 
         return ValidationResult.Success;

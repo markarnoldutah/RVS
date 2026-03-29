@@ -49,7 +49,7 @@ public class ClientVinValidatorTests
         var result = ClientVinValidator.Validate("1HGBH41J0MN109186");
 
         result.IsValid.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("check digit");
+        result.ErrorMessage.Should().Contain("does not appear to be valid");
     }
 
     [Fact]
@@ -70,5 +70,25 @@ public class ClientVinValidatorTests
 
         result.IsValid.Should().BeFalse();
         result.ErrorMessage.Should().Contain("must not contain");
+    }
+
+    [Theory]
+    [InlineData(" 1HGBH41JXMN109186")]
+    [InlineData("1HGBH41JXMN109186 ")]
+    [InlineData("  1HGBH41JXMN109186  ")]
+    public void Validate_WhitespaceAroundValidVin_ReturnsSuccess(string vin)
+    {
+        var result = ClientVinValidator.Validate(vin);
+
+        result.IsValid.Should().BeTrue();
+        result.ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public void Validate_WhitespaceOnlyInput_ReturnsFailure()
+    {
+        var result = ClientVinValidator.Validate("   ");
+
+        result.IsValid.Should().BeFalse();
     }
 }

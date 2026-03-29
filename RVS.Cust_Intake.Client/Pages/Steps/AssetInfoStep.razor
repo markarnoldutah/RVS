@@ -8,7 +8,8 @@
             <MudText Typo="Typo.h5">Vehicle Information</MudText>
         </MudStack>
 
-        <MudTextField @bind-Value="State.Vin"
+        <MudTextField Value="@State.Vin"
+                      ValueChanged="HandleVinChanged"
                       Label="VIN (Vehicle Identification Number)"
                       Required="true"
                       RequiredError="VIN is required"
@@ -18,7 +19,8 @@
                       Adornment="Adornment.Start"
                       AdornmentIcon="@Icons.Material.Filled.Pin"
                       Placeholder="17-character VIN"
-                      HelperText="Enter the 17-character Vehicle Identification Number" />
+                      HelperText="Enter the 17-character Vehicle Identification Number"
+                      Immediate="true" />
 
         @if (!string.IsNullOrWhiteSpace(State.Vin))
         {
@@ -32,7 +34,7 @@
             else if (State.Vin.Length == 17)
             {
                 <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
-                    @vinResult.ErrorMessage
+                    @vinResult.ErrorMessage You can usually find the VIN on the driver's side dashboard or door jamb sticker.
                 </MudAlert>
             }
         }
@@ -83,6 +85,14 @@
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
     [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+
+    private void HandleVinChanged(string? value)
+    {
+        // Strip whitespace and uppercase to normalize VIN on input,
+        // preventing MaxLength from silently truncating real characters
+        // when clipboard paste includes leading/trailing spaces.
+        State.Vin = value?.Trim().ToUpperInvariant() ?? string.Empty;
+    }
 
     private async Task HandleNext()
     {
