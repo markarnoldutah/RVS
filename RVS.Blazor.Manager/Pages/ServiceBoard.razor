@@ -93,7 +93,7 @@
                                     <MudStack Spacing="2">
                                         @foreach (var sr in items)
                                         {
-                                            <MudCard Elevation="2" Class="cursor-pointer"
+                                            <MudCard Elevation="2"
                                                      Style="cursor: pointer;"
                                                      @onclick="() => NavigateToDetail(sr.Id)">
                                                 <MudCardContent Class="pa-3">
@@ -252,14 +252,14 @@
     {
         _pollCts = new CancellationTokenSource();
         _pollTimer = new PeriodicTimer(TimeSpan.FromSeconds(DefaultPollIntervalSeconds));
-        _ = PollLoopAsync(_pollCts.Token);
+        _ = PollLoopAsync(_pollTimer, _pollCts.Token);
     }
 
-    private async Task PollLoopAsync(CancellationToken ct)
+    private async Task PollLoopAsync(PeriodicTimer timer, CancellationToken ct)
     {
         try
         {
-            while (await _pollTimer!.WaitForNextTickAsync(ct))
+            while (await timer.WaitForNextTickAsync(ct))
             {
                 await LoadBoardDataAsync();
                 await InvokeAsync(StateHasChanged);
@@ -268,6 +268,10 @@
         catch (OperationCanceledException)
         {
             // Polling cancelled — expected on dispose.
+        }
+        catch (Exception)
+        {
+            // Swallow to prevent unobserved task exceptions; errors surface via _error in LoadBoardDataAsync.
         }
     }
 
