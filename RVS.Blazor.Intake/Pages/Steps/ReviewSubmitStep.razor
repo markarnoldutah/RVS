@@ -225,6 +225,8 @@
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private HttpClient Http { get; set; } = default!;
 
+    private const long MaxUploadSizeBytes = 25 * 1024 * 1024;
+
     private bool _isSubmitting;
     private string? _submitError;
     private string? _uploadStatus;
@@ -272,7 +274,7 @@
 
                         file.BlobName = sasResponse.BlobName;
 
-                        await using var stream = file.BrowserFile!.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024);
+                        await using var stream = file.BrowserFile!.OpenReadStream(maxAllowedSize: MaxUploadSizeBytes);
                         using var content = new StreamContent(stream);
                         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
 
@@ -293,9 +295,9 @@
 
                         file.IsUploaded = true;
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        file.ErrorMessage = "Upload failed";
+                        file.ErrorMessage = $"Upload failed: {ex.Message}";
                     }
                 }
 
