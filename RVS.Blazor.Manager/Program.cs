@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using Microsoft.FluentUI.AspNetCore.Components;
+using MudBlazor.Services;
 using RVS.Blazor.Manager;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
@@ -31,8 +31,8 @@ builder.Services.AddScoped<AuthorizationMessageHandler>();
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API"));
 
-// FluentUI component library
-builder.Services.AddFluentUIComponents();
+// MudBlazor component library
+builder.Services.AddMudServices();
 
 // Configure OIDC Authentication with Auth0
 builder.Services.AddOidcAuthentication(options =>

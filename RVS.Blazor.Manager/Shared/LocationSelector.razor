@@ -4,25 +4,35 @@
     <Authorized>
         @if (_locations.Count > 1)
         {
-            <FluentCard Style="padding: 16px;">
-                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12">
-                    <FluentIcon Value="@(new Icons.Regular.Size20.Location())" Color="Color.Accent" />
-                    <FluentSelect TOption="string"
-                                  Label="Select Location"
-                                  Items="@_locations"
-                                  @bind-SelectedOption="@SelectedLocation"
-                                  Style="min-width: 250px;" />
-                </FluentStack>
-            </FluentCard>
+            <MudPaper Elevation="1" Class="pa-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
+                             aria-hidden="true" />
+                    <MudSelect T="string" Label="Select Location"
+                               @bind-Value="SelectedLocation"
+                               Variant="Variant.Outlined"
+                               AnchorOrigin="Origin.BottomCenter"
+                               aria-label="Select your location"
+                               Style="min-width: 250px;">
+                        @foreach (var location in _locations)
+                        {
+                            <MudSelectItem T="string" Value="@location">@location</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudStack>
+            </MudPaper>
         }
         else if (_locations.Count == 1)
         {
-            <FluentCard Style="padding: 16px;">
-                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12">
-                    <FluentIcon Value="@(new Icons.Regular.Size20.Location())" Color="Color.Accent" />
-                    <span>Location: <strong>@_locations[0]</strong></span>
-                </FluentStack>
-            </FluentCard>
+            <MudPaper Elevation="1" Class="pa-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
+                             aria-hidden="true" />
+                    <MudText Typo="Typo.body1">
+                        Location: <strong>@_locations[0]</strong>
+                    </MudText>
+                </MudStack>
+            </MudPaper>
         }
     </Authorized>
 </AuthorizeView>

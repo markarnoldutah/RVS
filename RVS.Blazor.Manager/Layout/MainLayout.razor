@@ -1,45 +1,89 @@
 @inherits LayoutComponentBase
 
-<PageTitle>RVS Manager</PageTitle>
+<MudThemeProvider Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
 
-<div>
-    <FluentLayout>
-        <FluentHeader Class="siteheader">
-            <a href="/" aria-label="Back to the homepage">
-                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
-                    <FluentIcon Value="@(new Icons.Regular.Size24.BuildingMultiple())" Color="Color.Accent" />
-                    <span class="site-title">RVS Manager</span>
-                </FluentStack>
-            </a>
-            <FluentSpacer />
+<MudLayout>
+    <MudAppBar Elevation="2" Color="Color.Primary">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       aria-label="Toggle navigation menu"
+                       OnClick="ToggleDrawer" />
+        <MudIconButton Icon="@Icons.Material.Filled.RvHookup"
+                       Color="Color.Inherit"
+                       Href="/"
+                       aria-label="Back to the homepage" />
+        <MudText Typo="Typo.h6" Class="ml-2">
+            RVS Manager
+        </MudText>
+        <MudSpacer />
+        <LoginDisplay />
+    </MudAppBar>
 
-            <div class="profile">
-                <LoginDisplay />
-            </div>
-        </FluentHeader>
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always">
+        <NavMenu />
+    </MudDrawer>
 
-        <FluentStack Class="main" Orientation="Orientation.Horizontal" Width="100%">
-            <NavMenu />
-            <FluentBodyContent Class="body-content">
-                <ErrorBoundary>
-                    <ChildContent>
-                        <div class="content">
-                            @Body
-                        </div>
-                    </ChildContent>
-                    <ErrorContent Context="ex">
-                        <div class="blazor-error-boundary">@ex.Message</div>
-                    </ErrorContent>
-                </ErrorBoundary>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="py-4 px-4">
+            <ErrorBoundary>
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent Context="ex">
+                    <MudAlert Severity="Severity.Error" Class="my-4">@ex.Message</MudAlert>
+                </ErrorContent>
+            </ErrorBoundary>
+        </MudContainer>
+    </MudMainContent>
 
-                <FluentDialogProvider />
-                <FluentDesignTheme StorageName="theme" />
-            </FluentBodyContent>
-        </FluentStack>
+    <MudAppBar Bottom="true" Elevation="0" Color="Color.Transparent" Dense="true"
+               Style="background: var(--mud-palette-background-gray);">
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            &copy; @DateTime.UtcNow.Year RV Service Flow &mdash; Manager
+        </MudText>
+        <MudSpacer />
+    </MudAppBar>
+</MudLayout>
 
-        <FluentFooter>
-            <div>RV Service Flow &mdash; Manager</div>
-            <FluentSpacer />
-        </FluentFooter>
-    </FluentLayout>
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private bool _drawerOpen = true;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#1565C0",
+            Secondary = "#00897B",
+            AppbarBackground = "#1565C0",
+            AppbarText = "#FFFFFF",
+            Background = "#FAFAFA",
+            Surface = "#FFFFFF",
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = ["Roboto", "Helvetica", "Arial", "sans-serif"]
+            }
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "8px"
+        }
+    };
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+}

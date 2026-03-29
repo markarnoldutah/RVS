@@ -1,101 +1,8 @@
 html, body {
-    font-family: 'Segoe UI Variable', 'Segoe UI', sans-serif;
+    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
     margin: 0;
     padding: 0;
-}
-
-/* Header */
-.siteheader {
-    height: 50px;
-    display: flex;
-    align-items: center;
-    padding: 0 16px;
-}
-
-.siteheader a {
-    text-decoration: none;
-    color: inherit;
-}
-
-.site-title {
-    font-size: 18px;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.profile {
-    display: flex;
-    align-items: center;
-}
-
-/* Main layout */
-.main {
-    min-height: calc(100vh - 100px);
-}
-
-.body-content {
-    flex: 1;
-}
-
-.content {
-    padding: 16px;
-}
-
-/* Navigation */
-.navmenu {
-    background: var(--neutral-layer-1);
-    border-right: 1px solid var(--neutral-stroke-divider-rest);
-}
-
-.navmenu-icon {
-    display: none;
-}
-
-/* Error boundary */
-.blazor-error-boundary {
-    background: var(--error);
-    color: white;
-    padding: 16px;
-    border-radius: 4px;
-    margin: 16px;
-}
-
-/* Loading progress */
-.loading-progress {
-    position: relative;
-    display: block;
-    width: 8rem;
-    height: 8rem;
-    margin: 20vh auto 1rem auto;
-}
-
-.loading-progress circle {
-    fill: none;
-    stroke: #e0e0e0;
-    stroke-width: 0.6rem;
-    transform-origin: 50% 50%;
-    transform: rotate(-90deg);
-}
-
-.loading-progress circle:last-child {
-    stroke: #1b6ec2;
-    stroke-dasharray: calc(3.14 * 4rem), 500%;
-    animation: loading-progress-spin 1.5s linear infinite;
-}
-
-.loading-progress-text {
-    text-align: center;
-    font-weight: bold;
-    color: #666;
-}
-
-.loading-progress-text:after {
-    content: "Loading...";
-}
-
-@keyframes loading-progress-spin {
-    0% { transform: rotate(-90deg); }
-    100% { transform: rotate(270deg); }
+    background: #FAFAFA;
 }
 
 /* Blazor error UI */
@@ -118,19 +25,32 @@ html, body {
     top: 0.5rem;
 }
 
-/* Responsive */
-@media (max-width: 600px) {
-    .navmenu-icon {
-        display: block;
-        cursor: pointer;
-        padding: 8px;
-    }
+/* Ensure interactive elements meet WCAG 2.1 minimum 44px touch target */
+button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+}
 
-    .navmenu .sitenav {
-        display: none;
-    }
+/* Focus indicator for keyboard navigation (WCAG 2.4.7) */
+:focus-visible {
+    outline: 2px solid #1565C0;
+    outline-offset: 2px;
+}
 
-    .navmenu-icon:checked ~ .sitenav {
-        display: block;
-    }
+/* Skip-to-content link for accessibility */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #1565C0;
+    color: white;
+    padding: 8px 16px;
+    z-index: 9999;
+    font-size: 14px;
+    text-decoration: none;
+    border-radius: 0 0 4px 0;
+}
+
+.skip-link:focus {
+    top: 0;
 }

@@ -2,19 +2,35 @@
 @inject NavigationManager Navigation
 
 <AuthorizeView>
-    <Authorized>
-        <FluentProfileMenu TopCorner="true"
-                           Initials="@GetUserInitials(context)"
-                           FullName="@GetDisplayName(context)"
-                           EMail="@GetUserEmail(context)"
-                           OnHeaderButtonClick="BeginLogout"
-                           PopoverStyle="min-width: 330px;" />
+    <Authorized Context="authState">
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                 aria-label="User menu">
+            <ActivatorContent>
+                <MudAvatar Color="Color.Secondary" Size="Size.Small"
+                           aria-label="@GetDisplayName(authState)">
+                    @GetUserInitials(authState)
+                </MudAvatar>
+            </ActivatorContent>
+            <ChildContent>
+                <MudMenuItem Disabled="true">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.subtitle2">@GetDisplayName(authState)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@GetUserEmail(authState)</MudText>
+                    </MudStack>
+                </MudMenuItem>
+                <MudDivider />
+                <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="BeginLogout">
+                    Sign Out
+                </MudMenuItem>
+            </ChildContent>
+        </MudMenu>
     </Authorized>
     <NotAuthorized>
-        <FluentButton Appearance="Appearance.Accent"
-                      @onclick="BeginLogin">
+        <MudButton Variant="Variant.Text" Color="Color.Inherit"
+                   StartIcon="@Icons.Material.Filled.Login"
+                   OnClick="BeginLogin">
             Log in
-        </FluentButton>
+        </MudButton>
     </NotAuthorized>
 </AuthorizeView>
 

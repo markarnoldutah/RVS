@@ -10,96 +10,46 @@
                 }
                 else
                 {
-                    <div class="access-denied-container">
-                        <FluentCard class="access-denied-card">
-                            <FluentStack Orientation="Orientation.Vertical"
-                                         VerticalAlignment="VerticalAlignment.Center"
-                                         HorizontalAlignment="HorizontalAlignment.Center"
-                                         VerticalGap="20">
-
-                                <FluentIcon Value="@(new Icons.Regular.Size48.ShieldError())"
-                                            Color="Color.Error" />
-
-                                <h2>Access Denied</h2>
-
-                                <p class="message" role="alert">
-                                    You are not authorized to access this resource.
-                                </p>
-
-                                <FluentButton Appearance="Appearance.Neutral"
-                                              IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
-                                              OnClick="@(() => Navigation.NavigateTo("/"))">
-                                    Return to Home
-                                </FluentButton>
-                            </FluentStack>
-                        </FluentCard>
-                    </div>
+                    <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
+                        <MudPaper Elevation="2" Class="pa-8 text-center" Style="max-width: 500px; width: 100%;">
+                            <MudIcon Icon="@Icons.Material.Filled.Block"
+                                     Color="Color.Error" Size="Size.Large" Class="mb-4"
+                                     aria-hidden="true" />
+                            <MudText Typo="Typo.h5" Class="mb-2">Access Denied</MudText>
+                            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4" role="alert">
+                                You are not authorized to access this resource.
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                                       Href="/">
+                                Return to Home
+                            </MudButton>
+                        </MudPaper>
+                    </MudContainer>
                 }
             </NotAuthorized>
         </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
     <NotFound>
         <PageTitle>Not found</PageTitle>
         <LayoutView Layout="@typeof(MainLayout)">
-            <div class="not-found-container">
-                <FluentCard class="not-found-card">
-                    <FluentStack Orientation="Orientation.Vertical"
-                                 VerticalAlignment="VerticalAlignment.Center"
-                                 HorizontalAlignment="HorizontalAlignment.Center"
-                                 VerticalGap="20">
-
-                        <FluentIcon Value="@(new Icons.Regular.Size48.QuestionCircle())"
-                                    Color="Color.Neutral" />
-
-                        <h2>Page Not Found</h2>
-
-                        <p class="message" role="alert">
-                            Sorry, there's nothing at this address.
-                        </p>
-
-                        <FluentButton Appearance="Appearance.Accent"
-                                      IconStart="@(new Icons.Regular.Size20.Home())"
-                                      OnClick="@(() => Navigation.NavigateTo("/"))">
-                            Go to Home
-                        </FluentButton>
-                    </FluentStack>
-                </FluentCard>
-            </div>
+            <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
+                <MudPaper Elevation="2" Class="pa-8 text-center" Style="max-width: 500px; width: 100%;">
+                    <MudIcon Icon="@Icons.Material.Filled.HelpOutline"
+                             Color="Color.Default" Size="Size.Large" Class="mb-4"
+                             aria-hidden="true" />
+                    <MudText Typo="Typo.h5" Class="mb-2">Page Not Found</MudText>
+                    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4" role="alert">
+                        Sorry, there's nothing at this address.
+                    </MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Home"
+                               Href="/">
+                        Go to Home
+                    </MudButton>
+                </MudPaper>
+            </MudContainer>
         </LayoutView>
     </NotFound>
 </Router>
-
-<style>
-    .access-denied-container,
-    .not-found-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 400px;
-        padding: 40px 20px;
-    }
-
-    .access-denied-card,
-    .not-found-card {
-        max-width: 500px;
-        width: 100%;
-        padding: 40px;
-        text-align: center;
-    }
-
-    .access-denied-card h2,
-    .not-found-card h2 {
-        margin: 0;
-        font-size: 24px;
-        font-weight: 600;
-        color: var(--neutral-foreground-rest);
-    }
-
-    .access-denied-card .message,
-    .not-found-card .message {
-        margin: 0;
-        font-size: 16px;
-        color: var(--neutral-foreground-hint);
-        line-height: 1.5;
-    }
-</style>

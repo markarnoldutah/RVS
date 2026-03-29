@@ -1,69 +1,29 @@
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject NavigationManager Navigation
 
-<div class="unauthorized-container">
-    <FluentCard class="unauthorized-card">
-        <FluentStack Orientation="Orientation.Vertical"
-                     VerticalAlignment="VerticalAlignment.Center"
-                     HorizontalAlignment="HorizontalAlignment.Center"
-                     VerticalGap="20">
-
-            <FluentIcon Value="@(new Icons.Regular.Size48.LockClosed())"
-                        Color="Color.Accent" />
-
-            <h2>Authentication Required</h2>
-
-            <p class="message">
-                You need to sign in to access this page.
-            </p>
-
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="10">
-                <FluentButton Appearance="Appearance.Accent"
-                              IconStart="@(new Icons.Regular.Size20.Person())"
-                              @onclick="BeginLogin">
-                    Sign In
-                </FluentButton>
-
-                <FluentButton Appearance="Appearance.Neutral"
-                              IconStart="@(new Icons.Regular.Size20.Home())"
-                              @onclick="GoHome">
-                    Go to Home
-                </FluentButton>
-            </FluentStack>
-        </FluentStack>
-    </FluentCard>
-</div>
-
-<style>
-    .unauthorized-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 400px;
-        padding: 40px 20px;
-    }
-
-    .unauthorized-card {
-        max-width: 500px;
-        width: 100%;
-        padding: 40px;
-        text-align: center;
-    }
-
-    .unauthorized-card h2 {
-        margin: 0;
-        font-size: 24px;
-        font-weight: 600;
-        color: var(--neutral-foreground-rest);
-    }
-
-    .unauthorized-card .message {
-        margin: 0;
-        font-size: 16px;
-        color: var(--neutral-foreground-hint);
-        line-height: 1.5;
-    }
-</style>
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
+    <MudPaper Elevation="2" Class="pa-8 text-center" Style="max-width: 500px; width: 100%;">
+        <MudIcon Icon="@Icons.Material.Filled.Lock"
+                 Color="Color.Primary" Size="Size.Large" Class="mb-4"
+                 aria-hidden="true" />
+        <MudText Typo="Typo.h5" Class="mb-2">Authentication Required</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+            You need to sign in to access this page.
+        </MudText>
+        <MudStack Row="true" Justify="Justify.Center" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Person"
+                       OnClick="BeginLogin">
+                Sign In
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.Home"
+                       OnClick="GoHome">
+                Go to Home
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
 
 @code {
     [Parameter]

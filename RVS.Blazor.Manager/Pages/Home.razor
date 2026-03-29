@@ -4,19 +4,27 @@
 
 <AuthorizeView>
     <Authorized>
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="20" Style="padding: 24px;">
-            <h1>Welcome, @GetDisplayName(context)!</h1>
+        <MudStack Spacing="5" Class="pa-6">
+            <MudText Typo="Typo.h4" GutterBottom="true">
+                Welcome, @GetDisplayName(context)!
+            </MudText>
 
             <LocationSelector />
 
-            <FluentCard Style="padding: 24px;">
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
-                    <FluentIcon Value="@(new Icons.Regular.Size24.Home())" Color="Color.Accent" />
-                    <h3>Manager Dashboard</h3>
-                    <p>Select a location above to begin managing service requests.</p>
-                </FluentStack>
-            </FluentCard>
-        </FluentStack>
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudStack Spacing="3">
+                        <MudIcon Icon="@Icons.Material.Filled.Dashboard"
+                                 Color="Color.Primary" Size="Size.Large"
+                                 aria-hidden="true" />
+                        <MudText Typo="Typo.h6">Manager Dashboard</MudText>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary">
+                            Select a location above to begin managing service requests.
+                        </MudText>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudStack>
     </Authorized>
 </AuthorizeView>
 
