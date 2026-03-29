@@ -6,7 +6,7 @@
         </MudStack>
 
         <MudText Typo="Typo.body1" Color="Color.Secondary">
-            Upload photos or videos of the issue. Drag and drop files or use the button below.
+            Upload photos or videos of the issue. Drag and drop files, browse, or take a photo.
         </MudText>
 
         @if (State.Config is not null)
@@ -38,6 +38,21 @@
                        style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0;" />
         </MudPaper>
 
+        @* Camera capture button for mobile devices *@
+        <MudPaper Elevation="0" Outlined="true"
+                  Class="pa-4 d-flex flex-column align-center justify-center"
+                  Style="border-style: dashed; border-width: 2px; cursor: pointer;
+                         border-color: var(--mud-palette-secondary); position: relative;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.CameraAlt" Color="Color.Secondary" />
+                <MudText Typo="Typo.body1">Take a Photo</MudText>
+            </MudStack>
+            <InputFile OnChange="HandleFilesSelected"
+                       accept="image/*"
+                       capture="environment"
+                       style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0;" />
+        </MudPaper>
+
         @if (State.Attachments.Count > 0)
         {
             <MudStack Spacing="2">
@@ -66,6 +81,11 @@
                                 <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">
                                     Ready
                                 </MudChip>
+                            }
+                            else
+                            {
+                                <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Uploading…</MudText>
                             }
 
                             <MudIconButton Icon="@Icons.Material.Filled.Close"
@@ -163,7 +183,7 @@
                 FileName = file.Name,
                 ContentType = file.ContentType,
                 SizeBytes = file.Size,
-                IsUploaded = true
+                BrowserFile = file
             });
         }
 

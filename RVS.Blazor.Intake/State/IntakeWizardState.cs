@@ -437,6 +437,8 @@ public sealed class IntakeWizardState
 
 /// <summary>
 /// Metadata for a file selected/uploaded in the attachment step.
+/// Holds a reference to the <see cref="Microsoft.AspNetCore.Components.Forms.IBrowserFile"/>
+/// so the file stream can be read at upload time.
 /// </summary>
 public sealed class AttachmentFileInfo
 {
@@ -460,6 +462,13 @@ public sealed class AttachmentFileInfo
 
     /// <summary>The blob name returned after upload for the confirm step.</summary>
     public string? BlobName { get; set; }
+
+    /// <summary>
+    /// Reference to the browser file for streaming at upload time.
+    /// Not serializable — only available during the current browser session.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Microsoft.AspNetCore.Components.Forms.IBrowserFile? BrowserFile { get; set; }
 }
 
 /// <summary>

@@ -194,6 +194,15 @@
             </MudAlert>
         }
 
+        @* Upload progress *@
+        @if (_uploadStatus is not null)
+        {
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_uploadStatus</MudText>
+            </MudStack>
+        }
+
         @* Submit button *@
         <MudStack AlignItems="AlignItems.Center" Class="mt-4">
             <MudButton Variant="Variant.Filled"
@@ -214,9 +223,11 @@
     [Parameter, EditorRequired] public EventCallback<int> OnEdit { get; set; }
     [Parameter, EditorRequired] public EventCallback OnSubmitted { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+    [Inject] private HttpClient Http { get; set; } = default!;
 
     private bool _isSubmitting;
     private string? _submitError;
+    private string? _uploadStatus;
 
     private async Task EditStep(int step)
     {
@@ -227,6 +238,7 @@
     {
         _isSubmitting = true;
         _submitError = null;
+        _uploadStatus = null;
         StateHasChanged();
 
         try
@@ -237,6 +249,58 @@
             State.IsSubmitted = true;
             State.CreatedServiceRequestId = result.Id;
             await State.PersistAsync();
+
+            var pendingFiles = State.Attachments
+                .Where(a => a.BrowserFile is not null && !a.IsUploaded)
+                .ToList();
+
+            if (pendingFiles.Count > 0)
+            {
+                _uploadStatus = $"Uploading attachments (0/{pendingFiles.Count})…";
+                StateHasChanged();
+
+                for (var i = 0; i < pendingFiles.Count; i++)
+                {
+                    var file = pendingFiles[i];
+                    _uploadStatus = $"Uploading attachments ({i + 1}/{pendingFiles.Count})…";
+                    StateHasChanged();
+
+                    try
+                    {
+                        var sasResponse = await IntakeApi.GetUploadSasAsync(
+                            State.Slug, result.Id, file.FileName, file.ContentType);
+
+                        file.BlobName = sasResponse.BlobName;
+
+                        await using var stream = file.BrowserFile!.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024);
+                        using var content = new StreamContent(stream);
+                        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+
+                        using var sasRequest = new HttpRequestMessage(HttpMethod.Put, sasResponse.SasUrl);
+                        sasRequest.Content = content;
+                        sasRequest.Headers.Add("x-ms-blob-type", "BlockBlob");
+
+                        var sasResult = await Http.SendAsync(sasRequest);
+                        sasResult.EnsureSuccessStatusCode();
+
+                        await IntakeApi.ConfirmUploadAsync(State.Slug, result.Id, new AttachmentConfirmRequestDto
+                        {
+                            BlobName = sasResponse.BlobName,
+                            FileName = file.FileName,
+                            ContentType = file.ContentType,
+                            SizeBytes = file.SizeBytes
+                        });
+
+                        file.IsUploaded = true;
+                    }
+                    catch (Exception)
+                    {
+                        file.ErrorMessage = "Upload failed";
+                    }
+                }
+
+                _uploadStatus = null;
+            }
 
             await OnSubmitted.InvokeAsync();
         }

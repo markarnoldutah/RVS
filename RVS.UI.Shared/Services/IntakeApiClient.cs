@@ -89,27 +89,65 @@ public sealed class IntakeApiClient
     }
 
     /// <summary>
-    /// Uploads an attachment to an existing service request via the anonymous intake flow.
+    /// Requests a time-limited SAS URL for direct client-to-blob upload of an attachment.
+    /// The API validates content type and attachment count before issuing the URL.
     /// </summary>
-    public async Task<AttachmentDto> UploadAttachmentAsync(
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="serviceRequestId">The service request to attach the file to.</param>
+    /// <param name="fileName">Original file name (e.g. "photo.jpg").</param>
+    /// <param name="contentType">MIME content type (e.g. "image/jpeg").</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>SAS URL, blob name, and expiry time for direct upload.</returns>
+    public async Task<AttachmentUploadSasResponseDto> GetUploadSasAsync(
         string locationSlug,
         string serviceRequestId,
-        HttpContent fileContent,
+        string fileName,
+        string contentType,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
-        ArgumentNullException.ThrowIfNull(fileContent);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
 
-        var response = await _httpClient.PostAsync(
-            $"api/intake/{Uri.EscapeDataString(locationSlug)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/attachments",
-            fileContent,
+        var url = $"api/intake/{Uri.EscapeDataString(locationSlug)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/attachments/upload-url"
+            + $"?fileName={Uri.EscapeDataString(fileName)}&contentType={Uri.EscapeDataString(contentType)}";
+
+        var response = await _httpClient.PostAsync(url, content: null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<AttachmentUploadSasResponseDto>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize upload SAS response.");
+    }
+
+    /// <summary>
+    /// Confirms a direct-upload attachment after the client has uploaded the blob via SAS URL.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="serviceRequestId">The service request to attach the file to.</param>
+    /// <param name="request">Confirmation details (blob name, file name, content type, size).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The confirmed attachment record.</returns>
+    public async Task<AttachmentDto> ConfirmUploadAsync(
+        string locationSlug,
+        string serviceRequestId,
+        AttachmentConfirmRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"api/intake/{Uri.EscapeDataString(locationSlug)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/attachments/confirm",
+            request,
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync<AttachmentDto>(
             cancellationToken: cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize attachment response.");
+            ?? throw new InvalidOperationException("Failed to deserialize attachment confirm response.");
     }
 
     /// <summary>
