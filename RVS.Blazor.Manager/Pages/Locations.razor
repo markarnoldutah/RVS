@@ -1,0 +1,281 @@
+@page "/locations"
+@inject LookupApiClient LookupClient
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+<PageTitle>RVS Manager — Locations</PageTitle>
+
+<MudStack Spacing="4" Class="pa-2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4">Locations</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="ShowCreateDialog">
+            Add Location
+        </MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error">@_error</MudAlert>
+    }
+    else
+    {
+        <MudGrid Spacing="3">
+            @foreach (var loc in _locations)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="2">
+                        <MudCardHeader>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary" />
+                                <MudText Typo="Typo.h6">@loc.Name</MudText>
+                            </MudStack>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body2"><strong>Slug:</strong> @loc.Slug</MudText>
+                                @if (!string.IsNullOrEmpty(loc.Phone))
+                                {
+                                    <MudText Typo="Typo.body2"><strong>Phone:</strong> @loc.Phone</MudText>
+                                }
+                                @if (loc.Address is not null)
+                                {
+                                    <MudText Typo="Typo.body2">
+                                        <strong>Address:</strong>
+                                        @FormatAddress(loc.Address)
+                                    </MudText>
+                                }
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Created: @loc.CreatedAtUtc.ToLocalTime().ToString("g")
+                                </MudText>
+                            </MudStack>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                       OnClick="@(() => ShowEditDialog(loc))">
+                                Edit
+                            </MudButton>
+                            <MudButton Variant="Variant.Text" Color="Color.Secondary" Size="Size.Small"
+                                       OnClick="@(() => DownloadQrCodeAsync(loc.Id, loc.Slug))">
+                                QR Code
+                            </MudButton>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+
+    @* Create / Edit Dialog *@
+    <MudDialog @bind-Visible="_dialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+        <TitleContent>
+            <MudText Typo="Typo.h6">@(_editingLocationId is null ? "Create Location" : "Edit Location")</MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudStack Spacing="3">
+                <MudTextField T="string" Label="Name" Variant="Variant.Outlined"
+                              @bind-Value="_form.Name" Required="true" />
+                <MudTextField T="string" Label="Slug" Variant="Variant.Outlined"
+                              @bind-Value="_form.Slug" Required="true"
+                              HelperText="URL-friendly identifier (e.g., 'salt-lake-city')" />
+                <MudTextField T="string" Label="Phone" Variant="Variant.Outlined"
+                              @bind-Value="_form.Phone" />
+                <MudText Typo="Typo.subtitle2">Address</MudText>
+                <MudTextField T="string" Label="Address Line 1" Variant="Variant.Outlined"
+                              @bind-Value="_form.Address1" />
+                <MudTextField T="string" Label="Address Line 2" Variant="Variant.Outlined"
+                              @bind-Value="_form.Address2" />
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="5">
+                        <MudTextField T="string" Label="City" Variant="Variant.Outlined"
+                                      @bind-Value="_form.City" />
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudTextField T="string" Label="State" Variant="Variant.Outlined"
+                                      @bind-Value="_form.State" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudTextField T="string" Label="Postal Code" Variant="Variant.Outlined"
+                                      @bind-Value="_form.PostalCode" />
+                    </MudItem>
+                </MudGrid>
+            </MudStack>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="CloseDialog">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       OnClick="SaveLocationAsync" Disabled="_saving">
+                @if (_saving)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Save
+            </MudButton>
+        </DialogActions>
+    </MudDialog>
+</MudStack>
+
+@code {
+    private List<LocationDetailDto> _locations = [];
+    private bool _loading = true;
+    private string? _error;
+    private bool _dialogOpen;
+    private bool _saving;
+    private string? _editingLocationId;
+    private LocationForm _form = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLocationsAsync();
+    }
+
+    private async Task LoadLocationsAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var summaries = await LookupClient.GetLocationsAsync();
+            var details = new List<LocationDetailDto>();
+            foreach (var s in summaries)
+            {
+                var detail = await LookupClient.GetLocationByIdAsync(s.LocationId);
+                details.Add(detail);
+            }
+            _locations = details;
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ShowCreateDialog()
+    {
+        _editingLocationId = null;
+        _form = new LocationForm();
+        _dialogOpen = true;
+    }
+
+    private void ShowEditDialog(LocationDetailDto location)
+    {
+        _editingLocationId = location.Id;
+        _form = new LocationForm
+        {
+            Name = location.Name,
+            Slug = location.Slug,
+            Phone = location.Phone,
+            Address1 = location.Address?.Address1,
+            Address2 = location.Address?.Address2,
+            City = location.Address?.City,
+            State = location.Address?.State,
+            PostalCode = location.Address?.PostalCode
+        };
+        _dialogOpen = true;
+    }
+
+    private void CloseDialog()
+    {
+        _dialogOpen = false;
+    }
+
+    private async Task SaveLocationAsync()
+    {
+        _saving = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new LocationCreateRequestDto
+            {
+                Name = _form.Name ?? string.Empty,
+                Slug = _form.Slug ?? string.Empty,
+                Phone = _form.Phone,
+                Address = new AddressDto
+                {
+                    Address1 = _form.Address1,
+                    Address2 = _form.Address2,
+                    City = _form.City,
+                    State = _form.State,
+                    PostalCode = _form.PostalCode
+                }
+            };
+
+            if (_editingLocationId is not null)
+            {
+                await LookupClient.UpdateLocationAsync(_editingLocationId, request);
+                Snackbar.Add("Location updated.", Severity.Success);
+            }
+            else
+            {
+                await LookupClient.CreateLocationAsync(request);
+                Snackbar.Add("Location created.", Severity.Success);
+            }
+
+            _dialogOpen = false;
+            await LoadLocationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save location: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DownloadQrCodeAsync(string locationId, string slug)
+    {
+        try
+        {
+            var bytes = await LookupClient.GetLocationQrCodeAsync(locationId);
+            var base64 = Convert.ToBase64String(bytes);
+            var dataUrl = $"data:image/png;base64,{base64}";
+            await JS.InvokeVoidAsync("eval",
+                $"(function(){{var a=document.createElement('a');a.href='{dataUrl}';a.download='qr-{slug}.png';document.body.appendChild(a);a.click();document.body.removeChild(a);}})()");
+            Snackbar.Add("QR code downloaded.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to download QR code: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string FormatAddress(AddressDto address)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(address.Address1)) parts.Add(address.Address1);
+        if (!string.IsNullOrEmpty(address.City)) parts.Add(address.City);
+        if (!string.IsNullOrEmpty(address.State)) parts.Add(address.State);
+        if (!string.IsNullOrEmpty(address.PostalCode)) parts.Add(address.PostalCode);
+        return parts.Count > 0 ? string.Join(", ", parts) : "—";
+    }
+
+    private sealed class LocationForm
+    {
+        public string? Name { get; set; }
+        public string? Slug { get; set; }
+        public string? Phone { get; set; }
+        public string? Address1 { get; set; }
+        public string? Address2 { get; set; }
+        public string? City { get; set; }
+        public string? State { get; set; }
+        public string? PostalCode { get; set; }
+    }
+}

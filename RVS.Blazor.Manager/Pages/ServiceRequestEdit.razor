@@ -1,0 +1,222 @@
+@page "/service-requests/{Id}/edit"
+@inject ServiceRequestApiClient SrClient
+@inject LookupApiClient LookupClient
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>RVS Manager — Edit Service Request</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="ma-4">@_error</MudAlert>
+}
+else if (_sr is not null)
+{
+    <MudStack Spacing="4" Class="pa-2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                           OnClick="@(() => Navigation.NavigateTo($"/service-requests/{Id}"))"
+                           aria-label="Back to detail" />
+            <MudText Typo="Typo.h5">Edit Service Request</MudText>
+        </MudStack>
+
+        <MudPaper Elevation="2" Class="pa-6">
+            <MudGrid Spacing="3">
+                @* Status *@
+                <MudItem xs="12" sm="6" md="4">
+                    <MudSelect T="string" Label="Status" Variant="Variant.Outlined"
+                               @bind-Value="_model.Status">
+                        <MudSelectItem T="string" Value="@_sr.Status">@FormatStatus(_sr.Status) (current)</MudSelectItem>
+                        @foreach (var status in _allowedStatuses)
+                        {
+                            <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                @* Priority *@
+                <MudItem xs="12" sm="6" md="4">
+                    <MudSelect T="string" Label="Priority" Variant="Variant.Outlined"
+                               @bind-Value="_model.Priority">
+                        <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                @* Assigned Technician *@
+                <MudItem xs="12" sm="6" md="4">
+                    <MudTextField T="string" Label="Assigned Technician" Variant="Variant.Outlined"
+                                  @bind-Value="_model.AssignedTechnicianId" />
+                </MudItem>
+
+                @* Assigned Bay *@
+                <MudItem xs="12" sm="6" md="4">
+                    <MudTextField T="string" Label="Assigned Bay" Variant="Variant.Outlined"
+                                  @bind-Value="_model.AssignedBayId" />
+                </MudItem>
+
+                @* Scheduled Date *@
+                <MudItem xs="12" sm="6" md="4">
+                    <MudDatePicker Label="Scheduled Date" Variant="Variant.Outlined"
+                                   @bind-Date="_scheduledDate" Clearable="true" />
+                </MudItem>
+
+                @* Issue Category *@
+                <MudItem xs="12" sm="6" md="4">
+                    <MudTextField T="string" Label="Issue Category" Variant="Variant.Outlined"
+                                  @bind-Value="_model.IssueCategory" />
+                </MudItem>
+
+                @* Issue Description *@
+                <MudItem xs="12">
+                    <MudTextField T="string" Label="Issue Description" Variant="Variant.Outlined"
+                                  @bind-Value="_model.IssueDescription"
+                                  Lines="4" />
+                </MudItem>
+
+                @* Technician Notes *@
+                <MudItem xs="12">
+                    <MudTextField T="string" Label="Technician / Advisor Notes" Variant="Variant.Outlined"
+                                  @bind-Value="_model.TechnicianSummary"
+                                  Lines="3" />
+                </MudItem>
+
+                @* Actions *@
+                <MudItem xs="12" Class="d-flex gap-2 justify-end">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                               Href="@($"/service-requests/{Id}")">
+                        Cancel
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="SaveAsync" Disabled="_saving">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Save Changes
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    </MudStack>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = default!;
+
+    private ServiceRequestDetailResponseDto? _sr;
+    private EditModel _model = new();
+    private List<string> _allowedStatuses = [];
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _dealershipId;
+    private DateTime? _scheduledDate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var dealerships = await LookupClient.GetDealershipsAsync();
+            _dealershipId = dealerships.FirstOrDefault()?.Id;
+
+            if (_dealershipId is null)
+            {
+                _error = "No dealership found.";
+                return;
+            }
+
+            _sr = await SrClient.GetByIdAsync(_dealershipId, Id);
+            _allowedStatuses = [.. StatusTransitions.GetAllowedTargets(_sr.Status)];
+
+            _model = new EditModel
+            {
+                Status = _sr.Status,
+                Priority = _sr.Priority ?? "Medium",
+                AssignedTechnicianId = _sr.AssignedTechnicianId,
+                AssignedBayId = _sr.AssignedBayId,
+                IssueCategory = _sr.IssueCategory,
+                IssueDescription = _sr.IssueDescription,
+                TechnicianSummary = _sr.TechnicianSummary
+            };
+            _scheduledDate = _sr.ScheduledDateUtc?.ToLocalTime();
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_sr is null || _dealershipId is null) return;
+
+        _saving = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new ServiceRequestUpdateRequestDto
+            {
+                Status = _model.Status ?? _sr.Status,
+                IssueDescription = _model.IssueDescription ?? _sr.IssueDescription,
+                IssueCategory = _model.IssueCategory,
+                TechnicianSummary = _model.TechnicianSummary,
+                Priority = _model.Priority ?? "Medium",
+                Urgency = _sr.Urgency,
+                RvUsage = _sr.RvUsage,
+                AssignedTechnicianId = _model.AssignedTechnicianId,
+                AssignedBayId = _model.AssignedBayId,
+                ScheduledDateUtc = _scheduledDate?.ToUniversalTime(),
+                RequiredSkills = _sr.RequiredSkills,
+                UpdatedAtUtc = _sr.UpdatedAtUtc
+            };
+
+            await SrClient.UpdateAsync(_dealershipId, Id, request);
+            Snackbar.Add("Service request updated.", Severity.Success);
+            Navigation.NavigateTo($"/service-requests/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string FormatStatus(string status) => status switch
+    {
+        "InProgress" => "In Progress",
+        "WaitingOnParts" => "Waiting on Parts",
+        _ => status
+    };
+
+    private sealed class EditModel
+    {
+        public string? Status { get; set; }
+        public string? Priority { get; set; }
+        public string? AssignedTechnicianId { get; set; }
+        public string? AssignedBayId { get; set; }
+        public string? IssueCategory { get; set; }
+        public string? IssueDescription { get; set; }
+        public string? TechnicianSummary { get; set; }
+    }
+}
