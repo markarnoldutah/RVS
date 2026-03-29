@@ -364,9 +364,10 @@ else if (_sr is not null)
             var sas = await AttachmentClient.GetReadSasAsync(_dealershipId, Id, attachment.AttachmentId);
             Navigation.NavigateTo(sas.SasUrl, forceLoad: true);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Attachment view failed silently — SAS may have expired
+            _statusError = $"Failed to open attachment: {ex.Message}";
+            StateHasChanged();
         }
     }
 

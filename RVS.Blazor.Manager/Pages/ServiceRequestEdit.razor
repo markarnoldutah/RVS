@@ -31,7 +31,7 @@ else if (_sr is not null)
                     <MudSelect T="string" Label="Status" Variant="Variant.Outlined"
                                @bind-Value="_model.Status">
                         <MudSelectItem T="string" Value="@_sr.Status">@FormatStatus(_sr.Status) (current)</MudSelectItem>
-                        @foreach (var status in _allowedStatuses)
+                        @foreach (var status in _allowedStatuses.Where(s => s != _sr.Status))
                         {
                             <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
                         }

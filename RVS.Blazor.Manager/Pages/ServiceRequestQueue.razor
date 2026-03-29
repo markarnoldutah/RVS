@@ -153,6 +153,7 @@
 </MudStack>
 
 @code {
+    private const int PageSize = 25;
     private SearchModel _search = new();
     private DateTime? _dateFrom;
     private DateTime? _dateTo;
@@ -216,13 +217,13 @@
                 DateFrom = _dateFrom?.ToUniversalTime(),
                 DateTo = _dateTo?.ToUniversalTime(),
                 Page = _currentPage,
-                PageSize = 25
+                PageSize = PageSize
             };
 
             var response = await SrClient.SearchAsync(_dealershipId, request);
             _results = response.Results.Items;
             _totalCount = response.Results.TotalCount;
-            _totalPages = (int)Math.Ceiling((double)_totalCount / 25);
+            _totalPages = (int)Math.Ceiling((double)_totalCount / PageSize);
         }
         catch (AccessTokenNotAvailableException ex)
         {
