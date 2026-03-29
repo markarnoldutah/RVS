@@ -14,4 +14,9 @@ public sealed record IntakeConfigResponseDto
     public bool AllowAnonymousIntake { get; init; }
     public List<LookupItemDto> IssueCategories { get; init; } = [];
     public CustomerInfoDto? PrefillCustomer { get; init; }
+
+    /// <summary>
+    /// Most recently used vehicle info, prefilled when the customer has asset history via a magic-link token.
+    /// </summary>
+    public AssetInfoDto? PrefillAsset { get; init; }
 }

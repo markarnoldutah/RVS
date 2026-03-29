@@ -87,6 +87,11 @@
             {
                 State.ApplyPrefill(State.Config.PrefillCustomer);
             }
+
+            if (State.Config.PrefillAsset is not null)
+            {
+                State.ApplyAssetPrefill(State.Config.PrefillAsset);
+            }
         }
         catch (HttpRequestException)
         {

@@ -156,6 +156,20 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
+    /// Applies asset prefill data from the intake config (magic-link token).
+    /// Sets the most recently used vehicle information so the customer doesn't re-enter it.
+    /// </summary>
+    public void ApplyAssetPrefill(AssetInfoDto prefillAsset)
+    {
+        ArgumentNullException.ThrowIfNull(prefillAsset);
+        Vin = prefillAsset.AssetId;
+        Manufacturer = prefillAsset.Manufacturer;
+        Model = prefillAsset.Model;
+        Year = prefillAsset.Year;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
     /// Validates the current step and returns any error messages.
     /// </summary>
     public List<string> ValidateCurrentStep()

@@ -588,4 +588,165 @@ public class IntakeOrchestrationServiceTests
         _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("Slide System");
     }
+
+    // ── GetIntakeConfigAsync ─────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetIntakeConfigAsync_WhenSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var act = () => _sut.GetIntakeConfigAsync(slug!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenSlugNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("unknown-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+
+        var act = () => _sut.GetIntakeConfigAsync("unknown-slug");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>()
+            .WithMessage("*unknown-slug*");
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenNoToken_ShouldReturnNullPrefills()
+    {
+        SetupConfigHappyPath();
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.PrefillCustomer.Should().BeNull();
+        result.PrefillAsset.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenTokenExpired_ShouldReturnNullPrefills()
+    {
+        SetupConfigHappyPath();
+        var acct = BuildGlobalAcctWithMagicLink(expired: true, assetIds: ["RV:1HGBH41JXMN109186"]);
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("expired-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug", "expired-token");
+
+        result.PrefillCustomer.Should().BeNull();
+        result.PrefillAsset.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenTokenValidButNoAssets_ShouldReturnCustomerPrefillOnly()
+    {
+        SetupConfigHappyPath();
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: []);
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
+
+        result.PrefillCustomer.Should().NotBeNull();
+        result.PrefillCustomer!.FirstName.Should().Be("Jane");
+        result.PrefillAsset.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenTokenValidWithAssetHistory_ShouldReturnPrefillAsset()
+    {
+        SetupConfigHappyPath();
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["RV:OLD_VIN", "RV:1HGBH41JXMN109186"]);
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        // The most recently added asset ID is the last in the list
+        var ledgerEntries = new List<AssetLedgerEntry>
+        {
+            new()
+            {
+                AssetId = "RV:1HGBH41JXMN109186",
+                Manufacturer = "Grand Design",
+                Model = "Momentum 395G",
+                Year = 2023,
+                GlobalCustomerAcctId = acct.Id,
+            }
+        };
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ledgerEntries);
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
+
+        result.PrefillAsset.Should().NotBeNull();
+        result.PrefillAsset!.AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.PrefillAsset.Manufacturer.Should().Be("Grand Design");
+        result.PrefillAsset.Model.Should().Be("Momentum 395G");
+        result.PrefillAsset.Year.Should().Be(2023);
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenAssetLedgerEmpty_ShouldReturnNullPrefillAsset()
+    {
+        SetupConfigHappyPath();
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["RV:1HGBH41JXMN109186"]);
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AssetLedgerEntry>());
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
+
+        result.PrefillCustomer.Should().NotBeNull();
+        result.PrefillAsset.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenTokenNotFoundInDb_ShouldReturnNullPrefills()
+    {
+        SetupConfigHappyPath();
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("unknown-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GlobalCustomerAcct?)null);
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug", "unknown-token");
+
+        result.PrefillCustomer.Should().BeNull();
+        result.PrefillAsset.Should().BeNull();
+    }
+
+    private static GlobalCustomerAcct BuildGlobalAcctWithMagicLink(bool expired, List<string> assetIds)
+    {
+        return new GlobalCustomerAcct
+        {
+            Id = "gca_test",
+            Email = "jane@example.com",
+            FirstName = "Jane",
+            LastName = "Doe",
+            Phone = "801-555-1234",
+            MagicLinkToken = expired ? "expired-token" : "valid-token",
+            MagicLinkExpiresAtUtc = expired ? DateTime.UtcNow.AddDays(-1) : DateTime.UtcNow.AddDays(29),
+            AllKnownAssetIds = assetIds,
+            CreatedByUserId = "intake",
+        };
+    }
+
+    private void SetupConfigHappyPath()
+    {
+        _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("test-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildSlugLookup());
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                CreatedByUserId = "admin",
+            });
+
+        _lookupRepoMock.Setup(r => r.GetGlobalAsync("IssueCategory", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LookupSet?)null);
+    }
 }

@@ -329,6 +329,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         }
 
         CustomerInfoDto? prefillCustomer = null;
+        AssetInfoDto? prefillAsset = null;
         if (!string.IsNullOrWhiteSpace(magicLinkToken))
         {
             var acct = await _globalCustomerAcctRepository.GetByMagicLinkTokenAsync(magicLinkToken, cancellationToken);
@@ -341,6 +342,24 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                     Email = acct.Email,
                     Phone = acct.Phone
                 };
+
+                // Prefill the most recently used vehicle from the asset ledger
+                if (acct.AllKnownAssetIds is { Count: > 0 })
+                {
+                    var lastAssetId = acct.AllKnownAssetIds[^1];
+                    var entries = await _assetLedgerRepository.GetByAssetIdAsync(lastAssetId, cancellationToken);
+                    var mostRecent = entries.LastOrDefault();
+                    if (mostRecent is not null)
+                    {
+                        prefillAsset = new AssetInfoDto
+                        {
+                            AssetId = mostRecent.AssetId,
+                            Manufacturer = mostRecent.Manufacturer,
+                            Model = mostRecent.Model,
+                            Year = mostRecent.Year,
+                        };
+                    }
+                }
             }
         }
 
@@ -354,7 +373,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             MaxAttachments = intakeConfig.MaxAttachments,
             AllowAnonymousIntake = intakeConfig.AllowAnonymousIntake,
             IssueCategories = issueCategories,
-            PrefillCustomer = prefillCustomer
+            PrefillCustomer = prefillCustomer,
+            PrefillAsset = prefillAsset,
         };
     }
 
