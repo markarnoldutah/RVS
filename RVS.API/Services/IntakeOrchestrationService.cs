@@ -331,6 +331,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         CustomerInfoDto? prefillCustomer = null;
         AssetInfoDto? prefillAsset = null;
         var knownAssets = new List<AssetInfoDto>();
+        var tokenExpired = false;
         if (!string.IsNullOrWhiteSpace(magicLinkToken))
         {
             var acct = await _globalCustomerAcctRepository.GetByMagicLinkTokenAsync(magicLinkToken, cancellationToken);
@@ -369,6 +370,10 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                     prefillAsset = knownAssets.Count > 0 ? knownAssets[^1] : null;
                 }
             }
+            else if (acct is not null && acct.MagicLinkExpiresAtUtc.HasValue && acct.MagicLinkExpiresAtUtc.Value <= DateTime.UtcNow)
+            {
+                tokenExpired = true;
+            }
         }
 
         return new IntakeConfigResponseDto
@@ -384,6 +389,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             PrefillCustomer = prefillCustomer,
             PrefillAsset = prefillAsset,
             KnownAssets = knownAssets,
+            TokenExpired = tokenExpired,
         };
     }
 

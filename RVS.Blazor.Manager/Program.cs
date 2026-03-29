@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using MudBlazor.Services;
 using RVS.Blazor.Manager;
+using RVS.UI.Shared.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -33,6 +34,22 @@ builder.Services.AddScoped<AuthorizationMessageHandler>();
 // Provide a default HttpClient via IHttpClientFactory for DI consumers
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API"));
+
+// Typed API clients
+builder.Services.AddScoped<ServiceRequestApiClient>();
+
+// MudBlazor component library
+builder.Services.AddMudServices();
+
+// Register typed API clients using the named HttpClient
+builder.Services.AddScoped<RVS.UI.Shared.Services.ServiceRequestApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+builder.Services.AddScoped<RVS.UI.Shared.Services.AnalyticsApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+builder.Services.AddScoped<RVS.UI.Shared.Services.LookupApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+builder.Services.AddScoped<RVS.UI.Shared.Services.AttachmentApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
 
 // Configure OIDC Authentication with Auth0
 builder.Services.AddOidcAuthentication(options =>

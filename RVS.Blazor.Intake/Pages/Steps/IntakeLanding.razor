@@ -27,6 +27,15 @@
     else if (State.Config is not null)
     {
         <MudStack AlignItems="AlignItems.Center" Spacing="5">
+            @if (State.Config.TokenExpired)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-2" Style="width: 100%;"
+                          Icon="@Icons.Material.Filled.Schedule">
+                    Your link has expired. You can still submit a service request below, but your information won't be pre-filled.
+                    Contact the dealership if you need a new link.
+                </MudAlert>
+            }
+
             <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary"
                      Style="font-size: 4rem;" />
 

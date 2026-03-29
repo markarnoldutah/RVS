@@ -1,0 +1,187 @@
+@page "/settings"
+@inject LookupApiClient LookupClient
+@inject ISnackbar Snackbar
+
+<PageTitle>RVS Manager — Settings</PageTitle>
+
+<MudStack Spacing="4" Class="pa-2">
+    <MudText Typo="Typo.h4">Settings</MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error">@_error</MudAlert>
+    }
+    else if (_config is not null)
+    {
+        @* Tenant Configuration *@
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Tenant Configuration</MudText>
+                </MudStack>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body2"><strong>Tenant ID:</strong> @_config.TenantId</MudText>
+                    <MudText Typo="Typo.body2"><strong>Config ID:</strong> @_config.Id</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Created: @_config.CreatedAtUtc.ToLocalTime().ToString("g")
+                    </MudText>
+                    @if (_config.UpdatedAtUtc.HasValue)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Updated: @_config.UpdatedAtUtc.Value.ToLocalTime().ToString("g")
+                        </MudText>
+                    }
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+
+        @* Access Gate *@
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Access Gate</MudText>
+                </MudStack>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudSwitch T="bool" @bind-Value="_loginsEnabled"
+                                   Color="Color.Primary"
+                                   Label="@(_loginsEnabled ? "Logins Enabled" : "Logins Disabled")" />
+                    </MudStack>
+
+                    @if (!_loginsEnabled)
+                    {
+                        <MudAlert Severity="Severity.Warning">
+                            When logins are disabled, all users except administrators will be blocked from signing in.
+                        </MudAlert>
+
+                        <MudTextField T="string" Label="Disabled Reason (internal)" Variant="Variant.Outlined"
+                                      @bind-Value="_disabledReason" />
+                        <MudTextField T="string" Label="Disabled Message (shown to users)" Variant="Variant.Outlined"
+                                      @bind-Value="_disabledMessage" Lines="3" />
+                        <MudTextField T="string" Label="Support Contact Email" Variant="Variant.Outlined"
+                                      @bind-Value="_supportEmail" InputType="InputType.Email" />
+                    }
+                </MudStack>
+            </MudCardContent>
+            <MudCardActions>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveSettingsAsync" Disabled="_saving">
+                    @if (_saving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Save Settings
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+
+        @* Current Access Gate Status (read-only) *@
+        @if (_accessGate is not null)
+        {
+            <MudCard Elevation="1">
+                <MudCardHeader>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Info" />
+                        <MudText Typo="Typo.h6">Current Access Gate Status</MudText>
+                    </MudStack>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudStack Spacing="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@(_accessGate.IsEnabled ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                     Color="@(_accessGate.IsEnabled ? Color.Success : Color.Error)"
+                                     Size="Size.Small" />
+                            <MudText Typo="Typo.body1">
+                                @(_accessGate.IsEnabled ? "Access gate is enabled — logins are allowed." : "Access gate is disabled — logins are blocked.")
+                            </MudText>
+                        </MudStack>
+                        @if (!string.IsNullOrEmpty(_accessGate.DisabledReason))
+                        {
+                            <MudText Typo="Typo.body2"><strong>Reason:</strong> @_accessGate.DisabledReason</MudText>
+                        }
+                        @if (!string.IsNullOrEmpty(_accessGate.DisabledMessage))
+                        {
+                            <MudText Typo="Typo.body2"><strong>User Message:</strong> @_accessGate.DisabledMessage</MudText>
+                        }
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        }
+    }
+</MudStack>
+
+@code {
+    private TenantConfigResponseDto? _config;
+    private AccessGateStatusDto? _accessGate;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+
+    private bool _loginsEnabled;
+    private string? _disabledReason;
+    private string? _disabledMessage;
+    private string? _supportEmail;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _config = await LookupClient.GetTenantConfigAsync();
+            _accessGate = await LookupClient.GetAccessGateStatusAsync();
+
+            _loginsEnabled = _config.AccessGate.LoginsEnabled;
+            _disabledReason = _config.AccessGate.DisabledReason;
+            _disabledMessage = _config.AccessGate.DisabledMessage;
+            _supportEmail = _config.AccessGate.SupportContactEmail;
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        _saving = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new TenantConfigUpdateRequestDto();
+            await LookupClient.UpdateTenantConfigAsync(request);
+
+            _config = await LookupClient.GetTenantConfigAsync();
+            _accessGate = await LookupClient.GetAccessGateStatusAsync();
+
+            Snackbar.Add("Settings saved.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save settings: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

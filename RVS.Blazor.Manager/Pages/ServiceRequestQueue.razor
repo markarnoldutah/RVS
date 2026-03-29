@@ -1,0 +1,284 @@
+@page "/service-requests"
+@inject ServiceRequestApiClient SrClient
+@inject LookupApiClient LookupClient
+@inject NavigationManager Navigation
+
+<PageTitle>RVS Manager — Service Requests</PageTitle>
+
+<MudStack Spacing="4" Class="pa-2">
+    <MudText Typo="Typo.h4">Service Requests</MudText>
+
+    @* Search / Filter Panel *@
+    <MudExpansionPanels>
+        <MudExpansionPanel Text="Search &amp; Filter" Expanded="_filtersExpanded">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6" md="3">
+                    <MudTextField T="string" Label="Keyword" Variant="Variant.Outlined"
+                                  @bind-Value="_search.Keyword"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" Label="Status" Variant="Variant.Outlined"
+                               @bind-Value="_search.Status" Clearable="true">
+                        <MudSelectItem T="string" Value="@("New")">New</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("InProgress")">In Progress</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("WaitingOnParts")">Waiting on Parts</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Completed")">Completed</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Cancelled")">Cancelled</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudTextField T="string" Label="Issue Category" Variant="Variant.Outlined"
+                                  @bind-Value="_search.IssueCategory" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" Label="Location" Variant="Variant.Outlined"
+                               @bind-Value="_search.LocationId" Clearable="true">
+                        @foreach (var loc in _locations)
+                        {
+                            <MudSelectItem T="string" Value="@loc.LocationId">@loc.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudTextField T="string" Label="Assigned Technician" Variant="Variant.Outlined"
+                                  @bind-Value="_search.AssignedTechnicianId" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudTextField T="string" Label="Assigned Bay" Variant="Variant.Outlined"
+                                  @bind-Value="_search.AssignedBayId" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudTextField T="string" Label="Asset / VIN" Variant="Variant.Outlined"
+                                  @bind-Value="_search.AssetId" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" Label="Priority" Variant="Variant.Outlined"
+                               @bind-Value="_search.Priority" Clearable="true">
+                        <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker Label="Date From" Variant="Variant.Outlined"
+                                   @bind-Date="_dateFrom" Clearable="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker Label="Date To" Variant="Variant.Outlined"
+                                   @bind-Date="_dateTo" Clearable="true" />
+                </MudItem>
+                <MudItem xs="12" Class="d-flex gap-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Search"
+                               OnClick="SearchAsync">
+                        Search
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                               OnClick="ClearFilters">
+                        Clear
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
+    @* Results Table *@
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error">@_error</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="@_results" Hover="true" Striped="true" Dense="true"
+                  OnRowClick="OnRowClick" T="ServiceRequestSummaryResponseDto"
+                  RowClass="cursor-pointer">
+            <HeaderContent>
+                <MudTh>ID</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Priority</MudTh>
+                <MudTh>Customer</MudTh>
+                <MudTh>Asset</MudTh>
+                <MudTh>Category</MudTh>
+                <MudTh>Location</MudTh>
+                <MudTh>Technician</MudTh>
+                <MudTh>Created</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="ID">
+                    <MudText Typo="Typo.body2">@context.Id[..Math.Min(8, context.Id.Length)]…</MudText>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <StatusBadge Status="@context.Status" />
+                </MudTd>
+                <MudTd DataLabel="Priority">
+                    @if (!string.IsNullOrEmpty(context.Priority))
+                    {
+                        <PriorityBadge Priority="@context.Priority" />
+                    }
+                </MudTd>
+                <MudTd DataLabel="Customer">@context.CustomerFullName</MudTd>
+                <MudTd DataLabel="Asset">@(context.AssetDisplay ?? "—")</MudTd>
+                <MudTd DataLabel="Category">@context.IssueCategory</MudTd>
+                <MudTd DataLabel="Location">@(context.LocationName ?? context.LocationId)</MudTd>
+                <MudTd DataLabel="Technician">@(context.AssignedTechnicianId ?? "Unassigned")</MudTd>
+                <MudTd DataLabel="Created">@context.CreatedAtUtc.ToLocalTime().ToString("g")</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body1" Color="Color.Secondary">No service requests found.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+
+        @* Pagination *@
+        @if (_totalPages > 1)
+        {
+            <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="2" Class="mt-4">
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
+                               Disabled="@(_currentPage <= 1)"
+                               OnClick="PreviousPageAsync"
+                               aria-label="Previous page" />
+                <MudText Typo="Typo.body2">Page @_currentPage of @_totalPages (@_totalCount total)</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                               Disabled="@(_currentPage >= _totalPages)"
+                               OnClick="NextPageAsync"
+                               aria-label="Next page" />
+            </MudStack>
+        }
+    }
+</MudStack>
+
+@code {
+    private const int PageSize = 25;
+    private SearchModel _search = new();
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+    private List<LocationSummaryResponseDto> _locations = [];
+    private List<ServiceRequestSummaryResponseDto> _results = [];
+    private bool _loading;
+    private string? _error;
+    private int _currentPage = 1;
+    private long _totalCount;
+    private int _totalPages;
+    private bool _filtersExpanded = true;
+    private string? _dealershipId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _locations = await LookupClient.GetLocationsAsync();
+            var dealerships = await LookupClient.GetDealershipsAsync();
+            _dealershipId = dealerships.FirstOrDefault()?.Id;
+
+            if (_dealershipId is not null)
+            {
+                await SearchAsync();
+            }
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (_dealershipId is null)
+        {
+            _error = "No dealership found. Please contact your administrator.";
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var request = new ServiceRequestSearchRequestDto
+            {
+                Keyword = _search.Keyword,
+                Status = _search.Status,
+                IssueCategory = _search.IssueCategory,
+                LocationId = _search.LocationId,
+                AssignedTechnicianId = _search.AssignedTechnicianId,
+                AssignedBayId = _search.AssignedBayId,
+                AssetId = _search.AssetId,
+                Priority = _search.Priority,
+                DateFrom = _dateFrom?.ToUniversalTime(),
+                DateTo = _dateTo?.ToUniversalTime(),
+                Page = _currentPage,
+                PageSize = PageSize
+            };
+
+            var response = await SrClient.SearchAsync(_dealershipId, request);
+            _results = response.Results.Items;
+            _totalCount = response.Results.TotalCount;
+            _totalPages = (int)Math.Ceiling((double)_totalCount / PageSize);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ClearFilters()
+    {
+        _search = new();
+        _dateFrom = null;
+        _dateTo = null;
+        _currentPage = 1;
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_currentPage > 1)
+        {
+            _currentPage--;
+            await SearchAsync();
+        }
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_currentPage < _totalPages)
+        {
+            _currentPage++;
+            await SearchAsync();
+        }
+    }
+
+    private void OnRowClick(TableRowClickEventArgs<ServiceRequestSummaryResponseDto> args)
+    {
+        Navigation.NavigateTo($"/service-requests/{args.Item!.Id}");
+    }
+
+    private sealed class SearchModel
+    {
+        public string? Keyword { get; set; }
+        public string? Status { get; set; }
+        public string? IssueCategory { get; set; }
+        public string? LocationId { get; set; }
+        public string? AssignedTechnicianId { get; set; }
+        public string? AssignedBayId { get; set; }
+        public string? AssetId { get; set; }
+        public string? Priority { get; set; }
+    }
+}
