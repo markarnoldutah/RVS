@@ -25,10 +25,10 @@ html, body {
     top: 0.5rem;
 }
 
-/* Ensure interactive elements meet WCAG 2.1 minimum 44px touch target */
-button, a, [role="button"] {
+/* Ensure MudBlazor interactive elements meet WCAG 2.1 minimum 44px touch target */
+.mud-button, .mud-icon-button, .mud-nav-link, .mud-menu-activator,
+.mud-select, .mud-list-item {
     min-height: 44px;
-    min-width: 44px;
 }
 
 /* Focus indicator for keyboard navigation (WCAG 2.4.7) */
