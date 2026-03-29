@@ -55,6 +55,9 @@ builder.Services.AddOidcAuthentication(options =>
         options.ProviderOptions.AdditionalProviderParameters.Add("audience", audience);
     }
 
+    // Force Auth0 to always show the login screen (no silent SSO re-use)
+    // options.ProviderOptions.AdditionalProviderParameters.Add("prompt", "login");
+
     // Auth0 claim mapping
     options.UserOptions.RoleClaim = "roles";
     options.UserOptions.NameClaim = "name";

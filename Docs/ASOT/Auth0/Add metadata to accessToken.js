@@ -22,11 +22,19 @@ exports.onExecutePostLogin = async (event, api) => {
     let orgName = findOrgName()
     let regionTag = findRegionTag()
 
+    // Access token — used by the API (server-side JWT bearer validation)
     api.accessToken.setCustomClaim(tenantIdClaim, tenantId)
     api.accessToken.setCustomClaim(locationIdsClaim, locationIds)
     api.accessToken.setCustomClaim(orgNameClaim, orgName)
     api.accessToken.setCustomClaim(userIdClaim, event.user.user_id)
     api.accessToken.setCustomClaim(regionTagClaim, regionTag)
+
+    // ID token — used by Blazor WebAssembly (AuthenticationState.User / ClaimsPrincipal)
+    api.idToken.setCustomClaim(tenantIdClaim, tenantId)
+    api.idToken.setCustomClaim(locationIdsClaim, locationIds)
+    api.idToken.setCustomClaim(orgNameClaim, orgName)
+    api.idToken.setCustomClaim(userIdClaim, event.user.user_id)
+    api.idToken.setCustomClaim(regionTagClaim, regionTag)
 
 
     function findTenantId() {

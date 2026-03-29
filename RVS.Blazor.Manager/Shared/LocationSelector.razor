@@ -58,8 +58,12 @@
 
         if (user.Identity?.IsAuthenticated != true) return;
 
-        // Extract location IDs from claims (Auth0 custom claim)
-        var locationClaims = user.FindAll("app_metadata/locationIds");
+        // Extract location IDs from claims (Auth0 namespaced custom claim added to the ID token)
+        // Claim type must match the namespace set in the Auth0 PostLogin Action:
+        //   const namespace = 'https://rvserviceflow.com/'
+        //   api.idToken.setCustomClaim(namespace + 'locationIds', locationIds)
+        const string locationIdsClaimType = "https://rvserviceflow.com/locationIds";
+        var locationClaims = user.FindAll(locationIdsClaimType);
         foreach (var claim in locationClaims)
         {
             if (!string.IsNullOrWhiteSpace(claim.Value))

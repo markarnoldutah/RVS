@@ -1,0 +1,105 @@
+@page "/claims-debug"
+@using System.Security.Claims
+
+<PageTitle>Claims Debug</PageTitle>
+
+<AuthorizeView>
+    <Authorized Context="authContext">
+        <MudStack Spacing="4" Class="pa-6">
+            <MudText Typo="Typo.h5">Claims Debug</MudText>
+
+            <MudAlert Severity="Severity.Warning">
+                Temporary diagnostic page — remove before production.
+            </MudAlert>
+
+            @if (_claims.Count == 0)
+            {
+                <MudAlert Severity="Severity.Error">
+                    No claims found in AuthenticationState.User.
+                    IsAuthenticated = @_isAuthenticated
+                </MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Authenticated: @_isAuthenticated — Total claims: @_claims.Count
+                </MudText>
+
+                <MudTable Items="@_claims" Dense="true" Hover="true" Elevation="2"
+                          FixedHeader="true" Style="max-height: 600px; overflow-y: auto;">
+                    <HeaderContent>
+                        <MudTh>#</MudTh>
+                        <MudTh>Claim Type</MudTh>
+                        <MudTh>Value</MudTh>
+                    </HeaderContent>
+                    <RowTemplate Context="row">
+                        <MudTd>@row.Index</MudTd>
+                        <MudTd Style="word-break: break-all; max-width: 400px;">
+                            @row.Type
+                        </MudTd>
+                        <MudTd Style="word-break: break-all; max-width: 400px;">
+                            @row.Value
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+
+                <MudText Typo="Typo.h6" Class="mt-4">Location Claim Lookup</MudText>
+                <MudText Typo="Typo.body2">
+                    Looking for: <code>https://rvserviceflow.com/locationIds</code>
+                </MudText>
+
+                @if (_locationClaims.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Success">
+                        Found @_locationClaims.Count location claim(s):
+                    </MudAlert>
+                    @foreach (var loc in _locationClaims)
+                    {
+                        <MudChip T="string" Color="Color.Primary">@loc</MudChip>
+                    }
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Error">
+                        No claims found with type <code>https://rvserviceflow.com/locationIds</code>.
+                        Check the table above for claims containing "location" or "rvserviceflow".
+                    </MudAlert>
+                }
+            }
+        </MudStack>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private record ClaimRow(int Index, string Type, string Value);
+
+    private List<ClaimRow> _claims = [];
+    private List<string> _locationClaims = [];
+    private bool _isAuthenticated;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is null) return;
+
+        var authState = await AuthStateTask;
+        var user = authState.User;
+        _isAuthenticated = user.Identity?.IsAuthenticated == true;
+
+        if (!_isAuthenticated) return;
+
+        // Dump every claim
+        _claims = user.Claims
+            .Select((c, i) => new ClaimRow(i + 1, c.Type, c.Value))
+            .ToList();
+
+        // Try the expected claim type
+        const string locationIdsClaimType = "https://rvserviceflow.com/locationIds";
+        _locationClaims = user.FindAll(locationIdsClaimType)
+            .Select(c => c.Value)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .ToList();
+    }
+}
