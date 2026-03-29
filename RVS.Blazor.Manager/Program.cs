@@ -9,6 +9,9 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
+// MudBlazor component library
+builder.Services.AddMudServices();
+
 // Get API base URL from configuration
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
 
@@ -30,9 +33,6 @@ builder.Services.AddScoped<AuthorizationMessageHandler>();
 // Provide a default HttpClient via IHttpClientFactory for DI consumers
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API"));
-
-// MudBlazor component library
-builder.Services.AddMudServices();
 
 // Configure OIDC Authentication with Auth0
 builder.Services.AddOidcAuthentication(options =>
