@@ -92,6 +92,11 @@
             {
                 State.ApplyAssetPrefill(State.Config.PrefillAsset);
             }
+
+            if (State.Config.KnownAssets is { Count: > 0 })
+            {
+                State.KnownAssets = State.Config.KnownAssets;
+            }
         }
         catch (HttpRequestException)
         {

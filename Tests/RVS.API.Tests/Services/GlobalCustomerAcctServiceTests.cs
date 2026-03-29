@@ -2,6 +2,7 @@ using FluentAssertions;
 using Moq;
 using RVS.API.Services;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Interfaces;
 
 namespace RVS.API.Tests.Services;
@@ -332,7 +333,7 @@ public class GlobalCustomerAcctServiceTests
     }
 
     [Fact]
-    public async Task ValidateMagicLinkTokenAsync_WhenTokenExpired_ShouldThrowUnauthorizedAccessException()
+    public async Task ValidateMagicLinkTokenAsync_WhenTokenExpired_ShouldThrowMagicLinkExpiredException()
     {
         var account = BuildAccount();
         account.MagicLinkToken = "prefix:suffix";
@@ -343,7 +344,7 @@ public class GlobalCustomerAcctServiceTests
 
         var act = () => _sut.ValidateMagicLinkTokenAsync("prefix:suffix");
 
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+        await act.Should().ThrowAsync<MagicLinkExpiredException>()
             .WithMessage("*expired*");
     }
 

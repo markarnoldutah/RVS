@@ -19,4 +19,10 @@ public sealed record IntakeConfigResponseDto
     /// Most recently used vehicle info, prefilled when the customer has asset history via a magic-link token.
     /// </summary>
     public AssetInfoDto? PrefillAsset { get; init; }
+
+    /// <summary>
+    /// All known vehicles for the returning customer, enabling one-tap VIN selection.
+    /// Empty for anonymous (no token) customers.
+    /// </summary>
+    public List<AssetInfoDto> KnownAssets { get; init; } = [];
 }

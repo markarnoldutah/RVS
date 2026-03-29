@@ -330,6 +330,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         CustomerInfoDto? prefillCustomer = null;
         AssetInfoDto? prefillAsset = null;
+        var knownAssets = new List<AssetInfoDto>();
         if (!string.IsNullOrWhiteSpace(magicLinkToken))
         {
             var acct = await _globalCustomerAcctRepository.GetByMagicLinkTokenAsync(magicLinkToken, cancellationToken);
@@ -343,22 +344,27 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                     Phone = acct.Phone
                 };
 
-                // Prefill the most recently used vehicle from the asset ledger
+                // Resolve all known vehicles for one-tap selection
                 if (acct.AllKnownAssetIds is { Count: > 0 })
                 {
-                    var lastAssetId = acct.AllKnownAssetIds[^1];
-                    var entries = await _assetLedgerRepository.GetByAssetIdAsync(lastAssetId, cancellationToken);
-                    var mostRecent = entries.LastOrDefault();
-                    if (mostRecent is not null)
+                    foreach (var assetId in acct.AllKnownAssetIds)
                     {
-                        prefillAsset = new AssetInfoDto
+                        var entries = await _assetLedgerRepository.GetByAssetIdAsync(assetId, cancellationToken);
+                        var mostRecent = entries.LastOrDefault();
+                        if (mostRecent is not null)
                         {
-                            AssetId = mostRecent.AssetId,
-                            Manufacturer = mostRecent.Manufacturer,
-                            Model = mostRecent.Model,
-                            Year = mostRecent.Year,
-                        };
+                            knownAssets.Add(new AssetInfoDto
+                            {
+                                AssetId = mostRecent.AssetId,
+                                Manufacturer = mostRecent.Manufacturer,
+                                Model = mostRecent.Model,
+                                Year = mostRecent.Year,
+                            });
+                        }
                     }
+
+                    // Prefill the most recently used vehicle
+                    prefillAsset = knownAssets.Count > 0 ? knownAssets[^1] : null;
                 }
             }
         }
@@ -375,6 +381,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             IssueCategories = issueCategories,
             PrefillCustomer = prefillCustomer,
             PrefillAsset = prefillAsset,
+            KnownAssets = knownAssets,
         };
     }
 

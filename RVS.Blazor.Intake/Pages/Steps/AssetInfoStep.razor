@@ -5,6 +5,29 @@
             <MudText Typo="Typo.h5">Vehicle Information</MudText>
         </MudStack>
 
+        @if (State.KnownAssets is { Count: > 0 })
+        {
+            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
+                Select a previous vehicle or enter a new VIN below
+            </MudText>
+
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                @foreach (var asset in State.KnownAssets)
+                {
+                    var isSelected = string.Equals(State.Vin, asset.AssetId, StringComparison.OrdinalIgnoreCase);
+                    var label = FormatAssetLabel(asset);
+                    <MudChip T="string"
+                             Text="@label"
+                             Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                             Color="@(isSelected ? Color.Primary : Color.Default)"
+                             Icon="@(isSelected ? Icons.Material.Filled.CheckCircle : Icons.Material.Outlined.DirectionsCar)"
+                             OnClick="() => SelectKnownAsset(asset)" />
+                }
+            </MudStack>
+
+            <MudDivider Class="my-1" />
+        }
+
         <MudTextField T="string"
                       Value="@State.Vin"
                       ValueChanged="HandleVinChanged"
@@ -86,10 +109,32 @@
 
     private void HandleVinChanged(string? value)
     {
-        // Strip whitespace and uppercase to normalize VIN on input,
-        // preventing MaxLength from silently truncating real characters
-        // when clipboard paste includes leading/trailing spaces.
         State.Vin = value?.Trim().ToUpperInvariant() ?? string.Empty;
+    }
+
+    private void SelectKnownAsset(AssetInfoDto asset)
+    {
+        State.Vin = asset.AssetId;
+        State.Manufacturer = asset.Manufacturer;
+        State.Model = asset.Model;
+        State.Year = asset.Year;
+        StateHasChanged();
+    }
+
+    private static string FormatAssetLabel(AssetInfoDto asset)
+    {
+        var parts = new List<string>();
+        if (asset.Year.HasValue)
+            parts.Add(asset.Year.Value.ToString());
+        if (!string.IsNullOrWhiteSpace(asset.Manufacturer))
+            parts.Add(asset.Manufacturer);
+        if (!string.IsNullOrWhiteSpace(asset.Model))
+            parts.Add(asset.Model);
+
+        var description = parts.Count > 0 ? string.Join(" ", parts) : null;
+        var vin = asset.AssetId.Length > 8 ? $"…{asset.AssetId[^8..]}" : asset.AssetId;
+
+        return description is not null ? $"{description} ({vin})" : vin;
     }
 
     private async Task HandleNext()

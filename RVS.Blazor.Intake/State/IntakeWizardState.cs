@@ -49,6 +49,9 @@ public sealed class IntakeWizardState
     /// <summary>Whether the customer info was prefilled from a magic-link token.</summary>
     public bool IsPrefilled { get; set; }
 
+    /// <summary>All known vehicles for the returning customer, enabling one-tap VIN selection in Step 3.</summary>
+    public List<AssetInfoDto> KnownAssets { get; set; } = [];
+
     /// <summary>Vehicle Identification Number (Step 3).</summary>
     public string Vin { get; set; } = string.Empty;
 
@@ -318,6 +321,7 @@ public sealed class IntakeWizardState
         Email = string.Empty;
         Phone = null;
         IsPrefilled = false;
+        KnownAssets = [];
         Vin = string.Empty;
         Manufacturer = null;
         Model = null;
