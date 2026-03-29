@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using MudBlazor.Services;
 using RVS.Blazor.Manager;
+using RVS.UI.Shared.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -30,6 +31,9 @@ builder.Services.AddScoped<AuthorizationMessageHandler>();
 // Provide a default HttpClient via IHttpClientFactory for DI consumers
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API"));
+
+// Typed API clients
+builder.Services.AddScoped<ServiceRequestApiClient>();
 
 // MudBlazor component library
 builder.Services.AddMudServices();
