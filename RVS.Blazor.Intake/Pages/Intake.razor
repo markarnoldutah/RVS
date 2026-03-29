@@ -1,0 +1,22 @@
+@page "/intake"
+
+<PageTitle>Service Request Intake</PageTitle>
+
+<MudStack AlignItems="AlignItems.Center" Spacing="5" Class="mt-8"
+          Style="max-width: 600px; margin: 0 auto;">
+    <MudIcon Icon="@Icons.Material.Filled.EditNote" Color="Color.Primary"
+             Style="font-size: 4rem;" />
+
+    <MudText Typo="Typo.h4" Align="Align.Center">
+        Service Request Intake
+    </MudText>
+
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+        To start a service request, please use the location-specific link provided by your dealer
+        (e.g., from a QR code or email).
+    </MudText>
+
+    <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+        The link format is: <code>/intake/your-location-slug</code>
+    </MudText>
+</MudStack>

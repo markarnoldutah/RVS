@@ -1,0 +1,87 @@
+<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+    <MudStack Spacing="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">Contact Information</MudText>
+        </MudStack>
+
+        @if (State.IsPrefilled)
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+                Your information has been pre-filled from your previous visit.
+            </MudAlert>
+        }
+
+        <MudTextField @bind-Value="State.FirstName"
+                      Label="First Name"
+                      Required="true"
+                      RequiredError="First name is required"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Badge"
+                      autocomplete="given-name" />
+
+        <MudTextField @bind-Value="State.LastName"
+                      Label="Last Name"
+                      Required="true"
+                      RequiredError="Last name is required"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Badge"
+                      autocomplete="family-name" />
+
+        <MudTextField @bind-Value="State.Email"
+                      Label="Email"
+                      Required="true"
+                      RequiredError="Email is required"
+                      InputType="InputType.Email"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Email"
+                      Placeholder="you@example.com"
+                      autocomplete="email" />
+
+        <MudTextField @bind-Value="State.Phone"
+                      Label="Phone (optional)"
+                      InputType="InputType.Telephone"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Phone"
+                      Placeholder="(555) 123-4567"
+                      autocomplete="tel" />
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="HandleBack"
+                       Style="text-transform: none;">
+                Back
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       EndIcon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="HandleNext"
+                       Style="text-transform: none;">
+                Next
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+
+    private async Task HandleNext()
+    {
+        await State.NotifyAndPersistAsync();
+        await OnNext.InvokeAsync();
+    }
+
+    private async Task HandleBack()
+    {
+        await OnBack.InvokeAsync();
+    }
+}

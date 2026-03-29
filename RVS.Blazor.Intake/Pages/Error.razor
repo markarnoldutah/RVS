@@ -1,0 +1,24 @@
+@page "/error"
+
+<PageTitle>Error</PageTitle>
+
+<MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
+    <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
+             Style="font-size: 4rem;" />
+
+    <MudText Typo="Typo.h4" Color="Color.Error" Align="Align.Center">
+        An error occurred while processing your request.
+    </MudText>
+
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+        Please try again. If the problem persists, contact the dealership.
+    </MudText>
+
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Home"
+               Href="/"
+               Style="text-transform: none;">
+        Return Home
+    </MudButton>
+</MudStack>

@@ -1,0 +1,225 @@
+@page "/status/{Token}"
+
+<PageTitle>Your Service Requests</PageTitle>
+
+@if (_loading)
+{
+    <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        <MudText Typo="Typo.body1">Loading your service requests…</MudText>
+    </MudStack>
+}
+else if (_errorState == ErrorState.InvalidToken)
+{
+    <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
+        <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
+                 Style="font-size: 4rem;" />
+
+        <MudText Typo="Typo.h4" Align="Align.Center">
+            Invalid Link
+        </MudText>
+
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            This status link is not valid. Please check the link in your email and try again.
+        </MudText>
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Home"
+                   Href="/"
+                   Style="text-transform: none;">
+            Return Home
+        </MudButton>
+    </MudStack>
+}
+else if (_errorState == ErrorState.ExpiredToken)
+{
+    <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
+        <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning"
+                 Style="font-size: 4rem;" />
+
+        <MudText Typo="Typo.h4" Align="Align.Center">
+            Link Expired
+        </MudText>
+
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            This status link has expired. Please request a new status link from the dealership
+            or submit a new service request to receive an updated link.
+        </MudText>
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Home"
+                   Href="/"
+                   Style="text-transform: none;">
+            Return Home
+        </MudButton>
+    </MudStack>
+}
+else if (_errorState == ErrorState.Unexpected)
+{
+    <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
+        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error"
+                 Style="font-size: 4rem;" />
+
+        <MudText Typo="Typo.h4" Align="Align.Center">
+            Something Went Wrong
+        </MudText>
+
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            We were unable to load your service requests. Please try again later.
+        </MudText>
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="RetryLoad"
+                   Style="text-transform: none;">
+            Try Again
+        </MudButton>
+    </MudStack>
+}
+else if (_statusResponse is not null)
+{
+    <MudStack Spacing="6" Class="mt-4">
+        <MudText Typo="Typo.h4">
+            Hi @_statusResponse.FirstName, here are your service requests
+        </MudText>
+
+        @if (_statusResponse.ServiceRequests.Count == 0)
+        {
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <MudIcon Icon="@Icons.Material.Filled.EditNote" Color="Color.Default"
+                         Style="font-size: 4rem;" />
+                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                    You have no active service requests at this time.
+                </MudText>
+            </MudStack>
+        }
+        else
+        {
+            <MudGrid>
+                @foreach (var sr in _statusResponse.ServiceRequests)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudCard Elevation="3">
+                            <MudCardContent>
+                                <MudStack Spacing="3">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                        <StatusBadge Status="@sr.Status" />
+                                        @if (!string.IsNullOrWhiteSpace(sr.LocationName))
+                                        {
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                                @sr.LocationName
+                                            </MudText>
+                                        }
+                                    </MudStack>
+
+                                    <MudDivider />
+
+                                    <MudSimpleTable Dense="true" Elevation="0">
+                                        <tbody>
+                                            <tr>
+                                                <td><strong>Issue Category</strong></td>
+                                                <td>@(string.IsNullOrWhiteSpace(sr.IssueCategory) ? "—" : sr.IssueCategory)</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Submitted</strong></td>
+                                                <td>@sr.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Last Updated</strong></td>
+                                                <td>
+                                                    @(sr.UpdatedAtUtc.HasValue
+                                                        ? sr.UpdatedAtUtc.Value.ToLocalTime().ToString("MMM d, yyyy")
+                                                        : "—")
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </MudSimpleTable>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        <MudStack AlignItems="AlignItems.Center">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Home"
+                       Href="/"
+                       Style="text-transform: none;">
+                Return Home
+            </MudButton>
+        </MudStack>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Token { get; set; } = default!;
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private ILogger<StatusPage> Logger { get; set; } = default!;
+
+    private CustomerStatusResponseDto? _statusResponse;
+    private bool _loading = true;
+    private ErrorState _errorState = ErrorState.None;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatusAsync();
+    }
+
+    private async Task LoadStatusAsync()
+    {
+        _loading = true;
+        _errorState = ErrorState.None;
+        _statusResponse = null;
+
+        try
+        {
+            var response = await Http.GetAsync($"api/status/{Uri.EscapeDataString(Token)}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                _statusResponse = await response.Content.ReadFromJsonAsync<CustomerStatusResponseDto>();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _errorState = ErrorState.InvalidToken;
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Gone)
+            {
+                _errorState = ErrorState.ExpiredToken;
+            }
+            else
+            {
+                _errorState = ErrorState.Unexpected;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load status for token");
+            _errorState = ErrorState.Unexpected;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RetryLoad()
+    {
+        await LoadStatusAsync();
+    }
+
+    private enum ErrorState
+    {
+        None,
+        InvalidToken,
+        ExpiredToken,
+        Unexpected
+    }
+}

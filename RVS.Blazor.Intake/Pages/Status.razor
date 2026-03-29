@@ -1,0 +1,60 @@
+@page "/status"
+
+<PageTitle>Check Request Status</PageTitle>
+
+<MudStack AlignItems="AlignItems.Center" Spacing="5" Class="mt-8">
+    <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Primary"
+             Style="font-size: 4rem;" />
+
+    <MudText Typo="Typo.h4" Align="Align.Center">
+        Check Request Status
+    </MudText>
+
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+        Enter your confirmation number to view the status of your service request.
+    </MudText>
+
+    <MudStack AlignItems="AlignItems.Center" Spacing="3" Style="width: 100%; max-width: 400px;">
+        <MudTextField @bind-Value="_confirmationNumber"
+                      Label="Confirmation Number"
+                      Placeholder="e.g., SR-2026-00742"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.ConfirmationNumber"
+                      Immediate="true"
+                      autocomplete="off"
+                      OnKeyDown="HandleKeyDown" />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Search"
+                   OnClick="LookupStatus"
+                   Disabled="@string.IsNullOrWhiteSpace(_confirmationNumber)"
+                   Style="text-transform: none; min-width: 200px;">
+            Look Up Status
+        </MudButton>
+    </MudStack>
+</MudStack>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private string _confirmationNumber = string.Empty;
+
+    private void LookupStatus()
+    {
+        var token = _confirmationNumber.Trim();
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            Navigation.NavigateTo($"/status/{Uri.EscapeDataString(token)}");
+        }
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            LookupStatus();
+        }
+    }
+}

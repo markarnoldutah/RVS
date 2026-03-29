@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="RVS.API/RVS.API.csproj" />
+  <Project Path="RVS.Blazor.Intake/RVS.Blazor.Intake.csproj" />
   <Project Path="RVS.Cust_Intake.Client/RVS.Cust_Intake.Client.csproj">
     <Build Solution="Debug|*" Project="false" />
   </Project>
