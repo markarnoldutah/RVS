@@ -1,0 +1,364 @@
+@page "/analytics"
+@inject AnalyticsApiClient AnalyticsClient
+@inject LookupApiClient LookupClient
+
+<PageTitle>RVS Manager — Analytics</PageTitle>
+
+<MudStack Spacing="4" Class="pa-2">
+    <MudText Typo="Typo.h4">Analytics Dashboard</MudText>
+
+    @* Date range & location filter *@
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="4" md="3">
+                <MudDatePicker Label="From" Variant="Variant.Outlined"
+                               @bind-Date="_dateFrom" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="4" md="3">
+                <MudDatePicker Label="To" Variant="Variant.Outlined"
+                               @bind-Date="_dateTo" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="4" md="3">
+                <MudSelect T="string" Label="Location" Variant="Variant.Outlined"
+                           @bind-Value="_locationId" Clearable="true">
+                    @foreach (var loc in _locations)
+                    {
+                        <MudSelectItem T="string" Value="@loc.LocationId">@loc.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="12" md="3" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadAnalyticsAsync" FullWidth="true">
+                    Refresh
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error">@_error</MudAlert>
+    }
+    else if (_analytics is not null)
+    {
+        @* Summary Cards *@
+        <MudGrid Spacing="3">
+            <MudItem xs="6" sm="3">
+                <MudPaper Elevation="2" Class="pa-4 text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Inbox" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Typo="Typo.h4">@_analytics.TotalRequests</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Total Requests</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Elevation="2" Class="pa-4 text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Secondary" Size="Size.Large" />
+                    <MudText Typo="Typo.h4">@(_analytics.AverageRepairTimeHours?.ToString("F1") ?? "—")</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Avg Repair Hours</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Elevation="2" Class="pa-4 text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Info" Size="Size.Large" />
+                    <MudText Typo="Typo.h4">@(_analytics.AverageDaysToComplete?.ToString("F1") ?? "—")</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Avg Days to Complete</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Elevation="2" Class="pa-4 text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Warning" Size="Size.Large" />
+                    <MudText Typo="Typo.h4">@_analytics.RequestsByLocation.Count</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Locations Active</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* Breakdown by Status *@
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">By Status</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_analytics.RequestsByStatus.Count > 0)
+                        {
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th style="text-align:right;">Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var kv in _analytics.RequestsByStatus.OrderByDescending(x => x.Value))
+                                    {
+                                        <tr>
+                                            <td><StatusBadge Status="@kv.Key" /></td>
+                                            <td style="text-align:right;">@kv.Value</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No data available.</MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            @* Breakdown by Category *@
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">By Category</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_analytics.RequestsByCategory.Count > 0)
+                        {
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th style="text-align:right;">Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var kv in _analytics.RequestsByCategory.OrderByDescending(x => x.Value))
+                                    {
+                                        <tr>
+                                            <td>@kv.Key</td>
+                                            <td style="text-align:right;">@kv.Value</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No data available.</MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            @* Breakdown by Location *@
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">By Location</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_analytics.RequestsByLocation.Count > 0)
+                        {
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <thead>
+                                    <tr>
+                                        <th>Location</th>
+                                        <th style="text-align:right;">Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var kv in _analytics.RequestsByLocation.OrderByDescending(x => x.Value))
+                                    {
+                                        <tr>
+                                            <td>@kv.Key</td>
+                                            <td style="text-align:right;">@kv.Value</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No data available.</MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            @* Top Failure Modes *@
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Top Failure Modes</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_analytics.TopFailureModes.Count > 0)
+                        {
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <thead>
+                                    <tr>
+                                        <th>Failure Mode</th>
+                                        <th style="text-align:right;">Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in _analytics.TopFailureModes)
+                                    {
+                                        <tr>
+                                            <td>@item.Name</td>
+                                            <td style="text-align:right;">@item.Count</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No data available.</MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            @* Top Repair Actions *@
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Top Repair Actions</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_analytics.TopRepairActions.Count > 0)
+                        {
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <thead>
+                                    <tr>
+                                        <th>Repair Action</th>
+                                        <th style="text-align:right;">Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in _analytics.TopRepairActions)
+                                    {
+                                        <tr>
+                                            <td>@item.Name</td>
+                                            <td style="text-align:right;">@item.Count</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No data available.</MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            @* Top Parts Used *@
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Top Parts Used</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_analytics.TopPartsUsed.Count > 0)
+                        {
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <thead>
+                                    <tr>
+                                        <th>Part</th>
+                                        <th style="text-align:right;">Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in _analytics.TopPartsUsed)
+                                    {
+                                        <tr>
+                                            <td>@item.Name</td>
+                                            <td style="text-align:right;">@item.Count</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No data available.</MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+</MudStack>
+
+@code {
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+    private string? _locationId;
+    private string? _dealershipId;
+    private List<LocationSummaryResponseDto> _locations = [];
+    private ServiceRequestAnalyticsResponseDto? _analytics;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _locations = await LookupClient.GetLocationsAsync();
+            var dealerships = await LookupClient.GetDealershipsAsync();
+            _dealershipId = dealerships.FirstOrDefault()?.Id;
+
+            if (_dealershipId is not null)
+            {
+                await LoadAnalyticsAsync();
+            }
+            else
+            {
+                _error = "No dealership found.";
+                _loading = false;
+            }
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _loading = false;
+        }
+    }
+
+    private async Task LoadAnalyticsAsync()
+    {
+        if (_dealershipId is null) return;
+
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            _analytics = await AnalyticsClient.GetServiceRequestSummaryAsync(
+                _dealershipId,
+                _dateFrom?.ToUniversalTime(),
+                _dateTo?.ToUniversalTime(),
+                _locationId);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

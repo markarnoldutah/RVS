@@ -70,4 +70,39 @@ public class StatusTransitionsTests
                 because: $"Completed should not transition to {target}");
         }
     }
+
+    [Fact]
+    public void GetAllowedTargets_New_ReturnsInProgressAndCancelled()
+    {
+        var targets = StatusTransitions.GetAllowedTargets("New");
+
+        targets.Should().BeEquivalentTo(["InProgress", "Cancelled"]);
+    }
+
+    [Fact]
+    public void GetAllowedTargets_Completed_ReturnsEmpty()
+    {
+        var targets = StatusTransitions.GetAllowedTargets("Completed");
+
+        targets.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetAllowedTargets_UnknownStatus_ReturnsEmpty()
+    {
+        var targets = StatusTransitions.GetAllowedTargets("Unknown");
+
+        targets.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void GetAllowedTargets_NullOrWhitespace_ThrowsArgumentException(string? status)
+    {
+        var act = () => StatusTransitions.GetAllowedTargets(status!);
+
+        act.Should().Throw<ArgumentException>();
+    }
 }

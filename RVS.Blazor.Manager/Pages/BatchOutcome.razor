@@ -1,0 +1,232 @@
+@page "/service-requests/batch-outcome"
+@inject ServiceRequestApiClient SrClient
+@inject LookupApiClient LookupClient
+@inject ISnackbar Snackbar
+
+<PageTitle>RVS Manager — Batch Outcome</PageTitle>
+
+<MudStack Spacing="4" Class="pa-2">
+    <MudText Typo="Typo.h4">Batch Outcome</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary">
+        Search for service requests, select up to 25, and apply a shared repair outcome.
+    </MudText>
+
+    @* Search for SRs to select *@
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudStack Row="true" AlignItems="AlignItems.End" Spacing="2">
+            <MudTextField T="string" Label="Search keyword" Variant="Variant.Outlined"
+                          @bind-Value="_keyword"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Style="flex: 1;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchAsync"
+                       Disabled="_searching">
+                Search
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @if (_searching)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_searchError is not null)
+    {
+        <MudAlert Severity="Severity.Error">@_searchError</MudAlert>
+    }
+
+    @* Selection table *@
+    @if (_searchResults.Count > 0)
+    {
+        <MudTable Items="@_searchResults" MultiSelection="true" @bind-SelectedItems="_selectedItems"
+                  Hover="true" Dense="true" T="ServiceRequestSummaryResponseDto">
+            <HeaderContent>
+                <MudTh>ID</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Customer</MudTh>
+                <MudTh>Category</MudTh>
+                <MudTh>Created</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="ID">@context.Id[..Math.Min(8, context.Id.Length)]…</MudTd>
+                <MudTd DataLabel="Status"><StatusBadge Status="@context.Status" /></MudTd>
+                <MudTd DataLabel="Customer">@context.CustomerFullName</MudTd>
+                <MudTd DataLabel="Category">@context.IssueCategory</MudTd>
+                <MudTd DataLabel="Created">@context.CreatedAtUtc.ToLocalTime().ToString("g")</MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        @if (_selectedItems.Count > 25)
+        {
+            <MudAlert Severity="Severity.Warning">Maximum of 25 service requests can be selected at once.</MudAlert>
+        }
+
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            @_selectedItems.Count of @_searchResults.Count selected (max 25)
+        </MudText>
+    }
+
+    @* Outcome Form *@
+    @if (_selectedItems.Count > 0 && _selectedItems.Count <= 25)
+    {
+        <MudPaper Elevation="2" Class="pa-6">
+            <MudText Typo="Typo.h6" Class="mb-4">Repair Outcome</MudText>
+            <MudGrid Spacing="3">
+                <MudItem xs="12" sm="6">
+                    <MudTextField T="string" Label="Failure Mode" Variant="Variant.Outlined"
+                                  @bind-Value="_outcome.FailureMode" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField T="string" Label="Repair Action" Variant="Variant.Outlined"
+                                  @bind-Value="_outcome.RepairAction" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField T="string" Label="Parts Used (comma-separated)" Variant="Variant.Outlined"
+                                  @bind-Value="_partsInput" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="decimal?" Label="Labor Hours" Variant="Variant.Outlined"
+                                     @bind-Value="_outcome.LaborHours" Min="0" />
+                </MudItem>
+                <MudItem xs="12" Class="d-flex justify-end">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="ApplyOutcomeAsync" Disabled="_applying">
+                        @if (_applying)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Apply Outcome to @_selectedItems.Count SRs
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+
+    @* Results *@
+    @if (_batchResult is not null)
+    {
+        <MudPaper Elevation="1" Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Batch Results</MudText>
+            @if (_batchResult.Succeeded.Count > 0)
+            {
+                <MudAlert Severity="Severity.Success" Class="mb-2">
+                    @_batchResult.Succeeded.Count service request(s) updated successfully.
+                </MudAlert>
+            }
+            @if (_batchResult.Failed.Count > 0)
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-2">
+                    @_batchResult.Failed.Count service request(s) failed:
+                </MudAlert>
+                <MudList T="string" Dense="true">
+                    @foreach (var fail in _batchResult.Failed)
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Error" IconColor="Color.Error">
+                            @fail.ServiceRequestId: @fail.Reason
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private string? _keyword;
+    private string? _dealershipId;
+    private bool _searching;
+    private bool _applying;
+    private string? _searchError;
+    private List<ServiceRequestSummaryResponseDto> _searchResults = [];
+    private HashSet<ServiceRequestSummaryResponseDto> _selectedItems = [];
+    private OutcomeModel _outcome = new();
+    private string? _partsInput;
+    private BatchOutcomeResponseDto? _batchResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var dealerships = await LookupClient.GetDealershipsAsync();
+            _dealershipId = dealerships.FirstOrDefault()?.Id;
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (_dealershipId is null) return;
+
+        _searching = true;
+        _searchError = null;
+        _batchResult = null;
+        StateHasChanged();
+
+        try
+        {
+            var request = new ServiceRequestSearchRequestDto
+            {
+                Keyword = _keyword,
+                PageSize = 50
+            };
+
+            var response = await SrClient.SearchAsync(_dealershipId, request);
+            _searchResults = response.Results.Items;
+            _selectedItems = [];
+        }
+        catch (Exception ex)
+        {
+            _searchError = ex.Message;
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private async Task ApplyOutcomeAsync()
+    {
+        if (_dealershipId is null || _selectedItems.Count == 0) return;
+
+        _applying = true;
+        StateHasChanged();
+
+        try
+        {
+            var parts = string.IsNullOrWhiteSpace(_partsInput)
+                ? null
+                : _partsInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+            var request = new BatchOutcomeRequestDto
+            {
+                ServiceRequestIds = _selectedItems.Select(s => s.Id).ToList(),
+                FailureMode = _outcome.FailureMode,
+                RepairAction = _outcome.RepairAction,
+                PartsUsed = parts,
+                LaborHours = _outcome.LaborHours
+            };
+
+            _batchResult = await SrClient.BatchOutcomeAsync(_dealershipId, request);
+            Snackbar.Add($"Batch outcome applied: {_batchResult.Succeeded.Count} succeeded, {_batchResult.Failed.Count} failed.",
+                _batchResult.Failed.Count == 0 ? Severity.Success : Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Batch outcome failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _applying = false;
+        }
+    }
+
+    private sealed class OutcomeModel
+    {
+        public string? FailureMode { get; set; }
+        public string? RepairAction { get; set; }
+        public decimal? LaborHours { get; set; }
+    }
+}
