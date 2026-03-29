@@ -16,6 +16,18 @@ public static class StatusTransitions
     };
 
     /// <summary>
+    /// Returns the set of statuses that can be reached from <paramref name="currentStatus"/>.
+    /// </summary>
+    /// <param name="currentStatus">The current status value.</param>
+    /// <returns>A read-only collection of valid target statuses, or empty if none are allowed.</returns>
+    public static IReadOnlyCollection<string> GetAllowedTargets(string currentStatus)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(currentStatus);
+
+        return _allowed.TryGetValue(currentStatus, out var targets) ? targets : [];
+    }
+
+    /// <summary>
     /// Returns true if the transition from <paramref name="from"/> to <paramref name="to"/> is valid.
     /// </summary>
     /// <param name="from">The current status value.</param>

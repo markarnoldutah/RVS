@@ -87,4 +87,98 @@ public sealed class LookupApiClient
             cancellationToken)
             ?? throw new InvalidOperationException("Failed to deserialize dealership response.");
     }
+
+    /// <summary>
+    /// Creates a new location.
+    /// </summary>
+    public async Task<LocationDetailDto> CreateLocationAsync(
+        LocationCreateRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PostAsJsonAsync("api/locations", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<LocationDetailDto>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize location create response.");
+    }
+
+    /// <summary>
+    /// Updates an existing location.
+    /// </summary>
+    public async Task<LocationDetailDto> UpdateLocationAsync(
+        string locationId,
+        LocationCreateRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationId);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PutAsJsonAsync(
+            $"api/locations/{Uri.EscapeDataString(locationId)}",
+            request,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<LocationDetailDto>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize location update response.");
+    }
+
+    /// <summary>
+    /// Gets the QR code image (PNG) for a location's intake form.
+    /// </summary>
+    public async Task<byte[]> GetLocationQrCodeAsync(
+        string locationId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationId);
+
+        return await _httpClient.GetByteArrayAsync(
+            $"api/locations/{Uri.EscapeDataString(locationId)}/qr-code",
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Gets the current tenant configuration.
+    /// </summary>
+    public async Task<TenantConfigResponseDto> GetTenantConfigAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await _httpClient.GetFromJsonAsync<TenantConfigResponseDto>(
+            "api/tenants/config",
+            cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize tenant config response.");
+    }
+
+    /// <summary>
+    /// Updates the tenant configuration.
+    /// </summary>
+    public async Task<TenantConfigResponseDto> UpdateTenantConfigAsync(
+        TenantConfigUpdateRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PutAsJsonAsync("api/tenants/config", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<TenantConfigResponseDto>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize tenant config update response.");
+    }
+
+    /// <summary>
+    /// Gets the tenant access gate status.
+    /// </summary>
+    public async Task<AccessGateStatusDto> GetAccessGateStatusAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await _httpClient.GetFromJsonAsync<AccessGateStatusDto>(
+            "api/tenants/access-gate",
+            cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize access gate response.");
+    }
 }

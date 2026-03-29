@@ -38,6 +38,16 @@ builder.Services.AddScoped<ServiceRequestApiClient>();
 // MudBlazor component library
 builder.Services.AddMudServices();
 
+// Register typed API clients using the named HttpClient
+builder.Services.AddScoped<RVS.UI.Shared.Services.ServiceRequestApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+builder.Services.AddScoped<RVS.UI.Shared.Services.AnalyticsApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+builder.Services.AddScoped<RVS.UI.Shared.Services.LookupApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+builder.Services.AddScoped<RVS.UI.Shared.Services.AttachmentApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+
 // Configure OIDC Authentication with Auth0
 builder.Services.AddOidcAuthentication(options =>
 {
