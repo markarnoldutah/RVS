@@ -103,6 +103,7 @@
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
+    [SupplyParameterFromQuery(Name = "token")] public string? Token { get; set; }
 
     [Inject] private IntakeWizardState _state { get; set; } = default!;
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
@@ -126,6 +127,7 @@
     protected override void OnParametersSet()
     {
         _state.Slug = Slug;
+        _state.Token = Token;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

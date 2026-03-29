@@ -16,6 +16,7 @@ public class IntakeWizardStateTests
         state.CurrentStep.Should().Be(1);
         state.TotalSteps.Should().Be(7);
         state.Slug.Should().BeEmpty();
+        state.Token.Should().BeNull();
         state.Config.Should().BeNull();
         state.FirstName.Should().BeEmpty();
         state.LastName.Should().BeEmpty();
@@ -442,6 +443,16 @@ public class IntakeWizardStateTests
         var request = state.BuildCreateRequest();
 
         request.DiagnosticResponses.Should().BeNull();
+    }
+
+    [Fact]
+    public void Token_ShouldBeSettable()
+    {
+        var state = CreateState();
+
+        state.Token = "dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ";
+
+        state.Token.Should().Be("dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ");
     }
 
     [Fact]
