@@ -1,0 +1,136 @@
+html, body {
+    font-family: 'Segoe UI Variable', 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Header */
+.siteheader {
+    height: 50px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+}
+
+.siteheader a {
+    text-decoration: none;
+    color: inherit;
+}
+
+.site-title {
+    font-size: 18px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.profile {
+    display: flex;
+    align-items: center;
+}
+
+/* Main layout */
+.main {
+    min-height: calc(100vh - 100px);
+}
+
+.body-content {
+    flex: 1;
+}
+
+.content {
+    padding: 16px;
+}
+
+/* Navigation */
+.navmenu {
+    background: var(--neutral-layer-1);
+    border-right: 1px solid var(--neutral-stroke-divider-rest);
+}
+
+.navmenu-icon {
+    display: none;
+}
+
+/* Error boundary */
+.blazor-error-boundary {
+    background: var(--error);
+    color: white;
+    padding: 16px;
+    border-radius: 4px;
+    margin: 16px;
+}
+
+/* Loading progress */
+.loading-progress {
+    position: relative;
+    display: block;
+    width: 8rem;
+    height: 8rem;
+    margin: 20vh auto 1rem auto;
+}
+
+.loading-progress circle {
+    fill: none;
+    stroke: #e0e0e0;
+    stroke-width: 0.6rem;
+    transform-origin: 50% 50%;
+    transform: rotate(-90deg);
+}
+
+.loading-progress circle:last-child {
+    stroke: #1b6ec2;
+    stroke-dasharray: calc(3.14 * 4rem), 500%;
+    animation: loading-progress-spin 1.5s linear infinite;
+}
+
+.loading-progress-text {
+    text-align: center;
+    font-weight: bold;
+    color: #666;
+}
+
+.loading-progress-text:after {
+    content: "Loading...";
+}
+
+@keyframes loading-progress-spin {
+    0% { transform: rotate(-90deg); }
+    100% { transform: rotate(270deg); }
+}
+
+/* Blazor error UI */
+#blazor-error-ui {
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .navmenu-icon {
+        display: block;
+        cursor: pointer;
+        padding: 8px;
+    }
+
+    .navmenu .sitenav {
+        display: none;
+    }
+
+    .navmenu-icon:checked ~ .sitenav {
+        display: block;
+    }
+}

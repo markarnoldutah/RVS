@@ -1,0 +1,65 @@
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject NavigationManager Navigation
+
+<AuthorizeView>
+    <Authorized>
+        <FluentProfileMenu TopCorner="true"
+                           Initials="@GetUserInitials(context)"
+                           FullName="@GetDisplayName(context)"
+                           EMail="@GetUserEmail(context)"
+                           OnHeaderButtonClick="BeginLogout"
+                           PopoverStyle="min-width: 330px;" />
+    </Authorized>
+    <NotAuthorized>
+        <FluentButton Appearance="Appearance.Accent"
+                      @onclick="BeginLogin">
+            Log in
+        </FluentButton>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private void BeginLogin()
+    {
+        Navigation.NavigateToLogin("authentication/login");
+    }
+
+    private void BeginLogout()
+    {
+        Navigation.NavigateToLogout("authentication/logout");
+    }
+
+    private static string GetDisplayName(AuthenticationState context)
+    {
+        return context.User.Identity?.Name
+            ?? context.User.FindFirst("email")?.Value
+            ?? context.User.FindFirst("preferred_username")?.Value
+            ?? "User";
+    }
+
+    private static string GetUserInitials(AuthenticationState context)
+    {
+        var fullName = GetDisplayName(context);
+        var nameParts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (nameParts.Length >= 2)
+        {
+            return $"{nameParts[0][0]}{nameParts[^1][0]}".ToUpper();
+        }
+
+        if (nameParts.Length == 1 && nameParts[0].Length > 0)
+        {
+            return nameParts[0][..Math.Min(2, nameParts[0].Length)].ToUpper();
+        }
+
+        return "U";
+    }
+
+    private static string GetUserEmail(AuthenticationState context)
+    {
+        return context.User.FindFirst("email")?.Value
+            ?? context.User.FindFirst("preferred_username")?.Value
+            ?? context.User.FindFirst("upn")?.Value
+            ?? string.Empty;
+    }
+}

@@ -1,0 +1,105 @@
+@inject NavigationManager Navigation
+
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <UnauthorizedAccess />
+                }
+                else
+                {
+                    <div class="access-denied-container">
+                        <FluentCard class="access-denied-card">
+                            <FluentStack Orientation="Orientation.Vertical"
+                                         VerticalAlignment="VerticalAlignment.Center"
+                                         HorizontalAlignment="HorizontalAlignment.Center"
+                                         VerticalGap="20">
+
+                                <FluentIcon Value="@(new Icons.Regular.Size48.ShieldError())"
+                                            Color="Color.Error" />
+
+                                <h2>Access Denied</h2>
+
+                                <p class="message" role="alert">
+                                    You are not authorized to access this resource.
+                                </p>
+
+                                <FluentButton Appearance="Appearance.Neutral"
+                                              IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                                              OnClick="@(() => Navigation.NavigateTo("/"))">
+                                    Return to Home
+                                </FluentButton>
+                            </FluentStack>
+                        </FluentCard>
+                    </div>
+                }
+            </NotAuthorized>
+        </AuthorizeRouteView>
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <div class="not-found-container">
+                <FluentCard class="not-found-card">
+                    <FluentStack Orientation="Orientation.Vertical"
+                                 VerticalAlignment="VerticalAlignment.Center"
+                                 HorizontalAlignment="HorizontalAlignment.Center"
+                                 VerticalGap="20">
+
+                        <FluentIcon Value="@(new Icons.Regular.Size48.QuestionCircle())"
+                                    Color="Color.Neutral" />
+
+                        <h2>Page Not Found</h2>
+
+                        <p class="message" role="alert">
+                            Sorry, there's nothing at this address.
+                        </p>
+
+                        <FluentButton Appearance="Appearance.Accent"
+                                      IconStart="@(new Icons.Regular.Size20.Home())"
+                                      OnClick="@(() => Navigation.NavigateTo("/"))">
+                            Go to Home
+                        </FluentButton>
+                    </FluentStack>
+                </FluentCard>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>
+
+<style>
+    .access-denied-container,
+    .not-found-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 400px;
+        padding: 40px 20px;
+    }
+
+    .access-denied-card,
+    .not-found-card {
+        max-width: 500px;
+        width: 100%;
+        padding: 40px;
+        text-align: center;
+    }
+
+    .access-denied-card h2,
+    .not-found-card h2 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--neutral-foreground-rest);
+    }
+
+    .access-denied-card .message,
+    .not-found-card .message {
+        margin: 0;
+        font-size: 16px;
+        color: var(--neutral-foreground-hint);
+        line-height: 1.5;
+    }
+</style>

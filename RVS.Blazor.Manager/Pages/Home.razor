@@ -1,0 +1,30 @@
+@page "/"
+
+<PageTitle>RVS Manager — Home</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="20" Style="padding: 24px;">
+            <h1>Welcome, @GetDisplayName(context)!</h1>
+
+            <LocationSelector />
+
+            <FluentCard Style="padding: 24px;">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Home())" Color="Color.Accent" />
+                    <h3>Manager Dashboard</h3>
+                    <p>Select a location above to begin managing service requests.</p>
+                </FluentStack>
+            </FluentCard>
+        </FluentStack>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private static string GetDisplayName(AuthenticationState context)
+    {
+        return context.User.Identity?.Name
+            ?? context.User.FindFirst("email")?.Value
+            ?? "Manager";
+    }
+}
