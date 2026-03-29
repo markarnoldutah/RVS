@@ -344,10 +344,12 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                     Phone = acct.Phone
                 };
 
-                // Resolve all known vehicles for one-tap selection
+                // Resolve known vehicles for one-tap selection (capped to avoid excessive lookups;
+                // RV customers typically own 1–3 vehicles)
                 if (acct.AllKnownAssetIds is { Count: > 0 })
                 {
-                    foreach (var assetId in acct.AllKnownAssetIds)
+                    const int maxAssetLookups = 10;
+                    foreach (var assetId in acct.AllKnownAssetIds.TakeLast(maxAssetLookups))
                     {
                         var entries = await _assetLedgerRepository.GetByAssetIdAsync(assetId, cancellationToken);
                         var mostRecent = entries.LastOrDefault();

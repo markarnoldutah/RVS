@@ -14,7 +14,7 @@
             <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
                 @foreach (var asset in State.KnownAssets)
                 {
-                    var isSelected = string.Equals(State.Vin, asset.AssetId, StringComparison.OrdinalIgnoreCase);
+                    var isSelected = IsAssetSelected(State.Vin, asset.AssetId);
                     var label = FormatAssetLabel(asset);
                     <MudChip T="string"
                              Text="@label"
@@ -103,6 +103,8 @@
 </MudPaper>
 
 @code {
+    private const int VinSuffixDisplayLength = 8;
+
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
     [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
@@ -121,6 +123,10 @@
         StateHasChanged();
     }
 
+    private static bool IsAssetSelected(string currentVin, string assetId) =>
+        string.Equals(currentVin, assetId, StringComparison.OrdinalIgnoreCase)
+        || (!string.IsNullOrWhiteSpace(currentVin) && assetId.EndsWith(currentVin, StringComparison.OrdinalIgnoreCase));
+
     private static string FormatAssetLabel(AssetInfoDto asset)
     {
         var parts = new List<string>();
@@ -132,7 +138,9 @@
             parts.Add(asset.Model);
 
         var description = parts.Count > 0 ? string.Join(" ", parts) : null;
-        var vin = asset.AssetId.Length > 8 ? $"…{asset.AssetId[^8..]}" : asset.AssetId;
+        var vin = asset.AssetId.Length > VinSuffixDisplayLength
+            ? $"…{asset.AssetId[^VinSuffixDisplayLength..]}"
+            : asset.AssetId;
 
         return description is not null ? $"{description} ({vin})" : vin;
     }
