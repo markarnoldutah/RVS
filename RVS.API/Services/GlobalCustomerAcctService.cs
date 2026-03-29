@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Interfaces;
 
 namespace RVS.API.Services;
@@ -118,7 +119,7 @@ public sealed class GlobalCustomerAcctService : IGlobalCustomerAcctService
 
         if (account.MagicLinkExpiresAtUtc.HasValue && account.MagicLinkExpiresAtUtc.Value < DateTime.UtcNow)
         {
-            throw new UnauthorizedAccessException("Magic-link token has expired.");
+            throw new MagicLinkExpiredException("Magic-link token has expired.");
         }
 
         return account;

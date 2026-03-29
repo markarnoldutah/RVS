@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Middleware;
+using RVS.Domain.Exceptions;
 
 namespace RVS.API.Tests.Middleware;
 
@@ -70,6 +71,24 @@ public sealed class ExceptionHandlingMiddlewareTests
         problem.Title.Should().Be("Resource not found");
         problem.Status.Should().Be(404);
         problem.Detail.Should().Be("Service request not found.");
+        problem.Instance.Should().Be("/api/test");
+    }
+
+    [Fact]
+    public async Task MagicLinkExpiredException_Returns410_WithProblemDetails()
+    {
+        var context = CreateHttpContext();
+        RequestDelegate next = _ => throw new MagicLinkExpiredException("Magic-link token has expired.");
+
+        await _middleware.InvokeAsync(context, next);
+
+        var problem = await DeserializeProblemDetails(context);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status410Gone);
+        context.Response.ContentType.Should().Contain("application/problem+json");
+        problem.Type.Should().Be("https://api.rvserviceflow.com/errors/token-expired");
+        problem.Title.Should().Be("Gone");
+        problem.Status.Should().Be(410);
+        problem.Detail.Should().Be("Magic-link token has expired.");
         problem.Instance.Should().Be("/api/test");
     }
 

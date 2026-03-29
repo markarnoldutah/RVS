@@ -662,6 +662,20 @@ public class IntakeOrchestrationServiceTests
         _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
+        var oldLedgerEntries = new List<AssetLedgerEntry>
+        {
+            new()
+            {
+                AssetId = "RV:OLD_VIN",
+                Manufacturer = "Thor",
+                Model = "Aria 4000",
+                Year = 2019,
+                GlobalCustomerAcctId = acct.Id,
+            }
+        };
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:OLD_VIN", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(oldLedgerEntries);
+
         // The most recently added asset ID is the last in the list
         var ledgerEntries = new List<AssetLedgerEntry>
         {
@@ -684,6 +698,36 @@ public class IntakeOrchestrationServiceTests
         result.PrefillAsset.Manufacturer.Should().Be("Grand Design");
         result.PrefillAsset.Model.Should().Be("Momentum 395G");
         result.PrefillAsset.Year.Should().Be(2023);
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenTokenValidWithMultipleAssets_ShouldReturnAllKnownAssets()
+    {
+        SetupConfigHappyPath();
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["RV:OLD_VIN", "RV:1HGBH41JXMN109186"]);
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:OLD_VIN", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AssetLedgerEntry>
+            {
+                new() { AssetId = "RV:OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
+            });
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AssetLedgerEntry>
+            {
+                new() { AssetId = "RV:1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
+            });
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
+
+        result.KnownAssets.Should().HaveCount(2);
+        result.KnownAssets[0].AssetId.Should().Be("RV:OLD_VIN");
+        result.KnownAssets[0].Manufacturer.Should().Be("Thor");
+        result.KnownAssets[1].AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.KnownAssets[1].Manufacturer.Should().Be("Grand Design");
+        result.PrefillAsset.Should().NotBeNull();
+        result.PrefillAsset!.AssetId.Should().Be("RV:1HGBH41JXMN109186");
     }
 
     [Fact]
