@@ -81,7 +81,7 @@
 
         try
         {
-            State.Config = await IntakeApi.GetConfigAsync(State.Slug);
+            State.Config = await IntakeApi.GetConfigAsync(State.Slug, State.Token);
 
             if (State.Config.PrefillCustomer is not null)
             {

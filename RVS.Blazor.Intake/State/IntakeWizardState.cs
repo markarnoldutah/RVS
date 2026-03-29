@@ -28,6 +28,9 @@ public sealed class IntakeWizardState
     /// <summary>Location slug from URL route.</summary>
     public string Slug { get; set; } = string.Empty;
 
+    /// <summary>Optional magic-link token from the intake URL query string.</summary>
+    public string? Token { get; set; }
+
     /// <summary>Location configuration fetched from the API.</summary>
     public IntakeConfigResponseDto? Config { get; set; }
 
