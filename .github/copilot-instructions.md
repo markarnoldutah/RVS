@@ -150,7 +150,7 @@ All feature implementation MUST follow Red → Green → Refactor. This is not o
 
 ### UI Component Library — MudBlazor
 
-All Blazor frontend projects (`RVS.Cust_Intake`, `RVS.Cust_Intake.Client`, `RVS.Mngr_Desktop`, `RVS.Tech_Mobile`) use **MudBlazor 9.x** (Material Design 3). Do not use Microsoft.FluentUI.AspNetCore.Components.
+All Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`, `RVS.MAUI.Tech`) use **MudBlazor 9.x** (Material Design 3). Do not use Microsoft.FluentUI.AspNetCore.Components.
 
 ### Setup (per project)
 - `wwwroot/index.html` (WASM) or `App.razor` (hosted): link `MudBlazor.min.css`, Roboto font, `MudBlazor.min.js`
@@ -186,4 +186,4 @@ All Blazor frontend projects (`RVS.Cust_Intake`, `RVS.Cust_Intake.Client`, `RVS.
 - Complex C# expressions in `Style=` Razor attributes cause RZ9986 — extract to a C# helper method in `@code`
 
 ### `RVS.Cust_Intake.MudDemo`
-This project is the approved MudBlazor prototype for the full wizard flow. Use it as the reference implementation when migrating or building new pages in `RVS.Cust_Intake` and `RVS.Cust_Intake.Client`.
+This project is the approved MudBlazor prototype for the full wizard flow. Use it as the reference implementation when migrating or building new pages in `RVS.Blazor.Intake`.

@@ -1,7 +1,7 @@
 /* ============================================================
    RVS Design Tokens — CSS Custom Properties
    Consumed by all three frontends:
-     Cust_Intake, Mngr_Desktop, Tech_Mobile
+     Blazor.Intake, Blazor.Manager, MAUI.Tech
    ============================================================ */
 
 :root {

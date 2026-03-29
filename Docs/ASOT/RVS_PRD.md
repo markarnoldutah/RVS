@@ -12,7 +12,7 @@
 
 RV Service Flow (RVS) is a multi-tenant SaaS platform that digitizes the service intake workflow at RV dealerships and independent RV repair shops. The core problem is that service departments rely on phone calls, emails, and manual notes to collect repair information before an RV arrives, resulting in incomplete diagnostics, wasted technician time, and extended Repair Event Cycle Times (RECT).
 
-The MVP delivers three integrated surfaces: a frictionless, mobile-first customer intake portal (`Blazor.Intake`) that captures structured repair information (including photos, video, VIN, and an AI-guided issue wizard) before the RV arrives; a manager and advisor dashboard (`Blazor.Desktop`) where service advisors and managers manage, triage, and act on incoming service requests from a desktop browser; and a technician mobile app (`MAUI.Tech`) purpose-built for service bay use with offline-first job access, native barcode scanning, voice notes, and a 3–5 second interaction target. Customers are never required to create an account — a magic-link token gives them passive status visibility across all their dealerships.
+The MVP delivers three integrated surfaces: a frictionless, mobile-first customer intake portal (`Blazor.Intake`) that captures structured repair information (including photos, video, VIN, and an AI-guided issue wizard) before the RV arrives; a manager and advisor dashboard (`Blazor.Manager`) where service advisors and managers manage, triage, and act on incoming service requests from a desktop browser; and a technician mobile app (`MAUI.Tech`) purpose-built for service bay use with offline-first job access, native barcode scanning, voice notes, and a 3–5 second interaction target. Customers are never required to create an account — a magic-link token gives them passive status visibility across all their dealerships.
 
 The platform is designed as the intake layer that sits in front of existing Dealer Management Systems (DMS), not a DMS replacement. A simple SFTP-based DMS export makes it easy for dealers to pull structured service request data into their existing workflow on day one.
 
@@ -233,7 +233,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - The `MAUI.Tech` technician app is glove-friendly with extra-large tap targets throughout the job list and outcome entry form.
 - QR/VIN scanning is the primary job access method in `MAUI.Tech` — one scan opens the assigned job immediately.
 - Outcome entries in `MAUI.Tech` store locally when the device goes offline and sync automatically when connectivity returns; no data is lost in poor-signal bays.
-- The `Blazor.Desktop` Service Board uses drag-and-drop status columns; status changes push to all connected sessions in real time via SignalR.
+- The `Blazor.Manager` Service Board uses drag-and-drop status columns; long polling refreshes the board at a configurable interval (default 5 min). **vNEXT:** A dedicated SignalR hub will push real-time status changes to all connected sessions.
 
 ---
 
@@ -291,17 +291,17 @@ The MVP comprises three distinct front-end applications, each optimized for its 
 | Application | Framework | Rationale |
 |---|---|---|
 | **Blazor.Intake** | Blazor WebAssembly (Standalone PWA) | Zero install friction; customer accesses via dealer-specific URL. The entire app — landing page, guided intake wizard, submission confirmation, and magic-link status page — runs as a single WASM SPA. A service worker caches the WASM runtime after first load, eliminating the download penalty on repeat visits. No SSR, no SignalR, no per-page render-mode handoffs. |
-| **Blazor.Desktop** | Blazor SSR (Interactive Server) | Desktop browser on reliable office network. SignalR connection enables real-time push updates to the Service Board when technicians complete jobs. All business logic executes server-side; no sensitive data ships to the client. |
+| **Blazor.Manager** | Blazor WebAssembly (Standalone) | Desktop browser on reliable office network. Long polling (configurable interval, default 5 min) for near-real-time Service Board updates. **vNEXT:** SignalR hub for real-time push. Deployed to Azure Static Web Apps — same hosting model as Blazor.Intake. |
 | **MAUI.Tech** | MAUI Blazor Hybrid (iOS + Android) | Offline-first mode is critical — service bays have poor connectivity. Outcome entries are queued locally and synced on reconnect. Native barcode SDK provides the fast, reliable VIN/QR scanning required for the 3–5 second interaction target. MAUI Essentials provides device speech-to-text for voice notes. Employer-provisioned install eliminates consumer app store friction. |
 
 **Code reuse strategy:**
 
-| Shared asset | Blazor.Intake | Blazor.Desktop | MAUI.Tech |
+| Shared asset | Blazor.Intake | Blazor.Manager | MAUI.Tech |
 |---|---|---|---|
 | `RVS.Domain` (DTOs, entities, validation) | ✅ | ✅ | ✅ |
 | `RVS.UI.Shared` Razor component library | ✅ | ✅ | ✅ |
 | CSS / design tokens | ✅ | ✅ | ✅ |
-| API client (typed `HttpClient` services) | ✅ | ✅ (server-side) | ✅ + offline queue |
+| API client (typed `HttpClient` services) | ✅ | ✅ | ✅ + offline queue |
 | MAUI Essentials (camera, speech, local storage) | ❌ | ❌ | ✅ |
 
 ---
@@ -316,7 +316,7 @@ The MVP comprises three distinct front-end applications, each optimized for its 
 ### 8.2 Team size and composition
 
 - **Team size:** 1 developer
-- **Roles:** Full-stack developer (ASP.NET Core API, Blazor WebAssembly, Blazor SSR, MAUI Blazor Hybrid, Azure infrastructure)
+- **Roles:** Full-stack developer (ASP.NET Core API, Blazor WebAssembly, MAUI Blazor Hybrid, Azure infrastructure)
 
 ### 8.3 Suggested phases
 
@@ -354,7 +354,7 @@ The MVP comprises three distinct front-end applications, each optimized for its 
 
 - **Phase 9: Front-end applications** (Week 7–9)
   - **Blazor.Intake (Blazor WASM Standalone PWA):** Dealer landing page, 5-step guided intake wizard (VIN scan, AI wizard, speech-to-text, photo/video upload), submission confirmation, and magic-link status page — all routes within a single WASM SPA. Service worker caches the WASM runtime after first load. No SSR, no SignalR.
-  - **Blazor.Desktop (Blazor SSR — Interactive Server):** Service request queue, drag-and-drop Service Board, search/filter, service request detail view, status update, attachment viewer, analytics dashboard, dealer settings (location management, QR code download), real-time push updates via SignalR.
+  - **Blazor.Manager (Blazor WASM Standalone):** Service request queue, drag-and-drop Service Board, search/filter, service request detail view, status update, attachment viewer, analytics dashboard, dealer settings (location management, QR code download). Long polling for near-real-time updates (MVP); SignalR hub for real-time push (vNEXT).
   - **MAUI.Tech (MAUI Blazor Hybrid):** Assigned job list, QR/VIN native barcode scan to open job, outcome entry form (offline queue + sync), voice notes via MAUI speech-to-text, photo capture, glove-friendly tap targets.
 
 - **Phase 10: QR codes, seed data, polish, and deployment** (Week 9–10)

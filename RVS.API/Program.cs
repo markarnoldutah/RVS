@@ -20,7 +20,7 @@ using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure CORS — AllowBlazorClient for Cust_Intake WASM + Mngr_Desktop WASM
+// Configure CORS — AllowBlazorClient for Blazor.Intake WASM + Blazor.Manager WASM
 if (builder.Environment.IsProduction())
 {
     builder.Services.AddCors(options =>

@@ -67,11 +67,11 @@ RVS is a cloud-based **service intake and workflow platform** that sits in front
 - **Data:** Location name, status, issue summary, last-updated date, request total count
 - **Design principle:** Passive, cross-dealer visibility without account or login friction
 
-### 2.3 Service Manager Desktop — `RVS.Blazor.Desktop` (Blazor SSR, Interactive Server)
+### 2.3 Service Manager Desktop — `RVS.Blazor.Manager` (Blazor WebAssembly, Standalone)
 
 **For service advisors, managers, regional managers, and corporate staff — desktop browser.**
 
-- **App:** `RVS.Blazor.Desktop` — Blazor SSR (Interactive Server). Optimized for large-screen desktop browsers on reliable office networks. SignalR connection enables real-time Service Board updates when technicians complete jobs. All business logic executes server-side.
+- **App:** `RVS.Blazor.Manager` — Blazor WebAssembly (Standalone). Optimized for large-screen desktop browsers on reliable office networks. **MVP:** Long polling (configurable interval, default 5 min) for near-real-time Service Board updates when technicians complete jobs. **vNEXT:** A dedicated SignalR hub will push real-time updates, eliminating polling latency. Deployed to Azure Static Web Apps.
 - **Authentication:** Auth0 JWT Bearer, organization-scoped
 - **For Service Advisors:** Create service requests, search/filter queue, view detail, update status, add notes, view attachments
 - **For Managers:** Drag-and-drop Service Board, triage intake queue, batch outcome entry, workload visibility across location or region
@@ -308,7 +308,7 @@ Used by every controller and service method to enforce tenant isolation, role ch
 | Application | Technology | Purpose | Notes |
 |---|---|---|---|
 | **`RVS.Blazor.Intake`** | Blazor WebAssembly (Standalone PWA) | Customer intake portal + status pages | Zero-install, URL-based. All surfaces are client-side routes in a single WASM SPA. Service worker caches WASM runtime after first load. No SSR. Deployed to Azure Static Web Apps (CDN). |
-| **`RVS.Blazor.Desktop`** | Blazor SSR (Interactive Server) | Service manager desktop app | Service Board, triage, analytics, batch operations. Large-screen desktop browser. Real-time push via SignalR. Runs as App Service. |
+| **`RVS.Blazor.Manager`** | Blazor WebAssembly (Standalone) | Service manager desktop app | Service Board, triage, analytics, batch operations. Large-screen desktop browser. Long polling for near-real-time updates (MVP); SignalR hub for real-time push (vNEXT). Deployed to Azure Static Web Apps. |
 | **`RVS.MAUI.Tech`** | MAUI Blazor Hybrid (iOS + Android) | Technician mobile app | Offline-first, native barcode/QR/camera/voice. 3–5 sec interaction target. Employer-provisioned via MDM. Shares Razor components from `RVS.UI.Shared`. |
 | **`RVS.UI.Shared`** | Razor Class Library | Shared UI components | DTOs, Razor components, CSS design tokens, and typed API client services consumed by all three apps. |
 

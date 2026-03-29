@@ -49,7 +49,7 @@ RVS is a B2B SaaS platform for RV dealership service management. It digitizes th
 - **Identity:** Auth0 (JWT Bearer; `app_metadata` tenant scoping)
 - **AI:** Azure OpenAI (`gpt-4o-mini`) for issue categorization and diagnostic questions
 - **Notifications:** SendGrid (behind `INotificationService`)
-- **Frontend:** Blazor WebAssembly (Blazor.Intake + Blazor.Desktop), MAUI Blazor Hybrid (MAUI.Tech); UI component library: **MudBlazor 9.x** (Material Design 3)
+- **Frontend:** Blazor WebAssembly (Blazor.Intake + Blazor.Manager), MAUI Blazor Hybrid (MAUI.Tech); UI component library: **MudBlazor 9.x** (Material Design 3)
 
 ### 2.2 Multi-Tenancy Model
 
@@ -69,7 +69,7 @@ Customer = Anonymous (MVP); no Auth0 account required
 | App | Framework | Users |
 |---|---|---|
 | `RVS.Blazor.Intake` | Blazor WebAssembly (Standalone PWA) | RV owners (anonymous) |
-| `RVS.Blazor.Desktop` | Blazor WebAssembly (Standalone) | Advisors, managers, corporate admins |
+| `RVS.Blazor.Manager` | Blazor WebAssembly (Standalone) | Advisors, managers, corporate admins |
 | `RVS.MAUI.Tech` | MAUI Blazor Hybrid (iOS + Android) | Technicians (offline-first) |
 | `RVS.UI.Shared` | Razor Class Library | Shared components, API clients |
 
@@ -107,10 +107,10 @@ Customer = Anonymous (MVP); no Auth0 account required
 | Persona | Auth | Primary Surface | Key Actions |
 |---|---|---|---|
 | RV Owner | Anonymous (magic-link only) | `Blazor.Intake` WASM | Submit intake, check status |
-| Service Advisor | Auth0 JWT | `Blazor.Desktop` | Search/filter SRs, update status, add notes |
-| Service Manager | Auth0 JWT | `Blazor.Desktop` | Service Board drag-drop, batch outcomes, analytics |
-| Regional Manager | Auth0 JWT | `Blazor.Desktop` | Cross-location SR view, regional analytics |
-| Corporate Admin | Auth0 JWT | `Blazor.Desktop` | User management, all locations, all analytics |
+| Service Advisor | Auth0 JWT | `Blazor.Manager` | Search/filter SRs, update status, add notes |
+| Service Manager | Auth0 JWT | `Blazor.Manager` | Service Board drag-drop, batch outcomes, analytics |
+| Regional Manager | Auth0 JWT | `Blazor.Manager` | Cross-location SR view, regional analytics |
+| Corporate Admin | Auth0 JWT | `Blazor.Manager` | User management, all locations, all analytics |
 | Technician | Auth0 JWT | `MAUI.Tech` | View assigned jobs, record Section 10A, photo capture |
 | Platform Admin | Auth0 JWT | Direct API / future admin UI | Tenant provisioning, global lookups |
 
@@ -193,8 +193,8 @@ The authenticated response MUST return all active service requests linked to the
 `PATCH api/dealerships/{id}/service-requests/batch-outcome` MUST apply a shared repair outcome to up to 25 service requests in one call. MUST validate all SR IDs belong to the caller's tenant before writing.
 
 **FR-DASH-03 — Service Board updates**
-**MVP:** The `Blazor.Desktop` Service Board MUST use long polling (periodic `GET` or `POST search` calls) to detect status-change events. Polling interval MUST be configurable (default: 5 minutes). On technician SR update, the Service Board MUST reflect the change within one polling cycle.
-**vNEXT:** A dedicated SignalR hub MUST replace long polling to push status-change events to all connected `Blazor.Desktop` sessions within a tenant. On technician SR update, all connected sessions for that tenant MUST receive the update within 5 seconds.
+**MVP:** The `Blazor.Manager` Service Board MUST use long polling (periodic `GET` or `POST search` calls) to detect status-change events. Polling interval MUST be configurable (default: 5 minutes). On technician SR update, the Service Board MUST reflect the change within one polling cycle.
+**vNEXT:** A dedicated SignalR hub MUST replace long polling to push status-change events to all connected `Blazor.Manager` sessions within a tenant. On technician SR update, all connected sessions for that tenant MUST receive the update within 5 seconds.
 
 **FR-DASH-04 — Analytics**
 `GET api/dealerships/{id}/analytics/service-requests/summary` MUST return `ServiceRequestAnalyticsResponseDto` covering: total requests, by status, by category, by location, top failure modes, top repair actions, average repair time, top parts used, average days to complete. Supports optional `?from`, `?to`, `?locationId` query parameters.
@@ -708,7 +708,7 @@ Order is mandatory. Deviation MUST require architecture review sign-off.
 |---|---|---|---|
 | 1 | Dev endpoints | `UseSwaggerUI()` | Development only |
 | 2 | HTTPS redirect | `UseHttpsRedirection()` | Production only |
-| 3 | CORS | `UseCors("AllowBlazorClient")` | All origins (Blazor.Intake WASM + Blazor.Desktop WASM) |
+| 3 | CORS | `UseCors("AllowBlazorClient")` | All origins (Blazor.Intake WASM + Blazor.Manager WASM) |
 | 4 | Rate limiting | `UseRateLimiter()` | Public intake + status endpoints |
 | 5 | Exception handling | `ExceptionHandlingMiddleware` (singleton) | All exceptions → ProblemDetails |
 | 6 | Authentication | `UseAuthentication()` | JWT validation |
@@ -752,7 +752,7 @@ Integration tests MUST run against the Cosmos Emulator (Windows) or a dedicated 
 Minimum E2E scenarios (automated, against staging):
 - RV owner submits intake → receives confirmation email with magic-link
 - Advisor logs in, finds SR in queue, updates status to InProgress
-- Technician opens job on `MAUI.Tech`, records Section 10A fields, job shows Completed in `Blazor.Desktop`
+- Technician opens job on `MAUI.Tech`, records Section 10A fields, job shows Completed in `Blazor.Manager`
 
 ### 12.4 Performance Baselines
 
@@ -770,7 +770,7 @@ Before MVP release, run load tests at:
 |---|---|---|
 | API | Azure App Service (B2/B3) or Container Apps (MVP) | Enable Always On |
 | `Blazor.Intake` WASM | Azure Static Web Apps | CDN-enabled; custom domain `app.rvserviceflow.com`; PWA service worker caches WASM runtime for instant repeat visits |
-| `Blazor.Desktop` WASM | Azure Static Web Apps | CDN-enabled; same hosting pattern as Blazor.Intake |
+| `Blazor.Manager` WASM | Azure Static Web Apps | CDN-enabled; same hosting pattern as Blazor.Intake |
 | Cosmos DB | Single account, single region (MVP) | 9 containers per spec |
 | Blob Storage | Single account | `rvs-attachments` container with per-tenant virtual paths |
 | Key Vault | 1 vault | All secrets; API Managed Identity granted `get` + `list` |

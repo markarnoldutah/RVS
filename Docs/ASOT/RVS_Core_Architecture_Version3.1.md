@@ -10,7 +10,7 @@ This document captures the domain model, multi-location tenancy, data layer, orc
 
 ## Executive Summary
 
-RVS is a B2B SaaS platform for RV dealership service management. The backend is built on ASP.NET Core (.NET 10), Azure Cosmos DB (NoSQL), and Auth0 identity. The frontend consists of three purpose-built applications: a standalone Blazor WebAssembly PWA customer intake portal (Blazor.Intake), a Blazor SSR (Interactive Server) service manager desktop app (Blazor.Desktop), and a MAUI Blazor Hybrid technician mobile app (MAUI.Tech).
+RVS is a B2B SaaS platform for RV dealership service management. The backend is built on ASP.NET Core (.NET 10), Azure Cosmos DB (NoSQL), and Auth0 identity. The frontend consists of three purpose-built applications: a standalone Blazor WebAssembly PWA customer intake portal (Blazor.Intake), a standalone Blazor WebAssembly service manager desktop app (Blazor.Manager), and a MAUI Blazor Hybrid technician mobile app (MAUI.Tech).
 
 **Multi-tenancy Model:** Tenant = Corporation (e.g., Blue Compass RV). One tenant maps to:
 - One Auth0 Organization
@@ -42,7 +42,7 @@ RVS is a B2B SaaS platform for RV dealership service management. The backend is 
 
 ## 1. Solution Structure and Layering
 
-**Technology Stack:** ASP.NET Core (.NET 10, C# 14), Azure Cosmos DB (SQL API), Azure Blob Storage, Auth0 identity. Three front-end applications: Blazor WebAssembly Standalone PWA (Blazor.Intake), Blazor SSR Interactive Server (Blazor.Desktop), MAUI Blazor Hybrid (MAUI.Tech). All Blazor frontends use **MudBlazor 9.x** (Material Design 3) as the UI component library.
+**Technology Stack:** ASP.NET Core (.NET 10, C# 14), Azure Cosmos DB (SQL API), Azure Blob Storage, Auth0 identity. Three front-end applications: Blazor WebAssembly Standalone PWA (Blazor.Intake), Blazor WebAssembly Standalone (Blazor.Manager), MAUI Blazor Hybrid (MAUI.Tech). All Blazor frontends use **MudBlazor 9.x** (Material Design 3) as the UI component library.
 
 **Layered Architecture:**
 - **RVS.API** — ASP.NET Core REST API; request handlers, service layer, middleware pipeline
@@ -51,7 +51,7 @@ RVS is a B2B SaaS platform for RV dealership service management. The backend is 
 - **RVS.Data.Cosmos.Seed** — Development seed data
 - **RVS.UI.Shared** — Razor Class Library; shared Razor components, CSS design tokens, API client services (consumed by all three front-end apps)
 - **RVS.Blazor.Intake** — Blazor WebAssembly (Standalone PWA); customer-facing intake portal. All pages (landing, wizard, confirmation, status) are routes within a single WASM SPA. A service worker caches the WASM runtime after first load — subsequent visits skip the network download entirely. No SSR, no SignalR.
-- **RVS.Blazor.Desktop** — Blazor SSR (Interactive Server); service manager desktop app for triage, Service Board, analytics, and batch operations
+- **RVS.Blazor.Manager** — Blazor WebAssembly (Standalone); service manager desktop app for triage, Service Board, analytics, and batch operations. Long polling (configurable interval) for near-real-time updates; SignalR deferred to vNEXT.
 - **RVS.MAUI.Tech** — MAUI Blazor Hybrid (iOS + Android); technician mobile app with offline sync, native camera/barcode/voice, and glove-friendly UI
 
 **Design Patterns:**
@@ -434,7 +434,7 @@ Following the [RVS copilot-instructions.md pipeline order](https://github.com/ma
 |---|---|---|---|
 | 1 | Dev-only endpoints | `MapOpenApi()`, `UseSwaggerUI()` | Development environment only |
 | 2 | HTTPS redirection | `UseHttpsRedirection()` | Production only |
-| 3 | CORS | `UseCors("AllowBlazorClient")` | Allows Blazor WASM (Blazor.Intake) and Blazor SSR (Blazor.Desktop) client origins |
+| 3 | CORS | `UseCors("AllowBlazorClient")` | Allows Blazor WASM (Blazor.Intake) and Blazor WASM (Blazor.Manager) client origins |
 | 4 | Rate limiting | `UseRateLimiter()` | Protects public intake + status endpoints |
 | 5 | ExceptionHandlingMiddleware | `IMiddleware`, singleton | Catches all unhandled exceptions, returns structured ProblemDetails |
 | 6 | Authentication & Authorization | `UseAuthentication()` + `UseAuthorization()` | Auth0 JWT validation + policy checks |
@@ -792,9 +792,9 @@ For MVP, the mobile app uses static suggested labor times from the `LookupSet` d
 
 ## 18. Service Manager Desktop App — API Readiness
 
-**Front-end format:** Blazor SSR (Interactive Server). Optimized for large-screen desktop browsers on reliable office networks. SignalR connection enables real-time push updates (e.g., Service Board refresh when technicians complete jobs). All business logic stays server-side.
+**Front-end format:** Blazor WebAssembly (Standalone). Optimized for large-screen desktop browsers on reliable office networks. **MVP:** Long polling (configurable interval, default 5 min) for near-real-time updates (e.g., Service Board refresh when technicians complete jobs). **vNEXT:** A dedicated SignalR hub will push real-time updates, eliminating polling latency. Deployed to Azure Static Web Apps.
 
-This section documents the API surface gaps identified from the Service Manager Desktop feature requirements (see `Docs/Research/FrontEnd/RVS_Features_Blazor.Desktop.md`) and the resolutions adopted in this architecture version.
+This section documents the API surface gaps identified from the Service Manager Desktop feature requirements (see `Docs/FrontEnd/RVS_Features_Blazor.Manager.md`) and the resolutions adopted in this architecture version.
 
 ### 18.1 Gap Summary
 
@@ -941,7 +941,7 @@ The following issues are identified in `RVS_SaaS_Architecture_Assessment.md` and
 
 2. **No CDN for Blazor WASM (Blazor.Intake)**
   - Impact: 5–15 MB WASM runtime + app download from single App Service instance, poor UX on mobile customer devices
-  - Action: Deploy `RVS.Blazor.Intake` to Azure Static Web Apps (Free tier) or front with Azure Front Door CDN. `RVS.Blazor.Desktop` (Blazor SSR) runs as App Service — no CDN needed for desktop office use. `RVS.MAUI.Tech` (MAUI) is distributed via MDM/app store.
+  - Action: Deploy `RVS.Blazor.Intake` to Azure Static Web Apps (Free tier) or front with Azure Front Door CDN. `RVS.Blazor.Manager` (Blazor WASM Standalone) deploys to Azure Static Web Apps — same hosting model as Blazor.Intake. `RVS.MAUI.Tech` (MAUI) is distributed via MDM/app store.
   - See: Assessment "Performance Efficiency" section
 
 3. **No Blob Storage Lifecycle Management**

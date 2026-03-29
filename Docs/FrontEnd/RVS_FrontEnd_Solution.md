@@ -12,7 +12,7 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
 
 ## Requirements Summary by Application
 
-| Requirement | Blazor.Intake | Blazor.Desktop | MAUI.Tech |
+| Requirement | Blazor.Intake | Blazor.Manager | MAUI.Tech |
 |---|---|---|---|
 | **Primary device** | Customer smartphones | Large desktop screens | Phones/tablets in service bays |
 | **Authentication** | Anonymous / magic-link (no login) | Auth0 dealer staff | Auth0 dealer staff |
@@ -49,7 +49,7 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
 
 ---
 
-## 2. Blazor.Desktop → **Blazor WASM (Standalone)**
+## 2. Blazor.Manager → **Blazor WASM (Standalone)**
 
 ### Why Blazor WASM Standalone
 
@@ -82,7 +82,7 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
 | **Glove-friendly / bay-mounted tablet** | A native app can be configured as a kiosk, pinned to a home screen, and launched full-screen. Bay tablets can auto-show the assigned job on wake. Browser apps can't do this reliably. |
 | **3–5 second interaction target** | The docs demand *"total interaction: 3–5 seconds"* and *"open a job in one action."* A native app with pre-loaded job data, instant camera launch, and tap-to-complete beats any browser experience. |
 | **Employer-provisioned install is acceptable** | Unlike customers, technicians are dealership employees. The dealership IT provisions devices. MDM/app store distribution is standard practice — install friction is near-zero for this user class. |
-| **Blazor UI layer for code sharing** | Using MAUI Blazor **Hybrid** (not pure MAUI) lets you share Razor components, CSS, and `RVS.Domain` DTOs/validation with the Blazor.Intake and Blazor.Desktop apps. The UI investment in Blazor components for job cards, outcome entry forms, and photo viewers is reusable. |
+| **Blazor UI layer for code sharing** | Using MAUI Blazor **Hybrid** (not pure MAUI) lets you share Razor components, CSS, and `RVS.Domain` DTOs/validation with the Blazor.Intake and Blazor.Manager apps. The UI investment in Blazor components for job cards, outcome entry forms, and photo viewers is reusable. |
 | **Cross-platform (iOS + Android)** | Technicians use a mix of personal phones and shop tablets. One codebase covers both platforms. |
 
 ### Why NOT the others
@@ -101,7 +101,7 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
 └──────────────┬──────────────┬──────────────┬────────────┘
                │              │              │
     ┌──────────▼───┐  ┌──────▼───────┐  ┌──▼──────────────┐
-    │  Blazor.Intake │  │ Blazor.Desktop │  │   MAUI.Tech   │
+    │  Blazor.Intake │  │ Blazor.Manager │  │   MAUI.Tech   │
     │  WASM PWA    │  │  Blazor WASM │  │ MAUI Blazor Hyb.│
     │ (Standalone) │  │ (Standalone) │  │ (iOS + Android) │
     │              │  │              │  │                 │
@@ -124,7 +124,7 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
 
 ## Code Reuse Strategy
 
-| Shared Asset | Blazor.Intake | Blazor.Desktop | MAUI.Tech |
+| Shared Asset | Blazor.Intake | Blazor.Manager | MAUI.Tech |
 |---|---|---|---|
 | `RVS.Domain` (DTOs, entities, validation) | ✅ | ✅ | ✅ |
 | Razor component library (`RVS.UI.Shared`) | ✅ | ✅ | ✅ |
@@ -142,7 +142,7 @@ By placing shared Razor components (job cards, status badges, outcome entry form
 | Application | **Recommended Format** | Primary Justification |
 |---|---|---|
 | **Blazor.Intake** | **Blazor WebAssembly (Standalone PWA)** | Zero-install, URL-based, mobile-first, anonymous access; service worker caches WASM runtime for instant repeat visits — no SSR, no SignalR |
-| **Blazor.Desktop** | **Blazor WASM (Standalone)** | Large-screen, reliable network, consistent WASM architecture, long polling (MVP) → SignalR (vNEXT) for real-time updates |
+| **Blazor.Manager** | **Blazor WASM (Standalone)** | Large-screen, reliable network, consistent WASM architecture, long polling (MVP) → SignalR (vNEXT) for real-time updates |
 | **MAUI.Tech** | **MAUI Blazor Hybrid** | Offline-first, native camera/barcode/voice, 3-second interaction target, employer-provisioned install |
 
 

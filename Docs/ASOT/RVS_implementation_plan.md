@@ -17,7 +17,7 @@
 | [RVS_PRD.md](RVS_PRD.md) | Product goals, personas, user stories |
 | [RVS_FrontEnd_Solution.md](../FrontEnd/RVS_FrontEnd_Solution.md) | App format decisions, render modes, code reuse strategy |
 | [RVS_Features_Blazor.Intake_App.md](../FrontEnd/RVS_Features_Blazor.Intake_App.md) | Customer intake app feature spec |
-| [RVS_Features_Blazor.Desktop.md](../FrontEnd/RVS_Features_Blazor.Desktop.md) | Manager desktop feature spec |
+| [RVS_Features_Blazor.Manager.md](../FrontEnd/RVS_Features_Blazor.Manager.md) | Manager desktop feature spec |
 | [RVS_Features_MAUI.Tech.md](../FrontEnd/RVS_Features_MAUI.Tech.md) | Technician mobile feature spec |
 | [copilot-instructions.md](../../../.github/copilot-instructions.md) | Coding conventions and patterns |
 
@@ -58,7 +58,7 @@ The repo contains a fully implemented **healthcare benefits verification system*
 | Cosmos seed tool | Rewrite for RVS containers | 9 containers with test data |
 | `RVS.UI.Shared` Razor Class Library | Shared components, DTOs, CSS tokens | Foundation for all 3 frontends |
 | `Blazor.Intake` Blazor WASM | 7-step intake wizard + status page | Most complex frontend |
-| `Blazor.Desktop` Blazor WASM (Standalone) | Dashboard + Service Board + analytics | Second priority frontend |
+| `Blazor.Manager` Blazor WASM (Standalone) | Dashboard + Service Board + analytics | Second priority frontend |
 | `MAUI.Tech` MAUI Blazor Hybrid | My Jobs, Section 10A, photo capture | Third frontend, offline-first |
 | Rate limiting middleware | ASP.NET rate limiter | Per Tech PRD §5.3 |
 | Health check endpoint | Standard health checks | Cosmos + Blob probes |
@@ -84,10 +84,10 @@ This plan covers the **full MVP including all three frontend applications**. The
 | Shared UI library (`RVS.UI.Shared`) | FrontEnd Solution doc | P0 | 5 |
 | `Blazor.Intake` — intake wizard (7 steps) | FR-INTAKE-01–07 | P0 | 5–6 |
 | `Blazor.Intake` — status page | FR-STATUS-01, 02 | P0 | 6 |
-| `Blazor.Desktop` — SR queue + detail + search | FR-DASH-01 | P0 | 7–8 |
-| `Blazor.Desktop` — Service Board (polling) | FR-DASH-03 (simplified) | P0 | 8 |
-| `Blazor.Desktop` — analytics dashboard | FR-DASH-04 | P1 | 8 |
-| `Blazor.Desktop` — location management + QR codes | FR-TENANT-03, 04 | P1 | 8 |
+| `Blazor.Manager` — SR queue + detail + search | FR-DASH-01 | P0 | 7–8 |
+| `Blazor.Manager` — Service Board (polling) | FR-DASH-03 (simplified) | P0 | 8 |
+| `Blazor.Manager` — analytics dashboard | FR-DASH-04 | P1 | 8 |
+| `Blazor.Manager` — location management + QR codes | FR-TENANT-03, 04 | P1 | 8 |
 | `MAUI.Tech` — project scaffold + auth | FR-TECH-01 | P0 | 9 |
 | `MAUI.Tech` — My Jobs queue + SR detail | FR-TECH-02, 03 | P0 | 9 |
 | `MAUI.Tech` — Section 10A outcome entry | FR-TECH-03 | P0 | 9–10 |
@@ -115,7 +115,7 @@ This plan covers the **full MVP including all three frontend applications**. The
 
 ### 2.3 Key Difference from v1.0 Plan
 
-The v1.0 plan (8 weeks) deferred `MAUI.Tech` entirely and had technicians use `Blazor.Desktop` on a tablet. This v2.0 plan adds 4 weeks to deliver all three frontend applications, satisfying the requirement that the MVP includes a purpose-built technician experience with native scanning, photo capture, and offline support.
+The v1.0 plan (8 weeks) deferred `MAUI.Tech` entirely and had technicians use `Blazor.Manager` on a tablet. This v2.0 plan adds 4 weeks to deliver all three frontend applications, satisfying the requirement that the MVP includes a purpose-built technician experience with native scanning, photo capture, and offline support.
 
 ---
 
@@ -138,7 +138,7 @@ RVS.sln
 │   ├── RVS.Infra.AzBlobRepository/    (Blob Storage service)
 │   ├── RVS.UI.Shared/             (Razor Class Library — shared components, API clients)
 │   ├── RVS.Blazor.Intake/           (Blazor WASM — customer portal)
-│   ├── RVS.Blazor.Desktop/          (Blazor WASM Standalone — manager dashboard)
+│   ├── RVS.Blazor.Manager/          (Blazor WASM Standalone — manager dashboard)
 │   └── RVS.MAUI.Tech/           (MAUI Blazor Hybrid — technician app)
 ├── tools/
 │   └── RVS.Data.Cosmos.Seed/      (Cosmos seed tool)
@@ -516,11 +516,11 @@ Build the core intake experience. Each step is a separate Razor component with s
 
 ### Phase 6 — Manager Desktop Frontend (Days 36–45) {Weeks 7 second half – Week 9 start}
 
-**Goal:** `Blazor.Desktop` Blazor WASM (Standalone) delivers the advisor/manager dashboard with auth.
+**Goal:** `Blazor.Manager` Blazor WASM (Standalone) delivers the advisor/manager dashboard with auth.
 
 #### 6.1 Project Setup
 
-Create `RVS.Blazor.Desktop` as Blazor WebAssembly (Standalone):
+Create `RVS.Blazor.Manager` as Blazor WebAssembly (Standalone):
 - Auth0 OIDC authentication (PKCE flow) via `Microsoft.AspNetCore.Components.WebAssembly.Authentication`
 - `HttpClient` with Bearer token injection via `AuthorizationMessageHandler`
 - MudBlazor component library
@@ -707,7 +707,7 @@ Verify against Tech PRD §9:
 |---|---|
 | Azure App Service (API) | Deploy API; configure Managed Identity; Always On |
 | Azure Static Web Apps (`Blazor.Intake`) | Deploy WASM; custom domain `app.rvserviceflow.com` |
-| Azure Static Web Apps (`Blazor.Desktop`) | Deploy WASM; same hosting pattern as Blazor.Intake |
+| Azure Static Web Apps (`Blazor.Manager`) | Deploy WASM; same hosting pattern as Blazor.Intake |
 | Cosmos DB | Provision account; run seed tool for 9 containers; verify index policies |
 | Azure Blob Storage | Create `rvs-attachments` container; configure CORS for direct SAS upload |
 | Azure Key Vault | Store: OpenAI key, SendGrid key; grant API Managed Identity `get` + `list` |
@@ -724,7 +724,7 @@ Verify against Tech PRD §9:
 | Workflow | Trigger | Steps |
 |---|---|---|
 | `build-test.yml` | Push to any branch / PR | `dotnet build`, `dotnet test`, coverage report |
-| `deploy-staging.yml` | Merge to `main` | Build → publish → deploy API + Blazor.Intake + Blazor.Desktop to staging |
+| `deploy-staging.yml` | Merge to `main` | Build → publish → deploy API + Blazor.Intake + Blazor.Manager to staging |
 | `deploy-production.yml` | Manual approval | Same as staging with production config |
 | `build-mobile.yml` | Tag `mobile-v*` | Build MAUI → produce APK + IPA; upload to release artifacts |
 
@@ -770,9 +770,9 @@ For each of the 5 design partner dealerships:
 | **4** | Phase 3b–4a | Intake orchestration E2E + controllers started | **High** — orchestration complexity |
 | **5** | Phase 4b–5a | Controllers complete + RVS.UI.Shared + Blazor.Intake scaffold | Medium — render mode mixing |
 | **6** | Phase 5b | Intake wizard complete (all 7 steps) | Medium — SAS upload integration |
-| **7** | Phase 5c–6a | Status page + Blazor.Desktop scaffold + auth + SR queue | Medium — WASM project setup |
-| **8** | Phase 6b | Blazor.Desktop Service Board + analytics + locations | Medium — long polling integration |
-| **9** | Phase 6c–7a | Blazor.Desktop polish + MAUI.Tech scaffold + auth + My Jobs | Medium — MAUI setup |
+| **7** | Phase 5c–6a | Status page + Blazor.Manager scaffold + auth + SR queue | Medium — WASM project setup |
+| **8** | Phase 6b | Blazor.Manager Service Board + analytics + locations | Medium — long polling integration |
+| **9** | Phase 6c–7a | Blazor.Manager polish + MAUI.Tech scaffold + auth + My Jobs | Medium — MAUI setup |
 | **10** | Phase 7b | MAUI.Tech Section 10A + photo + VIN scan + offline queue | **High** — native APIs + SQLite |
 | **11** | Phase 8 | Unit tests + integration tests + security hardening | Medium — coverage target |
 | **12** | Phase 9 | Deployment + CI/CD + design partner onboarding | Medium — infra provisioning |
@@ -832,7 +832,7 @@ Because `MAUI.Tech` is the highest-risk frontend, perform a **1-day spike on Day
 4. ZXing.NET.MAUI (or equivalent) barcode scanner works
 5. SQLite package installs and basic read/write works
 
-This spike catches build pipeline or compatibility issues 9 weeks before MAUI.Tech is scheduled. If MAUI proves unstable, the fallback is `Blazor.Desktop` on a tablet (same as v1.0 plan) with no impact on the backend schedule.
+This spike catches build pipeline or compatibility issues 9 weeks before MAUI.Tech is scheduled. If MAUI proves unstable, the fallback is `Blazor.Manager` on a tablet (same as v1.0 plan) with no impact on the backend schedule.
 
 ---
 
