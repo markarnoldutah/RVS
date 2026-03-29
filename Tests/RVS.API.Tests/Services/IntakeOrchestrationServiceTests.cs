@@ -623,6 +623,7 @@ public class IntakeOrchestrationServiceTests
 
         result.PrefillCustomer.Should().BeNull();
         result.PrefillAsset.Should().BeNull();
+        result.TokenExpired.Should().BeFalse();
     }
 
     [Fact]
@@ -637,6 +638,7 @@ public class IntakeOrchestrationServiceTests
 
         result.PrefillCustomer.Should().BeNull();
         result.PrefillAsset.Should().BeNull();
+        result.TokenExpired.Should().BeTrue();
     }
 
     [Fact]
@@ -652,6 +654,7 @@ public class IntakeOrchestrationServiceTests
         result.PrefillCustomer.Should().NotBeNull();
         result.PrefillCustomer!.FirstName.Should().Be("Jane");
         result.PrefillAsset.Should().BeNull();
+        result.TokenExpired.Should().BeFalse();
     }
 
     [Fact]
@@ -758,6 +761,7 @@ public class IntakeOrchestrationServiceTests
 
         result.PrefillCustomer.Should().BeNull();
         result.PrefillAsset.Should().BeNull();
+        result.TokenExpired.Should().BeFalse();
     }
 
     private static GlobalCustomerAcct BuildGlobalAcctWithMagicLink(bool expired, List<string> assetIds)
