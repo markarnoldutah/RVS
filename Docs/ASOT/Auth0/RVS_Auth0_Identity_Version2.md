@@ -638,6 +638,6 @@ The following permissions were resolved as part of the V3 Core Architecture's Se
 | `dealer:technician` was missing `service-requests:search` | Added permission to role → permission matrix | Section 6 (row: `service-requests:search`, column: `dealer:technician` = ✅ ²) | ✅ Confirmed |
 | No authenticated attachment upload for dealer staff | `attachments:upload` added for `dealer:technician` | Section 6 (row: `attachments:upload`, column: `dealer:technician` = ✅) | ✅ Confirmed |
 
-**Footnote ²** in Section 6 documents the application-layer restriction that accompanies the `service-requests:search` grant: the service layer restricts technician search results to SRs where `AssignedTechnicianId` matches the technician's own `userId` claim. This powers the **My Jobs** queue (QR/VIN scan → job lookup, bay-based access) on the technician mobile app documented in `Docs/Research/FrontEnd/RVS_Features_Tech_Mobile.md`.
+**Footnote ²** in Section 6 documents the application-layer restriction that accompanies the `service-requests:search` grant: the service layer restricts technician search results to SRs where `AssignedTechnicianId` matches the technician's own `userId` claim. This powers the **My Jobs** queue (QR/VIN scan → job lookup, bay-based access) on the technician mobile app documented in `Docs/Research/FrontEnd/RVS_Features_MAUI.Tech.md`.
 
 **Section 8.4** (Sample JWT — Location Technician) confirms both permissions appear in the technician access token payload.

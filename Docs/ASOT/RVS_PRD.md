@@ -12,7 +12,7 @@
 
 RV Service Flow (RVS) is a multi-tenant SaaS platform that digitizes the service intake workflow at RV dealerships and independent RV repair shops. The core problem is that service departments rely on phone calls, emails, and manual notes to collect repair information before an RV arrives, resulting in incomplete diagnostics, wasted technician time, and extended Repair Event Cycle Times (RECT).
 
-The MVP delivers three integrated surfaces: a frictionless, mobile-first customer intake portal (`Cust_Intake`) that captures structured repair information (including photos, video, VIN, and an AI-guided issue wizard) before the RV arrives; a manager and advisor dashboard (`Mngr_Desktop`) where service advisors and managers manage, triage, and act on incoming service requests from a desktop browser; and a technician mobile app (`Tech_Mobile`) purpose-built for service bay use with offline-first job access, native barcode scanning, voice notes, and a 3–5 second interaction target. Customers are never required to create an account — a magic-link token gives them passive status visibility across all their dealerships.
+The MVP delivers three integrated surfaces: a frictionless, mobile-first customer intake portal (`Blazor.Intake`) that captures structured repair information (including photos, video, VIN, and an AI-guided issue wizard) before the RV arrives; a manager and advisor dashboard (`Blazor.Desktop`) where service advisors and managers manage, triage, and act on incoming service requests from a desktop browser; and a technician mobile app (`MAUI.Tech`) purpose-built for service bay use with offline-first job access, native barcode scanning, voice notes, and a 3–5 second interaction target. Customers are never required to create an account — a magic-link token gives them passive status visibility across all their dealerships.
 
 The platform is designed as the intake layer that sits in front of existing Dealer Management Systems (DMS), not a DMS replacement. A simple SFTP-based DMS export makes it easy for dealers to pull structured service request data into their existing workflow on day one.
 
@@ -44,7 +44,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - Customer Auth0 accounts and full customer login (Phase 2+); the MVP uses anonymous intake plus magic-link.
 - Warranty claim processing or warranty data lookups.
 - OEM or manufacturer data integrations.
-- Customer-facing native mobile apps (iOS/Android app store distribution); customer intake is browser-based (Blazor WASM) requiring zero install. The `Tech_Mobile` technician app is a MAUI Blazor Hybrid native app distributed to employer-provisioned devices — not a consumer app store release.
+- Customer-facing native mobile apps (iOS/Android app store distribution); customer intake is browser-based (Blazor WASM) requiring zero install. The `MAUI.Tech` technician app is a MAUI Blazor Hybrid native app distributed to employer-provisioned devices — not a consumer app store release.
 
 ---
 
@@ -230,10 +230,10 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - The dealer dashboard is a desktop-primary layout with a responsive fallback for tablet/mobile use.
 - Status badges on the dealer queue use consistent color coding: New (blue), In Progress (amber), Completed (green), Cancelled (grey).
 - Attachment previews render inline on the service request detail page; video attachments autoplay muted on hover.
-- The `Tech_Mobile` technician app is glove-friendly with extra-large tap targets throughout the job list and outcome entry form.
-- QR/VIN scanning is the primary job access method in `Tech_Mobile` — one scan opens the assigned job immediately.
-- Outcome entries in `Tech_Mobile` store locally when the device goes offline and sync automatically when connectivity returns; no data is lost in poor-signal bays.
-- The `Mngr_Desktop` Service Board uses drag-and-drop status columns; status changes push to all connected sessions in real time via SignalR.
+- The `MAUI.Tech` technician app is glove-friendly with extra-large tap targets throughout the job list and outcome entry form.
+- QR/VIN scanning is the primary job access method in `MAUI.Tech` — one scan opens the assigned job immediately.
+- Outcome entries in `MAUI.Tech` store locally when the device goes offline and sync automatically when connectivity returns; no data is lost in poor-signal bays.
+- The `Blazor.Desktop` Service Board uses drag-and-drop status columns; status changes push to all connected sessions in real time via SignalR.
 
 ---
 
@@ -290,13 +290,13 @@ The MVP comprises three distinct front-end applications, each optimized for its 
 
 | Application | Framework | Rationale |
 |---|---|---|
-| **Cust_Intake** | Blazor WebAssembly (Interactive WebAssembly + Static SSR pages) | Zero install friction; customer accesses via dealer-specific URL. Dealer landing page and confirmation screens are Static SSR (instant load, SEO). The guided intake wizard (`@rendermode InteractiveWebAssembly`) runs entirely client-side — critical for multi-step form state and photo upload progress without round-trips. |
-| **Mngr_Desktop** | Blazor SSR (Interactive Server) | Desktop browser on reliable office network. SignalR connection enables real-time push updates to the Service Board when technicians complete jobs. All business logic executes server-side; no sensitive data ships to the client. |
-| **Tech_Mobile** | MAUI Blazor Hybrid (iOS + Android) | Offline-first mode is critical — service bays have poor connectivity. Outcome entries are queued locally and synced on reconnect. Native barcode SDK provides the fast, reliable VIN/QR scanning required for the 3–5 second interaction target. MAUI Essentials provides device speech-to-text for voice notes. Employer-provisioned install eliminates consumer app store friction. |
+| **Blazor.Intake** | Blazor WebAssembly (Standalone PWA) | Zero install friction; customer accesses via dealer-specific URL. The entire app — landing page, guided intake wizard, submission confirmation, and magic-link status page — runs as a single WASM SPA. A service worker caches the WASM runtime after first load, eliminating the download penalty on repeat visits. No SSR, no SignalR, no per-page render-mode handoffs. |
+| **Blazor.Desktop** | Blazor SSR (Interactive Server) | Desktop browser on reliable office network. SignalR connection enables real-time push updates to the Service Board when technicians complete jobs. All business logic executes server-side; no sensitive data ships to the client. |
+| **MAUI.Tech** | MAUI Blazor Hybrid (iOS + Android) | Offline-first mode is critical — service bays have poor connectivity. Outcome entries are queued locally and synced on reconnect. Native barcode SDK provides the fast, reliable VIN/QR scanning required for the 3–5 second interaction target. MAUI Essentials provides device speech-to-text for voice notes. Employer-provisioned install eliminates consumer app store friction. |
 
 **Code reuse strategy:**
 
-| Shared asset | Cust_Intake | Mngr_Desktop | Tech_Mobile |
+| Shared asset | Blazor.Intake | Blazor.Desktop | MAUI.Tech |
 |---|---|---|---|
 | `RVS.Domain` (DTOs, entities, validation) | ✅ | ✅ | ✅ |
 | `RVS.UI.Shared` Razor component library | ✅ | ✅ | ✅ |
@@ -353,9 +353,9 @@ The MVP comprises three distinct front-end applications, each optimized for its 
   - Validates: Export generates correct CSV; SFTP push delivers file to configured endpoint.
 
 - **Phase 9: Front-end applications** (Week 7–9)
-  - **Cust_Intake (Blazor WASM):** Dealer landing page (Static SSR with WASM preload), 5-step guided intake wizard (Interactive WebAssembly — VIN scan, AI wizard, speech-to-text, photo/video upload), submission confirmation (Static SSR), magic-link status page (Static SSR).
-  - **Mngr_Desktop (Blazor SSR — Interactive Server):** Service request queue, drag-and-drop Service Board, search/filter, service request detail view, status update, attachment viewer, analytics dashboard, dealer settings (location management, QR code download), real-time push updates via SignalR.
-  - **Tech_Mobile (MAUI Blazor Hybrid):** Assigned job list, QR/VIN native barcode scan to open job, outcome entry form (offline queue + sync), voice notes via MAUI speech-to-text, photo capture, glove-friendly tap targets.
+  - **Blazor.Intake (Blazor WASM Standalone PWA):** Dealer landing page, 5-step guided intake wizard (VIN scan, AI wizard, speech-to-text, photo/video upload), submission confirmation, and magic-link status page — all routes within a single WASM SPA. Service worker caches the WASM runtime after first load. No SSR, no SignalR.
+  - **Blazor.Desktop (Blazor SSR — Interactive Server):** Service request queue, drag-and-drop Service Board, search/filter, service request detail view, status update, attachment viewer, analytics dashboard, dealer settings (location management, QR code download), real-time push updates via SignalR.
+  - **MAUI.Tech (MAUI Blazor Hybrid):** Assigned job list, QR/VIN native barcode scan to open job, outcome entry form (offline queue + sync), voice notes via MAUI speech-to-text, photo capture, glove-friendly tap targets.
 
 - **Phase 10: QR codes, seed data, polish, and deployment** (Week 9–10)
   - QR code generation endpoint, comprehensive seed data (multi-tenant, VIN transfers), rate limiting fine-tuning, Swagger/OpenAPI documentation, structured logging, Azure App Service deployment.

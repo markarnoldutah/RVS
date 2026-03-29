@@ -49,7 +49,7 @@ RVS is a cloud-based **service intake and workflow platform** that sits in front
 
 **For RV owners — requires no account.**
 
-- **App:** `RVS.Cust_Intake` — Blazor WebAssembly. Dealer landing page and status pages use Static SSR (instant load, SEO-friendly); the guided intake wizard uses Interactive WebAssembly (full client-side interactivity, no mid-form state resets).
+- **App:** `RVS.Blazor.Intake` — Blazor WebAssembly (Standalone PWA). All surfaces (landing page, guided wizard, confirmation, status pages) are routes within a single WASM SPA. No SSR, no SignalR. A service worker caches the WASM runtime after first load — subsequent visits skip the network download entirely.
 - **URL:** `https://app.rvserviceflow.com/intake/{locationSlug}` (location-specific, accessible via QR code)
 - **Submits:** VIN (camera scan or manual entry), make/model/year, issue description (text or speech-to-text), photos/videos (up to 10 files), urgency level, RV usage (full-time vs. part-time)
 - **Flow:** AI-guided intake wizard presents contextual follow-up questions based on issue category (e.g., for Refrigerator → ask absorption vs. residential type, error codes, shore power; for Slide-out → which slide number, manual override attempted)
@@ -60,18 +60,18 @@ RVS is a cloud-based **service intake and workflow platform** that sits in front
 
 **For RV owners — check status any time, any dealership.**
 
-- **App:** Part of `RVS.Cust_Intake` — delivered as a Static SSR page (server-rendered, no WASM required).
+- **App:** Part of `RVS.Blazor.Intake` — the status page is a client-side route within the same WASM SPA. No separate server-rendered page; the service worker ensures fast loads on repeat visits.
 - **URL:** `https://app.rvserviceflow.com/status/{token}` (anonymous, rate-limited)
 - **Token:** Secure magic-link generated on intake submission, embedded in confirmation email
 - **Shows:** All active service requests from that customer **across all dealerships** where they've submitted
 - **Data:** Location name, status, issue summary, last-updated date, request total count
 - **Design principle:** Passive, cross-dealer visibility without account or login friction
 
-### 2.3 Service Manager Desktop — `RVS.Mngr_Desktop` (Blazor SSR, Interactive Server)
+### 2.3 Service Manager Desktop — `RVS.Blazor.Desktop` (Blazor SSR, Interactive Server)
 
 **For service advisors, managers, regional managers, and corporate staff — desktop browser.**
 
-- **App:** `RVS.Mngr_Desktop` — Blazor SSR (Interactive Server). Optimized for large-screen desktop browsers on reliable office networks. SignalR connection enables real-time Service Board updates when technicians complete jobs. All business logic executes server-side.
+- **App:** `RVS.Blazor.Desktop` — Blazor SSR (Interactive Server). Optimized for large-screen desktop browsers on reliable office networks. SignalR connection enables real-time Service Board updates when technicians complete jobs. All business logic executes server-side.
 - **Authentication:** Auth0 JWT Bearer, organization-scoped
 - **For Service Advisors:** Create service requests, search/filter queue, view detail, update status, add notes, view attachments
 - **For Managers:** Drag-and-drop Service Board, triage intake queue, batch outcome entry, workload visibility across location or region
@@ -79,11 +79,11 @@ RVS is a cloud-based **service intake and workflow platform** that sits in front
 - **Data isolation:** Multi-tenant by corporation (Auth0 Organization), location-scoped roles filter within tenant
 - **Design principle:** Structured, permission-based, real-time, supports lean to enterprise dealer groups
 
-### 2.4 Technician Mobile App — `RVS.Tech_Mobile` (MAUI Blazor Hybrid)
+### 2.4 Technician Mobile App — `RVS.MAUI.Tech` (MAUI Blazor Hybrid)
 
 **For technicians — phones and tablets in service bays.**
 
-- **App:** `RVS.Tech_Mobile` — MAUI Blazor Hybrid (iOS + Android). Employer-provisioned install via MDM or app store.
+- **App:** `RVS.MAUI.Tech` — MAUI Blazor Hybrid (iOS + Android). Employer-provisioned install via MDM or app store.
 - **Authentication:** Auth0 JWT Bearer, organization-scoped
 - **Offline-first:** Poor bay connectivity is expected. Outcome entries store locally (SQLite) and sync on reconnect via sequential `PUT` calls.
 - **Key interactions:** QR/VIN scan to open a job (native barcode SDK), photo capture, voice notes (platform speech-to-text via MAUI Essentials), log Section 10A repair fields (failure mode, action, parts, labor)
@@ -307,9 +307,9 @@ Used by every controller and service method to enforce tenant isolation, role ch
 
 | Application | Technology | Purpose | Notes |
 |---|---|---|---|
-| **`RVS.Cust_Intake`** | Blazor WebAssembly | Customer intake portal + status pages | Zero-install, URL-based. Landing page + status pages: Static SSR. Intake wizard: Interactive WebAssembly. Deployed to Azure Static Web Apps (CDN). |
-| **`RVS.Mngr_Desktop`** | Blazor SSR (Interactive Server) | Service manager desktop app | Service Board, triage, analytics, batch operations. Large-screen desktop browser. Real-time push via SignalR. Runs as App Service. |
-| **`RVS.Tech_Mobile`** | MAUI Blazor Hybrid (iOS + Android) | Technician mobile app | Offline-first, native barcode/QR/camera/voice. 3–5 sec interaction target. Employer-provisioned via MDM. Shares Razor components from `RVS.UI.Shared`. |
+| **`RVS.Blazor.Intake`** | Blazor WebAssembly (Standalone PWA) | Customer intake portal + status pages | Zero-install, URL-based. All surfaces are client-side routes in a single WASM SPA. Service worker caches WASM runtime after first load. No SSR. Deployed to Azure Static Web Apps (CDN). |
+| **`RVS.Blazor.Desktop`** | Blazor SSR (Interactive Server) | Service manager desktop app | Service Board, triage, analytics, batch operations. Large-screen desktop browser. Real-time push via SignalR. Runs as App Service. |
+| **`RVS.MAUI.Tech`** | MAUI Blazor Hybrid (iOS + Android) | Technician mobile app | Offline-first, native barcode/QR/camera/voice. 3–5 sec interaction target. Employer-provisioned via MDM. Shares Razor components from `RVS.UI.Shared`. |
 | **`RVS.UI.Shared`** | Razor Class Library | Shared UI components | DTOs, Razor components, CSS design tokens, and typed API client services consumed by all three apps. |
 
 ### 9.3 Infrastructure

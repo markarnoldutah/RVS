@@ -16,9 +16,9 @@
 | [RVS_Auth0_Identity_Version2.md](RVS_Auth0_Identity_Version2.md) | RBAC, JWT claims, Auth0 Organization model |
 | [RVS_PRD.md](RVS_PRD.md) | Product goals, personas, user stories |
 | [RVS_FrontEnd_Solution.md](../FrontEnd/RVS_FrontEnd_Solution.md) | App format decisions, render modes, code reuse strategy |
-| [RVS_Features_Cust_Intake_App.md](../FrontEnd/RVS_Features_Cust_Intake_App.md) | Customer intake app feature spec |
-| [RVS_Features_Mngr_Desktop.md](../FrontEnd/RVS_Features_Mngr_Desktop.md) | Manager desktop feature spec |
-| [RVS_Features_Tech_Mobile.md](../FrontEnd/RVS_Features_Tech_Mobile.md) | Technician mobile feature spec |
+| [RVS_Features_Blazor.Intake_App.md](../FrontEnd/RVS_Features_Blazor.Intake_App.md) | Customer intake app feature spec |
+| [RVS_Features_Blazor.Desktop.md](../FrontEnd/RVS_Features_Blazor.Desktop.md) | Manager desktop feature spec |
+| [RVS_Features_MAUI.Tech.md](../FrontEnd/RVS_Features_MAUI.Tech.md) | Technician mobile feature spec |
 | [copilot-instructions.md](../../../.github/copilot-instructions.md) | Coding conventions and patterns |
 
 ---
@@ -42,7 +42,7 @@ The repo contains a fully implemented **healthcare benefits verification system*
 | Cosmos DI registration pattern | ✅ Copy pattern | Same singleton client, scoped repos |
 | Mapper convention (static extension methods) | ✅ Copy pattern | Same `ToDetailDto()`, `ToEntity()` convention |
 | DTOs as records pattern | ✅ Copy pattern | Same naming convention |
-| Blazor WASM project structure | ✅ Fork for `Cust_Intake` | Auth, HttpClient, MudBlazor already wired |
+| Blazor WASM project structure | ✅ Fork for `Blazor.Intake` | Auth, HttpClient, MudBlazor already wired |
 
 ### 1.2 What Must Be Built New
 
@@ -57,9 +57,9 @@ The repo contains a fully implemented **healthcare benefits verification system*
 | External integrations | NHTSA, Azure OpenAI, SendGrid, Blob SAS | 4 integration clients |
 | Cosmos seed tool | Rewrite for RVS containers | 9 containers with test data |
 | `RVS.UI.Shared` Razor Class Library | Shared components, DTOs, CSS tokens | Foundation for all 3 frontends |
-| `Cust_Intake` Blazor WASM | 7-step intake wizard + status page | Most complex frontend |
-| `Mngr_Desktop` Blazor WASM (Standalone) | Dashboard + Service Board + analytics | Second priority frontend |
-| `Tech_Mobile` MAUI Blazor Hybrid | My Jobs, Section 10A, photo capture | Third frontend, offline-first |
+| `Blazor.Intake` Blazor WASM | 7-step intake wizard + status page | Most complex frontend |
+| `Blazor.Desktop` Blazor WASM (Standalone) | Dashboard + Service Board + analytics | Second priority frontend |
+| `MAUI.Tech` MAUI Blazor Hybrid | My Jobs, Section 10A, photo capture | Third frontend, offline-first |
 | Rate limiting middleware | ASP.NET rate limiter | Per Tech PRD §5.3 |
 | Health check endpoint | Standard health checks | Cosmos + Blob probes |
 | Unit + integration tests | Two test projects | 80% domain/service coverage target |
@@ -82,17 +82,17 @@ This plan covers the **full MVP including all three frontend applications**. The
 | All API controllers + auth policies | §8.2, §10.1 | P0 | 4 |
 | Middleware (rate limiting, exception handling, access gate) | §6.4–6.5, FR-STATUS-03 | P0 | 4 |
 | Shared UI library (`RVS.UI.Shared`) | FrontEnd Solution doc | P0 | 5 |
-| `Cust_Intake` — intake wizard (7 steps) | FR-INTAKE-01–07 | P0 | 5–6 |
-| `Cust_Intake` — status page | FR-STATUS-01, 02 | P0 | 6 |
-| `Mngr_Desktop` — SR queue + detail + search | FR-DASH-01 | P0 | 7–8 |
-| `Mngr_Desktop` — Service Board (polling) | FR-DASH-03 (simplified) | P0 | 8 |
-| `Mngr_Desktop` — analytics dashboard | FR-DASH-04 | P1 | 8 |
-| `Mngr_Desktop` — location management + QR codes | FR-TENANT-03, 04 | P1 | 8 |
-| `Tech_Mobile` — project scaffold + auth | FR-TECH-01 | P0 | 9 |
-| `Tech_Mobile` — My Jobs queue + SR detail | FR-TECH-02, 03 | P0 | 9 |
-| `Tech_Mobile` — Section 10A outcome entry | FR-TECH-03 | P0 | 9–10 |
-| `Tech_Mobile` — photo capture + VIN/QR scan | FR-TECH-02, 04 | P1 | 10 |
-| `Tech_Mobile` — offline queue (SQLite) | FR-TECH-01 | P1 | 10 |
+| `Blazor.Intake` — intake wizard (7 steps) | FR-INTAKE-01–07 | P0 | 5–6 |
+| `Blazor.Intake` — status page | FR-STATUS-01, 02 | P0 | 6 |
+| `Blazor.Desktop` — SR queue + detail + search | FR-DASH-01 | P0 | 7–8 |
+| `Blazor.Desktop` — Service Board (polling) | FR-DASH-03 (simplified) | P0 | 8 |
+| `Blazor.Desktop` — analytics dashboard | FR-DASH-04 | P1 | 8 |
+| `Blazor.Desktop` — location management + QR codes | FR-TENANT-03, 04 | P1 | 8 |
+| `MAUI.Tech` — project scaffold + auth | FR-TECH-01 | P0 | 9 |
+| `MAUI.Tech` — My Jobs queue + SR detail | FR-TECH-02, 03 | P0 | 9 |
+| `MAUI.Tech` — Section 10A outcome entry | FR-TECH-03 | P0 | 9–10 |
+| `MAUI.Tech` — photo capture + VIN/QR scan | FR-TECH-02, 04 | P1 | 10 |
+| `MAUI.Tech` — offline queue (SQLite) | FR-TECH-01 | P1 | 10 |
 | Unit tests (80% coverage target) | §12.1 | P0 | 11 |
 | Integration tests (Cosmos Emulator) | §12.2 | P0 | 11 |
 | Security verification | §9 | P0 | 11 |
@@ -109,13 +109,13 @@ This plan covers the **full MVP including all three frontend applications**. The
 | Change feed asset ledger enrichment (GAP-02) | Phase 5–6 per architecture |
 | Load testing (§12.4) | Stretch goal Week 12; otherwise immediate post-MVP |
 | E2E automated tests (§12.3) | Manual E2E with design partners; automated post-MVP |
-| `Tech_Mobile` voice notes | Platform speech-to-text via MAUI Essentials; post-MVP polish |
-| `Tech_Mobile` bay-based tablet kiosk mode | MDM auto-provisioning; Phase 2 |
+| `MAUI.Tech` voice notes | Platform speech-to-text via MAUI Essentials; post-MVP polish |
+| `MAUI.Tech` bay-based tablet kiosk mode | MDM auto-provisioning; Phase 2 |
 | Customer Auth0 accounts (persistent login) | Phase 2 per Context doc §10.2 |
 
 ### 2.3 Key Difference from v1.0 Plan
 
-The v1.0 plan (8 weeks) deferred `Tech_Mobile` entirely and had technicians use `Mngr_Desktop` on a tablet. This v2.0 plan adds 4 weeks to deliver all three frontend applications, satisfying the requirement that the MVP includes a purpose-built technician experience with native scanning, photo capture, and offline support.
+The v1.0 plan (8 weeks) deferred `MAUI.Tech` entirely and had technicians use `Blazor.Desktop` on a tablet. This v2.0 plan adds 4 weeks to deliver all three frontend applications, satisfying the requirement that the MVP includes a purpose-built technician experience with native scanning, photo capture, and offline support.
 
 ---
 
@@ -137,9 +137,9 @@ RVS.sln
 │   ├── RVS.Infra.AzCosmosRepository/  (Cosmos DB repositories)
 │   ├── RVS.Infra.AzBlobRepository/    (Blob Storage service)
 │   ├── RVS.UI.Shared/             (Razor Class Library — shared components, API clients)
-│   ├── RVS.Cust_Intake/           (Blazor WASM — customer portal)
-│   ├── RVS.Mngr_Desktop/          (Blazor WASM Standalone — manager dashboard)
-│   └── RVS.Tech_Mobile/           (MAUI Blazor Hybrid — technician app)
+│   ├── RVS.Blazor.Intake/           (Blazor WASM — customer portal)
+│   ├── RVS.Blazor.Desktop/          (Blazor WASM Standalone — manager dashboard)
+│   └── RVS.MAUI.Tech/           (MAUI Blazor Hybrid — technician app)
 ├── tools/
 │   └── RVS.Data.Cosmos.Seed/      (Cosmos seed tool)
 └── tests/
@@ -455,7 +455,7 @@ Complete DI registration for all services, repositories, integration clients, an
 
 ### Phase 5 — Shared UI Library & Customer Intake Frontend (Days 26–35) {Weeks 5–7 first half}
 
-**Goal:** `RVS.UI.Shared` Razor Class Library built. `Cust_Intake` Blazor WASM delivers the complete anonymous intake wizard and status page.
+**Goal:** `RVS.UI.Shared` Razor Class Library built. `Blazor.Intake` Blazor WASM delivers the complete anonymous intake wizard and status page.
 
 #### 5.1 RVS.UI.Shared — Razor Class Library
 
@@ -467,18 +467,16 @@ Create `RVS.UI.Shared` as the shared foundation consumed by all three frontends:
 | **Shared Razor components** | `StatusBadge`, `PriorityBadge`, `AssetDisplay`, `AttachmentThumbnail`, `DiagnosticResponseView` | All 3 apps |
 | **CSS design tokens** | Colors, spacing, typography variables | All 3 apps |
 | **DTO re-exports** | References `RVS.Domain` DTOs for frontend consumption | All 3 apps |
-| **Shared validation helpers** | Client-side VIN format check, email format, search input sanitization | Cust_Intake, Tech_Mobile |
+| **Shared validation helpers** | Client-side VIN format check, email format, search input sanitization | Blazor.Intake, MAUI.Tech |
 
-#### 5.2 Cust_Intake Project Setup
+#### 5.2 Blazor.Intake Project Setup
 
-Create `RVS.Cust_Intake` as Blazor WebAssembly:
+Create `RVS.Blazor.Intake` as a standalone Blazor WebAssembly PWA:
 - Remove healthcare check-in components from forked project
 - Keep: MudBlazor, HttpClient setup, layout skeleton
 - Update `Program.cs`: anonymous HttpClient (no Auth0 OIDC), pointing to RVS.API
-- Configure mixed render modes per FrontEnd Solution doc:
-  - **Static SSR:** landing page, confirmation page, status page
-  - **Interactive WebAssembly:** intake wizard steps
-- Preload WASM bundle on the Static SSR landing page for instant wizard transition
+- Enable PWA/service worker (`serviceWorkerScope`, `offline.razor`, `service-worker.js`) for WASM runtime caching
+- All pages (landing, wizard, confirmation, status) are client-side routes in the same SPA — no SSR, no SignalR
 
 #### 5.3 Intake Wizard (7-Step Form)
 
@@ -486,7 +484,7 @@ Build the core intake experience. Each step is a separate Razor component with s
 
 | Step | Component | API Call | Key UI |
 |---|---|---|---|
-| 1. Location Landing | `IntakeLanding.razor` | `GET api/intake/{slug}` | Location branding, "Start Service Request" CTA, WASM preload |
+| 1. Location Landing | `IntakeLanding.razor` | `GET api/intake/{slug}` | Location branding, "Start Service Request" CTA |
 | 2. Customer Info | `CustomerInfoStep.razor` | — (local state) | First name, last name, email (required), phone. Returning customer prefill if magic-link token present (FR-INTAKE-06) |
 | 3. Asset Info | `AssetInfoStep.razor` | — (local state) | VIN input (17-char validation), make/model/year. Returning customer sees known VINs for one-tap selection |
 | 4. Issue Description | `IssueDescriptionStep.razor` | — (local state) | Category dropdown (from LookupSet), free-text description (max 2000 chars), urgency selector, RV usage type |
@@ -503,7 +501,7 @@ Build the core intake experience. Each step is a separate Razor component with s
 - Displays all active SRs across all dealerships (FR-STATUS-02)
 - Shows: location name, status, issue category, submission date, last updated
 - Handles 404 (invalid token), 410 (expired token) gracefully
-- Rendered as Static SSR (no WASM required)
+- Client-side route within the WASM SPA; calls `GET api/status/{token}` directly
 
 #### 5.5 Mobile-First UX
 
@@ -518,16 +516,16 @@ Build the core intake experience. Each step is a separate Razor component with s
 
 ### Phase 6 — Manager Desktop Frontend (Days 36–45) {Weeks 7 second half – Week 9 start}
 
-**Goal:** `Mngr_Desktop` Blazor WASM (Standalone) delivers the advisor/manager dashboard with auth.
+**Goal:** `Blazor.Desktop` Blazor WASM (Standalone) delivers the advisor/manager dashboard with auth.
 
 #### 6.1 Project Setup
 
-Create `RVS.Mngr_Desktop` as Blazor WebAssembly (Standalone):
+Create `RVS.Blazor.Desktop` as Blazor WebAssembly (Standalone):
 - Auth0 OIDC authentication (PKCE flow) via `Microsoft.AspNetCore.Components.WebAssembly.Authentication`
 - `HttpClient` with Bearer token injection via `AuthorizationMessageHandler`
 - MudBlazor component library
 - Reference `RVS.UI.Shared` for shared components and API clients
-- Same hosting model as `Cust_Intake` — deployed to Azure Static Web Apps, cached after first load
+- Same hosting model as `Blazor.Intake` — deployed to Azure Static Web Apps, cached after first load
 
 #### 6.2 Core Pages
 
@@ -548,7 +546,7 @@ Service Board at `/board`:
 - Kanban-style columns: New → In Progress → Completed / Cancelled
 - Cards show SR summary (customer name, asset, category, age, priority badge)
 - Click card → SR Detail
-- **Long polling refresh** at configurable interval (default 5m) to detect Tech_Mobile updates (dedicated SignalR hub deferred to vNEXT per §2.2)
+- **Long polling refresh** at configurable interval (default 5m) to detect MAUI.Tech updates (dedicated SignalR hub deferred to vNEXT per §2.2)
 - Filter by location for multi-location tenants
 
 #### 6.4 Outcome Compliance Monitoring
@@ -563,11 +561,11 @@ Dashboard widget showing "Jobs Completed Without Outcomes":
 
 ### Phase 7 — Technician Mobile App (Days 46–55) {Weeks 9 second half – Week 11 start}
 
-**Goal:** `Tech_Mobile` MAUI Blazor Hybrid delivers the core technician workflow: view assigned jobs, record Section 10A outcomes, capture photos, scan VINs, and queue updates offline.
+**Goal:** `MAUI.Tech` MAUI Blazor Hybrid delivers the core technician workflow: view assigned jobs, record Section 10A outcomes, capture photos, scan VINs, and queue updates offline.
 
 #### 7.1 Project Setup
 
-Create `RVS.Tech_Mobile` as MAUI Blazor Hybrid (iOS + Android):
+Create `RVS.MAUI.Tech` as MAUI Blazor Hybrid (iOS + Android):
 - Auth0 OIDC authentication (PKCE flow, `WebAuthenticator`)
 - `HttpClient` with Bearer token injection via `DelegatingHandler`
 - Reference `RVS.UI.Shared` for shared components and API clients
@@ -586,7 +584,7 @@ Create `RVS.Tech_Mobile` as MAUI Blazor Hybrid (iOS + Android):
 
 #### 7.3 Job Access Methods
 
-Per Feature spec (`RVS_Features_Tech_Mobile.md`):
+Per Feature spec (`RVS_Features_MAUI.Tech.md`):
 
 | Method | Implementation |
 |---|---|
@@ -610,7 +608,7 @@ Lookup values (failure modes, repair actions, component types) loaded from `GET 
 #### 7.5 Photo Capture
 
 - MAUI `MediaPicker.CapturePhotoAsync()` for camera access
-- Preview → confirm → upload via SAS URL (same as Cust_Intake attachment flow)
+- Preview → confirm → upload via SAS URL (same as Blazor.Intake attachment flow)
 - `POST api/dealerships/{id}/service-requests/{srId}/attachments` for metadata registration
 - Photos queued locally if offline (uploaded on reconnect)
 
@@ -708,15 +706,15 @@ Verify against Tech PRD §9:
 | Resource | Action |
 |---|---|
 | Azure App Service (API) | Deploy API; configure Managed Identity; Always On |
-| Azure Static Web Apps (`Cust_Intake`) | Deploy WASM; custom domain `app.rvserviceflow.com` |
-| Azure Static Web Apps (`Mngr_Desktop`) | Deploy WASM; same hosting pattern as Cust_Intake |
+| Azure Static Web Apps (`Blazor.Intake`) | Deploy WASM; custom domain `app.rvserviceflow.com` |
+| Azure Static Web Apps (`Blazor.Desktop`) | Deploy WASM; same hosting pattern as Blazor.Intake |
 | Cosmos DB | Provision account; run seed tool for 9 containers; verify index policies |
 | Azure Blob Storage | Create `rvs-attachments` container; configure CORS for direct SAS upload |
 | Azure Key Vault | Store: OpenAI key, SendGrid key; grant API Managed Identity `get` + `list` |
 | App Insights | Link to API + frontends; configure availability test on `/health` |
 | Auth0 | Configure API audience; create dev Organization; seed test users with roles |
 
-**Tech_Mobile** distribution:
+**MAUI.Tech** distribution:
 - Android: internal testing track on Google Play or direct APK sideload for design partners
 - iOS: TestFlight for design partner technicians
 - No public app store listing required for MVP
@@ -726,7 +724,7 @@ Verify against Tech PRD §9:
 | Workflow | Trigger | Steps |
 |---|---|---|
 | `build-test.yml` | Push to any branch / PR | `dotnet build`, `dotnet test`, coverage report |
-| `deploy-staging.yml` | Merge to `main` | Build → publish → deploy API + Cust_Intake + Mngr_Desktop to staging |
+| `deploy-staging.yml` | Merge to `main` | Build → publish → deploy API + Blazor.Intake + Blazor.Desktop to staging |
 | `deploy-production.yml` | Manual approval | Same as staging with production config |
 | `build-mobile.yml` | Tag `mobile-v*` | Build MAUI → produce APK + IPA; upload to release artifacts |
 
@@ -740,7 +738,7 @@ For each of the 5 design partner dealerships:
 3. Create Dealership and Location(s) via API
 4. Generate QR codes for each location
 5. Invite staff users: assign roles (`dealer:owner`, `dealer:advisor`, `dealer:technician`) with appropriate `locationIds`
-6. Install `Tech_Mobile` on technician devices (APK/TestFlight)
+6. Install `MAUI.Tech` on technician devices (APK/TestFlight)
 7. Verify full cycle end-to-end: intake → dashboard → SR update → Section 10A → status page
 
 #### 9.4 Post-MVP Backlog (Prioritized)
@@ -748,8 +746,8 @@ For each of the 5 design partner dealerships:
 | Priority | Item | Effort |
 |---|---|---|
 | P0 | Dedicated SignalR hub for real-time Service Board (replaces long polling) | 3–5 days |
-| P1 | `Tech_Mobile` voice notes (MAUI Essentials speech-to-text) | 3–5 days |
-| P1 | `Tech_Mobile` bay-based tablet kiosk mode | 3–5 days |
+| P1 | `MAUI.Tech` voice notes (MAUI Essentials speech-to-text) | 3–5 days |
+| P1 | `MAUI.Tech` bay-based tablet kiosk mode | 3–5 days |
 | P1 | SendGrid styled email templates | 2–3 days |
 | P1 | DMS SFTP export | 1 week |
 | P2 | Azure Tables analytics pre-aggregation | 1 week |
@@ -770,12 +768,12 @@ For each of the 5 design partner dealerships:
 | **2** | Phase 2 | All repositories + CRUD services work via Postman | Low — follows existing patterns |
 | **3** | Phase 3a | Integration clients (NHTSA, OpenAI, Blob) with mocks + customer services | Medium — external API quirks |
 | **4** | Phase 3b–4a | Intake orchestration E2E + controllers started | **High** — orchestration complexity |
-| **5** | Phase 4b–5a | Controllers complete + RVS.UI.Shared + Cust_Intake scaffold | Medium — render mode mixing |
+| **5** | Phase 4b–5a | Controllers complete + RVS.UI.Shared + Blazor.Intake scaffold | Medium — render mode mixing |
 | **6** | Phase 5b | Intake wizard complete (all 7 steps) | Medium — SAS upload integration |
-| **7** | Phase 5c–6a | Status page + Mngr_Desktop scaffold + auth + SR queue | Medium — WASM project setup |
-| **8** | Phase 6b | Mngr_Desktop Service Board + analytics + locations | Medium — long polling integration |
-| **9** | Phase 6c–7a | Mngr_Desktop polish + Tech_Mobile scaffold + auth + My Jobs | Medium — MAUI setup |
-| **10** | Phase 7b | Tech_Mobile Section 10A + photo + VIN scan + offline queue | **High** — native APIs + SQLite |
+| **7** | Phase 5c–6a | Status page + Blazor.Desktop scaffold + auth + SR queue | Medium — WASM project setup |
+| **8** | Phase 6b | Blazor.Desktop Service Board + analytics + locations | Medium — long polling integration |
+| **9** | Phase 6c–7a | Blazor.Desktop polish + MAUI.Tech scaffold + auth + My Jobs | Medium — MAUI setup |
+| **10** | Phase 7b | MAUI.Tech Section 10A + photo + VIN scan + offline queue | **High** — native APIs + SQLite |
 | **11** | Phase 8 | Unit tests + integration tests + security hardening | Medium — coverage target |
 | **12** | Phase 9 | Deployment + CI/CD + design partner onboarding | Medium — infra provisioning |
 
@@ -788,14 +786,14 @@ For each of the 5 design partner dealerships:
 | Intake orchestration complexity (7 steps, 5 docs) | Schedule slip Weeks 3–4 | Medium | Build integration test first as executable spec; test each step independently |
 | Cosmos Emulator issues on Windows | Blocks integration testing | Medium | Fall back to dedicated Azure test DB; budget $5/month |
 | Auth0 free-plan Organization limit | Blocks multi-tenant testing | Low | Use `app_metadata` hybrid strategy (already designed) |
-| Blazor WASM mixed render mode (SSR + WASM) | Frontend complexity in Cust_Intake | Medium | Start with pure WASM; add SSR for landing/status pages last |
+| Blazor WASM first-load size on mobile (PWA) | Slow first visit → poor UX for intake customers | Medium | Service worker caches runtime after first load; loading skeleton covers 2–5 sec wait; acceptable for form submission flow |
 | SAS direct-upload from WASM to Blob | CORS complexity | Medium | Test SAS upload in Week 3 (Phase 3); don't defer to frontend phase |
-| MAUI build pipeline stability | Blocks Tech_Mobile delivery | **High** | Pin MAUI workload version; test build pipeline in Week 1 as spike |
+| MAUI build pipeline stability | Blocks MAUI.Tech delivery | **High** | Pin MAUI workload version; test build pipeline in Week 1 as spike |
 | MAUI Blazor Hybrid + native APIs (camera, barcode) | Integration bugs | Medium | Use well-supported libraries (ZXing.NET.MAUI); build native spike in Week 1 |
 | Offline SQLite sync conflicts | Data integrity risk | Medium | Design conflict UI upfront; test with simulated offline in Week 10 |
 | Azure OpenAI quota/availability | AI questions fail in demo | Low | Rule-based fallback already designed; test fallback path explicitly |
 | .NET 10 preview instability | Build issues | Low | Pin SDK version; avoid preview-only APIs |
-| Three frontends for one developer | Schedule pressure | **High** | Aggressively share code via RVS.UI.Shared; keep Tech_Mobile MVP-minimal; defer polish to post-MVP |
+| Three frontends for one developer | Schedule pressure | **High** | Aggressively share code via RVS.UI.Shared; keep MAUI.Tech MVP-minimal; defer polish to post-MVP |
 
 ---
 
@@ -826,7 +824,7 @@ The following tasks are highly accelerated by AI coding tools and should be dele
 
 ## 7. MAUI Early Spike (Risk Mitigation)
 
-Because `Tech_Mobile` is the highest-risk frontend, perform a **1-day spike on Day 1** (parallel to Phase 1 entity work) to validate:
+Because `MAUI.Tech` is the highest-risk frontend, perform a **1-day spike on Day 1** (parallel to Phase 1 entity work) to validate:
 
 1. MAUI Blazor Hybrid project template builds and runs on Android emulator
 2. Auth0 OIDC login works via `WebAuthenticator`
@@ -834,7 +832,7 @@ Because `Tech_Mobile` is the highest-risk frontend, perform a **1-day spike on D
 4. ZXing.NET.MAUI (or equivalent) barcode scanner works
 5. SQLite package installs and basic read/write works
 
-This spike catches build pipeline or compatibility issues 9 weeks before Tech_Mobile is scheduled. If MAUI proves unstable, the fallback is `Mngr_Desktop` on a tablet (same as v1.0 plan) with no impact on the backend schedule.
+This spike catches build pipeline or compatibility issues 9 weeks before MAUI.Tech is scheduled. If MAUI proves unstable, the fallback is `Blazor.Desktop` on a tablet (same as v1.0 plan) with no impact on the backend schedule.
 
 ---
 
