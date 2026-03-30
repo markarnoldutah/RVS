@@ -1,0 +1,138 @@
+@using System.Security.Claims
+@inject ServiceRequestApiClient SrClient
+@inject NavigationManager Navigation
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width: 100%;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning"
+                         aria-hidden="true" />
+                <MudText Typo="Typo.h6">Jobs Completed Without Outcomes</MudText>
+            </MudStack>
+            @if (_nonCompliantItems.Count > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">
+                    @_nonCompliantItems.Count
+                </MudChip>
+            }
+        </MudStack>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (_loading)
+        {
+            <MudStack Spacing="2">
+                <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="60px" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="60px" />
+            </MudStack>
+        }
+        else if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error">@_error</MudAlert>
+        }
+        else if (_nonCompliantItems.Count == 0)
+        {
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="py-4">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
+                         Color="Color.Success" Size="Size.Large"
+                         Style="opacity: 0.6;"
+                         aria-hidden="true" />
+                <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
+                    All completed service requests have outcomes recorded.
+                </MudText>
+            </MudStack>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Style="white-space: nowrap;">
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Asset</th>
+                        <th>Completed</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var sr in _nonCompliantItems)
+                    {
+                        <tr style="cursor: pointer;" @onclick="() => OpenOutcomeEntry(sr.Id)">
+                            <td>@sr.CustomerFullName</td>
+                            <td>@(sr.AssetDisplay ?? "—")</td>
+                            <td>@FormatCompletionDate(sr.UpdatedAtUtc ?? sr.CreatedAtUtc)</td>
+                            <td>
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Color="Color.Primary"
+                                               aria-label="Record outcome"
+                                               OnClick="() => OpenOutcomeEntry(sr.Id)" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private const int MaxWidgetPageSize = 100;
+
+    private bool _loading;
+    private string? _error;
+    private List<ServiceRequestSummaryResponseDto> _nonCompliantItems = [];
+
+    [Parameter]
+    public string? DealershipId { get; set; }
+
+    /// <summary>
+    /// Loads non-compliant service requests from the API.
+    /// </summary>
+    public async Task LoadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(DealershipId)) return;
+
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            var request = new ServiceRequestSearchRequestDto
+            {
+                Status = "Completed",
+                HasOutcome = false,
+                PageSize = MaxWidgetPageSize,
+            };
+
+            var result = await SrClient.SearchAsync(DealershipId, request);
+
+            _nonCompliantItems = (result.Results?.Items?.ToList() ?? [])
+                .OrderBy(sr => sr.UpdatedAtUtc ?? sr.CreatedAtUtc)
+                .ToList();
+        }
+        catch (Exception)
+        {
+            _error = "Unable to load compliance data. Please try again later.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private void OpenOutcomeEntry(string srId)
+    {
+        Navigation.NavigateTo($"/service-requests/{srId}/edit");
+    }
+
+    private static string FormatCompletionDate(DateTime dateUtc)
+    {
+        return dateUtc.ToLocalTime().ToString("MMM d, yyyy");
+    }
+}

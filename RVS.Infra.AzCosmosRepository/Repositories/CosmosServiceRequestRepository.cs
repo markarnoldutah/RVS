@@ -98,6 +98,14 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
             conditions.Add("c.createdAtUtc <= @dateTo");
         if (!string.IsNullOrWhiteSpace(request.Priority))
             conditions.Add("c.priority = @priority");
+        // HasOutcome filter: checks whether serviceEvent has meaningful outcome fields (failureMode or repairAction)
+        if (request.HasOutcome.HasValue)
+        {
+            if (request.HasOutcome.Value)
+                conditions.Add("(c.serviceEvent != null AND (c.serviceEvent.failureMode != null OR c.serviceEvent.repairAction != null))");
+            else
+                conditions.Add("(NOT IS_DEFINED(c.serviceEvent) OR c.serviceEvent = null OR (c.serviceEvent.failureMode = null AND c.serviceEvent.repairAction = null))");
+        }
         if (!string.IsNullOrWhiteSpace(request.Keyword))
             conditions.Add("(CONTAINS(LOWER(c.customerSnapshot.firstName), LOWER(@keyword)) OR CONTAINS(LOWER(c.customerSnapshot.lastName), LOWER(@keyword)) OR CONTAINS(LOWER(c.issueDescription), LOWER(@keyword)) OR CONTAINS(LOWER(c.assetInfo.assetId), LOWER(@keyword)))");
 

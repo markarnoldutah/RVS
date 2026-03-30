@@ -1,4 +1,5 @@
 @page "/"
+@using System.Security.Claims
 
 <PageTitle>RVS Manager — Home</PageTitle>
 
@@ -24,11 +25,35 @@
                     </MudStack>
                 </MudCardContent>
             </MudCard>
+
+            <OutcomeComplianceWidget @ref="_complianceWidget"
+                                    DealershipId="@_dealershipId" />
         </MudStack>
     </Authorized>
 </AuthorizeView>
 
 @code {
+    private OutcomeComplianceWidget? _complianceWidget;
+    private string? _dealershipId;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dealershipId = await ResolveDealershipIdAsync();
+    }
+
+    private async Task<string?> ResolveDealershipIdAsync()
+    {
+        if (AuthStateTask is null) return null;
+        var authState = await AuthStateTask;
+        var user = authState.User;
+
+        return user.FindFirst("app_metadata/tenantId")?.Value
+            ?? user.FindFirst("tenantId")?.Value;
+    }
+
     private static string GetDisplayName(AuthenticationState context)
     {
         return context.User.Identity?.Name

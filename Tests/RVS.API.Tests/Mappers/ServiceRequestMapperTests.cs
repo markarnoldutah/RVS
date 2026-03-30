@@ -217,6 +217,59 @@ public class ServiceRequestMapperTests
         dto.AssetDisplay.Should().BeNull();
     }
 
+    [Fact]
+    public void ToSummaryDto_WhenServiceEventIsNull_HasOutcomeShouldBeFalse()
+    {
+        var entity = new ServiceRequest { ServiceEvent = null };
+
+        var dto = entity.ToSummaryDto();
+
+        dto.HasOutcome.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToSummaryDto_WhenServiceEventHasNoMeaningfulFields_HasOutcomeShouldBeFalse()
+    {
+        var entity = new ServiceRequest
+        {
+            ServiceEvent = new ServiceEventEmbedded
+            {
+                FailureMode = null,
+                RepairAction = null
+            }
+        };
+
+        var dto = entity.ToSummaryDto();
+
+        dto.HasOutcome.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToSummaryDto_WhenServiceEventHasFailureMode_HasOutcomeShouldBeTrue()
+    {
+        var entity = new ServiceRequest
+        {
+            ServiceEvent = new ServiceEventEmbedded { FailureMode = "Corrosion" }
+        };
+
+        var dto = entity.ToSummaryDto();
+
+        dto.HasOutcome.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ToSummaryDto_WhenServiceEventHasRepairAction_HasOutcomeShouldBeTrue()
+    {
+        var entity = new ServiceRequest
+        {
+            ServiceEvent = new ServiceEventEmbedded { RepairAction = "Replaced pipe" }
+        };
+
+        var dto = entity.ToSummaryDto();
+
+        dto.HasOutcome.Should().BeTrue();
+    }
+
     // ── ToEntity (create) ────────────────────────────────────────────────────
 
     [Fact]

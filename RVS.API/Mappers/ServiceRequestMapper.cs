@@ -56,6 +56,10 @@ public static class ServiceRequestMapper
         var model = entity.AssetInfo.Model ?? string.Empty;
         var assetDisplay = (year + manufacturer + model).Trim();
 
+        var hasOutcome = entity.ServiceEvent is not null
+            && (!string.IsNullOrWhiteSpace(entity.ServiceEvent.FailureMode)
+                || !string.IsNullOrWhiteSpace(entity.ServiceEvent.RepairAction));
+
         return new ServiceRequestSummaryResponseDto
         {
             Id = entity.Id,
@@ -68,6 +72,7 @@ public static class ServiceRequestMapper
             AttachmentCount = entity.Attachments.Count,
             AssignedTechnicianId = entity.AssignedTechnicianId,
             Priority = entity.Priority,
+            HasOutcome = hasOutcome,
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
