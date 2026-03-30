@@ -237,6 +237,7 @@ public sealed class IntakeWizardState
                 Email = Email,
                 Phone = Phone,
                 IsPrefilled = IsPrefilled,
+                KnownAssets = KnownAssets,
                 Vin = Vin,
                 Manufacturer = Manufacturer,
                 Model = Model,
@@ -282,6 +283,7 @@ public sealed class IntakeWizardState
             Email = data.Email;
             Phone = data.Phone;
             IsPrefilled = data.IsPrefilled;
+            KnownAssets = data.KnownAssets;
             Vin = data.Vin;
             Manufacturer = data.Manufacturer;
             Model = data.Model;
@@ -488,6 +490,7 @@ internal sealed class IntakeWizardStateData
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
     public bool IsPrefilled { get; set; }
+    public List<AssetInfoDto> KnownAssets { get; set; } = [];
     public string Vin { get; set; } = string.Empty;
     public string? Manufacturer { get; set; }
     public string? Model { get; set; }
