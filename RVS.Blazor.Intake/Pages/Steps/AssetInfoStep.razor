@@ -146,6 +146,7 @@
     private async Task LookupVinAsync(string vin)
     {
         _lookupCts?.Cancel();
+        _lookupCts?.Dispose();
         _lookupCts = new CancellationTokenSource();
         var ct = _lookupCts.Token;
 
@@ -177,7 +178,7 @@
         {
             return;
         }
-        catch
+        catch (HttpRequestException)
         {
             _lookupFailed = true;
             _lastLookedUpVin = vin;
