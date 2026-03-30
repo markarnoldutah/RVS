@@ -14,6 +14,7 @@ public class IntakeControllerTests
     private readonly Mock<IIntakeOrchestrationService> _intakeServiceMock = new();
     private readonly Mock<ICategorizationService> _categorizationMock = new();
     private readonly Mock<IAttachmentService> _attachmentServiceMock = new();
+    private readonly Mock<IVinDecoderService> _vinDecoderMock = new();
     private readonly IntakeController _sut;
 
     public IntakeControllerTests()
@@ -21,7 +22,8 @@ public class IntakeControllerTests
         _sut = new IntakeController(
             _intakeServiceMock.Object,
             _categorizationMock.Object,
-            _attachmentServiceMock.Object);
+            _attachmentServiceMock.Object,
+            _vinDecoderMock.Object);
     }
 
     [Fact]
@@ -108,6 +110,34 @@ public class IntakeControllerTests
         var createdResult = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
         var dto = createdResult.Value.Should().BeOfType<ServiceRequestDetailResponseDto>().Subject;
         dto.Id.Should().Be(sr.Id);
+    }
+
+    [Fact]
+    public async Task DecodeVin_WhenVinDecodesSuccessfully_ShouldReturnOkWithVinDecodeDto()
+    {
+        var vinResult = new VinDecoderResult("1RGDE4428R1000001", "Grand Design", "Momentum 395MS", 2024);
+        _vinDecoderMock.Setup(s => s.DecodeVinAsync("1RGDE4428R1000001", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(vinResult);
+
+        var result = await _sut.DecodeVin("test-slug", "1RGDE4428R1000001");
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<VinDecodeResponseDto>().Subject;
+        dto.Vin.Should().Be("1RGDE4428R1000001");
+        dto.Manufacturer.Should().Be("Grand Design");
+        dto.Model.Should().Be("Momentum 395MS");
+        dto.Year.Should().Be(2024);
+    }
+
+    [Fact]
+    public async Task DecodeVin_WhenVinCannotBeDecoded_ShouldReturnNotFound()
+    {
+        _vinDecoderMock.Setup(s => s.DecodeVinAsync("INVALID12345678901", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((VinDecoderResult?)null);
+
+        var result = await _sut.DecodeVin("test-slug", "INVALID12345678901");
+
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
     }
 
     private static ServiceRequest BuildServiceRequest() => new()

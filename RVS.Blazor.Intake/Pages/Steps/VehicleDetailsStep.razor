@@ -1,0 +1,90 @@
+<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+    <MudStack Spacing="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.DirectionsCarFilled" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">Vehicle Details</MudText>
+        </MudStack>
+
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            Review the decoded vehicle information below. You can edit any field if needed.
+        </MudText>
+
+        @if (!string.IsNullOrWhiteSpace(State.Vin))
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true"
+                      Icon="@Icons.Material.Filled.Pin">
+                VIN: @State.Vin
+            </MudAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(State.Manufacturer) || !string.IsNullOrWhiteSpace(State.Model) || State.Year.HasValue)
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true">
+                Vehicle information retrieved from VIN lookup.
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                No vehicle information was found for this VIN. Please enter details manually below.
+            </MudAlert>
+        }
+
+        <MudTextField @bind-Value="State.Manufacturer"
+                      Label="Manufacturer (optional)"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Factory"
+                      Placeholder="e.g., Winnebago, Thor, Jayco" />
+
+        <MudTextField @bind-Value="State.Model"
+                      Label="Model (optional)"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.DirectionsCar"
+                      Placeholder="e.g., Vista, Aria, Eagle" />
+
+        <MudNumericField @bind-Value="State.Year"
+                         Label="Year (optional)"
+                         Variant="Variant.Outlined"
+                         Adornment="Adornment.Start"
+                         AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                         Placeholder="e.g., 2023"
+                         Min="1900"
+                         Max="@(DateTime.UtcNow.Year + 2)" />
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="HandleBack"
+                       Style="text-transform: none;">
+                Back
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       EndIcon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="HandleNext"
+                       Style="text-transform: none;">
+                Next
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+
+    private async Task HandleNext()
+    {
+        await State.NotifyAndPersistAsync();
+        await OnNext.InvokeAsync();
+    }
+
+    private async Task HandleBack()
+    {
+        await OnBack.InvokeAsync();
+    }
+}

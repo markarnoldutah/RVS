@@ -6,8 +6,8 @@
 <MudStack AlignItems="AlignItems.Center" Spacing="4"
           Style="max-width: 700px; margin: 0 auto;">
 
-    @* Step progress indicator — visible on steps 2–6 *@
-    @if (_state.CurrentStep > 1 && _state.CurrentStep < 7)
+    @* Step progress indicator — visible on steps 2–7 *@
+    @if (_state.CurrentStep > 1 && _state.CurrentStep < 8)
     {
         <MudPaper Elevation="0" Class="pa-3" Style="width: 100%; background: transparent;">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="0">
@@ -73,26 +73,31 @@
                                   OnBack="HandlePreviousStep" />
                 break;
             case 3:
-                <AssetInfoStep State="_state"
+                <VinLookupStep State="_state"
                                OnNext="HandleNextStep"
                                OnBack="HandlePreviousStep" />
                 break;
             case 4:
+                <VehicleDetailsStep State="_state"
+                                    OnNext="HandleNextStep"
+                                    OnBack="HandlePreviousStep" />
+                break;
+            case 5:
                 <IssueDescriptionStep State="_state"
                                       OnNext="HandleNextStep"
                                       OnBack="HandlePreviousStep" />
                 break;
-            case 5:
+            case 6:
                 <DiagnosticQuestionsStep State="_state"
                                          OnNext="HandleNextStep"
                                          OnBack="HandlePreviousStep" />
                 break;
-            case 6:
+            case 7:
                 <AttachmentUploadStep State="_state"
                                       OnNext="HandleNextStep"
                                       OnBack="HandlePreviousStep" />
                 break;
-            case 7:
+            case 8:
                 <ReviewSubmitStep State="_state"
                                   OnEdit="HandleEditStep"
                                   OnSubmitted="HandleSubmitted" />

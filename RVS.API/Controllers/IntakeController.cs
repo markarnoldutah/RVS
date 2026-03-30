@@ -20,6 +20,7 @@ public class IntakeController : ControllerBase
     private readonly IIntakeOrchestrationService _intakeService;
     private readonly ICategorizationService _categorizationService;
     private readonly IAttachmentService _attachmentService;
+    private readonly IVinDecoderService _vinDecoder;
 
     /// <summary>
     /// Initializes a new instance of <see cref="IntakeController"/>.
@@ -27,11 +28,13 @@ public class IntakeController : ControllerBase
     public IntakeController(
         IIntakeOrchestrationService intakeService,
         ICategorizationService categorizationService,
-        IAttachmentService attachmentService)
+        IAttachmentService attachmentService,
+        IVinDecoderService vinDecoder)
     {
         _intakeService = intakeService;
         _categorizationService = categorizationService;
         _attachmentService = attachmentService;
+        _vinDecoder = vinDecoder;
     }
 
     /// <summary>
@@ -51,6 +54,33 @@ public class IntakeController : ControllerBase
         var config = await _intakeService.GetIntakeConfigAsync(locationSlug, token, ct);
 
         return Ok(config);
+    }
+
+    /// <summary>
+    /// Decodes a VIN using the NHTSA vPIC API to retrieve manufacturer, model, and year.
+    /// Returns 404 if the VIN could not be decoded.
+    /// </summary>
+    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="vin">17-character Vehicle Identification Number.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <example>
+    /// GET /api/intake/camping-world-slc/vin-decode/1RGDE4428R1000001
+    /// </example>
+    [HttpGet("vin-decode/{vin}")]
+    public async Task<ActionResult<VinDecodeResponseDto>> DecodeVin(
+        string locationSlug, string vin, CancellationToken ct = default)
+    {
+        var result = await _vinDecoder.DecodeVinAsync(vin, ct);
+        if (result is null)
+            return NotFound(new { message = "VIN could not be decoded. Please verify the VIN and try again." });
+
+        return Ok(new VinDecodeResponseDto
+        {
+            Vin = result.Vin,
+            Manufacturer = result.Manufacturer,
+            Model = result.Model,
+            Year = result.Year
+        });
     }
 
     /// <summary>

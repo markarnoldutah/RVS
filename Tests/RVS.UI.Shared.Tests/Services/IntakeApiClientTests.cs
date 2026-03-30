@@ -197,6 +197,85 @@ public class IntakeApiClientTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    // ── DecodeVinAsync ──────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task DecodeVinAsync_WhenLocationSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.DecodeVinAsync(slug!, "1RGDE4428R1000001");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task DecodeVinAsync_WhenVinIsNullOrWhiteSpace_ShouldThrowArgumentException(string? vin)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.DecodeVinAsync("slug", vin!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task DecodeVinAsync_WhenApiReturns200_ShouldDeserializeResponse()
+    {
+        var expected = new VinDecodeResponseDto
+        {
+            Vin = "1RGDE4428R1000001",
+            Manufacturer = "Grand Design",
+            Model = "Momentum 395MS",
+            Year = 2024
+        };
+
+        var handler = new FakeHttpHandler(HttpStatusCode.OK, expected);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var result = await sut.DecodeVinAsync("my-slug", "1RGDE4428R1000001");
+
+        result.Should().NotBeNull();
+        result!.Vin.Should().Be(expected.Vin);
+        result.Manufacturer.Should().Be(expected.Manufacturer);
+        result.Model.Should().Be(expected.Model);
+        result.Year.Should().Be(expected.Year);
+        handler.LastRequest!.RequestUri!.ToString().Should().Contain("my-slug");
+        handler.LastRequest.RequestUri.ToString().Should().Contain("vin-decode");
+        handler.LastRequest.Method.Should().Be(HttpMethod.Get);
+    }
+
+    [Fact]
+    public async Task DecodeVinAsync_WhenApiReturns404_ShouldReturnNull()
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.NotFound, new { message = "VIN not found" });
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var result = await sut.DecodeVinAsync("slug", "1RGDE4428R1000001");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecodeVinAsync_WhenApiReturnsError_ShouldThrowHttpRequestException()
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.InternalServerError, new { message = "Server error" });
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var act = () => sut.DecodeVinAsync("slug", "1RGDE4428R1000001");
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
     // ── Test helper ──────────────────────────────────────────────────────
 
     private sealed class FakeHttpHandler : HttpMessageHandler
