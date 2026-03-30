@@ -350,24 +350,31 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 if (acct.AllKnownAssetIds is { Count: > 0 })
                 {
                     const int maxAssetLookups = 10;
+                    AssetInfoDto? lastEnrichedAsset = null;
                     foreach (var assetId in acct.AllKnownAssetIds.TakeLast(maxAssetLookups))
                     {
                         var entries = await _assetLedgerRepository.GetByAssetIdAsync(assetId, cancellationToken);
                         var mostRecent = entries.LastOrDefault();
                         if (mostRecent is not null)
                         {
-                            knownAssets.Add(new AssetInfoDto
+                            var assetDto = new AssetInfoDto
                             {
                                 AssetId = mostRecent.AssetId,
                                 Manufacturer = mostRecent.Manufacturer,
                                 Model = mostRecent.Model,
                                 Year = mostRecent.Year,
-                            });
+                            };
+                            knownAssets.Add(assetDto);
+                            lastEnrichedAsset = assetDto;
+                        }
+                        else
+                        {
+                            knownAssets.Add(new AssetInfoDto { AssetId = assetId });
                         }
                     }
 
-                    // Prefill the most recently used vehicle
-                    prefillAsset = knownAssets.Count > 0 ? knownAssets[^1] : null;
+                    // Prefill the most recently used vehicle that has full details
+                    prefillAsset = lastEnrichedAsset;
                 }
             }
             else if (acct is not null && acct.MagicLinkExpiresAtUtc.HasValue && acct.MagicLinkExpiresAtUtc.Value <= DateTime.UtcNow)

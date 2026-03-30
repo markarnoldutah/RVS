@@ -734,7 +734,7 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task GetIntakeConfigAsync_WhenAssetLedgerEmpty_ShouldReturnNullPrefillAsset()
+    public async Task GetIntakeConfigAsync_WhenAssetLedgerEmpty_ShouldReturnNullPrefillAssetButIncludeKnownAsset()
     {
         SetupConfigHappyPath();
         var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["RV:1HGBH41JXMN109186"]);
@@ -748,6 +748,43 @@ public class IntakeOrchestrationServiceTests
 
         result.PrefillCustomer.Should().NotBeNull();
         result.PrefillAsset.Should().BeNull();
+        result.KnownAssets.Should().HaveCount(1);
+        result.KnownAssets[0].AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.KnownAssets[0].Manufacturer.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenSomeAssetsHaveNoLedgerEntries_ShouldIncludeAllKnownAssets()
+    {
+        SetupConfigHappyPath();
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["RV:OLD_VIN", "RV:1HGBH41JXMN109186", "RV:NO_LEDGER"]);
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:OLD_VIN", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AssetLedgerEntry>
+            {
+                new() { AssetId = "RV:OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
+            });
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AssetLedgerEntry>
+            {
+                new() { AssetId = "RV:1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
+            });
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:NO_LEDGER", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AssetLedgerEntry>());
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
+
+        result.KnownAssets.Should().HaveCount(3);
+        result.KnownAssets[0].AssetId.Should().Be("RV:OLD_VIN");
+        result.KnownAssets[0].Manufacturer.Should().Be("Thor");
+        result.KnownAssets[1].AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.KnownAssets[1].Manufacturer.Should().Be("Grand Design");
+        result.KnownAssets[2].AssetId.Should().Be("RV:NO_LEDGER");
+        result.KnownAssets[2].Manufacturer.Should().BeNull();
+        result.PrefillAsset.Should().NotBeNull();
+        result.PrefillAsset!.AssetId.Should().Be("RV:1HGBH41JXMN109186");
     }
 
     [Fact]
