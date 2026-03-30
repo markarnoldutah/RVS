@@ -17,12 +17,12 @@ namespace RVS.API.Controllers;
 // TODO: Add role-based authorization [Authorize(Roles = "TenantAdmin")]
 public class TenantsController : ControllerBase
 {
-    private readonly ITenantService _tenantService;
+    private readonly ITenantConfigService _tenantConfigService;
     private readonly ClaimsService _claimsService;
 
-    public TenantsController(ITenantService tenantService, ClaimsService claimsService)
+    public TenantsController(ITenantConfigService tenantConfigService, ClaimsService claimsService)
     {
-        _tenantService = tenantService;
+        _tenantConfigService = tenantConfigService;
         _claimsService = claimsService;
     }
 
@@ -35,7 +35,7 @@ public class TenantsController : ControllerBase
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
-        var config = await _tenantService.CreateTenantConfigAsync(tenantId, request);
+        var config = await _tenantConfigService.CreateTenantConfigAsync(tenantId, request);
         var dto = config.ToDto();
 
         return CreatedAtAction(nameof(GetTenantConfig), dto);
@@ -50,7 +50,7 @@ public class TenantsController : ControllerBase
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
-        var config = await _tenantService.GetTenantConfigAsync(tenantId);
+        var config = await _tenantConfigService.GetTenantConfigAsync(tenantId);
         var dto = config.ToDto();
 
         return Ok(dto);
@@ -65,7 +65,7 @@ public class TenantsController : ControllerBase
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
-        var config = await _tenantService.UpdateTenantConfigAsync(tenantId, request);
+        var config = await _tenantConfigService.UpdateTenantConfigAsync(tenantId, request);
         var dto = config.ToDto();
 
         return Ok(dto);
@@ -81,7 +81,7 @@ public class TenantsController : ControllerBase
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
-        var gate = await _tenantService.GetAccessGateAsync(tenantId);
+        var gate = await _tenantConfigService.GetAccessGateAsync(tenantId);
         
         var dto = new TenantAccessGateDto
         {

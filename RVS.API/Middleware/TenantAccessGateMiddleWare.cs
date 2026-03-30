@@ -23,7 +23,7 @@ public sealed class TenantAccessGateMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext ctx, ITenantService tenantService)
+    public async Task InvokeAsync(HttpContext ctx, ITenantConfigService tenantConfigService)
     {
         var path = ctx.Request.Path.Value ?? string.Empty;
 
@@ -56,7 +56,7 @@ public sealed class TenantAccessGateMiddleware
         }
 
         // TODO consider saving access gate to Tables, cache etc to reduce RUs
-        var gate = await tenantService.GetAccessGateAsync(tenantId);
+        var gate = await tenantConfigService.GetAccessGateAsync(tenantId);
 
         if (gate.LoginsEnabled == false)
         {

@@ -197,12 +197,6 @@ builder.Services.AddSingleton<TableServiceClient>(sp =>
 #region Repositories
 var cosmosDbId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvsdb";
 
-builder.Services.AddScoped<IConfigRepository>(sp =>
-{
-    var client = sp.GetRequiredService<CosmosClient>();
-    return new CosmosConfigRepository(client, cosmosDbId, "tenants");
-});
-
 builder.Services.AddScoped<ILookupRepository>(sp =>
 {
     var client = sp.GetRequiredService<CosmosClient>();
@@ -271,7 +265,6 @@ builder.Services.AddScoped<ITenantConfigRepository>(sp =>
 #endregion
 
 #region Services
-builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ILookupService, LookupService>();
 builder.Services.AddScoped<IDealershipService, DealershipService>();
 builder.Services.AddScoped<ILocationService, LocationService>();

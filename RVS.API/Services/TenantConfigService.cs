@@ -71,7 +71,9 @@ public sealed class TenantConfigService : ITenantConfigService
     /// <inheritdoc />
     public async Task<TenantAccessGateEmbedded> GetAccessGateAsync(string tenantId, CancellationToken cancellationToken = default)
     {
-        var config = await GetTenantConfigAsync(tenantId, cancellationToken);
-        return config.AccessGate ?? new TenantAccessGateEmbedded { LoginsEnabled = true };
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        var config = await _repository.GetAsync(tenantId, cancellationToken);
+        return config?.AccessGate ?? new TenantAccessGateEmbedded { LoginsEnabled = true };
     }
 }

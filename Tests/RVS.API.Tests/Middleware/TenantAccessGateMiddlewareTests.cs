@@ -10,7 +10,7 @@ namespace RVS.API.Tests.Middleware;
 
 public sealed class TenantAccessGateMiddlewareTests
 {
-    private readonly Mock<ITenantService> _tenantServiceMock = new();
+    private readonly Mock<ITenantConfigService> _tenantConfigServiceMock = new();
     private readonly TenantAccessGateMiddleware _middleware;
     private bool _nextCalled;
 
@@ -53,7 +53,7 @@ public sealed class TenantAccessGateMiddlewareTests
     {
         var ctx = CreateAuthenticatedContext(path);
 
-        await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
+        await _middleware.InvokeAsync(ctx, _tenantConfigServiceMock.Object);
 
         _nextCalled.Should().BeTrue();
     }
@@ -63,7 +63,7 @@ public sealed class TenantAccessGateMiddlewareTests
     {
         var ctx = CreateAuthenticatedContext("/api/intake/camping-world-slc");
 
-        await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
+        await _middleware.InvokeAsync(ctx, _tenantConfigServiceMock.Object);
 
         _nextCalled.Should().BeTrue();
     }
@@ -73,7 +73,7 @@ public sealed class TenantAccessGateMiddlewareTests
     {
         var ctx = CreateAuthenticatedContext("/api/intake/camping-world-slc/service-requests");
 
-        await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
+        await _middleware.InvokeAsync(ctx, _tenantConfigServiceMock.Object);
 
         _nextCalled.Should().BeTrue();
     }
@@ -83,7 +83,7 @@ public sealed class TenantAccessGateMiddlewareTests
     {
         var ctx = CreateAuthenticatedContext("/api/status/abc123def456");
 
-        await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
+        await _middleware.InvokeAsync(ctx, _tenantConfigServiceMock.Object);
 
         _nextCalled.Should().BeTrue();
     }
@@ -93,7 +93,7 @@ public sealed class TenantAccessGateMiddlewareTests
     {
         var ctx = CreateUnauthenticatedContext("/api/some-endpoint");
 
-        await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
+        await _middleware.InvokeAsync(ctx, _tenantConfigServiceMock.Object);
 
         _nextCalled.Should().BeTrue();
     }
@@ -106,7 +106,7 @@ public sealed class TenantAccessGateMiddlewareTests
         context.Request.Path = "/api/some-endpoint";
         context.Response.Body = new MemoryStream();
 
-        await _middleware.InvokeAsync(context, _tenantServiceMock.Object);
+        await _middleware.InvokeAsync(context, _tenantConfigServiceMock.Object);
 
         context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _nextCalled.Should().BeFalse();
@@ -116,11 +116,11 @@ public sealed class TenantAccessGateMiddlewareTests
     public async Task InvokeAsync_TenantDisabled_ShouldReturn403WithCorrectFormat()
     {
         var ctx = CreateAuthenticatedContext("/api/some-endpoint");
-        _tenantServiceMock
+        _tenantConfigServiceMock
             .Setup(s => s.GetAccessGateAsync("t1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAccessGateEmbedded { LoginsEnabled = false });
 
-        await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
+        await _middleware.InvokeAsync(ctx, _tenantConfigServiceMock.Object);
 
         ctx.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _nextCalled.Should().BeFalse();
@@ -138,11 +138,11 @@ public sealed class TenantAccessGateMiddlewareTests
     public async Task InvokeAsync_TenantEnabled_ShouldPassThrough()
     {
         var ctx = CreateAuthenticatedContext("/api/some-endpoint");
-        _tenantServiceMock
+        _tenantConfigServiceMock
             .Setup(s => s.GetAccessGateAsync("t1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAccessGateEmbedded { LoginsEnabled = true });
 
-        await _middleware.InvokeAsync(ctx, _tenantServiceMock.Object);
+        await _middleware.InvokeAsync(ctx, _tenantConfigServiceMock.Object);
 
         _nextCalled.Should().BeTrue();
     }
@@ -155,7 +155,7 @@ public sealed class TenantAccessGateMiddlewareTests
         context.Request.Path = "/api/some-endpoint";
         context.Response.Body = new MemoryStream();
 
-        await _middleware.InvokeAsync(context, _tenantServiceMock.Object);
+        await _middleware.InvokeAsync(context, _tenantConfigServiceMock.Object);
 
         context.Response.Body.Seek(0, SeekOrigin.Begin);
         using var reader = new StreamReader(context.Response.Body);

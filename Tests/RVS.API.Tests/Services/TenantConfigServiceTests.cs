@@ -182,6 +182,17 @@ public class TenantConfigServiceTests
         result.LoginsEnabled.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task GetAccessGateAsync_WhenConfigNotFound_ShouldReturnDefaultWithLoginsEnabled()
+    {
+        _repoMock.Setup(r => r.GetAsync("ten_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TenantConfig?)null);
+
+        var result = await _sut.GetAccessGateAsync("ten_missing");
+
+        result.LoginsEnabled.Should().BeTrue();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static TenantConfig BuildConfig() => new()
