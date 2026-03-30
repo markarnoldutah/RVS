@@ -60,7 +60,7 @@ public class IntakeController : ControllerBase
     /// Decodes a VIN using the NHTSA vPIC API to retrieve manufacturer, model, and year.
     /// Returns 404 if the VIN could not be decoded.
     /// </summary>
-    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="locationSlug">Location slug (route segment — required by controller route template).</param>
     /// <param name="vin">17-character Vehicle Identification Number.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <example>

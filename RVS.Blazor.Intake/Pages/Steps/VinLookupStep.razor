@@ -131,6 +131,7 @@
 
 @code {
     private const int VinSuffixDisplayLength = 8;
+    private const long MaxCameraCaptureSizeBytes = 10 * 1024 * 1024;
 
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
@@ -185,7 +186,7 @@
     {
         if (_cameraInput?.Element is not null)
         {
-            await JsRuntime.InvokeVoidAsync("HTMLElement.prototype.click.call", _cameraInput.Element);
+            await JsRuntime.InvokeVoidAsync("rvs_triggerClick", _cameraInput.Element);
         }
     }
 
@@ -195,7 +196,7 @@
         if (file is null) return;
 
         var buffer = new byte[file.Size];
-        await using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+        await using var stream = file.OpenReadStream(maxAllowedSize: MaxCameraCaptureSizeBytes);
         _ = await stream.ReadAsync(buffer);
         var base64 = Convert.ToBase64String(buffer);
         _capturedImageUrl = $"data:{file.ContentType};base64,{base64}";
