@@ -408,6 +408,7 @@ const string GcaSmith = "gca_smith";
 const string GcaMartinez = "gca_martinez";
 const string GcaWilliams = "gca_williams";
 const string GcaThompson = "gca_thompson";
+const string GcaChen = "gca_chen";
 
 // Customer profile IDs
 const string CpJohnsonBc = "cp_johnson_bc";
@@ -415,6 +416,7 @@ const string CpSmithBc = "cp_smith_bc";
 const string CpMartinezBc = "cp_martinez_bc";
 const string CpWilliamsHt = "cp_williams_ht";
 const string CpThompsonHt = "cp_thompson_ht";
+const string CpChenBc = "cp_chen_bc";
 
 // Sample AssetIds (compound key format: {AssetType}:{VIN})
 const string AssetId1 = "RV:1FTFW1ET5EKE12345";
@@ -422,6 +424,9 @@ const string AssetId2 = "RV:5TFCZ5AN3HX054321";
 const string AssetId3 = "RV:WBA3A5C55FK198765";
 const string AssetId4 = "RV:1C4RJFBG7EC234567";
 const string AssetId5 = "RV:2GCEC19T441345678";
+const string AssetId6 = "RV:3C6UR5CL8JG275901";
+const string AssetId7 = "RV:1GBHG31K071892034";
+const string AssetId8 = "RV:5B4MP67G663451278";
 
 static DateTime SeedDate(int daysAgo) => DateTime.UtcNow.AddDays(-daysAgo);
 
@@ -771,6 +776,29 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
             },
         ],
     },
+    new GlobalCustomerAcct
+    {
+        Id = GcaChen,
+        Email = "lisa.chen@example.com",
+        FirstName = "Lisa",
+        LastName = "Chen",
+        Phone = "(602) 555-1006",
+        CreatedByUserId = "seed",
+        MagicLinkToken = "mlk_chen_efg123hij456",
+        MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
+        AllKnownAssetIds = [AssetId6, AssetId7, AssetId8],
+        LinkedProfiles =
+        [
+            new LinkedProfileEmbedded
+            {
+                TenantId = TenantBlueCompass,
+                ProfileId = CpChenBc,
+                DealershipName = "Blue Compass RV",
+                FirstSeenAtUtc = SeedDate(120),
+                RequestCount = 2,
+            },
+        ],
+    },
 ];
 
 // ── Customer Profiles (5) ───────────────────────────────────────────────
@@ -917,6 +945,58 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
                 FirstSeenAtUtc = SeedDate(20),
                 LastSeenAtUtc = SeedDate(20),
                 RequestCount = 1,
+            },
+        ],
+    },
+
+    // Lisa Chen — Blue Compass (3 RVs, 2 service requests on one RV)
+    new CustomerProfile
+    {
+        Id = CpChenBc,
+        TenantId = TenantBlueCompass,
+        Name = "Lisa Chen",
+        Email = "lisa.chen@example.com",
+        FirstName = "Lisa",
+        LastName = "Chen",
+        Phone = "(602) 555-1006",
+        GlobalCustomerAcctId = GcaChen,
+        CreatedByUserId = "seed",
+        TotalRequestCount = 2,
+        ServiceRequestIds = ["sr_011", "sr_012"],
+        AssetsOwned =
+        [
+            new AssetOwnershipEmbedded
+            {
+                AssetId = AssetId6,
+                Manufacturer = "Coachmen",
+                Model = "Catalina Legacy 323BHDSCK",
+                Year = 2022,
+                Status = AssetOwnershipStatus.Active,
+                FirstSeenAtUtc = SeedDate(120),
+                LastSeenAtUtc = SeedDate(2),
+                RequestCount = 2,
+            },
+            new AssetOwnershipEmbedded
+            {
+                AssetId = AssetId7,
+                Manufacturer = "Entegra Coach",
+                Model = "Vision 29S",
+                Year = 2025,
+                Status = AssetOwnershipStatus.Active,
+                FirstSeenAtUtc = SeedDate(60),
+                LastSeenAtUtc = SeedDate(60),
+                RequestCount = 0,
+            },
+            new AssetOwnershipEmbedded
+            {
+                AssetId = AssetId8,
+                Manufacturer = "Newmar",
+                Model = "Bay Star 3014",
+                Year = 2023,
+                Status = AssetOwnershipStatus.Active,
+                FirstSeenAtUtc = SeedDate(90),
+                LastSeenAtUtc = SeedDate(90),
+                RequestCount = 0,
             },
         ],
     },
@@ -1194,6 +1274,68 @@ static List<ServiceRequest> BuildServiceRequests() =>
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId5, Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023 },
     },
+
+    // SR 11 — Completed (Phoenix — Blue Compass) — Chen, Coachmen Catalina
+    new ServiceRequest
+    {
+        Id = "sr_011",
+        TenantId = TenantBlueCompass,
+        Status = "Completed",
+        LocationId = LocPhoenix,
+        CustomerProfileId = CpChenBc,
+        IssueDescription = "Inverter/converter not switching to shore power. Runs on battery only even when plugged in.",
+        IssueCategory = "Electrical",
+        Priority = "High",
+        Name = "SR-011 Chen Inverter",
+        CreatedByUserId = "seed",
+        AssignedTechnicianId = "tech_james",
+        ScheduledDateUtc = SeedDate(25),
+        CustomerSnapshot = new CustomerSnapshotEmbedded
+        {
+            FirstName = "Lisa", LastName = "Chen",
+            Email = "Lisa.Chen@example.com", Phone = "(602) 555-1006",
+            IsReturningCustomer = false, PriorRequestCount = 0,
+        },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId6, Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022 },
+        ServiceEvent = new ServiceEventEmbedded
+        {
+            ComponentType = "Inverter/Converter",
+            FailureMode = "Electrical Short",
+            RepairAction = "Component Replacement",
+            PartsUsed = ["Progressive Dynamics PD4655V Converter"],
+            LaborHours = 3.0m,
+            ServiceDateUtc = SeedDate(22),
+        },
+    },
+
+    // SR 12 — InProgress (Phoenix — Blue Compass) — Chen, Coachmen Catalina (currently active)
+    new ServiceRequest
+    {
+        Id = "sr_012",
+        TenantId = TenantBlueCompass,
+        Status = "InProgress",
+        LocationId = LocPhoenix,
+        CustomerProfileId = CpChenBc,
+        IssueDescription = "Slide-out room makes grinding noise when retracting. Extends fine but struggles on retract.",
+        IssueCategory = "Slide-Out Systems",
+        Priority = "Medium",
+        Name = "SR-012 Chen Slide-Out",
+        CreatedByUserId = "seed",
+        AssignedTechnicianId = "tech_james",
+        ScheduledDateUtc = SeedDate(-3),
+        CustomerSnapshot = new CustomerSnapshotEmbedded
+        {
+            FirstName = "Lisa", LastName = "Chen",
+            Email = "Lisa.Chen@example.com", Phone = "(602) 555-1006",
+            IsReturningCustomer = true, PriorRequestCount = 1,
+        },
+        AssetInfo = new AssetInfoEmbedded { AssetId = AssetId6, Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022 },
+        ServiceEvent = new ServiceEventEmbedded
+        {
+            ComponentType = "Slide-Out Mechanism",
+            FailureMode = "Mechanical Noise",
+        },
+    },
 ];
 
 // ── Asset Ledger Entries
@@ -1210,6 +1352,8 @@ static List<AssetLedgerEntry> BuildAssetLedgerEntries() =>
     new AssetLedgerEntry { Id = "ale_008", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = "sr_008", GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Fresh water tank sensor reading incorrectly.", Status = "Completed", SubmittedAtUtc = SeedDate(18), Section10A = new Section10AEmbedded { ComponentType = "Tank Sensor", FailureMode = "Sensor Malfunction", RepairAction = "Sensor Replacement", PartsUsed = ["Tank Sensor Kit P/N TS-2021"], LaborHours = 1.5m, ServiceDateUtc = SeedDate(12) } },
     new AssetLedgerEntry { Id = "ale_009", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = "sr_009", GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Doors/Locks", IssueDescription = "Entry door latch mechanism broken.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(7) },
     new AssetLedgerEntry { Id = "ale_010", AssetId = AssetId5, TenantId = TenantHappyTrails, ServiceRequestId = "sr_010", GlobalCustomerAcctId = GcaThompson, DealershipName = "Happy Trails RV", Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023, IssueCategory = "Electrical", IssueDescription = "Generator not starting.", Status = "New", SubmittedAtUtc = SeedDate(1) },
+    new AssetLedgerEntry { Id = "ale_011", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = "sr_011", GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Inverter/converter not switching to shore power.", Status = "Completed", SubmittedAtUtc = SeedDate(30), Section10A = new Section10AEmbedded { ComponentType = "Inverter/Converter", FailureMode = "Electrical Short", RepairAction = "Component Replacement", PartsUsed = ["Progressive Dynamics PD4655V Converter"], LaborHours = 3.0m, ServiceDateUtc = SeedDate(22) } },
+    new AssetLedgerEntry { Id = "ale_012", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = "sr_012", GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Slide-Out Systems", IssueDescription = "Slide-out room makes grinding noise when retracting.", Status = "InProgress", SubmittedAtUtc = SeedDate(2) },
 ];
 
 // ── Lookup Sets (4) ─────────────────────────────────────────────────────
