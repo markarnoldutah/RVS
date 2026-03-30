@@ -77,6 +77,8 @@
 </MudCard>
 
 @code {
+    private const int MaxWidgetPageSize = 100;
+
     private bool _loading;
     private string? _error;
     private List<ServiceRequestSummaryResponseDto> _nonCompliantItems = [];
@@ -100,7 +102,7 @@
             {
                 Status = "Completed",
                 HasOutcome = false,
-                PageSize = 100,
+                PageSize = MaxWidgetPageSize,
             };
 
             var result = await SrClient.SearchAsync(DealershipId, request);
@@ -109,9 +111,9 @@
                 .OrderBy(sr => sr.UpdatedAtUtc ?? sr.CreatedAtUtc)
                 .ToList();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _error = $"Unable to load compliance data. {ex.Message}";
+            _error = "Unable to load compliance data. Please try again later.";
         }
         finally
         {

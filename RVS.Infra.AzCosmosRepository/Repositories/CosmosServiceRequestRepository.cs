@@ -98,6 +98,7 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
             conditions.Add("c.createdAtUtc <= @dateTo");
         if (!string.IsNullOrWhiteSpace(request.Priority))
             conditions.Add("c.priority = @priority");
+        // HasOutcome filter: checks whether serviceEvent has meaningful outcome fields (failureMode or repairAction)
         if (request.HasOutcome.HasValue)
         {
             if (request.HasOutcome.Value)
