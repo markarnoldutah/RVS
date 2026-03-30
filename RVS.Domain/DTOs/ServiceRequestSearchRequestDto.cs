@@ -15,6 +15,7 @@ public sealed record ServiceRequestSearchRequestDto
     public DateTime? DateFrom { get; init; }
     public DateTime? DateTo { get; init; }
     public string? Priority { get; init; }
+    public bool? HasOutcome { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 25;
 }
