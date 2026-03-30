@@ -1,80 +1,77 @@
-  /**
- * Handler that will be called during the execution of a PostLogin flow.
- *
- * --- AUTH0 ACTIONS TEMPLATE https://github.com/auth0/opensource-marketplace/blob/main/templates/role-creation-POST_LOGIN ---
- *
- * @param {Event} event - Details about the user and the context in which they are logging in.
- * @param {PostLoginAPI} api - Interface whose methods can be used to change the behavior of the login.
- */
+/**
+* Handler that will be called during the execution of a PostLogin flow.
+*
+* --- AUTH0 ACTIONS TEMPLATE https://github.com/auth0/opensource-marketplace/blob/main/templates/role-creation-POST_LOGIN ---
+*
+* @param {Event} event - Details about the user and the context in which they are logging in.
+* @param {PostLoginAPI} api - Interface whose methods can be used to change the behavior of the login.
+*/
 exports.onExecutePostLogin = async (event, api) => {
 
-    const roleClaim = 'http://schemas.microsoft.com/ws/2008/06/identity/claims/role'
-    
-    const namespace = 'https://rvserviceflow.com/'
-    const tenantIdClaim = namespace + 'tenantId'
-    const locationIdsClaim = namespace + 'locationIds'
-    const orgNameClaim = namespace + 'orgName'
-    const userIdClaim = namespace + 'userId'
-    const regionTagClaim = namespace + 'regionTag'
+    const namespace = 'https://rvserviceflow.com/';
+    const roleClaim = 'http://schemas.microsoft.com/ws/2008/06/identity/claims/role';
 
-    let tenantId = findTenantId()
-    let locationIds = findLocationIds()
-    let orgName = findOrgName()
-    let regionTag = findRegionTag()
+    // Using template literals for cleaner strings
+    const tenantIdClaim = `${namespace}tenantId`;
+    const locationIdsClaim = `${namespace}locationIds`;
+    const orgNameClaim = `${namespace}orgName`;
+    const regionTagClaim = `${namespace}regionTag`;
+    // const userIdClaim = `${namespace}userId`;
 
-    // Access token — used by the API (server-side JWT bearer validation)
-    api.accessToken.setCustomClaim(tenantIdClaim, tenantId)
-    api.accessToken.setCustomClaim(locationIdsClaim, locationIds)
-    api.accessToken.setCustomClaim(orgNameClaim, orgName)
-    api.accessToken.setCustomClaim(userIdClaim, event.user.user_id)
-    api.accessToken.setCustomClaim(regionTagClaim, regionTag)
+    // Extract values using helper functions
+    const tenantId = findTenantId();
+    const roles = findRoles();
+    const locationIds = findLocationIds();
+    const orgName = findOrgName();
+    const regionTag = findRegionTag();
 
-    // ID token — used by Blazor WebAssembly (AuthenticationState.User / ClaimsPrincipal)
+    // Set claims: access_token
+    api.accessToken.setCustomClaim(roleClaim, roles);
+    api.accessToken.setCustomClaim(tenantIdClaim, tenantId);
+    api.accessToken.setCustomClaim(locationIdsClaim, locationIds);
+    api.accessToken.setCustomClaim(orgNameClaim, orgName);
+    api.accessToken.setCustomClaim(regionTagClaim, regionTag);
+    // api.accessToken.setCustomClaim(userIdClaim, event.user.user_id);
+
+    // Set claims: id_token
     api.idToken.setCustomClaim(tenantIdClaim, tenantId)
     api.idToken.setCustomClaim(locationIdsClaim, locationIds)
     api.idToken.setCustomClaim(orgNameClaim, orgName)
-    api.idToken.setCustomClaim(userIdClaim, event.user.user_id)
     api.idToken.setCustomClaim(regionTagClaim, regionTag)
+    // api.idToken.setCustomClaim(userIdClaim, event.user.user_id)
 
+    // --- Helper Functions ---
 
     function findTenantId() {
-        // let tenantId = event.user.app_metadata.tenantId
-        let tenantId = event.organization?.id;
-
+        const tenantId = event.user.app_metadata?.tenantId;
         if (!tenantId) {
-        return api.access.deny("No tenantId found in metadata. You do not appear to be authorized for any tenants.");
+            return api.access.deny("No tenantId found. You do not appear to be authorized for any tenants.");
         }
-
         return tenantId;
     }
 
-    function findLocationIds() {
-        let locationIds = event.user.app_metadata.locationIds
-        if (locationIds && Array.isArray(locationIds) && locationIds.length > 0) {
-            return locationIds
-        } else {
-            api.access.deny("No locationIds found in metadata.  You do not appear to be authorized for any locations.")
+    function findRoles() {
+        const roles = event.authorization?.roles;
+        if (!Array.isArray(roles) || roles.length === 0) {
+            return api.access.deny("No roles found. You do not appear to be authorized for any roles.");
         }
+        return roles;
+    }
+
+    function findLocationIds() {
+        return event.user.app_metadata?.locationIds ?? [];
     }
 
     function findOrgName() {
-        let orgName = event.user.app_metadata.orgName
-        if (orgName) {
-            return orgName
-        } else {
-            api.access.deny("No OrgName found in metadata.  You do not appear to be authorized for any organizations.")
+        const orgName = event.user.app_metadata?.orgName;
+        if (!orgName) {
+            return api.access.deny("No OrgName found. You do not appear to be authorized for any organizations.");
         }
+        return orgName;
     }
 
     function findRegionTag() {
-        let regionTag = event.user.app_metadata.regionTag
-        if (regionTag) {
-            return regionTag
-        } else {
-            // non-blocking, optional region tag
-            // api.access.deny("No RegionTag found in metadata.  You do not appear to be authorized for any regions.")
-            return 'NA'
-        }
+        return event.user.app_metadata?.regionTag ?? '';
     }
 };
 
