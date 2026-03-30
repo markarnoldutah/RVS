@@ -1,12 +1,13 @@
 using FluentAssertions;
 using RVS.Blazor.Intake.State;
 using RVS.Domain.DTOs;
+using RVS.UI.Shared.Tests.Fakes;
 
 namespace RVS.UI.Shared.Tests.State;
 
 public class IntakeWizardStateTests
 {
-    private static IntakeWizardState CreateState() => new();
+    private static IntakeWizardState CreateState() => new(new NullJSRuntime());
 
     [Fact]
     public void Constructor_ShouldInitializeWithDefaultValues()

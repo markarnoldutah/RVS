@@ -106,7 +106,6 @@
     [SupplyParameterFromQuery(Name = "token")] public string? Token { get; set; }
 
     [Inject] private IntakeWizardState _state { get; set; } = default!;
-    [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
     private List<string> _validationErrors = [];
@@ -119,30 +118,23 @@
             : baseStyle;
     }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _state.OnChange += StateHasChanged;
-    }
 
-    protected override void OnParametersSet()
-    {
-        _state.Slug = Slug;
-        _state.Token = Token;
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender) return;
-
-        _state.SetJsRuntime(JsRuntime);
         await _state.RestoreAsync();
 
         if (_state.Slug != Slug || _state.IsSubmitted)
         {
             await _state.ClearAsync();
             _state.Slug = Slug;
-            StateHasChanged();
         }
+    }
+
+    protected override void OnParametersSet()
+    {
+        _state.Slug = Slug;
+        _state.Token = Token;
     }
 
     private async Task HandleNextStep()

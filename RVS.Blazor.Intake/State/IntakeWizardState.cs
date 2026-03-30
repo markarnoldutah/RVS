@@ -17,7 +17,17 @@ public sealed class IntakeWizardState
     private const int MaxDescriptionLength = 2000;
     private const int MaxAttachments = 10;
 
-    private IJSRuntime? _jsRuntime;
+    private readonly IJSRuntime _jsRuntime;
+
+    /// <summary>
+    /// Initializes a new instance of <see cref="IntakeWizardState"/> with the JS runtime
+    /// for sessionStorage persistence. In standalone WASM, JS interop is available immediately.
+    /// </summary>
+    public IntakeWizardState(IJSRuntime jsRuntime)
+    {
+        ArgumentNullException.ThrowIfNull(jsRuntime);
+        _jsRuntime = jsRuntime;
+    }
 
     /// <summary>Current wizard step index (1-based, range 1–7).</summary>
     public int CurrentStep { get; private set; } = 1;
@@ -96,14 +106,6 @@ public sealed class IntakeWizardState
 
     /// <summary>Event raised when state changes to notify UI components.</summary>
     public event Action? OnChange;
-
-    /// <summary>
-    /// Initializes the JS runtime reference for sessionStorage persistence.
-    /// </summary>
-    public void SetJsRuntime(IJSRuntime jsRuntime)
-    {
-        _jsRuntime = jsRuntime;
-    }
 
     /// <summary>
     /// Navigates to the next wizard step if validation passes.
@@ -224,41 +226,32 @@ public sealed class IntakeWizardState
     /// </summary>
     public async Task PersistAsync()
     {
-        if (_jsRuntime is null) return;
-
-        try
+        var data = new IntakeWizardStateData
         {
-            var data = new IntakeWizardStateData
-            {
-                CurrentStep = CurrentStep,
-                Slug = Slug,
-                FirstName = FirstName,
-                LastName = LastName,
-                Email = Email,
-                Phone = Phone,
-                IsPrefilled = IsPrefilled,
-                KnownAssets = KnownAssets,
-                Vin = Vin,
-                Manufacturer = Manufacturer,
-                Model = Model,
-                Year = Year,
-                IssueCategory = IssueCategory,
-                IssueDescription = IssueDescription,
-                Urgency = Urgency,
-                RvUsage = RvUsage,
-                DiagnosticResponses = DiagnosticResponses,
-                SmartSuggestion = SmartSuggestion,
-                IsSubmitted = IsSubmitted,
-                CreatedServiceRequestId = CreatedServiceRequestId
-            };
+            CurrentStep = CurrentStep,
+            Slug = Slug,
+            FirstName = FirstName,
+            LastName = LastName,
+            Email = Email,
+            Phone = Phone,
+            IsPrefilled = IsPrefilled,
+            KnownAssets = KnownAssets,
+            Vin = Vin,
+            Manufacturer = Manufacturer,
+            Model = Model,
+            Year = Year,
+            IssueCategory = IssueCategory,
+            IssueDescription = IssueDescription,
+            Urgency = Urgency,
+            RvUsage = RvUsage,
+            DiagnosticResponses = DiagnosticResponses,
+            SmartSuggestion = SmartSuggestion,
+            IsSubmitted = IsSubmitted,
+            CreatedServiceRequestId = CreatedServiceRequestId
+        };
 
-            var json = JsonSerializer.Serialize(data);
-            await _jsRuntime.InvokeVoidAsync("sessionStorage.setItem", StorageKey, json);
-        }
-        catch (JSDisconnectedException)
-        {
-            // Standalone WASM has no circuits, but kept for defensive coding
-        }
+        var json = JsonSerializer.Serialize(data);
+        await _jsRuntime.InvokeVoidAsync("sessionStorage.setItem", StorageKey, json);
     }
 
     /// <summary>
@@ -266,8 +259,6 @@ public sealed class IntakeWizardState
     /// </summary>
     public async Task RestoreAsync()
     {
-        if (_jsRuntime is null) return;
-
         try
         {
             var json = await _jsRuntime.InvokeAsync<string?>("sessionStorage.getItem", StorageKey);
@@ -298,10 +289,6 @@ public sealed class IntakeWizardState
             CreatedServiceRequestId = data.CreatedServiceRequestId;
 
             NotifyStateChanged();
-        }
-        catch (JSDisconnectedException)
-        {
-            // Standalone WASM has no circuits, but kept for defensive coding
         }
         catch (JsonException)
         {
@@ -339,17 +326,7 @@ public sealed class IntakeWizardState
         IsSubmitted = false;
         CreatedServiceRequestId = null;
 
-        if (_jsRuntime is not null)
-        {
-            try
-            {
-                await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", StorageKey);
-            }
-            catch (JSDisconnectedException)
-            {
-                // Standalone WASM has no circuits, but kept for defensive coding
-            }
-        }
+        await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", StorageKey);
 
         NotifyStateChanged();
     }
