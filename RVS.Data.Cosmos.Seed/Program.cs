@@ -418,15 +418,15 @@ const string CpWilliamsHt = "cp_williams_ht";
 const string CpThompsonHt = "cp_thompson_ht";
 const string CpChenBc = "cp_chen_bc";
 
-// Sample AssetIds (compound key format: {AssetType}:{VIN})
-const string AssetId1 = "RV:1FTFW1ET5EKE12345";
-const string AssetId2 = "RV:5TFCZ5AN3HX054321";
-const string AssetId3 = "RV:WBA3A5C55FK198765";
-const string AssetId4 = "RV:1C4RJFBG7EC234567";
-const string AssetId5 = "RV:2GCEC19T441345678";
-const string AssetId6 = "RV:3C6UR5CL8JG275901";
-const string AssetId7 = "RV:1GBHG31K071892034";
-const string AssetId8 = "RV:5B4MP67G663451278";
+// Sample AssetIds (VIN format — 17-character Vehicle Identification Numbers)
+const string AssetId1 = "5SFCU2324GE004561";
+const string AssetId2 = "5XWTF2147HF019873";
+const string AssetId3 = "5ZT2FJ1B9JA003417";
+const string AssetId4 = "5NHUH2620KE010592";
+const string AssetId5 = "5RVMK2510LE002846";
+const string AssetId6 = "5B4MP6700ME001739";
+const string AssetId7 = "5LZBK2112NE006485";
+const string AssetId8 = "5KTGP2426PE013260";
 
 static DateTime SeedDate(int daysAgo) => DateTime.UtcNow.AddDays(-daysAgo);
 

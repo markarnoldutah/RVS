@@ -405,7 +405,7 @@ public sealed class IntakeWizardState
         }
         else
         {
-            var vinResult = ClientVinValidator.Validate(Vin);
+            var vinResult = ClientVinValidator.ValidateFormat(Vin);
             if (!vinResult.IsValid)
                 errors.Add(vinResult.ErrorMessage!);
         }

@@ -140,7 +140,7 @@ public class IntakeWizardStateTests
         var state = CreateState();
         var prefillAsset = new AssetInfoDto
         {
-            AssetId = "RV:1HGBH41JXMN109186",
+            AssetId = "1HGBH41JXMN109186",
             Manufacturer = "Grand Design",
             Model = "Momentum 395G",
             Year = 2023
@@ -148,7 +148,7 @@ public class IntakeWizardStateTests
 
         state.ApplyAssetPrefill(prefillAsset);
 
-        state.Vin.Should().Be("RV:1HGBH41JXMN109186");
+        state.Vin.Should().Be("1HGBH41JXMN109186");
         state.Manufacturer.Should().Be("Grand Design");
         state.Model.Should().Be("Momentum 395G");
         state.Year.Should().Be(2023);

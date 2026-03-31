@@ -122,4 +122,86 @@ public class VinValidatorTests
         result.IsValid.Should().BeFalse();
         result.ErrorMessage.Should().Contain("must not be null or empty");
     }
+
+    // ── ValidateFormat tests (format-only, no check digit) ──────────────
+
+    [Theory]
+    [InlineData("5SFCU2324GE004561")]
+    [InlineData("5XWTF2147HF019873")]
+    [InlineData("5ZT2FJ1B9JA003417")]
+    [InlineData("1HGBH41JXMN109186")]
+    public void ValidateFormat_ValidFormatVin_ReturnsSuccess(string vin)
+    {
+        var result = VinValidator.ValidateFormat(vin);
+
+        result.IsValid.Should().BeTrue();
+        result.ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateFormat_NullInput_ReturnsFailure()
+    {
+        var result = VinValidator.ValidateFormat(null!);
+
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ValidateFormat_TooShort_ReturnsFailure()
+    {
+        var result = VinValidator.ValidateFormat("1234567890123456");
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("17");
+    }
+
+    [Theory]
+    [InlineData("1234567890I234567")]
+    [InlineData("1234567890O234567")]
+    [InlineData("1234567890Q234567")]
+    public void ValidateFormat_ContainsIOQ_ReturnsFailure(string vin)
+    {
+        var result = VinValidator.ValidateFormat(vin);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("must not contain");
+    }
+
+    [Theory]
+    [InlineData("12345678901234 67")]
+    [InlineData("1234567890!234567")]
+    public void ValidateFormat_NonAlphanumeric_ReturnsFailure(string vin)
+    {
+        var result = VinValidator.ValidateFormat(vin);
+
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ValidateFormat_InvalidCheckDigit_StillReturnsSuccess()
+    {
+        // VIN with bad check digit — ValidateFormat ignores check digit
+        var result = VinValidator.ValidateFormat("1HGBH41J0MN109186");
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidateFormat_LowercaseInput_IsNormalized()
+    {
+        var result = VinValidator.ValidateFormat("5sfcu2324ge004561");
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(" 5SFCU2324GE004561")]
+    [InlineData("5SFCU2324GE004561 ")]
+    [InlineData("  5SFCU2324GE004561  ")]
+    public void ValidateFormat_WhitespaceAroundVin_ReturnsSuccess(string vin)
+    {
+        var result = VinValidator.ValidateFormat(vin);
+
+        result.IsValid.Should().BeTrue();
+    }
 }

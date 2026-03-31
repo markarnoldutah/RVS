@@ -11,13 +11,13 @@ public class ServiceRequestDtoTests
         var dto = new ServiceRequestCreateRequestDto
         {
             Customer = new CustomerInfoDto { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
-            Asset = new AssetInfoDto { AssetId = "RV:1HGBH41JXMN109186" },
+            Asset = new AssetInfoDto { AssetId = "1HGBH41JXMN109186" },
             IssueCategory = "Slide System",
             IssueDescription = "Slide won't retract"
         };
 
         dto.Customer.FirstName.Should().Be("Jane");
-        dto.Asset.AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        dto.Asset.AssetId.Should().Be("1HGBH41JXMN109186");
         dto.IssueCategory.Should().Be("Slide System");
         dto.IssueDescription.Should().Be("Slide won't retract");
         dto.Urgency.Should().BeNull();

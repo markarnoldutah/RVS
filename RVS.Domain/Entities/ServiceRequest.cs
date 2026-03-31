@@ -176,7 +176,7 @@ public class CustomerSnapshotEmbedded
 public class AssetInfoEmbedded
 {
     /// <summary>
-    /// Compound asset identifier. Format: <c>{AssetType}:{Identifier}</c> (e.g. <c>RV:1FTFW1ET5EKE12345</c>).
+    /// Asset identifier — the 17-character Vehicle Identification Number (VIN).
     /// </summary>
     [JsonProperty("assetId")]
     public string AssetId { get; set; } = string.Empty;

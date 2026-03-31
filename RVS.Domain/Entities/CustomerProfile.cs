@@ -78,7 +78,7 @@ public class CustomerProfile : EntityBase
     /// Deactivates the active ownership entry for the specified asset.
     /// No-op if the asset is not actively owned by this profile.
     /// </summary>
-    /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
+    /// <param name="assetId">Asset identifier (VIN), e.g. <c>1FTFW1ET5EKE12345</c>.</param>
     public void DeactivateAsset(string assetId)
     {
         var active = GetActiveInteraction(assetId);
@@ -94,7 +94,7 @@ public class CustomerProfile : EntityBase
     /// by incrementing <see cref="AssetOwnershipEmbedded.RequestCount"/> and updating
     /// <see cref="AssetOwnershipEmbedded.LastSeenAtUtc"/>.
     /// </summary>
-    /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
+    /// <param name="assetId">Asset identifier (VIN), e.g. <c>1FTFW1ET5EKE12345</c>.</param>
     public void ActivateOrRefreshAsset(string assetId)
     {
         var existing = GetActiveInteraction(assetId);
@@ -129,7 +129,7 @@ public class CustomerProfile : EntityBase
 public class AssetOwnershipEmbedded
 {
     /// <summary>
-    /// Compound asset identifier. Format: <c>{AssetType}:{Identifier}</c> (e.g. <c>RV:1FTFW1ET5EKE12345</c>).
+    /// Asset identifier — the 17-character Vehicle Identification Number (VIN).
     /// </summary>
     [JsonProperty("assetId")]
     public string AssetId { get; set; } = string.Empty;
