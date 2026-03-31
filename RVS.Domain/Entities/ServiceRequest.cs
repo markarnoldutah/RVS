@@ -16,10 +16,10 @@ public class ServiceRequest : EntityBase
     public override string Type { get; init; } = "serviceRequest";
 
     /// <summary>
-    /// Unique identifier with <c>sr_</c> prefix convention for service requests.
+    /// Unique identifier for this service request.
     /// </summary>
     [JsonProperty("id")]
-    public new string Id { get; init; } = $"sr_{Guid.NewGuid()}";
+    public new string Id { get; init; } = Guid.NewGuid().ToString();
 
     /// <summary>
     /// Current workflow status. Transitions enforced by <see cref="Validation.StatusTransitions"/>.

@@ -181,7 +181,7 @@ One document cannot serve three different access patterns:
 
 ```json
 {
-  "id": "sr_abc123",
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "type": "serviceRequest",
   "tenantId": "org_blue_compass_rv",
   "locationId": "loc_blue_compass_slc",

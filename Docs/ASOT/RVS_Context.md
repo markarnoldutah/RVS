@@ -522,7 +522,7 @@ This context document is a **platform overview**. For deep dives, see:
 |---|---|---|
 | **Tenant** | Dealer corporation; Auth0 Organization boundary; Cosmos partition | `org_blue_compass_rv` |
 | **Location** | Physical service site | `loc_blue_compass_slc` |
-| **Service Request (SR)** | Customer repair intake; core domain entity | `sr_abc123` |
+| **Service Request (SR)** | Customer repair intake; core domain entity | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` |
 | **Section 10A** | Structured repair data: component, failure mode, action, parts, labor | From ASE/industry standard |
 | **Asset Ledger** | Append-only asset service history; the data moat | `RV:1ABC234567` |
 | **Magic-link token** | Secure, stateless, expiring URL token for anonymous customer status access | Emailed to customer on intake |
