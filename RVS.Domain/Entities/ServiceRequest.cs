@@ -16,12 +16,6 @@ public class ServiceRequest : EntityBase
     public override string Type { get; init; } = "serviceRequest";
 
     /// <summary>
-    /// Unique identifier for this service request.
-    /// </summary>
-    [JsonProperty("id")]
-    public new string Id { get; init; } = Guid.NewGuid().ToString();
-
-    /// <summary>
     /// Current workflow status. Transitions enforced by <see cref="Validation.StatusTransitions"/>.
     /// </summary>
     [JsonProperty("status")]
