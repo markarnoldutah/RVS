@@ -93,15 +93,22 @@ public class CustomerProfile : EntityBase
     /// Activates a new asset ownership or refreshes an existing active entry
     /// by incrementing <see cref="AssetOwnershipEmbedded.RequestCount"/> and updating
     /// <see cref="AssetOwnershipEmbedded.LastSeenAtUtc"/>.
+    /// When asset metadata is provided, it is stored on the entry (new or existing).
     /// </summary>
     /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
-    public void ActivateOrRefreshAsset(string assetId)
+    /// <param name="manufacturer">Optional manufacturer name.</param>
+    /// <param name="model">Optional model name.</param>
+    /// <param name="year">Optional model year.</param>
+    public void ActivateOrRefreshAsset(string assetId, string? manufacturer = null, string? model = null, int? year = null)
     {
         var existing = GetActiveInteraction(assetId);
         if (existing is not null)
         {
             existing.RequestCount++;
             existing.LastSeenAtUtc = DateTime.UtcNow;
+            if (manufacturer is not null) existing.Manufacturer = manufacturer;
+            if (model is not null) existing.Model = model;
+            if (year is not null) existing.Year = year;
             return;
         }
 
@@ -109,6 +116,9 @@ public class CustomerProfile : EntityBase
         AssetsOwned.Add(new AssetOwnershipEmbedded
         {
             AssetId = assetId,
+            Manufacturer = manufacturer,
+            Model = model,
+            Year = year,
             Status = AssetOwnershipStatus.Active,
             FirstSeenAtUtc = now,
             LastSeenAtUtc = now,

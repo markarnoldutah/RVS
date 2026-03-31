@@ -132,6 +132,36 @@ public class CustomerProfileTests
     }
 
     [Fact]
+    public void ActivateOrRefreshAsset_WhenNewAssetWithMetadata_ShouldPopulateManufacturerModelYear()
+    {
+        var profile = new CustomerProfile();
+
+        profile.ActivateOrRefreshAsset("RV:VIN-1", "Grand Design", "Momentum 395G", 2023);
+
+        profile.AssetsOwned.Should().ContainSingle();
+        var asset = profile.AssetsOwned.First();
+        asset.AssetId.Should().Be("RV:VIN-1");
+        asset.Manufacturer.Should().Be("Grand Design");
+        asset.Model.Should().Be("Momentum 395G");
+        asset.Year.Should().Be(2023);
+        asset.Status.Should().Be(AssetOwnershipStatus.Active);
+        asset.RequestCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void ActivateOrRefreshAsset_WhenNewAssetWithoutMetadata_ShouldLeaveFieldsNull()
+    {
+        var profile = new CustomerProfile();
+
+        profile.ActivateOrRefreshAsset("RV:VIN-1");
+
+        var asset = profile.AssetsOwned.First();
+        asset.Manufacturer.Should().BeNull();
+        asset.Model.Should().BeNull();
+        asset.Year.Should().BeNull();
+    }
+
+    [Fact]
     public void ActivateOrRefreshAsset_WhenAlreadyActive_ShouldIncrementRequestCountAndUpdateLastSeen()
     {
         var originalLastSeen = DateTime.UtcNow.AddDays(-5);
@@ -156,6 +186,61 @@ public class CustomerProfileTests
         asset.RequestCount.Should().Be(3);
         asset.LastSeenAtUtc.Should().BeAfter(originalLastSeen);
         asset.LastSeenAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public void ActivateOrRefreshAsset_WhenAlreadyActiveWithMetadata_ShouldUpdateMetadata()
+    {
+        var profile = new CustomerProfile
+        {
+            AssetsOwned =
+            [
+                new AssetOwnershipEmbedded
+                {
+                    AssetId = "RV:VIN-1",
+                    Status = AssetOwnershipStatus.Active,
+                    RequestCount = 2,
+                    Manufacturer = null,
+                    Model = null,
+                    Year = null,
+                }
+            ]
+        };
+
+        profile.ActivateOrRefreshAsset("RV:VIN-1", "Winnebago", "View 24D", 2023);
+
+        var asset = profile.AssetsOwned.First();
+        asset.Manufacturer.Should().Be("Winnebago");
+        asset.Model.Should().Be("View 24D");
+        asset.Year.Should().Be(2023);
+        asset.RequestCount.Should().Be(3);
+    }
+
+    [Fact]
+    public void ActivateOrRefreshAsset_WhenAlreadyActiveWithNullMetadata_ShouldPreserveExistingValues()
+    {
+        var profile = new CustomerProfile
+        {
+            AssetsOwned =
+            [
+                new AssetOwnershipEmbedded
+                {
+                    AssetId = "RV:VIN-1",
+                    Status = AssetOwnershipStatus.Active,
+                    RequestCount = 2,
+                    Manufacturer = "Winnebago",
+                    Model = "View 24D",
+                    Year = 2023,
+                }
+            ]
+        };
+
+        profile.ActivateOrRefreshAsset("RV:VIN-1");
+
+        var asset = profile.AssetsOwned.First();
+        asset.Manufacturer.Should().Be("Winnebago");
+        asset.Model.Should().Be("View 24D");
+        asset.Year.Should().Be(2023);
     }
 
     [Fact]
