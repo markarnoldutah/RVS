@@ -309,7 +309,8 @@ public class ServiceRequestMapperTests
 
         var entity = dto.ToEntity("ten_1", "usr_1");
 
-        entity.Id.Should().StartWith("sr_");
+        entity.Id.Should().NotBeNullOrWhiteSpace();
+        Guid.TryParse(entity.Id, out _).Should().BeTrue();
         entity.TenantId.Should().Be("ten_1");
         entity.CreatedByUserId.Should().Be("usr_1");
         entity.Status.Should().Be("New");

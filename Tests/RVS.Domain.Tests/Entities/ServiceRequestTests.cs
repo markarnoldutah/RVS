@@ -9,11 +9,11 @@ namespace RVS.Domain.Tests.Entities;
 public class ServiceRequestTests
 {
     [Fact]
-    public void NewServiceRequest_IdShouldStartWithSrPrefix()
+    public void NewServiceRequest_IdShouldBeValidGuid()
     {
         var sr = new ServiceRequest();
 
-        sr.Id.Should().StartWith("sr_");
+        Guid.TryParse(sr.Id, out _).Should().BeTrue();
     }
 
     [Fact]

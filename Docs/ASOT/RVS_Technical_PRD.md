@@ -316,7 +316,7 @@ Standard error codes:
 
 | Field | Type | Constraints |
 |---|---|---|
-| `id` | string | Prefix `sr_`, globally unique |
+| `id` | string | GUID, globally unique |
 | `tenantId` | string | Partition key; set from `app_metadata.tenantId`; required |
 | `locationId` | string | Prefix `loc_`; must exist in `locations` container |
 | `status` | enum | `New` → `InProgress` → `Completed` or `Cancelled`; enforced by `StatusTransitions.cs` |
