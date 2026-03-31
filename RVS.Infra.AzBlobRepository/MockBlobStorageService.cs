@@ -1,6 +1,7 @@
+using Microsoft.Extensions.Logging;
 using RVS.Domain.Integrations;
 
-namespace RVS.API.Integrations;
+namespace RVS.Infra.AzBlobRepository;
 
 /// <summary>
 /// Development mock that returns fake SAS URIs without touching Azure Blob Storage.
