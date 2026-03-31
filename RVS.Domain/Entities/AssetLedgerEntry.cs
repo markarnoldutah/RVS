@@ -18,8 +18,8 @@ public class AssetLedgerEntry
     public string Id { get; init; } = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// Compound asset identifier. Partition key — immutable after creation.
-    /// Format: <c>{AssetType}:{Identifier}</c> (e.g. <c>RV:1FTFW1ET5EKE12345</c>).
+    /// Asset identifier — the 17-character Vehicle Identification Number (VIN).
+    /// Partition key — immutable after creation.
     /// </summary>
     [JsonProperty("assetId")]
     public string AssetId { get; init; } = string.Empty;

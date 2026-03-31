@@ -15,7 +15,7 @@ public class IntakeWizardStateTests
         var state = CreateState();
 
         state.CurrentStep.Should().Be(1);
-        state.TotalSteps.Should().Be(7);
+        state.TotalSteps.Should().Be(8);
         state.Slug.Should().BeEmpty();
         state.Token.Should().BeNull();
         state.Config.Should().BeNull();
@@ -48,7 +48,7 @@ public class IntakeWizardStateTests
             await state.GoToNextStepAsync();
         }
 
-        state.CurrentStep.Should().Be(7);
+        state.CurrentStep.Should().Be(8);
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class IntakeWizardStateTests
     {
         var state = CreateState();
 
-        await state.GoToStepAsync(8);
+        await state.GoToStepAsync(9);
 
         state.CurrentStep.Should().Be(1);
     }
@@ -141,7 +141,7 @@ public class IntakeWizardStateTests
         var state = CreateState();
         var prefillAsset = new AssetInfoDto
         {
-            AssetId = "RV:1HGBH41JXMN109186",
+            AssetId = "1HGBH41JXMN109186",
             Manufacturer = "Grand Design",
             Model = "Momentum 395G",
             Year = 2023
@@ -149,7 +149,7 @@ public class IntakeWizardStateTests
 
         state.ApplyAssetPrefill(prefillAsset);
 
-        state.Vin.Should().Be("RV:1HGBH41JXMN109186");
+        state.Vin.Should().Be("1HGBH41JXMN109186");
         state.Manufacturer.Should().Be("Grand Design");
         state.Model.Should().Be("Momentum 395G");
         state.Year.Should().Be(2023);
@@ -284,10 +284,21 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public async Task ValidateCurrentStep_Step4_EmptyFields_ShouldReturnErrors()
+    public async Task ValidateCurrentStep_Step4_VehicleDetails_ShouldAlwaysReturnNoErrors()
     {
         var state = CreateState();
         await state.GoToStepAsync(4);
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step5_EmptyFields_ShouldReturnErrors()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(5);
 
         var errors = state.ValidateCurrentStep();
 
@@ -296,10 +307,10 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public async Task ValidateCurrentStep_Step4_DescriptionTooLong_ShouldReturnError()
+    public async Task ValidateCurrentStep_Step5_DescriptionTooLong_ShouldReturnError()
     {
         var state = CreateState();
-        await state.GoToStepAsync(4);
+        await state.GoToStepAsync(5);
         state.IssueCategory = "Electrical";
         state.IssueDescription = new string('x', 2001);
 
@@ -310,10 +321,10 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public async Task ValidateCurrentStep_Step4_ValidFields_ShouldReturnNoErrors()
+    public async Task ValidateCurrentStep_Step5_ValidFields_ShouldReturnNoErrors()
     {
         var state = CreateState();
-        await state.GoToStepAsync(4);
+        await state.GoToStepAsync(5);
         state.IssueCategory = "Electrical";
         state.IssueDescription = "The lights are flickering.";
 
@@ -323,10 +334,10 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public async Task ValidateCurrentStep_Step5_ShouldAlwaysReturnNoErrors()
+    public async Task ValidateCurrentStep_Step6_ShouldAlwaysReturnNoErrors()
     {
         var state = CreateState();
-        await state.GoToStepAsync(5);
+        await state.GoToStepAsync(6);
 
         var errors = state.ValidateCurrentStep();
 
@@ -334,10 +345,10 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public async Task ValidateCurrentStep_Step6_TooManyAttachments_ShouldReturnError()
+    public async Task ValidateCurrentStep_Step7_TooManyAttachments_ShouldReturnError()
     {
         var state = CreateState();
-        await state.GoToStepAsync(6);
+        await state.GoToStepAsync(7);
         for (var i = 0; i < 11; i++)
         {
             state.Attachments.Add(new AttachmentFileInfo { FileName = $"file{i}.jpg" });
@@ -350,10 +361,10 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public async Task ValidateCurrentStep_Step7_ShouldAlwaysReturnNoErrors()
+    public async Task ValidateCurrentStep_Step8_ShouldAlwaysReturnNoErrors()
     {
         var state = CreateState();
-        await state.GoToStepAsync(7);
+        await state.GoToStepAsync(8);
 
         var errors = state.ValidateCurrentStep();
 

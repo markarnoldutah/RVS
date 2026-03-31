@@ -26,16 +26,33 @@ public static class VinValidator
     /// </summary>
     /// <param name="vin">The VIN string to validate.</param>
     /// <returns>A <see cref="ValidationResult"/> indicating success or failure with a descriptive error.</returns>
-    /// <example>
-    /// <code>
-    /// var result = VinValidator.Validate("1HGBH41JXMN109186");
-    /// // result.IsValid == true
-    ///
-    /// var bad = VinValidator.Validate("INVALID");
-    /// // bad.IsValid == false
-    /// </code>
-    /// </example>
     public static ValidationResult Validate(string vin)
+    {
+        var formatResult = ValidateFormat(vin);
+        if (!formatResult.IsValid)
+        {
+            return formatResult;
+        }
+
+        var normalized = vin.Trim().ToUpperInvariant();
+
+        if (!IsCheckDigitValid(normalized))
+        {
+            return ValidationResult.Failure(
+                "This VIN does not appear to be valid. Please double-check it for typos.");
+        }
+
+        return ValidationResult.Success;
+    }
+
+    /// <summary>
+    /// Validates a VIN for correct length (17 characters) and allowed characters
+    /// (alphanumeric, excluding I, O, Q) without verifying the check digit.
+    /// Use this for blocking validation where the check digit should be a soft warning only.
+    /// </summary>
+    /// <param name="vin">The VIN string to validate.</param>
+    /// <returns>A <see cref="ValidationResult"/> indicating success or failure with a descriptive error.</returns>
+    public static ValidationResult ValidateFormat(string vin)
     {
         if (string.IsNullOrWhiteSpace(vin))
         {
@@ -63,12 +80,6 @@ public static class VinValidator
         {
             return ValidationResult.Failure(
                 "VIN must not contain the letters I, O, or Q.");
-        }
-
-        if (!IsCheckDigitValid(normalized))
-        {
-            return ValidationResult.Failure(
-                "This VIN does not appear to be valid. Please double-check it for typos.");
         }
 
         return ValidationResult.Success;

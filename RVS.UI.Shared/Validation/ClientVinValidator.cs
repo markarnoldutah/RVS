@@ -14,11 +14,13 @@ public static class ClientVinValidator
     /// </summary>
     /// <param name="vin">The VIN to validate.</param>
     /// <returns>A <see cref="ValidationResult"/> indicating success or failure.</returns>
-    /// <example>
-    /// <code>
-    /// var result = ClientVinValidator.Validate("1HGBH41JXMN109186");
-    /// // result.IsValid == true
-    /// </code>
-    /// </example>
     public static ValidationResult Validate(string vin) => VinValidator.Validate(vin);
+
+    /// <summary>
+    /// Validates a VIN string for correct format and allowed characters only (no check digit).
+    /// Use this for blocking validation where the check digit should be a soft warning.
+    /// </summary>
+    /// <param name="vin">The VIN to validate.</param>
+    /// <returns>A <see cref="ValidationResult"/> indicating success or failure.</returns>
+    public static ValidationResult ValidateFormat(string vin) => VinValidator.ValidateFormat(vin);
 }

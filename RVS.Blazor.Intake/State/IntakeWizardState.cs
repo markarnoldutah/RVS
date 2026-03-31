@@ -6,14 +6,14 @@ using RVS.UI.Shared.Validation;
 namespace RVS.Blazor.Intake.State;
 
 /// <summary>
-/// Shared state container for the 7-step intake wizard.
+/// Shared state container for the 8-step intake wizard.
 /// Holds all step data, current step index, validation state, and returning customer prefill data.
 /// Persisted in <c>sessionStorage</c> for offline resilience.
 /// </summary>
 public sealed class IntakeWizardState
 {
     private const string StorageKey = "rvs_intake_wizard_state";
-    private const int TotalStepCount = 7;
+    private const int TotalStepCount = 8;
     private const int MaxDescriptionLength = 2000;
     private const int MaxAttachments = 10;
 
@@ -29,7 +29,7 @@ public sealed class IntakeWizardState
         _jsRuntime = jsRuntime;
     }
 
-    /// <summary>Current wizard step index (1-based, range 1–7).</summary>
+    /// <summary>Current wizard step index (1-based, range 1–8).</summary>
     public int CurrentStep { get; private set; } = 1;
 
     /// <summary>Total number of wizard steps.</summary>
@@ -65,37 +65,37 @@ public sealed class IntakeWizardState
     /// <summary>Vehicle Identification Number (Step 3).</summary>
     public string Vin { get; set; } = string.Empty;
 
-    /// <summary>Vehicle manufacturer (Step 3).</summary>
+    /// <summary>Vehicle manufacturer (Step 4).</summary>
     public string? Manufacturer { get; set; }
 
-    /// <summary>Vehicle model (Step 3).</summary>
+    /// <summary>Vehicle model (Step 4).</summary>
     public string? Model { get; set; }
 
-    /// <summary>Vehicle year (Step 3).</summary>
+    /// <summary>Vehicle year (Step 4).</summary>
     public int? Year { get; set; }
 
-    /// <summary>Issue category selected from LookupSet (Step 4).</summary>
+    /// <summary>Issue category selected from LookupSet (Step 5).</summary>
     public string IssueCategory { get; set; } = string.Empty;
 
-    /// <summary>Issue description text, max 2000 characters (Step 4).</summary>
+    /// <summary>Issue description text, max 2000 characters (Step 5).</summary>
     public string IssueDescription { get; set; } = string.Empty;
 
-    /// <summary>Urgency level (Step 4).</summary>
+    /// <summary>Urgency level (Step 5).</summary>
     public string? Urgency { get; set; }
 
-    /// <summary>RV usage type — e.g., "Full-Time" or "Part-Time" (Step 4).</summary>
+    /// <summary>RV usage type — e.g., "Full-Time" or "Part-Time" (Step 5).</summary>
     public string? RvUsage { get; set; }
 
-    /// <summary>AI-generated diagnostic questions (Step 5).</summary>
+    /// <summary>AI-generated diagnostic questions (Step 6).</summary>
     public List<DiagnosticQuestionDto> DiagnosticQuestions { get; set; } = [];
 
-    /// <summary>Customer's diagnostic responses (Step 5).</summary>
+    /// <summary>Customer's diagnostic responses (Step 6).</summary>
     public List<DiagnosticResponseDto> DiagnosticResponses { get; set; } = [];
 
-    /// <summary>Smart suggestion from AI diagnostic (Step 5).</summary>
+    /// <summary>Smart suggestion from AI diagnostic (Step 6).</summary>
     public string? SmartSuggestion { get; set; }
 
-    /// <summary>Uploaded attachment metadata (Step 6).</summary>
+    /// <summary>Uploaded attachment metadata (Step 7).</summary>
     public List<AttachmentFileInfo> Attachments { get; set; } = [];
 
     /// <summary>Whether the service request has been submitted.</summary>
@@ -183,11 +183,12 @@ public sealed class IntakeWizardState
         {
             1 => ValidateLanding(),
             2 => ValidateCustomerInfo(),
-            3 => ValidateAssetInfo(),
-            4 => ValidateIssueDescription(),
-            5 => ValidateDiagnosticQuestions(),
-            6 => ValidateAttachments(),
-            7 => [],
+            3 => ValidateVinLookup(),
+            4 => [],
+            5 => ValidateIssueDescription(),
+            6 => ValidateDiagnosticQuestions(),
+            7 => ValidateAttachments(),
+            8 => [],
             _ => []
         };
     }
@@ -372,7 +373,7 @@ public sealed class IntakeWizardState
         return errors;
     }
 
-    private List<string> ValidateAssetInfo()
+    private List<string> ValidateVinLookup()
     {
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(Vin))
@@ -381,7 +382,7 @@ public sealed class IntakeWizardState
         }
         else
         {
-            var vinResult = ClientVinValidator.Validate(Vin);
+            var vinResult = ClientVinValidator.ValidateFormat(Vin);
             if (!vinResult.IsValid)
                 errors.Add(vinResult.ErrorMessage!);
         }

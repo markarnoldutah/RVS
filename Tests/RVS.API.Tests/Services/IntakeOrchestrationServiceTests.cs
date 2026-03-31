@@ -479,7 +479,7 @@ public class IntakeOrchestrationServiceTests
             },
             Asset = new AssetInfoDto
             {
-                AssetId = "RV:1HGBH41JXMN109186",
+                AssetId = "1HGBH41JXMN109186",
                 Manufacturer = "Grand Design",
                 Model = "Momentum 395G",
                 Year = 2023,

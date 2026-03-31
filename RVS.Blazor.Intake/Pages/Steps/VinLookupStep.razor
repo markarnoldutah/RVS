@@ -1,0 +1,248 @@
+<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+    <MudStack Spacing="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.QrCodeScanner" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">VIN Lookup</MudText>
+        </MudStack>
+
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            Enter your Vehicle Identification Number (VIN) or use your camera to capture it.
+        </MudText>
+
+        @if (State.KnownAssets is { Count: > 0 })
+        {
+            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
+                Select a previous vehicle or enter a new VIN below
+            </MudText>
+
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                @foreach (var asset in State.KnownAssets)
+                {
+                    var isSelected = IsAssetSelected(State.Vin, asset.AssetId);
+                    var label = FormatAssetLabel(asset);
+                    <MudChip T="string"
+                             Text="@label"
+                             Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                             Color="@(isSelected ? Color.Primary : Color.Default)"
+                             Icon="@(isSelected ? Icons.Material.Filled.CheckCircle : Icons.Material.Outlined.DirectionsCar)"
+                             OnClick="() => SelectKnownAsset(asset)" />
+                }
+            </MudStack>
+
+            <MudDivider Class="my-1" />
+        }
+
+        <MudTextField T="string"
+                      Value="@State.Vin"
+                      ValueChanged="HandleVinChanged"
+                      Label="VIN (Vehicle Identification Number)"
+                      Required="true"
+                      RequiredError="VIN is required"
+                      MaxLength="17"
+                      Counter="17"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Pin"
+                      Placeholder="17-character VIN"
+                      HelperText="Enter the 17-character Vehicle Identification Number"
+                      Immediate="true" />
+
+        @* Camera capture for VIN — opens native camera on mobile devices *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.CameraAlt"
+                       OnClick="TriggerCameraCapture"
+                       Style="text-transform: none;">
+                Capture VIN with Camera
+            </MudButton>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Take a photo of the VIN plate for reference
+            </MudText>
+        </MudStack>
+        <InputFile @ref="_cameraInput"
+                   accept="image/*"
+                   capture="environment"
+                   OnChange="HandleCameraCapture"
+                   style="display: none;" />
+
+        @if (_capturedImageUrl is not null)
+        {
+            <MudPaper Elevation="1" Class="pa-3" Style="text-align: center;">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                    📷 VIN photo captured — please enter the VIN from the image above
+                </MudText>
+                <img src="@_capturedImageUrl" alt="Captured VIN photo"
+                     style="max-width: 100%; max-height: 200px; border-radius: 4px;" />
+            </MudPaper>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(State.Vin))
+        {
+            var vinResult = ClientVinValidator.Validate(State.Vin);
+            if (vinResult.IsValid)
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true">
+                    VIN format is valid.
+                </MudAlert>
+            }
+            else if (State.Vin.Length == 17)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
+                    @vinResult.ErrorMessage You can usually find the VIN on the driver's side dashboard or door jamb sticker.
+                </MudAlert>
+            }
+        }
+
+        @if (_lookupError is not null)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                @_lookupError
+            </MudAlert>
+        }
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="HandleBack"
+                       Style="text-transform: none;">
+                Back
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       EndIcon="@(_isLookingUp ? null : Icons.Material.Filled.Search)"
+                       Disabled="_isLookingUp"
+                       OnClick="HandleLookup"
+                       Style="text-transform: none;">
+                @if (_isLookingUp)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    @:Looking up…
+                }
+                else
+                {
+                    @:Look Up VIN
+                }
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private const int VinSuffixDisplayLength = 8;
+    private const long MaxCameraCaptureSizeBytes = 10 * 1024 * 1024;
+
+    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+    [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+    [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
+
+    private InputFile? _cameraInput;
+    private string? _capturedImageUrl;
+    private bool _isLookingUp;
+    private string? _lookupError;
+
+    private void HandleVinChanged(string? value)
+    {
+        State.Vin = value?.Trim().ToUpperInvariant() ?? string.Empty;
+        _lookupError = null;
+    }
+
+    private void SelectKnownAsset(AssetInfoDto asset)
+    {
+        State.Vin = asset.AssetId;
+        State.Manufacturer = asset.Manufacturer;
+        State.Model = asset.Model;
+        State.Year = asset.Year;
+        _lookupError = null;
+        StateHasChanged();
+    }
+
+    private static bool IsAssetSelected(string currentVin, string assetId) =>
+        string.Equals(currentVin, assetId, StringComparison.OrdinalIgnoreCase)
+        || (!string.IsNullOrWhiteSpace(currentVin) && assetId.EndsWith(currentVin, StringComparison.OrdinalIgnoreCase));
+
+    private static string FormatAssetLabel(AssetInfoDto asset)
+    {
+        var parts = new List<string>();
+        if (asset.Year.HasValue)
+            parts.Add(asset.Year.Value.ToString());
+        if (!string.IsNullOrWhiteSpace(asset.Manufacturer))
+            parts.Add(asset.Manufacturer);
+        if (!string.IsNullOrWhiteSpace(asset.Model))
+            parts.Add(asset.Model);
+
+        var description = parts.Count > 0 ? string.Join(" ", parts) : null;
+        var vin = asset.AssetId.Length > VinSuffixDisplayLength
+            ? $"…{asset.AssetId[^VinSuffixDisplayLength..]}"
+            : asset.AssetId;
+
+        return description is not null ? $"{description} ({vin})" : vin;
+    }
+
+    private async Task TriggerCameraCapture()
+    {
+        if (_cameraInput?.Element is not null)
+        {
+            await JsRuntime.InvokeVoidAsync("rvs_triggerClick", _cameraInput.Element);
+        }
+    }
+
+    private async Task HandleCameraCapture(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        var buffer = new byte[file.Size];
+        await using var stream = file.OpenReadStream(maxAllowedSize: MaxCameraCaptureSizeBytes);
+        _ = await stream.ReadAsync(buffer);
+        var base64 = Convert.ToBase64String(buffer);
+        _capturedImageUrl = $"data:{file.ContentType};base64,{base64}";
+        StateHasChanged();
+    }
+
+    private async Task HandleLookup()
+    {
+        _lookupError = null;
+
+        var vinResult = ClientVinValidator.Validate(State.Vin);
+        if (!vinResult.IsValid)
+        {
+            _lookupError = vinResult.ErrorMessage;
+            return;
+        }
+
+        _isLookingUp = true;
+        StateHasChanged();
+
+        try
+        {
+            var decoded = await IntakeApi.DecodeVinAsync(State.Slug, State.Vin);
+            if (decoded is not null)
+            {
+                State.Manufacturer = decoded.Manufacturer;
+                State.Model = decoded.Model;
+                State.Year = decoded.Year;
+            }
+
+            await State.NotifyAndPersistAsync();
+            await OnNext.InvokeAsync();
+        }
+        catch (HttpRequestException)
+        {
+            _lookupError = "Unable to look up VIN at this time. You can continue and enter vehicle details manually.";
+        }
+        finally
+        {
+            _isLookingUp = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleBack()
+    {
+        await OnBack.InvokeAsync();
+    }
+}

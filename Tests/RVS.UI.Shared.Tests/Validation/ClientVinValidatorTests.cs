@@ -91,4 +91,46 @@ public class ClientVinValidatorTests
 
         result.IsValid.Should().BeFalse();
     }
+
+    // ── ValidateFormat tests (format-only, no check digit) ──────────────
+
+    [Theory]
+    [InlineData("5SFCU2324GE004561")]
+    [InlineData("5XWTF2147HF019873")]
+    [InlineData("1HGBH41JXMN109186")]
+    public void ValidateFormat_ValidFormatVin_ReturnsSuccess(string vin)
+    {
+        var result = ClientVinValidator.ValidateFormat(vin);
+
+        result.IsValid.Should().BeTrue();
+        result.ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateFormat_InvalidCheckDigit_StillReturnsSuccess()
+    {
+        var result = ClientVinValidator.ValidateFormat("1HGBH41J0MN109186");
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidateFormat_TooShort_ReturnsFailure()
+    {
+        var result = ClientVinValidator.ValidateFormat("1234567890123456");
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("17");
+    }
+
+    [Theory]
+    [InlineData("1234567890I234567")]
+    [InlineData("1234567890O234567")]
+    public void ValidateFormat_ContainsIOQ_ReturnsFailure(string vin)
+    {
+        var result = ClientVinValidator.ValidateFormat(vin);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("must not contain");
+    }
 }
