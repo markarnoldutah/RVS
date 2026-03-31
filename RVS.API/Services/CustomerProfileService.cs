@@ -94,7 +94,7 @@ public sealed class CustomerProfileService : ICustomerProfileService
     }
 
     /// <inheritdoc />
-    public async Task<CustomerProfile> ResolveAndTrackAssetAsync(string tenantId, string email, string assetId, CancellationToken cancellationToken = default)
+    public async Task<CustomerProfile> ResolveAndTrackAssetAsync(string tenantId, string email, string assetId, string? manufacturer = null, string? model = null, int? year = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
@@ -116,7 +116,7 @@ public sealed class CustomerProfileService : ICustomerProfileService
         }
 
         // Branch 2 & 3: Activate new asset or refresh existing one on the current profile.
-        profile.ActivateOrRefreshAsset(assetId);
+        profile.ActivateOrRefreshAsset(assetId, manufacturer, model, year);
         profile.MarkAsUpdated(_userContext.UserId);
         return await _repository.UpdateAsync(profile, cancellationToken);
     }

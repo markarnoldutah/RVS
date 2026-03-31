@@ -290,6 +290,25 @@ public class CustomerProfileServiceTests
     }
 
     [Fact]
+    public async Task ResolveAndTrackAssetAsync_Branch2_NewAssetWithMetadata_ShouldPopulateManufacturerModelYear()
+    {
+        var profile = BuildProfile();
+        _repoMock.Setup(r => r.GetByEmailAsync("ten_1", "mike@test.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(profile);
+        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "RV:VIN123", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CustomerProfile?)null);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CustomerProfile e, CancellationToken _) => e);
+
+        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "RV:VIN123", "Winnebago", "View 24D", 2023);
+
+        var asset = result.AssetsOwned.First(a => a.AssetId == "RV:VIN123" && a.Status == AssetOwnershipStatus.Active);
+        asset.Manufacturer.Should().Be("Winnebago");
+        asset.Model.Should().Be("View 24D");
+        asset.Year.Should().Be(2023);
+    }
+
+    [Fact]
     public async Task ResolveAndTrackAssetAsync_Branch3_SameProfileOwnsAsset_ShouldIncrementRequestCount()
     {
         var profile = BuildProfile();
