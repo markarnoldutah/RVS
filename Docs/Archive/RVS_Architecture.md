@@ -693,7 +693,7 @@ One document cannot serve three different access patterns:
 
 ```json name=service-request-document.json
 {
-  "id": "sr_abc123",
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "type": "serviceRequest",
   "tenantId": "dealer_saltlake",
   "status": "New",

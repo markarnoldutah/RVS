@@ -59,6 +59,9 @@ public interface ICustomerProfileService
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
     /// <param name="email">Customer email address.</param>
     /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
+    /// <param name="manufacturer">Optional manufacturer name for the asset.</param>
+    /// <param name="model">Optional model name for the asset.</param>
+    /// <param name="year">Optional model year for the asset.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<CustomerProfile> ResolveAndTrackAssetAsync(string tenantId, string email, string assetId, CancellationToken cancellationToken = default);
+    Task<CustomerProfile> ResolveAndTrackAssetAsync(string tenantId, string email, string assetId, string? manufacturer = null, string? model = null, int? year = null, CancellationToken cancellationToken = default);
 }

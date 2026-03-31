@@ -38,7 +38,7 @@ Cross-tenant, append-only. Partition key `/assetId` enables efficient "get full 
 ```json
 [
   {
-    "id": "sr_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "tenantId": "ten_bluecompass",
     "type": "serviceRequest",
     "status": "InProgress",
@@ -147,7 +147,7 @@ Cross-tenant, append-only. Partition key `/assetId` enables efficient "get full 
         "requestCount": 3
       }
     ],
-    "serviceRequestIds": ["sr_001", "sr_002", "sr_003"],
+    "serviceRequestIds": ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000003"],
     "totalRequestCount": 3,
     "createdAtUtc": "2026-01-10T08:00:00Z"
   }
@@ -211,7 +211,7 @@ Cross-tenant, append-only. Partition key `/assetId` enables efficient "get full 
     "assetId": "RV:1FTFW1ET5EKE12345",
     "tenantId": "ten_bluecompass",
     "dealershipName": "Blue Compass RV",
-    "serviceRequestId": "sr_001",
+    "serviceRequestId": "00000000-0000-0000-0000-000000000001",
     "globalCustomerAcctId": "gca_johnson",
     "manufacturer": "Forest River",
     "model": "Georgetown 36B7",

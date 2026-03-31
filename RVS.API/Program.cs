@@ -3,6 +3,7 @@ using Azure.Storage.Blobs;
 using RVS.API.HealthChecks;
 using RVS.API.Integrations;
 using RVS.API.Middleware;
+using RVS.Infra.AzBlobRepository;
 using RVS.API.Services;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;

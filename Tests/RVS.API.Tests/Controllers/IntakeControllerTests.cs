@@ -14,6 +14,7 @@ public class IntakeControllerTests
     private readonly Mock<IIntakeOrchestrationService> _intakeServiceMock = new();
     private readonly Mock<ICategorizationService> _categorizationMock = new();
     private readonly Mock<IAttachmentService> _attachmentServiceMock = new();
+    private readonly Mock<IVinDecoderService> _vinDecoderServiceMock = new();
     private readonly IntakeController _sut;
 
     public IntakeControllerTests()
@@ -21,7 +22,8 @@ public class IntakeControllerTests
         _sut = new IntakeController(
             _intakeServiceMock.Object,
             _categorizationMock.Object,
-            _attachmentServiceMock.Object);
+            _attachmentServiceMock.Object,
+            _vinDecoderServiceMock.Object);
     }
 
     [Fact]
@@ -133,6 +135,33 @@ public class IntakeControllerTests
             Year = 2023
         }
     };
+
+    [Fact]
+    public async Task DecodeVin_WhenVinResolved_ShouldReturnOkWithVinDecodeResponse()
+    {
+        _vinDecoderServiceMock.Setup(s => s.DecodeVinAsync("1RGDE4428R1000001", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VinDecoderResult("1RGDE4428R1000001", "Grand Design", "Momentum 395MS", 2024));
+
+        var result = await _sut.DecodeVin("test-slug", "1RGDE4428R1000001");
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<VinDecodeResponseDto>().Subject;
+        dto.Vin.Should().Be("1RGDE4428R1000001");
+        dto.Manufacturer.Should().Be("Grand Design");
+        dto.Model.Should().Be("Momentum 395MS");
+        dto.Year.Should().Be(2024);
+    }
+
+    [Fact]
+    public async Task DecodeVin_WhenVinNotResolved_ShouldReturnNotFound()
+    {
+        _vinDecoderServiceMock.Setup(s => s.DecodeVinAsync("INVALIDVIN1234567", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((VinDecoderResult?)null);
+
+        var result = await _sut.DecodeVin("test-slug", "INVALIDVIN1234567");
+
+        result.Result.Should().BeOfType<NotFoundResult>();
+    }
 
     [Fact]
     public async Task GetUploadSas_ShouldReturnOkWithUploadSasResponse()

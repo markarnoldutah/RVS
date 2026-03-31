@@ -92,7 +92,7 @@ public static class ServiceRequestMapper
 
         return new ServiceRequest
         {
-            Id = $"sr_{Guid.NewGuid():N}",
+            Id = Guid.NewGuid().ToString(),
             TenantId = tenantId,
             CreatedByUserId = createdByUserId,
             Status = "New",

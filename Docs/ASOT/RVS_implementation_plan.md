@@ -154,7 +154,7 @@ Create all entities in `RVS.Domain/Entities/` per Tech PRD §7.1 and Architectur
 | Entity | File | Key Properties | Embedded Types |
 |---|---|---|---|
 | `EntityBase` | `EntityBase.cs` | Adapt existing; remove `PracticeScopedEntityBase` | — |
-| `ServiceRequest` | `ServiceRequest.cs` | id (`sr_` prefix), tenantId, locationId, status, priority | `CustomerSnapshotEmbedded`, `AssetInfoEmbedded`, `ServiceEventEmbedded`, `DiagnosticResponseEmbedded` |
+| `ServiceRequest` | `ServiceRequest.cs` | id (GUID), tenantId, locationId, status, priority | `CustomerSnapshotEmbedded`, `AssetInfoEmbedded`, `ServiceEventEmbedded`, `DiagnosticResponseEmbedded` |
 | `CustomerProfile` | `CustomerProfile.cs` | tenantId (PK), email, globalCustomerAcctId | `AssetOwnershipEmbedded` (list) |
 | `GlobalCustomerAcct` | `GlobalCustomerAcct.cs` | email (PK), magicLinkToken, magicLinkExpiresAtUtc | `LinkedProfileEmbedded` (list) |
 | `AssetLedgerEntry` | `AssetLedgerEntry.cs` | assetId (PK), serviceRequestId | `Section10AEmbedded` (optional) |

@@ -1,9 +1,10 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
+using Microsoft.Extensions.Logging;
 using RVS.Domain.Integrations;
 
-namespace RVS.API.Integrations;
+namespace RVS.Infra.AzBlobRepository;
 
 /// <summary>
 /// Azure Blob Storage implementation of <see cref="IBlobStorageService"/>.

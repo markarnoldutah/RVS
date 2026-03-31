@@ -20,6 +20,7 @@ public class IntakeController : ControllerBase
     private readonly IIntakeOrchestrationService _intakeService;
     private readonly ICategorizationService _categorizationService;
     private readonly IAttachmentService _attachmentService;
+    private readonly IVinDecoderService _vinDecoderService;
 
     /// <summary>
     /// Initializes a new instance of <see cref="IntakeController"/>.
@@ -27,11 +28,13 @@ public class IntakeController : ControllerBase
     public IntakeController(
         IIntakeOrchestrationService intakeService,
         ICategorizationService categorizationService,
-        IAttachmentService attachmentService)
+        IAttachmentService attachmentService,
+        IVinDecoderService vinDecoderService)
     {
         _intakeService = intakeService;
         _categorizationService = categorizationService;
         _attachmentService = attachmentService;
+        _vinDecoderService = vinDecoderService;
     }
 
     /// <summary>
@@ -75,6 +78,35 @@ public class IntakeController : ControllerBase
         };
 
         return Ok(dto);
+    }
+
+    /// <summary>
+    /// Decodes a VIN using the configured third-party VIN decoder service (NHTSA vPIC in production, mock in development).
+    /// Returns manufacturer, model, and year information for the given VIN.
+    /// </summary>
+    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="vin">17-character Vehicle Identification Number to decode.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <example>
+    /// GET /api/intake/camping-world-slc/decode-vin/1RGDE4428R1000001
+    /// </example>
+    [HttpGet("decode-vin/{vin}")]
+    public async Task<ActionResult<VinDecodeResponseDto>> DecodeVin(
+        string locationSlug, string vin, CancellationToken ct = default)
+    {
+        var result = await _vinDecoderService.DecodeVinAsync(vin, ct);
+        if (result is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(new VinDecodeResponseDto
+        {
+            Vin = result.Vin,
+            Manufacturer = result.Manufacturer,
+            Model = result.Model,
+            Year = result.Year
+        });
     }
 
     /// <summary>

@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
-using RVS.API.Integrations;
+using RVS.Infra.AzBlobRepository;
 
 namespace RVS.API.Tests.Integrations;
 

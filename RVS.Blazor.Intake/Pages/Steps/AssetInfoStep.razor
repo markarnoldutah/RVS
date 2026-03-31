@@ -1,3 +1,5 @@
+@inject IntakeApiClient IntakeApi
+
 <MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
     <MudStack Spacing="4">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -48,9 +50,25 @@
             var vinResult = ClientVinValidator.Validate(State.Vin);
             if (vinResult.IsValid)
             {
-                <MudAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true">
-                    VIN format is valid.
-                </MudAlert>
+                if (_isLookingUp)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                        <MudText Typo="Typo.body2" Color="Color.Primary">Looking up vehicle info…</MudText>
+                    </MudStack>
+                }
+                else if (_lookupFailed)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                        VIN format is valid. Vehicle details could not be auto-filled — please enter them manually.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true">
+                        VIN format is valid.
+                    </MudAlert>
+                }
             }
             else if (State.Vin.Length == 17)
             {
@@ -105,13 +123,74 @@
 @code {
     private const int VinSuffixDisplayLength = 8;
 
+    private bool _isLookingUp;
+    private bool _lookupFailed;
+    private string? _lastLookedUpVin;
+    private CancellationTokenSource? _lookupCts;
+
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
     [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
 
-    private void HandleVinChanged(string? value)
+    private async Task HandleVinChanged(string? value)
     {
         State.Vin = value?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        var vinResult = ClientVinValidator.Validate(State.Vin);
+        if (vinResult.IsValid && !string.Equals(State.Vin, _lastLookedUpVin, StringComparison.Ordinal))
+        {
+            await LookupVinAsync(State.Vin);
+        }
+    }
+
+    private async Task LookupVinAsync(string vin)
+    {
+        _lookupCts?.Cancel();
+        _lookupCts?.Dispose();
+        _lookupCts = new CancellationTokenSource();
+        var ct = _lookupCts.Token;
+
+        _isLookingUp = true;
+        _lookupFailed = false;
+        StateHasChanged();
+
+        try
+        {
+            var result = await IntakeApi.DecodeVinAsync(State.Slug, vin, ct);
+
+            if (ct.IsCancellationRequested) return;
+
+            _lastLookedUpVin = vin;
+
+            if (result is not null)
+            {
+                State.Manufacturer = result.Manufacturer;
+                State.Model = result.Model;
+                State.Year = result.Year;
+                _lookupFailed = false;
+            }
+            else
+            {
+                _lookupFailed = true;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (HttpRequestException)
+        {
+            _lookupFailed = true;
+            _lastLookedUpVin = vin;
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                _isLookingUp = false;
+                StateHasChanged();
+            }
+        }
     }
 
     private void SelectKnownAsset(AssetInfoDto asset)
@@ -120,6 +199,8 @@
         State.Manufacturer = asset.Manufacturer;
         State.Model = asset.Model;
         State.Year = asset.Year;
+        _lastLookedUpVin = asset.AssetId;
+        _lookupFailed = false;
         StateHasChanged();
     }
 

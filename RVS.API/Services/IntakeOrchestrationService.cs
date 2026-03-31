@@ -126,7 +126,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 assetId, existingOwner.Id, profile.Id);
         }
 
-        profile.ActivateOrRefreshAsset(assetId);
+        profile.ActivateOrRefreshAsset(assetId, request.Asset.Manufacturer?.Trim(), request.Asset.Model?.Trim(), request.Asset.Year);
         profile.MarkAsUpdated("intake");
         profile = await _customerProfileRepository.UpdateAsync(profile, cancellationToken);
 

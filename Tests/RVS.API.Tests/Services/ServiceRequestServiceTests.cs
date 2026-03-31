@@ -523,7 +523,7 @@ public class ServiceRequestServiceTests
 
     private static ServiceRequest BuildServiceRequest(string? id = null, string tenantId = "ten_1") => new()
     {
-        Id = id ?? $"sr_{Guid.NewGuid():N}",
+        Id = id ?? Guid.NewGuid().ToString(),
         TenantId = tenantId,
         Status = "New",
         LocationId = "loc_slc",

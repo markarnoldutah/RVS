@@ -180,6 +180,25 @@ public class IntakeOrchestrationServiceTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ShouldPopulateAssetMetadataOnCustomerProfile()
+    {
+        SetupFullHappyPath();
+
+        CustomerProfile? capturedProfile = null;
+        _profileRepoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .Callback<CustomerProfile, CancellationToken>((p, _) => capturedProfile = p)
+            .ReturnsAsync((CustomerProfile p, CancellationToken _) => p);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        capturedProfile.Should().NotBeNull();
+        var asset = capturedProfile!.AssetsOwned.First(a => a.AssetId == "RV:1HGBH41JXMN109186" && a.Status == AssetOwnershipStatus.Active);
+        asset.Manufacturer.Should().Be("Grand Design");
+        asset.Model.Should().Be("Momentum 395G");
+        asset.Year.Should().Be(2023);
+    }
+
     // ── Step 4: ServiceRequest Creation ──────────────────────────────────────
 
     [Fact]
