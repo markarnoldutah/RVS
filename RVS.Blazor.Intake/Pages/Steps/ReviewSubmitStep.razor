@@ -203,8 +203,16 @@
             </MudStack>
         }
 
-        @* Submit button *@
-        <MudStack AlignItems="AlignItems.Center" Class="mt-4">
+        @* Back and Submit buttons *@
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-4">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       Disabled="_isSubmitting"
+                       OnClick="HandleBack"
+                       Style="text-transform: none;">
+                Back
+            </MudButton>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        Size="Size.Large"
@@ -221,6 +229,7 @@
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback<int> OnEdit { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
     [Parameter, EditorRequired] public EventCallback OnSubmitted { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private HttpClient Http { get; set; } = default!;
@@ -234,6 +243,11 @@
     private async Task EditStep(int step)
     {
         await OnEdit.InvokeAsync(step);
+    }
+
+    private async Task HandleBack()
+    {
+        await OnBack.InvokeAsync();
     }
 
     private async Task HandleSubmit()
