@@ -6,10 +6,15 @@
         <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
                  aria-label="User menu">
             <ActivatorContent>
-                <MudAvatar Color="Color.Secondary" Size="Size.Small"
-                           aria-label="@GetDisplayName(authState)">
-                    @GetUserInitials(authState)
-                </MudAvatar>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="cursor: pointer;">
+                    <MudText Typo="Typo.body2" Style="color: inherit;">
+                        @GetFirstName(authState)
+                    </MudText>
+                    <MudAvatar Color="Color.Secondary" Size="Size.Small"
+                               aria-label="@GetDisplayName(authState)">
+                        @GetUserInitials(authState)
+                    </MudAvatar>
+                </MudStack>
             </ActivatorContent>
             <ChildContent>
                 <MudMenuItem Disabled="true">
@@ -43,6 +48,19 @@
     private void BeginLogout()
     {
         Navigation.NavigateToLogout("authentication/logout");
+    }
+
+    private static string GetFirstName(AuthenticationState context)
+    {
+        var givenName = context.User.FindFirst("given_name")?.Value;
+        if (!string.IsNullOrWhiteSpace(givenName))
+        {
+            return givenName;
+        }
+
+        var fullName = GetDisplayName(context);
+        var nameParts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return nameParts.Length > 0 ? nameParts[0] : "User";
     }
 
     private static string GetDisplayName(AuthenticationState context)
