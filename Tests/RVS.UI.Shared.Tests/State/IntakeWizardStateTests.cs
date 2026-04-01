@@ -591,4 +591,20 @@ public class IntakeWizardStateTests
 
         url.Should().Be("/intake/slug%20with%20spaces");
     }
+
+    [Fact]
+    public void BuildStartOverUrl_NullSlug_ShouldThrow()
+    {
+        var act = () => IntakeWizardState.BuildStartOverUrl(null!, null);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BuildStartOverUrl_EmptySlug_ShouldThrow()
+    {
+        var act = () => IntakeWizardState.BuildStartOverUrl("", null);
+
+        act.Should().Throw<ArgumentException>();
+    }
 }

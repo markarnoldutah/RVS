@@ -337,6 +337,8 @@ public sealed class IntakeWizardState
     /// </summary>
     public static string BuildStartOverUrl(string slug, string? token)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slug);
+
         var url = $"/intake/{Uri.EscapeDataString(slug)}";
         if (!string.IsNullOrWhiteSpace(token))
         {
