@@ -104,6 +104,19 @@
                 break;
         }
     </div>
+
+    @* Start Over — visible on steps 2–8 so the user can reset the wizard *@
+    @if (_state.CurrentStep > 1)
+    {
+        <MudButton Variant="Variant.Text"
+                   Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.RestartAlt"
+                   OnClick="HandleStartOver"
+                   Style="text-transform: none;"
+                   aria-label="Start over">
+            Start Over
+        </MudButton>
+    }
 </MudStack>
 
 @code {
@@ -170,6 +183,12 @@
     private void HandleSubmitted()
     {
         Navigation.NavigateTo($"/confirmation?slug={Uri.EscapeDataString(Slug)}");
+    }
+
+    private async Task HandleStartOver()
+    {
+        await _state.ClearAsync();
+        Navigation.NavigateTo(IntakeWizardState.BuildStartOverUrl(Slug, Token), forceLoad: true);
     }
 
     public void Dispose()
