@@ -551,4 +551,60 @@ public class IntakeWizardStateTests
 
         fireCount.Should().Be(2);
     }
+
+    [Fact]
+    public void BuildStartOverUrl_ShouldReturnIntakeUrlWithSlug()
+    {
+        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", null);
+
+        url.Should().Be("/intake/camping-world-slc");
+    }
+
+    [Fact]
+    public void BuildStartOverUrl_WithToken_ShouldIncludeTokenQueryParam()
+    {
+        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ");
+
+        url.Should().Be("/intake/camping-world-slc?token=dK3mRw9x%3AXv2pLqN8aTcBfY7mZs4eWQ");
+    }
+
+    [Fact]
+    public void BuildStartOverUrl_WithWhitespaceToken_ShouldOmitTokenQueryParam()
+    {
+        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "   ");
+
+        url.Should().Be("/intake/camping-world-slc");
+    }
+
+    [Fact]
+    public void BuildStartOverUrl_WithEmptyToken_ShouldOmitTokenQueryParam()
+    {
+        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "");
+
+        url.Should().Be("/intake/camping-world-slc");
+    }
+
+    [Fact]
+    public void BuildStartOverUrl_ShouldEncodeSlug()
+    {
+        var url = IntakeWizardState.BuildStartOverUrl("slug with spaces", null);
+
+        url.Should().Be("/intake/slug%20with%20spaces");
+    }
+
+    [Fact]
+    public void BuildStartOverUrl_NullSlug_ShouldThrow()
+    {
+        var act = () => IntakeWizardState.BuildStartOverUrl(null!, null);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BuildStartOverUrl_EmptySlug_ShouldThrow()
+    {
+        var act = () => IntakeWizardState.BuildStartOverUrl("", null);
+
+        act.Should().Throw<ArgumentException>();
+    }
 }

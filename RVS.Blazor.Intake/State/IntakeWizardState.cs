@@ -333,6 +333,22 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
+    /// Builds the URL to navigate to when starting over, preserving the location slug and optional token.
+    /// </summary>
+    public static string BuildStartOverUrl(string slug, string? token)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slug);
+
+        var url = $"/intake/{Uri.EscapeDataString(slug)}";
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            url += $"?token={Uri.EscapeDataString(token)}";
+        }
+
+        return url;
+    }
+
+    /// <summary>
     /// Notifies subscribers and persists state.
     /// </summary>
     public async Task NotifyAndPersistAsync()
