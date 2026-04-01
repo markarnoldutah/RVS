@@ -45,35 +45,6 @@ public sealed class IntakeApiClient
     }
 
     /// <summary>
-    /// Decodes a VIN using the NHTSA vPIC API via the backend.
-    /// Returns the decoded manufacturer, model, and year, or <c>null</c> if the VIN could not be decoded.
-    /// </summary>
-    /// <param name="locationSlug">The location slug.</param>
-    /// <param name="vin">17-character Vehicle Identification Number.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Decoded vehicle information, or <c>null</c> if the API returned 404.</returns>
-    public async Task<VinDecodeResponseDto?> DecodeVinAsync(
-        string locationSlug,
-        string vin,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
-        ArgumentException.ThrowIfNullOrWhiteSpace(vin);
-
-        var response = await _httpClient.GetAsync(
-            $"api/intake/{Uri.EscapeDataString(locationSlug)}/vin-decode/{Uri.EscapeDataString(vin)}",
-            cancellationToken);
-
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-            return null;
-
-        response.EnsureSuccessStatusCode();
-
-        return await response.Content.ReadFromJsonAsync<VinDecodeResponseDto>(
-            cancellationToken: cancellationToken);
-    }
-
-    /// <summary>
     /// Requests AI-generated diagnostic questions for the intake wizard.
     /// </summary>
     public async Task<DiagnosticQuestionsResponseDto> GetDiagnosticQuestionsAsync(
