@@ -428,6 +428,22 @@ const string AssetId6 = "5B4MP6700ME001739";
 const string AssetId7 = "5LZBK2112NE006485";
 const string AssetId8 = "5KTGP2426PE013260";
 
+// Service request IDs (randomized GUIDs)
+const string Sr01 = "a7c3e1f0-84b2-4d6a-9e5f-1b3c7d9a2e40";
+const string Sr02 = "d4f8b6a2-3c91-47e5-b0d7-8e2f5a6c1d39";
+const string Sr03 = "f1e9c5b7-62d0-4a83-8f4e-0d7b3c8a9e21";
+const string Sr04 = "b8d2a4e6-c701-4f59-ab3c-6e9d1f5b7a08";
+const string Sr05 = "c5a7f3d1-9e48-4b26-80dc-2f6a8e4c3b17";
+const string Sr06 = "e3b1d9c5-07f6-42a4-9d8e-4a7c2f1b5e63";
+const string Sr07 = "917a4e2c-b5d8-4f03-a6c1-3d0e9f7b8a24";
+const string Sr08 = "f6c8a0d4-2e17-4b93-85af-9d3c1e6f7b52";
+const string Sr09 = "a2e4c6f8-d013-4a75-b9d2-7f8e3b1a5c40";
+const string Sr10 = "d0b7e9a3-f582-46c1-8d4f-5a2c9e6b3d18";
+const string Sr11 = "c9f1b3d5-a764-4e02-87c6-0e8d4f2a1b79";
+const string Sr12 = "b5d7a9e1-c083-4f46-92ab-3f6c8e1d0a57";
+const string Sr13 = "e8a2c4f6-1db5-4973-b0e7-6d9a3f5c2b84";
+const string Sr14 = "a4c6e8b0-f2d7-4a19-83c5-1b0e9d7f4a63";
+
 static DateTime SeedDate(int daysAgo) => DateTime.UtcNow.AddDays(-daysAgo);
 
 // ── Tenants ─────────────────────────────────────────────────────────────
@@ -818,7 +834,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         GlobalCustomerAcctId = GcaJohnson,
         CreatedByUserId = "seed",
         TotalRequestCount = 3,
-        ServiceRequestIds = ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000003"],
+        ServiceRequestIds = [Sr01, Sr02, Sr03],
         AssetsOwned =
         [
             new AssetOwnershipEmbedded
@@ -846,7 +862,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         GlobalCustomerAcctId = GcaSmith,
         CreatedByUserId = "seed",
         TotalRequestCount = 2,
-        ServiceRequestIds = ["00000000-0000-0000-0000-000000000004", "00000000-0000-0000-0000-000000000005"],
+        ServiceRequestIds = [Sr04, Sr05],
         AssetsOwned =
         [
             new AssetOwnershipEmbedded
@@ -874,7 +890,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         GlobalCustomerAcctId = GcaMartinez,
         CreatedByUserId = "seed",
         TotalRequestCount = 2,
-        ServiceRequestIds = ["00000000-0000-0000-0000-000000000006", "00000000-0000-0000-0000-000000000007"],
+        ServiceRequestIds = [Sr06, Sr07],
         AssetsOwned =
         [
             new AssetOwnershipEmbedded
@@ -904,7 +920,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         GlobalCustomerAcctId = GcaWilliams,
         CreatedByUserId = "seed",
         TotalRequestCount = 2,
-        ServiceRequestIds = ["00000000-0000-0000-0000-000000000008", "00000000-0000-0000-0000-000000000009"],
+        ServiceRequestIds = [Sr08, Sr09],
         AssetsOwned =
         [
             new AssetOwnershipEmbedded
@@ -932,7 +948,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         GlobalCustomerAcctId = GcaThompson,
         CreatedByUserId = "seed",
         TotalRequestCount = 1,
-        ServiceRequestIds = ["00000000-0000-0000-0000-000000000010"],
+        ServiceRequestIds = [Sr10],
         AssetsOwned =
         [
             new AssetOwnershipEmbedded
@@ -962,7 +978,7 @@ static List<CustomerProfile> BuildCustomerProfiles() =>
         GlobalCustomerAcctId = GcaChen,
         CreatedByUserId = "seed",
         TotalRequestCount = 2,
-        ServiceRequestIds = ["00000000-0000-0000-0000-000000000011", "00000000-0000-0000-0000-000000000012"],
+        ServiceRequestIds = [Sr11, Sr12],
         AssetsOwned =
         [
             new AssetOwnershipEmbedded
@@ -1009,7 +1025,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 1 — New (SLC)
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000001",
+        Id = Sr01,
         TenantId = TenantBlueCompass,
         Status = "New",
         LocationId = LocSaltLake,
@@ -1031,7 +1047,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 2
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000002",
+        Id = Sr02,
         TenantId = TenantBlueCompass,
         Status = "InProgress",
         LocationId = LocSaltLake,
@@ -1060,7 +1076,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 3 — Completed (SLC)
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000003",
+        Id = Sr03,
         TenantId = TenantBlueCompass,
         Status = "Completed",
         LocationId = LocSaltLake,
@@ -1092,7 +1108,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 4 — WaitingOnParts (Denver)
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000004",
+        Id = Sr04,
         TenantId = TenantBlueCompass,
         Status = "WaitingOnParts",
         LocationId = LocDenver,
@@ -1122,7 +1138,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 5 — Cancelled (Denver)
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000005",
+        Id = Sr05,
         TenantId = TenantBlueCompass,
         Status = "Cancelled",
         LocationId = LocDenver,
@@ -1144,7 +1160,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 6
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000006",
+        Id = Sr06,
         TenantId = TenantBlueCompass,
         Status = "InProgress",
         LocationId = LocLasVegas,
@@ -1173,7 +1189,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 7 — New (Phoenix)
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000007",
+        Id = Sr07,
         TenantId = TenantBlueCompass,
         Status = "New",
         LocationId = LocPhoenix,
@@ -1195,7 +1211,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 8
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000008",
+        Id = Sr08,
         TenantId = TenantHappyTrails,
         Status = "Completed",
         LocationId = LocBoise,
@@ -1228,7 +1244,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 9 — WaitingOnParts (Boise — Happy Trails)
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000009",
+        Id = Sr09,
         TenantId = TenantHappyTrails,
         Status = "WaitingOnParts",
         LocationId = LocBoise,
@@ -1256,7 +1272,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 10 — New (Boise — Happy Trails)
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000010",
+        Id = Sr10,
         TenantId = TenantHappyTrails,
         Status = "New",
         LocationId = LocBoise,
@@ -1278,7 +1294,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 11 — Completed (Phoenix — Blue Compass) — Chen, Coachmen Catalina
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000011",
+        Id = Sr11,
         TenantId = TenantBlueCompass,
         Status = "Completed",
         LocationId = LocPhoenix,
@@ -1311,7 +1327,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
     // SR 12 — InProgress (Phoenix — Blue Compass) — Chen, Coachmen Catalina (currently active)
     new ServiceRequest
     {
-        Id = "00000000-0000-0000-0000-000000000012",
+        Id = Sr12,
         TenantId = TenantBlueCompass,
         Status = "InProgress",
         LocationId = LocPhoenix,
@@ -1342,20 +1358,20 @@ static List<ServiceRequest> BuildServiceRequests() =>
 
 static List<AssetLedgerEntry> BuildAssetLedgerEntries() =>
 [
-    new AssetLedgerEntry { Id = "ale_001", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000001", GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Water heater not igniting on LP gas.", Status = "New", SubmittedAtUtc = SeedDate(2) },
-    new AssetLedgerEntry { Id = "ale_002", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000002", GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Slide-Out Systems", IssueDescription = "Slide-out not fully extending.", Status = "InProgress", SubmittedAtUtc = SeedDate(15) },
-    new AssetLedgerEntry { Id = "ale_003", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000003", GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Roof/Exterior", IssueDescription = "Annual roof inspection and sealant check.", Status = "Completed", SubmittedAtUtc = SeedDate(35), Section10A = new Section10AEmbedded { ComponentType = "Roof Assembly", FailureMode = "Wear/Age", RepairAction = "Sealant Reapplication", LaborHours = 2.5m, ServiceDateUtc = SeedDate(28) } },
-    new AssetLedgerEntry { Id = "ale_004", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000004", GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "HVAC", IssueDescription = "Furnace blowing cold air.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(10) },
-    new AssetLedgerEntry { Id = "ale_005", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000005", GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Rear camera image flickering.", Status = "Cancelled", SubmittedAtUtc = SeedDate(25) },
-    new AssetLedgerEntry { Id = "ale_006", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000006", GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "HVAC", IssueDescription = "AC compressor making loud clicking noise.", Status = "InProgress", SubmittedAtUtc = SeedDate(5) },
-    new AssetLedgerEntry { Id = "ale_007", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000007", GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "Awning/Exterior", IssueDescription = "Awning fabric tearing along the seam.", Status = "New", SubmittedAtUtc = SeedDate(3) },
-    new AssetLedgerEntry { Id = "ale_008", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = "00000000-0000-0000-0000-000000000008", GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Fresh water tank sensor reading incorrectly.", Status = "Completed", SubmittedAtUtc = SeedDate(18), Section10A = new Section10AEmbedded { ComponentType = "Tank Sensor", FailureMode = "Sensor Malfunction", RepairAction = "Sensor Replacement", PartsUsed = ["Tank Sensor Kit P/N TS-2021"], LaborHours = 1.5m, ServiceDateUtc = SeedDate(12) } },
-    new AssetLedgerEntry { Id = "ale_009", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = "00000000-0000-0000-0000-000000000009", GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Doors/Locks", IssueDescription = "Entry door latch mechanism broken.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(7) },
-    new AssetLedgerEntry { Id = "ale_010", AssetId = AssetId5, TenantId = TenantHappyTrails, ServiceRequestId = "00000000-0000-0000-0000-000000000010", GlobalCustomerAcctId = GcaThompson, DealershipName = "Happy Trails RV", Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023, IssueCategory = "Electrical", IssueDescription = "Generator not starting.", Status = "New", SubmittedAtUtc = SeedDate(1) },
-    new AssetLedgerEntry { Id = "ale_011", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000011", GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Inverter/converter not switching to shore power.", Status = "Completed", SubmittedAtUtc = SeedDate(30), Section10A = new Section10AEmbedded { ComponentType = "Inverter/Converter", FailureMode = "Electrical Short", RepairAction = "Component Replacement", PartsUsed = ["Progressive Dynamics PD4655V Converter"], LaborHours = 3.0m, ServiceDateUtc = SeedDate(22) } },
-    new AssetLedgerEntry { Id = "ale_012", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000012", GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Slide-Out Systems", IssueDescription = "Slide-out room makes grinding noise when retracting.", Status = "InProgress", SubmittedAtUtc = SeedDate(2) },
-    new AssetLedgerEntry { Id = "ale_013", AssetId = AssetId7, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000013", GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Entegra Coach", Model = "Vision 29S", Year = 2025, IssueCategory = "HVAC", IssueDescription = "Roof AC unit leaking condensation inside coach.", Status = "New", SubmittedAtUtc = SeedDate(55) },
-    new AssetLedgerEntry { Id = "ale_014", AssetId = AssetId8, TenantId = TenantBlueCompass, ServiceRequestId = "00000000-0000-0000-0000-000000000014", GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Newmar", Model = "Bay Star 3014", Year = 2023, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Hot water tank pressure relief valve dripping.", Status = "Completed", SubmittedAtUtc = SeedDate(85), Section10A = new Section10AEmbedded { ComponentType = "Pressure Relief Valve", FailureMode = "Wear/Age", RepairAction = "Valve Replacement", PartsUsed = ["Suburban P/N 161135"], LaborHours = 1.0m, ServiceDateUtc = SeedDate(80) } },
+    new AssetLedgerEntry { Id = "ale_001", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr01, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Water heater not igniting on LP gas.", Status = "New", SubmittedAtUtc = SeedDate(2) },
+    new AssetLedgerEntry { Id = "ale_002", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr02, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Slide-Out Systems", IssueDescription = "Slide-out not fully extending.", Status = "InProgress", SubmittedAtUtc = SeedDate(15) },
+    new AssetLedgerEntry { Id = "ale_003", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr03, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Roof/Exterior", IssueDescription = "Annual roof inspection and sealant check.", Status = "Completed", SubmittedAtUtc = SeedDate(35), Section10A = new Section10AEmbedded { ComponentType = "Roof Assembly", FailureMode = "Wear/Age", RepairAction = "Sealant Reapplication", LaborHours = 2.5m, ServiceDateUtc = SeedDate(28) } },
+    new AssetLedgerEntry { Id = "ale_004", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = Sr04, GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "HVAC", IssueDescription = "Furnace blowing cold air.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(10) },
+    new AssetLedgerEntry { Id = "ale_005", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = Sr05, GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Rear camera image flickering.", Status = "Cancelled", SubmittedAtUtc = SeedDate(25) },
+    new AssetLedgerEntry { Id = "ale_006", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = Sr06, GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "HVAC", IssueDescription = "AC compressor making loud clicking noise.", Status = "InProgress", SubmittedAtUtc = SeedDate(5) },
+    new AssetLedgerEntry { Id = "ale_007", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = Sr07, GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "Awning/Exterior", IssueDescription = "Awning fabric tearing along the seam.", Status = "New", SubmittedAtUtc = SeedDate(3) },
+    new AssetLedgerEntry { Id = "ale_008", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = Sr08, GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Fresh water tank sensor reading incorrectly.", Status = "Completed", SubmittedAtUtc = SeedDate(18), Section10A = new Section10AEmbedded { ComponentType = "Tank Sensor", FailureMode = "Sensor Malfunction", RepairAction = "Sensor Replacement", PartsUsed = ["Tank Sensor Kit P/N TS-2021"], LaborHours = 1.5m, ServiceDateUtc = SeedDate(12) } },
+    new AssetLedgerEntry { Id = "ale_009", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = Sr09, GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Doors/Locks", IssueDescription = "Entry door latch mechanism broken.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(7) },
+    new AssetLedgerEntry { Id = "ale_010", AssetId = AssetId5, TenantId = TenantHappyTrails, ServiceRequestId = Sr10, GlobalCustomerAcctId = GcaThompson, DealershipName = "Happy Trails RV", Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023, IssueCategory = "Electrical", IssueDescription = "Generator not starting.", Status = "New", SubmittedAtUtc = SeedDate(1) },
+    new AssetLedgerEntry { Id = "ale_011", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = Sr11, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Inverter/converter not switching to shore power.", Status = "Completed", SubmittedAtUtc = SeedDate(30), Section10A = new Section10AEmbedded { ComponentType = "Inverter/Converter", FailureMode = "Electrical Short", RepairAction = "Component Replacement", PartsUsed = ["Progressive Dynamics PD4655V Converter"], LaborHours = 3.0m, ServiceDateUtc = SeedDate(22) } },
+    new AssetLedgerEntry { Id = "ale_012", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = Sr12, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Slide-Out Systems", IssueDescription = "Slide-out room makes grinding noise when retracting.", Status = "InProgress", SubmittedAtUtc = SeedDate(2) },
+    new AssetLedgerEntry { Id = "ale_013", AssetId = AssetId7, TenantId = TenantBlueCompass, ServiceRequestId = Sr13, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Entegra Coach", Model = "Vision 29S", Year = 2025, IssueCategory = "HVAC", IssueDescription = "Roof AC unit leaking condensation inside coach.", Status = "New", SubmittedAtUtc = SeedDate(55) },
+    new AssetLedgerEntry { Id = "ale_014", AssetId = AssetId8, TenantId = TenantBlueCompass, ServiceRequestId = Sr14, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Newmar", Model = "Bay Star 3014", Year = 2023, IssueCategory = "Plumbing/Water Systems", IssueDescription = "Hot water tank pressure relief valve dripping.", Status = "Completed", SubmittedAtUtc = SeedDate(85), Section10A = new Section10AEmbedded { ComponentType = "Pressure Relief Valve", FailureMode = "Wear/Age", RepairAction = "Valve Replacement", PartsUsed = ["Suburban P/N 161135"], LaborHours = 1.0m, ServiceDateUtc = SeedDate(80) } },
 ];
 
 // ── Lookup Sets (4) ─────────────────────────────────────────────────────
