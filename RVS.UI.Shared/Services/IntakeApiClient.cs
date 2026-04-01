@@ -61,7 +61,7 @@ public sealed class IntakeApiClient
         ArgumentException.ThrowIfNullOrWhiteSpace(vin);
 
         var response = await _httpClient.GetAsync(
-            $"api/intake/{Uri.EscapeDataString(locationSlug)}/vin-decode/{Uri.EscapeDataString(vin)}",
+           $"api/intake/{Uri.EscapeDataString(locationSlug)}/decode-vin/{Uri.EscapeDataString(vin)}",
             cancellationToken);
 
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -177,37 +177,6 @@ public sealed class IntakeApiClient
         return await response.Content.ReadFromJsonAsync<AttachmentDto>(
             cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Failed to deserialize attachment confirm response.");
-    }
-
-    /// <summary>
-    /// Decodes a VIN using the backend VIN decoder service to retrieve manufacturer, model, and year.
-    /// Returns <c>null</c> if the VIN could not be resolved (404).
-    /// </summary>
-    /// <param name="locationSlug">The location slug.</param>
-    /// <param name="vin">17-character Vehicle Identification Number to decode.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Decoded vehicle information, or <c>null</c> if the VIN could not be resolved.</returns>
-    public async Task<VinDecodeResponseDto?> DecodeVinAsync(
-        string locationSlug,
-        string vin,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
-        ArgumentException.ThrowIfNullOrWhiteSpace(vin);
-
-        var response = await _httpClient.GetAsync(
-            $"api/intake/{Uri.EscapeDataString(locationSlug)}/decode-vin/{Uri.EscapeDataString(vin)}",
-            cancellationToken);
-
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-
-        response.EnsureSuccessStatusCode();
-
-        return await response.Content.ReadFromJsonAsync<VinDecodeResponseDto>(
-            cancellationToken: cancellationToken);
     }
 
     /// <summary>

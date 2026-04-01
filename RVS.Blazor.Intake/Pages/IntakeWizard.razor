@@ -126,13 +126,17 @@
     protected override async Task OnInitializedAsync()
     {
         _state.OnChange += StateHasChanged;
+       _state.Slug = Slug;
+       _state.Token = Token;
 
         await _state.RestoreAsync();
 
-        if (_state.Slug != Slug || _state.IsSubmitted)
+       // RestoreAsync may have overwritten Slug with a stale session value — correct it
+       if (_state.Slug != Slug || _state.IsSubmitted)
         {
             await _state.ClearAsync();
             _state.Slug = Slug;
+           _state.Token = Token;
         }
     }
 

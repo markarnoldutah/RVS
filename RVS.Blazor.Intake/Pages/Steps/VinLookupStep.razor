@@ -94,10 +94,21 @@
             }
         }
 
-        @if (_lookupError is not null)
+        @if (_lookupFailed)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
-                @_lookupError
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="false"
+                      Icon="@Icons.Material.Filled.ErrorOutline">
+                <MudText Typo="Typo.body2" Class="mb-1">
+                    <strong>VIN lookup was unsuccessful.</strong>
+                </MudText>
+                <MudText Typo="Typo.body2">
+                    Please double-check the number for typos or transposed characters.
+                    @if (_capturedImageUrl is not null)
+                    {
+                        @: If you used the camera, try capturing the VIN plate again with better lighting.
+                    }
+                    You can also proceed to enter vehicle details manually.
+                </MudText>
             </MudAlert>
         }
 
@@ -109,6 +120,16 @@
                        Style="text-transform: none;">
                 Back
             </MudButton>
+            @if (_lookupFailed)
+            {
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           EndIcon="@Icons.Material.Filled.ArrowForward"
+                           OnClick="HandleProceedAnyway"
+                           Style="text-transform: none;">
+                    Proceed Anyway
+                </MudButton>
+            }
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        EndIcon="@(_isLookingUp ? null : Icons.Material.Filled.Search)"
@@ -119,6 +140,10 @@
                 {
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                     @:Looking up…
+                }
+                else if (_lookupFailed)
+                {
+                    @:Try Again
                 }
                 else
                 {
@@ -142,12 +167,12 @@
     private InputFile? _cameraInput;
     private string? _capturedImageUrl;
     private bool _isLookingUp;
-    private string? _lookupError;
+    private bool _lookupFailed;
 
     private void HandleVinChanged(string? value)
     {
         State.Vin = value?.Trim().ToUpperInvariant() ?? string.Empty;
-        _lookupError = null;
+        _lookupFailed = false;
     }
 
     private void SelectKnownAsset(AssetInfoDto asset)
@@ -156,7 +181,7 @@
         State.Manufacturer = asset.Manufacturer;
         State.Model = asset.Model;
         State.Year = asset.Year;
-        _lookupError = null;
+        _lookupFailed = false;
         StateHasChanged();
     }
 
@@ -205,12 +230,12 @@
 
     private async Task HandleLookup()
     {
-        _lookupError = null;
+        _lookupFailed = false;
 
         var vinResult = ClientVinValidator.Validate(State.Vin);
         if (!vinResult.IsValid)
         {
-            _lookupError = vinResult.ErrorMessage;
+            _lookupFailed = true;
             return;
         }
 
@@ -232,7 +257,7 @@
         }
         catch (HttpRequestException)
         {
-            _lookupError = "Unable to look up VIN at this time. You can continue and enter vehicle details manually.";
+            _lookupFailed = true;
         }
         finally
         {
@@ -244,5 +269,15 @@
     private async Task HandleBack()
     {
         await OnBack.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Advances to the next step without a successful VIN decode,
+    /// allowing the user to enter vehicle details manually.
+    /// </summary>
+    private async Task HandleProceedAnyway()
+    {
+        await State.NotifyAndPersistAsync();
+        await OnNext.InvokeAsync();
     }
 }
