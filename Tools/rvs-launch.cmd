@@ -1,0 +1,3 @@
+@echo off
+
+wt -w 0 new-tab -d "C:\Users\Mark Arnold\repos\rvs\rvs.api" --title "API (7116)" --tabColor "#4CAF50" cmd /k "title API (7116) && dotnet run -lp https --no-restore" ; new-tab -d "C:\Users\Mark Arnold\repos\rvs\rvs.blazor.manager" --title "Manager (7300)" --tabColor "#2196F3" cmd /k "title Manager (7300) && dotnet watch run -lp https --no-restore" ; new-tab -d "C:\Users\Mark Arnold\repos\rvs\rvs.blazor.intake" --title "Intake (7200)" --tabColor "#9C27B0" cmd /k "title Intake (7200) && dotnet watch run -lp https --no-restore" ; new-tab -d "C:\Users\Mark Arnold\repos\rvs\rvs.data.cosmos.seed" --title "Cosmos Seed" --tabColor "#FF9800" cmd /k "title Cosmos Seed && echo Ready. Run dotnet run to seed." 
