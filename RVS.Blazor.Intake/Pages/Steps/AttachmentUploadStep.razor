@@ -125,7 +125,7 @@
                        EndIcon="@Icons.Material.Filled.ArrowForward"
                        OnClick="HandleNext"
                        Style="text-transform: none;">
-                Next
+                @(State.EditingFromReview ? "Save & Return to Review" : "Continue to Review")
             </MudButton>
         </MudStack>
     </MudStack>

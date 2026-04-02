@@ -45,17 +45,12 @@
         </MudPaper>
     }
 
-    @* Validation errors *@
+    @* Validation errors — summary banner *@
     @if (_validationErrors.Count > 0)
     {
         <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-2" Style="width: 100%;"
                   role="alert">
-            <ul style="margin: 0; padding-left: 16px;">
-                @foreach (var error in _validationErrors)
-                {
-                    <li>@error</li>
-                }
-            </ul>
+            Please fix the highlighted fields below.
         </MudAlert>
     }
 
@@ -169,19 +164,31 @@
             return;
         }
 
-        await _state.GoToNextStepAsync();
+        if (_state.EditingFromReview)
+        {
+            _state.EditingFromReview = false;
+            await _state.GoToStepAsync(8);
+        }
+        else
+        {
+            await _state.GoToNextStepAsync();
+        }
+
         _validationErrors = [];
     }
 
     private async Task HandlePreviousStep()
     {
         _validationErrors = [];
+        _state.FieldErrors = [];
         await _state.GoToPreviousStepAsync();
     }
 
     private async Task HandleEditStep(int step)
     {
         _validationErrors = [];
+        _state.FieldErrors = [];
+        _state.EditingFromReview = true;
         await _state.GoToStepAsync(step);
     }
 

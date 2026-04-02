@@ -37,7 +37,6 @@
                       ValueChanged="HandleVinChanged"
                       Label="VIN (Vehicle Identification Number)"
                       Required="true"
-                      RequiredError="VIN is required"
                       MaxLength="17"
                       Counter="17"
                       Variant="Variant.Outlined"
@@ -45,7 +44,9 @@
                       AdornmentIcon="@Icons.Material.Filled.Pin"
                       Placeholder="17-character VIN"
                       HelperText="Enter the 17-character Vehicle Identification Number"
-                      Immediate="true" />
+                      Immediate="true"
+                      Error="@State.FieldErrors.ContainsKey("Vin")"
+                      ErrorText="@State.FieldErrors.GetValueOrDefault("Vin")" />
 
         @* Camera capture for VIN — opens native camera on mobile devices *@
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
