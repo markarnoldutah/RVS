@@ -146,15 +146,18 @@
 
     private void SelectUrgency(string value)
     {
-        State.Urgency = State.Urgency == value ? null : value;
+        State.Urgency = ToggleSelection(State.Urgency, value);
         StateHasChanged();
     }
 
     private void SelectRvUsage(string value)
     {
-        State.RvUsage = State.RvUsage == value ? null : value;
+        State.RvUsage = ToggleSelection(State.RvUsage, value);
         StateHasChanged();
     }
+
+    private static string? ToggleSelection(string? current, string value) =>
+        current == value ? null : value;
 
     private async Task HandleNext()
     {
