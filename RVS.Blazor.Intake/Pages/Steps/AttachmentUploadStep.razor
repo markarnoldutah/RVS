@@ -1,9 +1,6 @@
 <MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
     <MudStack Spacing="4">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-            <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" />
-            <MudText Typo="Typo.h5">Attachments</MudText>
-        </MudStack>
+        <MudText Typo="Typo.h4">Attachments</MudText>
 
         <MudText Typo="Typo.body1" Color="Color.Secondary">
             Upload photos or videos of the issue. Drag and drop files, browse, or take a photo.
@@ -112,29 +109,23 @@
             </MudAlert>
         }
 
-        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Default"
-                       StartIcon="@Icons.Material.Filled.ArrowBack"
-                       OnClick="HandleBack"
-                       Style="text-transform: none;">
-                Back
-            </MudButton>
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       EndIcon="@Icons.Material.Filled.ArrowForward"
-                       OnClick="HandleNext"
-                       Style="text-transform: none;">
-                Next
-            </MudButton>
-        </MudStack>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   FullWidth="true"
+                   OnClick="HandleNext"
+                   Style="text-transform: none;"
+                   Class="mt-2">
+            Review
+        </MudButton>
+        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
+            Step @State.CurrentStep of @State.TotalSteps
+        </MudText>
     </MudStack>
 </MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
-    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
 
     private List<string> _fileErrors = [];
 
@@ -221,10 +212,5 @@
     {
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
-    }
-
-    private async Task HandleBack()
-    {
-        await OnBack.InvokeAsync();
     }
 }

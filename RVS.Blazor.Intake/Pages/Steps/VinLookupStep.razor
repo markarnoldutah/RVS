@@ -1,9 +1,6 @@
 <MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
     <MudStack Spacing="4">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-            <MudIcon Icon="@Icons.Material.Filled.QrCodeScanner" Color="Color.Primary" />
-            <MudText Typo="Typo.h5">VIN Lookup</MudText>
-        </MudStack>
+        <MudText Typo="Typo.h4">VIN Lookup</MudText>
 
         <MudText Typo="Typo.body1" Color="Color.Secondary">
             Enter your Vehicle Identification Number (VIN) or use your camera to capture it.
@@ -112,19 +109,12 @@
             </MudAlert>
         }
 
-        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Default"
-                       StartIcon="@Icons.Material.Filled.ArrowBack"
-                       OnClick="HandleBack"
-                       Style="text-transform: none;">
-                Back
-            </MudButton>
+        <MudStack Spacing="2" Class="mt-2">
             @if (_lookupFailed)
             {
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Secondary"
-                           EndIcon="@Icons.Material.Filled.ArrowForward"
+                           FullWidth="true"
                            OnClick="HandleProceedAnyway"
                            Style="text-transform: none;">
                     Proceed Anyway
@@ -132,7 +122,7 @@
             }
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
-                       EndIcon="@(_isLookingUp ? null : Icons.Material.Filled.Search)"
+                       FullWidth="true"
                        Disabled="_isLookingUp"
                        OnClick="HandleLookup"
                        Style="text-transform: none;">
@@ -141,15 +131,14 @@
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                     @:Looking up…
                 }
-                else if (_lookupFailed)
-                {
-                    @:Try Again
-                }
                 else
                 {
-                    @:Look Up VIN
+                    @:Continue...
                 }
             </MudButton>
+            <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
+                Step @State.CurrentStep of @State.TotalSteps
+            </MudText>
         </MudStack>
     </MudStack>
 </MudPaper>
@@ -160,7 +149,6 @@
 
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
-    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
 
@@ -264,11 +252,6 @@
             _isLookingUp = false;
             StateHasChanged();
         }
-    }
-
-    private async Task HandleBack()
-    {
-        await OnBack.InvokeAsync();
     }
 
     /// <summary>

@@ -6,43 +6,17 @@
 <MudStack AlignItems="AlignItems.Center" Spacing="4"
           Style="max-width: 700px; margin: 0 auto;">
 
-    @* Step progress indicator — visible on steps 2–7 *@
-    @if (_state.CurrentStep > 1 && _state.CurrentStep < 8)
+    @* Back button — top-left, visible on steps 2–8 *@
+    @if (_state.CurrentStep > 1)
     {
-        <MudPaper Elevation="0" Class="pa-3" Style="width: 100%; background: transparent;">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="0">
-                @for (var i = 1; i <= _state.TotalSteps; i++)
-                {
-                    var step = i;
-                    @if (i > 1)
-                    {
-                        <div style="width: 28px; height: 2px;
-                                    background: @(step <= _state.CurrentStep
-                                        ? "var(--mud-palette-primary)"
-                                        : "var(--mud-palette-lines-default)");
-                                    transition: background 0.3s ease;"
-                             aria-hidden="true"></div>
-                    }
-                    <MudAvatar Size="Size.Small"
-                               Style="@GetStepStyle(step)"
-                               Color="@(step <= _state.CurrentStep ? Color.Primary : Color.Default)"
-                               Variant="@(step <= _state.CurrentStep ? Variant.Filled : Variant.Outlined)"
-                               aria-label="@($"Step {step}{(step < _state.CurrentStep ? " completed" : step == _state.CurrentStep ? " current" : "")}")">
-                        @if (step < _state.CurrentStep)
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
-                        }
-                        else
-                        {
-                            @step
-                        }
-                    </MudAvatar>
-                }
-            </MudStack>
-            <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-2">
-                Step @_state.CurrentStep of @_state.TotalSteps
-            </MudText>
-        </MudPaper>
+        <MudButton Variant="Variant.Text"
+                   Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.ArrowBack"
+                   OnClick="HandlePreviousStep"
+                   Style="text-transform: none; align-self: flex-start;"
+                   aria-label="Go back">
+            Back
+        </MudButton>
     }
 
     @* Validation errors *@
@@ -69,55 +43,35 @@
                 break;
             case 2:
                 <CustomerInfoStep State="_state"
-                                  OnNext="HandleNextStep"
-                                  OnBack="HandlePreviousStep" />
+                                  OnNext="HandleNextStep" />
                 break;
             case 3:
                 <VinLookupStep State="_state"
-                               OnNext="HandleNextStep"
-                               OnBack="HandlePreviousStep" />
+                               OnNext="HandleNextStep" />
                 break;
             case 4:
                 <VehicleDetailsStep State="_state"
-                                    OnNext="HandleNextStep"
-                                    OnBack="HandlePreviousStep" />
+                                    OnNext="HandleNextStep" />
                 break;
             case 5:
                 <IssueDescriptionStep State="_state"
-                                      OnNext="HandleNextStep"
-                                      OnBack="HandlePreviousStep" />
+                                      OnNext="HandleNextStep" />
                 break;
             case 6:
                 <DiagnosticQuestionsStep State="_state"
-                                         OnNext="HandleNextStep"
-                                         OnBack="HandlePreviousStep" />
+                                          OnNext="HandleNextStep" />
                 break;
             case 7:
                 <AttachmentUploadStep State="_state"
-                                      OnNext="HandleNextStep"
-                                      OnBack="HandlePreviousStep" />
+                                       OnNext="HandleNextStep" />
                 break;
             case 8:
                 <ReviewSubmitStep State="_state"
                                   OnEdit="HandleEditStep"
-                                  OnBack="HandlePreviousStep"
                                   OnSubmitted="HandleSubmitted" />
                 break;
         }
     </div>
-
-    @* Start Over — visible on steps 2–8 so the user can reset the wizard *@
-    @if (_state.CurrentStep > 1)
-    {
-        <MudButton Variant="Variant.Text"
-                   Color="Color.Default"
-                   StartIcon="@Icons.Material.Filled.RestartAlt"
-                   OnClick="HandleStartOver"
-                   Style="text-transform: none;"
-                   aria-label="Start over">
-            Start Over
-        </MudButton>
-    }
 </MudStack>
 
 @code {
@@ -128,14 +82,6 @@
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
     private List<string> _validationErrors = [];
-
-    private string GetStepStyle(int step)
-    {
-        var baseStyle = "width:32px;height:32px;font-size:0.8rem;transition:all 0.3s ease;";
-        return step == _state.CurrentStep
-            ? baseStyle + "box-shadow: 0 0 0 3px var(--mud-palette-primary-lighten);"
-            : baseStyle;
-    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -188,12 +134,6 @@
     private void HandleSubmitted()
     {
         Navigation.NavigateTo($"/confirmation?slug={Uri.EscapeDataString(Slug)}");
-    }
-
-    private async Task HandleStartOver()
-    {
-        await _state.ClearAsync();
-        Navigation.NavigateTo(IntakeWizardState.BuildStartOverUrl(Slug, Token), forceLoad: true);
     }
 
     public void Dispose()
