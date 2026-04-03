@@ -104,14 +104,31 @@ public sealed class IntakeWizardState
     /// <summary>The created service request ID after submission.</summary>
     public string? CreatedServiceRequestId { get; set; }
 
+    /// <summary>
+    /// When set, the next call to <see cref="GoToNextStepAsync"/> or <see cref="GoToPreviousStepAsync"/>
+    /// will navigate to this step instead of the natural next/previous step.
+    /// Used when editing a specific section from the Review &amp; Submit page.
+    /// </summary>
+    public int? ReturnToStepAfterEdit { get; set; }
+
     /// <summary>Event raised when state changes to notify UI components.</summary>
     public event Action? OnChange;
 
     /// <summary>
     /// Navigates to the next wizard step if validation passes.
+    /// If <see cref="ReturnToStepAfterEdit"/> is set, navigates there instead and clears the flag.
     /// </summary>
     public async Task GoToNextStepAsync()
     {
+        if (ReturnToStepAfterEdit is { } returnStep)
+        {
+            ReturnToStepAfterEdit = null;
+            CurrentStep = returnStep;
+            NotifyStateChanged();
+            await PersistAsync();
+            return;
+        }
+
         if (CurrentStep < TotalStepCount)
         {
             CurrentStep++;
@@ -122,9 +139,19 @@ public sealed class IntakeWizardState
 
     /// <summary>
     /// Navigates to the previous wizard step.
+    /// If <see cref="ReturnToStepAfterEdit"/> is set, navigates there instead and clears the flag.
     /// </summary>
     public async Task GoToPreviousStepAsync()
     {
+        if (ReturnToStepAfterEdit is { } returnStep)
+        {
+            ReturnToStepAfterEdit = null;
+            CurrentStep = returnStep;
+            NotifyStateChanged();
+            await PersistAsync();
+            return;
+        }
+
         if (CurrentStep > 1)
         {
             CurrentStep--;
