@@ -15,31 +15,34 @@
         <MudTextField @bind-Value="State.FirstName"
                       Label="First Name"
                       Required="true"
-                      RequiredError="First name is required"
                       Variant="Variant.Outlined"
                       Adornment="Adornment.Start"
                       AdornmentIcon="@Icons.Material.Filled.Badge"
-                      autocomplete="given-name" />
+                      autocomplete="given-name"
+                      Error="@State.FieldErrors.ContainsKey("FirstName")"
+                      ErrorText="@State.FieldErrors.GetValueOrDefault("FirstName")" />
 
         <MudTextField @bind-Value="State.LastName"
                       Label="Last Name"
                       Required="true"
-                      RequiredError="Last name is required"
                       Variant="Variant.Outlined"
                       Adornment="Adornment.Start"
                       AdornmentIcon="@Icons.Material.Filled.Badge"
-                      autocomplete="family-name" />
+                      autocomplete="family-name"
+                      Error="@State.FieldErrors.ContainsKey("LastName")"
+                      ErrorText="@State.FieldErrors.GetValueOrDefault("LastName")" />
 
         <MudTextField @bind-Value="State.Email"
                       Label="Email"
                       Required="true"
-                      RequiredError="Email is required"
                       InputType="InputType.Email"
                       Variant="Variant.Outlined"
                       Adornment="Adornment.Start"
                       AdornmentIcon="@Icons.Material.Filled.Email"
-                      Placeholder="you@example.com"
-                      autocomplete="email" />
+                      HelperText="We'll send your service request confirmation here."
+                      autocomplete="email"
+                      Error="@State.FieldErrors.ContainsKey("Email")"
+                      ErrorText="@State.FieldErrors.GetValueOrDefault("Email")" />
 
         <MudTextField @bind-Value="State.Phone"
                       Label="Phone (optional)"
@@ -47,7 +50,7 @@
                       Variant="Variant.Outlined"
                       Adornment="Adornment.Start"
                       AdornmentIcon="@Icons.Material.Filled.Phone"
-                      Placeholder="(555) 123-4567"
+                      HelperText="Optional — we'll only call to clarify your request."
                       autocomplete="tel" />
 
         <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
@@ -63,7 +66,7 @@
                        EndIcon="@Icons.Material.Filled.ArrowForward"
                        OnClick="HandleNext"
                        Style="text-transform: none;">
-                Next
+                @(State.EditingFromReview ? "Save & Return to Review" : "Continue to VIN Lookup")
             </MudButton>
         </MudStack>
     </MudStack>

@@ -104,6 +104,19 @@ public sealed class IntakeWizardState
     /// <summary>The created service request ID after submission.</summary>
     public string? CreatedServiceRequestId { get; set; }
 
+    /// <summary>
+    /// Whether the user is editing a step after reaching the Review step (step 8).
+    /// When true, the "Next" action returns directly to review instead of stepping forward.
+    /// UI-only flag — not persisted to sessionStorage.
+    /// </summary>
+    public bool EditingFromReview { get; set; }
+
+    /// <summary>
+    /// Per-field validation errors populated by <see cref="ValidateCurrentStep"/>.
+    /// Keys are field names (e.g., "FirstName", "Email", "Vin"); values are error messages.
+    /// </summary>
+    public Dictionary<string, string> FieldErrors { get; set; } = [];
+
     /// <summary>Event raised when state changes to notify UI components.</summary>
     public event Action? OnChange;
 
@@ -115,6 +128,11 @@ public sealed class IntakeWizardState
         if (CurrentStep < TotalStepCount)
         {
             CurrentStep++;
+            if (CurrentStep == TotalStepCount)
+            {
+                EditingFromReview = false;
+            }
+
             NotifyStateChanged();
             await PersistAsync();
         }
@@ -176,9 +194,11 @@ public sealed class IntakeWizardState
 
     /// <summary>
     /// Validates the current step and returns any error messages.
+    /// Also populates <see cref="FieldErrors"/> with per-field error keys.
     /// </summary>
     public List<string> ValidateCurrentStep()
     {
+        FieldErrors = [];
         return CurrentStep switch
         {
             1 => ValidateLanding(),
@@ -326,6 +346,8 @@ public sealed class IntakeWizardState
         Attachments = [];
         IsSubmitted = false;
         CreatedServiceRequestId = null;
+        EditingFromReview = false;
+        FieldErrors = [];
 
         await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", StorageKey);
 
@@ -374,16 +396,30 @@ public sealed class IntakeWizardState
     {
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(FirstName))
+        {
             errors.Add("First name is required.");
+            FieldErrors["FirstName"] = "First name is required.";
+        }
+
         if (string.IsNullOrWhiteSpace(LastName))
+        {
             errors.Add("Last name is required.");
+            FieldErrors["LastName"] = "Last name is required.";
+        }
+
         if (string.IsNullOrWhiteSpace(Email))
+        {
             errors.Add("Email is required.");
+            FieldErrors["Email"] = "Email is required.";
+        }
         else
         {
             var emailResult = EmailValidator.Validate(Email);
             if (!emailResult.IsValid)
+            {
                 errors.Add(emailResult.ErrorMessage!);
+                FieldErrors["Email"] = emailResult.ErrorMessage!;
+            }
         }
 
         return errors;
@@ -395,12 +431,16 @@ public sealed class IntakeWizardState
         if (string.IsNullOrWhiteSpace(Vin))
         {
             errors.Add("VIN is required.");
+            FieldErrors["Vin"] = "VIN is required.";
         }
         else
         {
             var vinResult = ClientVinValidator.ValidateFormat(Vin);
             if (!vinResult.IsValid)
+            {
                 errors.Add(vinResult.ErrorMessage!);
+                FieldErrors["Vin"] = vinResult.ErrorMessage!;
+            }
         }
 
         return errors;
@@ -410,11 +450,22 @@ public sealed class IntakeWizardState
     {
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(IssueCategory))
+        {
             errors.Add("Issue category is required.");
+            FieldErrors["IssueCategory"] = "Issue category is required.";
+        }
+
         if (string.IsNullOrWhiteSpace(IssueDescription))
+        {
             errors.Add("Issue description is required.");
+            FieldErrors["IssueDescription"] = "Issue description is required.";
+        }
         else if (IssueDescription.Length > MaxDescriptionLength)
-            errors.Add($"Issue description must not exceed {MaxDescriptionLength} characters.");
+        {
+            var msg = $"Issue description must not exceed {MaxDescriptionLength} characters.";
+            errors.Add(msg);
+            FieldErrors["IssueDescription"] = msg;
+        }
 
         return errors;
     }

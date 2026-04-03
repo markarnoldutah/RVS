@@ -11,10 +11,11 @@
                        @bind-Value="State.IssueCategory"
                        Label="Issue Category"
                        Required="true"
-                       RequiredError="Issue category is required"
                        Variant="Variant.Outlined"
                        AnchorOrigin="Origin.BottomCenter"
-                       AdornmentIcon="@Icons.Material.Filled.Category">
+                       AdornmentIcon="@Icons.Material.Filled.Category"
+                       Error="@State.FieldErrors.ContainsKey("IssueCategory")"
+                       ErrorText="@State.FieldErrors.GetValueOrDefault("IssueCategory")">
                 @foreach (var category in _categories)
                 {
                     <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
@@ -27,10 +28,11 @@
                        @bind-Value="State.IssueCategory"
                        Label="Issue Category"
                        Required="true"
-                       RequiredError="Issue category is required"
                        Variant="Variant.Outlined"
                        AnchorOrigin="Origin.BottomCenter"
-                       AdornmentIcon="@Icons.Material.Filled.Category">
+                       AdornmentIcon="@Icons.Material.Filled.Category"
+                       Error="@State.FieldErrors.ContainsKey("IssueCategory")"
+                       ErrorText="@State.FieldErrors.GetValueOrDefault("IssueCategory")">
                 <MudSelectItem T="string" Value="@("Electrical")">Electrical</MudSelectItem>
                 <MudSelectItem T="string" Value="@("Plumbing")">Plumbing</MudSelectItem>
                 <MudSelectItem T="string" Value="@("HVAC")">HVAC / Climate Control</MudSelectItem>
@@ -46,57 +48,56 @@
             <MudTextField @bind-Value="State.IssueDescription"
                           Label="Description"
                           Required="true"
-                          RequiredError="Description is required"
                           Lines="5"
                           MaxLength="2000"
                           Counter="2000"
                           Variant="Variant.Outlined"
-                          Placeholder="Describe the issue in detail..." />
+                          Placeholder="e.g., The slide-out makes a grinding noise when retracting and stops halfway."
+                          HelperText="Describe what's happening so our technicians can prepare before your visit."
+                          Error="@State.FieldErrors.ContainsKey("IssueDescription")"
+                          ErrorText="@State.FieldErrors.GetValueOrDefault("IssueDescription")" />
         </div>
 
-        <MudSelect T="string"
-                   @bind-Value="State.Urgency"
-                   Label="Urgency"
-                   Variant="Variant.Outlined"
-                   AnchorOrigin="Origin.BottomCenter"
-                   AdornmentIcon="@Icons.Material.Filled.PriorityHigh">
-            <MudSelectItem T="string" Value="@("Low")">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Success" Size="Size.Small" />
-                    Low
-                </MudStack>
-            </MudSelectItem>
-            <MudSelectItem T="string" Value="@("Medium")">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Info" Size="Size.Small" />
-                    Medium
-                </MudStack>
-            </MudSelectItem>
-            <MudSelectItem T="string" Value="@("High")">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Warning" Size="Size.Small" />
-                    High
-                </MudStack>
-            </MudSelectItem>
-            <MudSelectItem T="string" Value="@("Critical")">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" />
-                    Critical
-                </MudStack>
-            </MudSelectItem>
-        </MudSelect>
+        @* Urgency — button toggle group *@
+        <div>
+            <MudText Typo="Typo.body2" Class="mb-2">Urgency</MudText>
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                @foreach (var option in _urgencyOptions)
+                {
+                    var isSelected = State.Urgency == option.Value;
+                    <MudButton Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                               Color="@(isSelected ? option.Color : Color.Default)"
+                               Size="Size.Small"
+                               StartIcon="@option.Icon"
+                               OnClick="() => SelectUrgency(option.Value)"
+                               Style="text-transform: none;">
+                        @option.Value
+                    </MudButton>
+                }
+            </MudStack>
+        </div>
 
-        <MudSelect T="string"
-                   @bind-Value="State.RvUsage"
-                   Label="RV Usage"
-                   Variant="Variant.Outlined"
-                   AnchorOrigin="Origin.BottomCenter"
-                   AdornmentIcon="@Icons.Material.Filled.Explore">
-            <MudSelectItem T="string" Value="@("Full-Time")">Full-Time</MudSelectItem>
-            <MudSelectItem T="string" Value="@("Part-Time")">Part-Time</MudSelectItem>
-            <MudSelectItem T="string" Value="@("Seasonal")">Seasonal</MudSelectItem>
-            <MudSelectItem T="string" Value="@("Occasional")">Occasional</MudSelectItem>
-        </MudSelect>
+        @* RV Usage — button toggle group *@
+        <div>
+            <MudText Typo="Typo.body2" Class="mb-2">RV Usage</MudText>
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                @foreach (var usage in _rvUsageOptions)
+                {
+                    var isSelected = State.RvUsage == usage;
+                    <MudButton Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                               Color="@(isSelected ? Color.Primary : Color.Default)"
+                               Size="Size.Small"
+                               OnClick="() => SelectRvUsage(usage)"
+                               Style="text-transform: none;">
+                        @if (isSelected)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" />
+                        }
+                        @usage
+                    </MudButton>
+                }
+            </MudStack>
+        </div>
 
         <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
             <MudButton Variant="Variant.Outlined"
@@ -111,7 +112,7 @@
                        EndIcon="@Icons.Material.Filled.ArrowForward"
                        OnClick="HandleNext"
                        Style="text-transform: none;">
-                Next
+                @(State.EditingFromReview ? "Save & Return to Review" : "Continue to Diagnostic Questions")
             </MudButton>
         </MudStack>
     </MudStack>
@@ -124,6 +125,17 @@
 
     private List<LookupItemDto> _categories = [];
 
+    private static readonly (string Value, string Icon, Color Color)[] _urgencyOptions =
+    [
+        ("Low", Icons.Material.Filled.ArrowDownward, Color.Success),
+        ("Medium", Icons.Material.Filled.Remove, Color.Info),
+        ("High", Icons.Material.Filled.ArrowUpward, Color.Warning),
+        ("Critical", Icons.Material.Filled.Warning, Color.Error),
+    ];
+
+    private static readonly string[] _rvUsageOptions =
+        ["Full-Time", "Part-Time", "Seasonal", "Occasional"];
+
     protected override void OnInitialized()
     {
         if (State.Config?.IssueCategories is { Count: > 0 } categories)
@@ -131,6 +143,21 @@
             _categories = categories.Where(c => c.IsSelectable).ToList();
         }
     }
+
+    private void SelectUrgency(string value)
+    {
+        State.Urgency = ToggleSelection(State.Urgency, value);
+        StateHasChanged();
+    }
+
+    private void SelectRvUsage(string value)
+    {
+        State.RvUsage = ToggleSelection(State.RvUsage, value);
+        StateHasChanged();
+    }
+
+    private static string? ToggleSelection(string? current, string value) =>
+        current == value ? null : value;
 
     private async Task HandleNext()
     {

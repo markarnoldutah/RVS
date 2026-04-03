@@ -99,7 +99,18 @@
                        OnClick="HandleNext"
                        Disabled="_isLoading"
                        Style="text-transform: none;">
-                @(_isLoading ? "Loading..." : "Next")
+                @if (_isLoading)
+                {
+                    @:Loading...
+                }
+                else if (State.EditingFromReview)
+                {
+                    @:Save & Return to Review
+                }
+                else
+                {
+                    @:Continue to Add Photos
+                }
             </MudButton>
         </MudStack>
     </MudStack>
