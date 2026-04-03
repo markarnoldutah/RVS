@@ -1,0 +1,27 @@
+@inject ThemeService ThemeService
+
+<MudToggleGroup T="ThemeMode"
+                Value="ThemeService.Mode"
+                ValueChanged="OnModeChanged"
+                Color="Color.Inherit"
+                Size="Size.Small"
+                Outlined="false"
+                Delimiters="false"
+                SelectedClass="mud-theme-primary">
+    <MudToggleItem Value="ThemeMode.Light">
+        <MudIcon Icon="@Icons.Material.Filled.LightMode" Size="Size.Small" />
+    </MudToggleItem>
+    <MudToggleItem Value="ThemeMode.Dark">
+        <MudIcon Icon="@Icons.Material.Filled.DarkMode" Size="Size.Small" />
+    </MudToggleItem>
+    <MudToggleItem Value="ThemeMode.HighContrast">
+        <MudIcon Icon="@Icons.Material.Filled.Contrast" Size="Size.Small" />
+    </MudToggleItem>
+</MudToggleGroup>
+
+@code {
+    private void OnModeChanged(ThemeMode mode)
+    {
+        ThemeService.Mode = mode;
+    }
+}

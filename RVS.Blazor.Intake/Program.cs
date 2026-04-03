@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using MudBlazor.Services;
 using RVS.Blazor.Intake;
+using RVS.Blazor.Intake.Services;
 using RVS.Blazor.Intake.State;
 using RVS.UI.Shared.Services;
 
@@ -30,5 +31,8 @@ builder.Services.AddScoped<AttachmentApiClient>();
 
 // Intake wizard shared state — scoped (one per browser tab lifetime)
 builder.Services.AddScoped<IntakeWizardState>();
+
+// Theme switcher — scoped (one per browser tab lifetime)
+builder.Services.AddScoped<ThemeService>();
 
 await builder.Build().RunAsync();

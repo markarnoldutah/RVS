@@ -9,43 +9,55 @@
             </MudAlert>
         }
 
-        <MudTextField @bind-Value="State.FirstName"
-                      Label="First Name"
-                      Required="true"
-                      RequiredError="First name is required"
-                      Variant="Variant.Outlined"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Badge"
-                      autocomplete="given-name" />
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.body1" Style="font-weight: 700;">First name</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Your given name as it appears on your ID</MudText>
+            <MudTextField @bind-Value="State.FirstName"
+                          T="string"
+                          Required="true"
+                          RequiredError="First name is required"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          autocomplete="given-name" />
+        </MudStack>
 
-        <MudTextField @bind-Value="State.LastName"
-                      Label="Last Name"
-                      Required="true"
-                      RequiredError="Last name is required"
-                      Variant="Variant.Outlined"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Badge"
-                      autocomplete="family-name" />
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.body1" Style="font-weight: 700;">Last name</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Your family or surname</MudText>
+            <MudTextField @bind-Value="State.LastName"
+                          T="string"
+                          Required="true"
+                          RequiredError="Last name is required"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          autocomplete="family-name" />
+        </MudStack>
 
-        <MudTextField @bind-Value="State.Email"
-                      Label="Email"
-                      Required="true"
-                      RequiredError="Email is required"
-                      InputType="InputType.Email"
-                      Variant="Variant.Outlined"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Email"
-                      Placeholder="you@example.com"
-                      autocomplete="email" />
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.body1" Style="font-weight: 700;">Email</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">We'll send service updates to this address</MudText>
+            <MudTextField @bind-Value="State.Email"
+                          T="string"
+                          Required="true"
+                          RequiredError="Email is required"
+                          InputType="InputType.Email"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Placeholder="you@example.com"
+                          autocomplete="email" />
+        </MudStack>
 
-        <MudTextField @bind-Value="State.Phone"
-                      Label="Phone (optional)"
-                      InputType="InputType.Telephone"
-                      Variant="Variant.Outlined"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Phone"
-                      Placeholder="(555) 123-4567"
-                      autocomplete="tel" />
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.body1" Style="font-weight: 700;">Phone</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">In case we need to reach you about your service (optional)</MudText>
+            <MudTextField @bind-Value="State.Phone"
+                          T="string"
+                          InputType="InputType.Telephone"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Placeholder="(555) 123-4567"
+                          autocomplete="tel" />
+        </MudStack>
 
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
@@ -55,7 +67,8 @@
                    Class="mt-2">
             Continue...
         </MudButton>
-        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
+        <MudText Typo="Typo.caption" Align="Align.Center"
+                 Style="color: var(--mud-palette-text-secondary);">
             Step @State.CurrentStep of @State.TotalSteps
         </MudText>
     </MudStack>
