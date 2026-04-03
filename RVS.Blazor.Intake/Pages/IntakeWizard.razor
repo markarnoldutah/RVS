@@ -38,37 +38,37 @@
         @switch (_state.CurrentStep)
         {
             case 1:
-                <IntakeLanding State="_state"
-                               OnStart="HandleNextStep" />
+                <Step1_IntakeLanding State="_state"
+                                     OnStart="HandleNextStep" />
                 break;
             case 2:
-                <CustomerInfoStep State="_state"
-                                  OnNext="HandleNextStep" />
+                <Step2_CustomerInfoStep State="_state"
+                                        OnNext="HandleNextStep" />
                 break;
             case 3:
-                <VinLookupStep State="_state"
-                               OnNext="HandleNextStep" />
+                <Step3_VinLookupStep State="_state"
+                                     OnNext="HandleNextStep" />
                 break;
             case 4:
-                <VehicleDetailsStep State="_state"
-                                    OnNext="HandleNextStep" />
-                break;
-            case 5:
-                <IssueDescriptionStep State="_state"
-                                      OnNext="HandleNextStep" />
-                break;
-            case 6:
-                <DiagnosticQuestionsStep State="_state"
+                <Step4_VehicleDetailsStep State="_state"
                                           OnNext="HandleNextStep" />
                 break;
+            case 5:
+                <Step5_IssueDescriptionStep State="_state"
+                                            OnNext="HandleNextStep" />
+                break;
+            case 6:
+                <Step6_DiagnosticQuestionsStep State="_state"
+                                               OnNext="HandleNextStep" />
+                break;
             case 7:
-                <AttachmentUploadStep State="_state"
-                                       OnNext="HandleNextStep" />
+                <Step7_AttachmentUploadStep State="_state"
+                                            OnNext="HandleNextStep" />
                 break;
             case 8:
-                <ReviewSubmitStep State="_state"
-                                  OnEdit="HandleEditStep"
-                                  OnSubmitted="HandleSubmitted" />
+                <Step8_ReviewSubmitStep State="_state"
+                                        OnEdit="HandleEditStep"
+                                        OnSubmitted="HandleSubmitted" />
                 break;
         }
     </div>
