@@ -74,6 +74,9 @@ public sealed class IntakeWizardState
     /// <summary>Vehicle year (Step 4).</summary>
     public int? Year { get; set; }
 
+    /// <summary>Whether the VIN decode API call returned successfully (Step 3 → Step 4).</summary>
+    public bool VinLookupSucceeded { get; set; }
+
     /// <summary>Issue category selected from LookupSet (Step 5).</summary>
     public string IssueCategory { get; set; } = string.Empty;
 

@@ -40,21 +40,29 @@ public sealed class ThemeService
     {
         PaletteLight = new PaletteLight
         {
-            Primary = "#3F51B5",
-            Secondary = "#00897B",
-            AppbarBackground = "#303F9F",
+            Primary = "#607D8B",              // BlueGray 500
+            PrimaryDarken = "#455A64",        // BlueGray 700
+            PrimaryLighten = "#CFD8DC",       // BlueGray 100
+            PrimaryContrastText = "#FFFFFF",
+            Secondary = "#00897B",            // Teal 600
+            AppbarBackground = "#455A64",     // BlueGray 700
             AppbarText = "#FFFFFF",
             Background = "#FAFAFA",
             Surface = "#FFFFFF",
         },
         PaletteDark = new PaletteDark
         {
-            Primary = "#7986CB",
-            Secondary = "#4DB6AC",
-            AppbarBackground = "#1A237E",
+            Primary = "#B0BEC5",              // BlueGray 200
+            PrimaryDarken = "#78909C",        // BlueGray 400
+            PrimaryLighten = "#ECEFF1",       // BlueGray 50
+            PrimaryContrastText = "#000000",
+            Secondary = "#4DB6AC",            // Teal 300
+            AppbarBackground = "#263238",     // BlueGray 900
             AppbarText = "#FFFFFF",
             Background = "#121212",
             Surface = "#1E1E1E",
+            DrawerBackground = "#1E1E1E",
+            DrawerText = "#FFFFFFB3",
         },
         Typography = new Typography
         {

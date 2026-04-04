@@ -1,85 +1,120 @@
-<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
-    <MudStack Spacing="4">
-        <MudText Typo="Typo.h4">Contact</MudText>
+<MudPaper Elevation="2" Class="pa-6 rounded-lg wizard-step-card">
+    <MudForm @ref="_form">
+        <MudStack Spacing="4">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Contact</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                    Tell us how to reach you regarding your service request.
+                </MudText>
+            </MudStack>
 
-        @if (State.IsPrefilled)
-        {
-            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
-                Your information has been pre-filled from your previous visit.
-            </MudAlert>
-        }
+            @if (State.IsPrefilled)
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+                    Your information has been pre-filled from your previous visit.
+                </MudAlert>
+            }
 
-        <MudStack Spacing="1">
-            <MudText Typo="Typo.body1" Style="font-weight: 700;">First name</MudText>
-            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Your given name as it appears on your ID</MudText>
-            <MudTextField @bind-Value="State.FirstName"
-                          T="string"
-                          Required="true"
-                          RequiredError="First name is required"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          autocomplete="given-name" />
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">First name</MudText>
+                    <MudTextField @bind-Value="State.FirstName"
+                                  T="string"
+                                  Validation="@(new Func<string?, string?>(ValidateFirstName))"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  autocomplete="given-name" />
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Last name</MudText>
+                    <MudTextField @bind-Value="State.LastName"
+                                  T="string"
+                                  Validation="@(new Func<string?, string?>(ValidateLastName))"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  autocomplete="family-name" />
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Email</MudText>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">We'll send service updates to this address</MudText>
+                    <MudTextField @bind-Value="State.Email"
+                                  T="string"
+                                  Validation="@(new Func<string?, string?>(ValidateEmail))"
+                                  InputType="InputType.Email"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Placeholder="you@example.com"
+                                  autocomplete="email" />
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Phone</MudText>
+                    <MudTextField @bind-Value="State.Phone"
+                                  T="string"
+                                  Validation="@(new Func<string?, string?>(ValidatePhone))"
+                                  InputType="InputType.Telephone"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Placeholder="(555) 123-4567"
+                                  autocomplete="tel" />
+                </MudStack>
+            </MudPaper>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       OnClick="HandleNext"
+                       Style="text-transform: none;"
+                       Class="mt-6">
+                Continue
+            </MudButton>
         </MudStack>
-
-        <MudStack Spacing="1">
-            <MudText Typo="Typo.body1" Style="font-weight: 700;">Last name</MudText>
-            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Your family or surname</MudText>
-            <MudTextField @bind-Value="State.LastName"
-                          T="string"
-                          Required="true"
-                          RequiredError="Last name is required"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          autocomplete="family-name" />
-        </MudStack>
-
-        <MudStack Spacing="1">
-            <MudText Typo="Typo.body1" Style="font-weight: 700;">Email</MudText>
-            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">We'll send service updates to this address</MudText>
-            <MudTextField @bind-Value="State.Email"
-                          T="string"
-                          Required="true"
-                          RequiredError="Email is required"
-                          InputType="InputType.Email"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          Placeholder="you@example.com"
-                          autocomplete="email" />
-        </MudStack>
-
-        <MudStack Spacing="1">
-            <MudText Typo="Typo.body1" Style="font-weight: 700;">Phone</MudText>
-            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">In case we need to reach you about your service (optional)</MudText>
-            <MudTextField @bind-Value="State.Phone"
-                          T="string"
-                          InputType="InputType.Telephone"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          Placeholder="(555) 123-4567"
-                          autocomplete="tel" />
-        </MudStack>
-
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   FullWidth="true"
-                   OnClick="HandleNext"
-                   Style="text-transform: none;"
-                   Class="mt-2">
-            Continue...
-        </MudButton>
-        <MudText Typo="Typo.caption" Align="Align.Center"
-                 Style="color: var(--mud-palette-text-secondary);">
-            Step @State.CurrentStep of @State.TotalSteps
-        </MudText>
-    </MudStack>
+    </MudForm>
 </MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
 
+    private MudForm _form = default!;
+    private bool _submitted;
+
+    private string? ValidateFirstName(string? value) =>
+        _submitted && string.IsNullOrWhiteSpace(value) ? "First name is required" : null;
+
+    private string? ValidateLastName(string? value) =>
+        _submitted && string.IsNullOrWhiteSpace(value) ? "Last name is required" : null;
+
+    private string? ValidateEmail(string? value)
+    {
+        if (!_submitted) return null;
+        if (string.IsNullOrWhiteSpace(value)) return "Email is required";
+        var result = EmailValidator.Validate(value);
+        return result.IsValid ? null : result.ErrorMessage;
+    }
+
+    private string? ValidatePhone(string? value)
+    {
+        if (!_submitted) return null;
+        if (string.IsNullOrWhiteSpace(value)) return "Phone number is required";
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        return digits.Length < 10 ? "Phone number must have at least 10 digits" : null;
+    }
+
     private async Task HandleNext()
     {
+        _submitted = true;
+        await _form.Validate();
+        if (!_form.IsValid) return;
+
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
     }

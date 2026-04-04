@@ -1,4 +1,4 @@
-<MudPaper Elevation="3" Class="pa-8" Style="width: 100%;">
+<MudPaper Elevation="2" Class="pa-6 rounded-lg wizard-step-card">
     @if (_isLoading)
     {
         <MudStack AlignItems="AlignItems.Center" Spacing="5"
@@ -19,7 +19,8 @@
             <MudText Typo="Typo.h5" Color="Color.Error" Align="Align.Center">
                 Location Not Found
             </MudText>
-            <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            <MudText Typo="Typo.body1" Align="Align.Center"
+                     Style="color: var(--mud-palette-text-secondary);">
                 @_error
             </MudText>
         </MudStack>
@@ -39,15 +40,17 @@
             <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary"
                      Style="font-size: 4rem;" />
 
-            <MudText Typo="Typo.h4" Align="Align.Center">
+            <MudText Typo="Typo.h5" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
                 @State.Config.DealershipName
             </MudText>
 
-            <MudText Typo="Typo.h6" Align="Align.Center" Color="Color.Secondary">
+            <MudText Typo="Typo.h6" Align="Align.Center"
+                     Style="color: var(--mud-palette-text-secondary);">
                 @State.Config.LocationName
             </MudText>
 
-            <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            <MudText Typo="Typo.body1" Align="Align.Center"
+                     Style="color: var(--mud-palette-text-secondary);">
                 Submit a service request for your RV. No account required.
             </MudText>
 
@@ -59,7 +62,7 @@
                        FullWidth="true"
                        OnClick="HandleStart"
                        Style="text-transform: none;">
-                Continue...
+                Continue
             </MudButton>
         </MudStack>
     }

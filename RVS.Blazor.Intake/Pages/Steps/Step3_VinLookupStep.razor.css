@@ -1,0 +1,10 @@
+::deep .mud-radio {
+    max-width: 100%;
+    overflow: hidden;
+}
+
+::deep .mud-radio-content {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

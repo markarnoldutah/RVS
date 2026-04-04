@@ -1,118 +1,140 @@
-<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+<MudPaper Elevation="2" Class="pa-6 rounded-lg wizard-step-card">
+    <MudForm @ref="_form">
     <MudStack Spacing="4">
-        <MudText Typo="Typo.h4">Issue</MudText>
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Issue</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                Describe the problem you're experiencing with your RV.
+            </MudText>
+        </MudStack>
 
-        @if (_categories.Count > 0)
-        {
-            <MudSelect T="string"
-                       @bind-Value="State.IssueCategory"
-                       Label="Issue Category"
-                       Required="true"
-                       RequiredError="Issue category is required"
-                       Variant="Variant.Outlined"
-                       AnchorOrigin="Origin.BottomCenter"
-                       AdornmentIcon="@Icons.Material.Filled.Category">
-                @foreach (var category in _categories)
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue Category</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Select the area that best describes the issue</MudText>
+                @if (_categories.Count > 0)
                 {
-                    <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
+                    <MudSelect T="string"
+                               @bind-Value="State.IssueCategory"
+                               Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var category in _categories)
+                        {
+                            <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
+                        }
+                    </MudSelect>
                 }
-            </MudSelect>
-        }
-        else
-        {
-            <MudSelect T="string"
-                       @bind-Value="State.IssueCategory"
-                       Label="Issue Category"
-                       Required="true"
-                       RequiredError="Issue category is required"
-                       Variant="Variant.Outlined"
-                       AnchorOrigin="Origin.BottomCenter"
-                       AdornmentIcon="@Icons.Material.Filled.Category">
-                <MudSelectItem T="string" Value="@("Electrical")">Electrical</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Plumbing")">Plumbing</MudSelectItem>
-                <MudSelectItem T="string" Value="@("HVAC")">HVAC / Climate Control</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Appliance")">Appliance</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Structural")">Structural / Body</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Slide-Out")">Slide-Out</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Awning")">Awning</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Other")">Other</MudSelectItem>
-            </MudSelect>
-        }
+                else
+                {
+                    <MudSelect T="string"
+                               @bind-Value="State.IssueCategory"
+                               Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               AnchorOrigin="Origin.BottomCenter">
+                        <MudSelectItem T="string" Value="@("Electrical")">Electrical</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Plumbing")">Plumbing</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("HVAC")">HVAC / Climate Control</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Appliance")">Appliance</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Structural")">Structural / Body</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Slide-Out")">Slide-Out</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Awning")">Awning</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Other")">Other</MudSelectItem>
+                    </MudSelect>
+                }
+            </MudStack>
+        </MudPaper>
 
-        <div>
-            <MudTextField @bind-Value="State.IssueDescription"
-                          Label="Description"
-                          Required="true"
-                          RequiredError="Description is required"
-                          Lines="5"
-                          MaxLength="2000"
-                          Counter="2000"
-                          Variant="Variant.Outlined"
-                          Placeholder="Describe the issue in detail..." />
-        </div>
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Description</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Provide as much detail as possible about the issue</MudText>
+                <MudTextField @bind-Value="State.IssueDescription"
+                              T="string"
+                              Validation="@(new Func<string?, string?>(ValidateDescription))"
+                              Lines="5"
+                              MaxLength="2000"
+                              Counter="2000"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Placeholder="Describe the issue in detail..." />
+            </MudStack>
+        </MudPaper>
 
-        <MudSelect T="string"
-                   @bind-Value="State.Urgency"
-                   Label="Urgency"
-                   Variant="Variant.Outlined"
-                   AnchorOrigin="Origin.BottomCenter"
-                   AdornmentIcon="@Icons.Material.Filled.PriorityHigh">
-            <MudSelectItem T="string" Value="@("Low")">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Success" Size="Size.Small" />
-                    Low
-                </MudStack>
-            </MudSelectItem>
-            <MudSelectItem T="string" Value="@("Medium")">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Info" Size="Size.Small" />
-                    Medium
-                </MudStack>
-            </MudSelectItem>
-            <MudSelectItem T="string" Value="@("High")">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Warning" Size="Size.Small" />
-                    High
-                </MudStack>
-            </MudSelectItem>
-            <MudSelectItem T="string" Value="@("Critical")">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" />
-                    Critical
-                </MudStack>
-            </MudSelectItem>
-        </MudSelect>
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Urgency</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How urgent is this service need?</MudText>
+                <MudSelect T="string"
+                           @bind-Value="State.Urgency"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="string" Value="@("Low")">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Success" Size="Size.Small" />
+                            Low
+                        </MudStack>
+                    </MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Medium")">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Info" Size="Size.Small" />
+                            Medium
+                        </MudStack>
+                    </MudSelectItem>
+                    <MudSelectItem T="string" Value="@("High")">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Warning" Size="Size.Small" />
+                            High
+                        </MudStack>
+                    </MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Critical")">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" />
+                            Critical
+                        </MudStack>
+                    </MudSelectItem>
+                </MudSelect>
+            </MudStack>
+        </MudPaper>
 
-        <MudSelect T="string"
-                   @bind-Value="State.RvUsage"
-                   Label="RV Usage"
-                   Variant="Variant.Outlined"
-                   AnchorOrigin="Origin.BottomCenter"
-                   AdornmentIcon="@Icons.Material.Filled.Explore">
-            <MudSelectItem T="string" Value="@("Full-Time")">Full-Time</MudSelectItem>
-            <MudSelectItem T="string" Value="@("Part-Time")">Part-Time</MudSelectItem>
-            <MudSelectItem T="string" Value="@("Seasonal")">Seasonal</MudSelectItem>
-            <MudSelectItem T="string" Value="@("Occasional")">Occasional</MudSelectItem>
-        </MudSelect>
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">RV Usage</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How often do you use your RV?</MudText>
+                <MudSelect T="string"
+                           @bind-Value="State.RvUsage"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="string" Value="@("Full-Time")">Full-Time</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Part-Time")">Part-Time</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Seasonal")">Seasonal</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Occasional")">Occasional</MudSelectItem>
+                </MudSelect>
+            </MudStack>
+        </MudPaper>
 
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
                    FullWidth="true"
                    OnClick="HandleNext"
                    Style="text-transform: none;"
-                   Class="mt-2">
-            Continue...
+                   Class="mt-6">
+            Continue
         </MudButton>
-        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
-            Step @State.CurrentStep of @State.TotalSteps
-        </MudText>
     </MudStack>
+    </MudForm>
 </MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
 
+    private MudForm _form = default!;
+    private bool _submitted;
     private List<LookupItemDto> _categories = [];
 
     protected override void OnInitialized()
@@ -123,8 +145,22 @@
         }
     }
 
+    private string? ValidateIssueCategory(string? value) =>
+        _submitted && string.IsNullOrWhiteSpace(value) ? "Issue category is required" : null;
+
+    private string? ValidateDescription(string? value)
+    {
+        if (!_submitted) return null;
+        if (string.IsNullOrWhiteSpace(value)) return "Description is required";
+        return value.Length > 2000 ? "Description must not exceed 2,000 characters" : null;
+    }
+
     private async Task HandleNext()
     {
+        _submitted = true;
+        await _form.Validate();
+        if (!_form.IsValid) return;
+
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
     }

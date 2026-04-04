@@ -127,7 +127,7 @@ Every step page **must** have a companion `.razor.css` file:
 /* StepN_DescriptiveNameStep.razor.css */
 
 ::deep .mud-input-outlined-border {
-    border-width: 2px !important;
+    border-width: 3px !important;
 }
 ```
 

@@ -1,6 +1,11 @@
-<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+<MudPaper Elevation="2" Class="pa-6 rounded-lg wizard-step-card">
     <MudStack Spacing="4">
-        <MudText Typo="Typo.h4">Diagnostics</MudText>
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Diagnostics</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                Answer a few questions to help us diagnose the issue before your visit.
+            </MudText>
+        </MudStack>
 
         @if (_isLoading)
         {
@@ -35,13 +40,13 @@
 
                 <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                     <MudStack Spacing="3">
-                        <MudText Typo="Typo.subtitle1" Style="font-weight: 500;">
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 500; color: var(--mud-palette-text-primary);">
                             @question.QuestionText
                         </MudText>
 
                         @if (!string.IsNullOrWhiteSpace(question.HelpText))
                         {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
                                 @question.HelpText
                             </MudText>
                         }
@@ -73,9 +78,11 @@
                         {
                             <MudTextField Value="@(GetResponse(questionIndex)?.FreeTextResponse ?? "")"
                                           ValueChanged="(string value) => SetFreeText(questionIndex, value)"
+                                          T="string"
                                           Placeholder="Additional details..."
                                           Lines="2"
-                                          Variant="Variant.Outlined" />
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" />
                         }
                     </MudStack>
                 </MudPaper>
@@ -88,12 +95,9 @@
                    OnClick="HandleNext"
                    Disabled="_isLoading"
                    Style="text-transform: none;"
-                   Class="mt-2">
-            @(_isLoading ? "Loading..." : "Continue...")
+                   Class="mt-6">
+            @(_isLoading ? "Loading..." : "Continue")
         </MudButton>
-        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
-            Step @State.CurrentStep of @State.TotalSteps
-        </MudText>
     </MudStack>
 </MudPaper>
 

@@ -1,10 +1,12 @@
-<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+<MudPaper Elevation="2" Class="pa-6 rounded-lg wizard-step-card">
+    <MudForm @ref="_form">
     <MudStack Spacing="4">
-        <MudText Typo="Typo.h4">Vehicle Details</MudText>
-
-        <MudText Typo="Typo.body1" Color="Color.Secondary">
-            Review the decoded vehicle information below. You can edit any field if needed.
-        </MudText>
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">RV Details</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                Review and edit your RV information below.
+            </MudText>
+        </MudStack>
 
         @if (!string.IsNullOrWhiteSpace(State.Vin))
         {
@@ -14,7 +16,7 @@
             </MudAlert>
         }
 
-        @if (!string.IsNullOrWhiteSpace(State.Manufacturer) || !string.IsNullOrWhiteSpace(State.Model) || State.Year.HasValue)
+        @if (State.VinLookupSucceeded)
         {
             <MudAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true">
                 Vehicle information retrieved from VIN lookup.
@@ -27,49 +29,81 @@
             </MudAlert>
         }
 
-        <MudTextField @bind-Value="State.Manufacturer"
-                      Label="Manufacturer (optional)"
-                      Variant="Variant.Outlined"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Factory"
-                      Placeholder="e.g., Winnebago, Thor, Jayco" />
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Manufacturer</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">The RV or chassis manufacturer</MudText>
+                <MudTextField @bind-Value="State.Manufacturer"
+                              T="string"
+                              Validation="@(new Func<string?, string?>(ValidateManufacturer))"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Placeholder="e.g., Winnebago, Thor, Jayco" />
+            </MudStack>
+        </MudPaper>
 
-        <MudTextField @bind-Value="State.Model"
-                      Label="Model (optional)"
-                      Variant="Variant.Outlined"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.DirectionsCar"
-                      Placeholder="e.g., Vista, Aria, Eagle" />
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Model</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">The specific vehicle model name</MudText>
+                <MudTextField @bind-Value="State.Model"
+                              T="string"
+                              Validation="@(new Func<string?, string?>(ValidateModel))"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Placeholder="e.g., Vista, Aria, Eagle" />
+            </MudStack>
+        </MudPaper>
 
-        <MudNumericField @bind-Value="State.Year"
-                         Label="Year (optional)"
-                         Variant="Variant.Outlined"
-                         Adornment="Adornment.Start"
-                         AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
-                         Placeholder="e.g., 2023"
-                         Min="1900"
-                         Max="@(DateTime.UtcNow.Year + 2)" />
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Year</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">The model year of the vehicle</MudText>
+                <MudNumericField @bind-Value="State.Year"
+                                 T="int?"
+                                 Validation="@(new Func<int?, string?>(ValidateYear))"
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense"
+                                 Placeholder="e.g., 2023"
+                                 Min="1900"
+                                 Max="@(DateTime.UtcNow.Year + 2)" />
+            </MudStack>
+        </MudPaper>
 
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
                    FullWidth="true"
                    OnClick="HandleNext"
                    Style="text-transform: none;"
-                   Class="mt-2">
-            Continue...
+                   Class="mt-6">
+            Continue
         </MudButton>
-        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
-            Step @State.CurrentStep of @State.TotalSteps
-        </MudText>
     </MudStack>
+    </MudForm>
 </MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
 
+    private MudForm _form = default!;
+    private bool _submitted;
+
+    private string? ValidateManufacturer(string? value) =>
+        _submitted && string.IsNullOrWhiteSpace(value) ? "Manufacturer is required" : null;
+
+    private string? ValidateModel(string? value) =>
+        _submitted && string.IsNullOrWhiteSpace(value) ? "Model is required" : null;
+
+    private string? ValidateYear(int? value) =>
+        _submitted && !value.HasValue ? "Year is required" : null;
+
     private async Task HandleNext()
     {
+        _submitted = true;
+        await _form.Validate();
+        if (!_form.IsValid) return;
+
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
     }

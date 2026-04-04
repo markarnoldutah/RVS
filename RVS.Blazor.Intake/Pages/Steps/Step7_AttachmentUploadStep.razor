@@ -1,21 +1,22 @@
-<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+<MudPaper Elevation="2" Class="pa-6 rounded-lg wizard-step-card">
     <MudStack Spacing="4">
-        <MudText Typo="Typo.h4">Attachments</MudText>
-
-        <MudText Typo="Typo.body1" Color="Color.Secondary">
-            Upload photos or videos of the issue. Drag and drop files, browse, or take a photo.
-        </MudText>
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Attachments</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                Upload photos or videos of the issue. Drag and drop files, browse, or take a photo.
+            </MudText>
+        </MudStack>
 
         @if (State.Config is not null)
         {
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
+            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
                 Max @State.Config.MaxAttachments files, up to @State.Config.MaxFileSizeMb MB each.
                 Accepted: @string.Join(", ", State.Config.AcceptedFileTypes)
             </MudText>
         }
         else
         {
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
+            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
                 Max 10 files, up to 25 MB each.
             </MudText>
         }
@@ -62,7 +63,7 @@
                                 <MudText Typo="Typo.body2" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                     @file.FileName
                                 </MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
                                     @FormatFileSize(file.SizeBytes)
                                 </MudText>
                             </MudStack>
@@ -114,12 +115,9 @@
                    FullWidth="true"
                    OnClick="HandleNext"
                    Style="text-transform: none;"
-                   Class="mt-2">
+                   Class="mt-6">
             Review
         </MudButton>
-        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
-            Step @State.CurrentStep of @State.TotalSteps
-        </MudText>
     </MudStack>
 </MudPaper>
 

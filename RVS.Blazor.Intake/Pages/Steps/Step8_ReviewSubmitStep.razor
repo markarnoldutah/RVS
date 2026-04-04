@@ -1,187 +1,176 @@
-<MudPaper Elevation="3" Class="pa-6" Style="width: 100%;">
+<MudPaper Elevation="2" Class="pa-6 rounded-lg wizard-step-card">
     <MudStack Spacing="4">
-        <MudText Typo="Typo.h4">Review &amp; Submit</MudText>
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Review &amp; Submit</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                Please review your information before submitting.
+            </MudText>
+        </MudStack>
 
-        <MudText Typo="Typo.body1" Color="Color.Secondary">
-            Please review your information before submitting.
-        </MudText>
+        @* Contact Information *@
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Contact Information</strong></MudText>
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="() => EditStep(2)"
+                                   aria-label="Edit contact info" />
+                </MudStack>
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <tbody>
+                        <tr><td><strong>Name</strong></td><td>@State.FirstName @State.LastName</td></tr>
+                        <tr><td><strong>Email</strong></td><td>@State.Email</td></tr>
+                        @if (!string.IsNullOrWhiteSpace(State.Phone))
+                        {
+                            <tr><td><strong>Phone</strong></td><td>@State.Phone</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudStack>
+        </MudPaper>
 
-        <MudExpansionPanels MultiExpansion="true">
-            @* Contact Information *@
-            <MudExpansionPanel Expanded="true">
-                <TitleContent>
+        @* Vehicle Information *@
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.DirectionsCarFilled" Color="Color.Primary" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Vehicle Information</strong></MudText>
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="() => EditStep(3)"
+                                   aria-label="Edit vehicle info" />
+                </MudStack>
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <tbody>
+                        <tr><td><strong>VIN</strong></td><td>@State.Vin</td></tr>
+                        @if (!string.IsNullOrWhiteSpace(State.Manufacturer))
+                        {
+                            <tr><td><strong>Manufacturer</strong></td><td>@State.Manufacturer</td></tr>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(State.Model))
+                        {
+                            <tr><td><strong>Model</strong></td><td>@State.Model</td></tr>
+                        }
+                        @if (State.Year.HasValue)
+                        {
+                            <tr><td><strong>Year</strong></td><td>@State.Year</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudStack>
+        </MudPaper>
+
+        @* Issue Details *@
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Description" Color="Color.Primary" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Issue Details</strong></MudText>
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="() => EditStep(5)"
+                                   aria-label="Edit issue details" />
+                </MudStack>
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <tbody>
+                        <tr><td><strong>Category</strong></td><td>@State.IssueCategory</td></tr>
+                        <tr><td><strong>Description</strong></td><td>@State.IssueDescription</td></tr>
+                        @if (!string.IsNullOrWhiteSpace(State.Urgency))
+                        {
+                            <tr><td><strong>Urgency</strong></td><td>@State.Urgency</td></tr>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(State.RvUsage))
+                        {
+                            <tr><td><strong>RV Usage</strong></td><td>@State.RvUsage</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudStack>
+        </MudPaper>
+
+        @* Diagnostic Responses *@
+        @if (State.DiagnosticResponses.Count > 0)
+        {
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Small" />
-                        <MudText Typo="Typo.subtitle1"><strong>Contact Information</strong></MudText>
+                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Diagnostic Responses</strong></MudText>
                         <MudSpacer />
                         <MudIconButton Icon="@Icons.Material.Filled.Edit"
                                        Size="Size.Small"
                                        Color="Color.Primary"
-                                       OnClick="() => EditStep(2)"
-                                       aria-label="Edit contact info" />
+                                       OnClick="() => EditStep(6)"
+                                       aria-label="Edit diagnostic responses" />
                     </MudStack>
-                </TitleContent>
-                <ChildContent>
-                    <MudSimpleTable Dense="true" Elevation="0">
-                        <tbody>
-                            <tr><td><strong>Name</strong></td><td>@State.FirstName @State.LastName</td></tr>
-                            <tr><td><strong>Email</strong></td><td>@State.Email</td></tr>
-                            @if (!string.IsNullOrWhiteSpace(State.Phone))
-                            {
-                                <tr><td><strong>Phone</strong></td><td>@State.Phone</td></tr>
-                            }
-                        </tbody>
-                    </MudSimpleTable>
-                </ChildContent>
-            </MudExpansionPanel>
-
-            @* Vehicle Information *@
-            <MudExpansionPanel Expanded="true">
-                <TitleContent>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.DirectionsCarFilled" Color="Color.Primary" Size="Size.Small" />
-                        <MudText Typo="Typo.subtitle1"><strong>Vehicle Information</strong></MudText>
-                        <MudSpacer />
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                       Size="Size.Small"
-                                       Color="Color.Primary"
-                                       OnClick="() => EditStep(3)"
-                                       aria-label="Edit vehicle info" />
-                    </MudStack>
-                </TitleContent>
-                <ChildContent>
-                    <MudSimpleTable Dense="true" Elevation="0">
-                        <tbody>
-                            <tr><td><strong>VIN</strong></td><td>@State.Vin</td></tr>
-                            @if (!string.IsNullOrWhiteSpace(State.Manufacturer))
-                            {
-                                <tr><td><strong>Manufacturer</strong></td><td>@State.Manufacturer</td></tr>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(State.Model))
-                            {
-                                <tr><td><strong>Model</strong></td><td>@State.Model</td></tr>
-                            }
-                            @if (State.Year.HasValue)
-                            {
-                                <tr><td><strong>Year</strong></td><td>@State.Year</td></tr>
-                            }
-                        </tbody>
-                    </MudSimpleTable>
-                </ChildContent>
-            </MudExpansionPanel>
-
-            @* Issue Details *@
-            <MudExpansionPanel Expanded="true">
-                <TitleContent>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Description" Color="Color.Primary" Size="Size.Small" />
-                        <MudText Typo="Typo.subtitle1"><strong>Issue Details</strong></MudText>
-                        <MudSpacer />
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                       Size="Size.Small"
-                                       Color="Color.Primary"
-                                       OnClick="() => EditStep(5)"
-                                       aria-label="Edit issue details" />
-                    </MudStack>
-                </TitleContent>
-                <ChildContent>
-                    <MudSimpleTable Dense="true" Elevation="0">
-                        <tbody>
-                            <tr><td><strong>Category</strong></td><td>@State.IssueCategory</td></tr>
-                            <tr><td><strong>Description</strong></td><td>@State.IssueDescription</td></tr>
-                            @if (!string.IsNullOrWhiteSpace(State.Urgency))
-                            {
-                                <tr><td><strong>Urgency</strong></td><td>@State.Urgency</td></tr>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(State.RvUsage))
-                            {
-                                <tr><td><strong>RV Usage</strong></td><td>@State.RvUsage</td></tr>
-                            }
-                        </tbody>
-                    </MudSimpleTable>
-                </ChildContent>
-            </MudExpansionPanel>
-
-            @* Diagnostic Responses *@
-            @if (State.DiagnosticResponses.Count > 0)
-            {
-                <MudExpansionPanel Expanded="true">
-                    <TitleContent>
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Primary" Size="Size.Small" />
-                            <MudText Typo="Typo.subtitle1"><strong>Diagnostic Responses</strong></MudText>
-                            <MudSpacer />
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                           Size="Size.Small"
-                                           Color="Color.Primary"
-                                           OnClick="() => EditStep(6)"
-                                           aria-label="Edit diagnostic responses" />
-                        </MudStack>
-                    </TitleContent>
-                    <ChildContent>
-                        <MudStack Spacing="3">
-                            @foreach (var response in State.DiagnosticResponses)
-                            {
-                                <div>
-                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">
-                                        @response.QuestionText
-                                    </MudText>
-                                    @if (response.SelectedOptions.Count > 0)
-                                    {
-                                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
-                                            @foreach (var option in response.SelectedOptions)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Primary"
-                                                         Variant="Variant.Outlined">
-                                                    @option
-                                                </MudChip>
-                                            }
-                                        </MudStack>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-                                            @response.FreeTextResponse
-                                        </MudText>
-                                    }
-                                </div>
-                            }
-                        </MudStack>
-                    </ChildContent>
-                </MudExpansionPanel>
-            }
-
-            @* Attachments *@
-            @if (State.Attachments.Count > 0)
-            {
-                <MudExpansionPanel Expanded="true">
-                    <TitleContent>
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" Size="Size.Small" />
-                            <MudText Typo="Typo.subtitle1">
-                                <strong>Attachments (@State.Attachments.Count)</strong>
-                            </MudText>
-                            <MudSpacer />
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                           Size="Size.Small"
-                                           Color="Color.Primary"
-                                           OnClick="() => EditStep(7)"
-                                           aria-label="Edit attachments" />
-                        </MudStack>
-                    </TitleContent>
-                    <ChildContent>
-                        <MudStack Spacing="1">
-                            @foreach (var attachment in State.Attachments)
-                            {
-                                <MudText Typo="Typo.body2">
-                                    📎 @attachment.FileName (@FormatFileSize(attachment.SizeBytes))
+                    <MudStack Spacing="3">
+                        @foreach (var response in State.DiagnosticResponses)
+                        {
+                            <div>
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">
+                                    @response.QuestionText
                                 </MudText>
-                            }
-                        </MudStack>
-                    </ChildContent>
-                </MudExpansionPanel>
-            }
-        </MudExpansionPanels>
+                                @if (response.SelectedOptions.Count > 0)
+                                {
+                                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
+                                        @foreach (var option in response.SelectedOptions)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary"
+                                                     Variant="Variant.Outlined">
+                                                @option
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
+                                {
+                                    <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);" Class="mt-1">
+                                        @response.FreeTextResponse
+                                    </MudText>
+                                }
+                            </div>
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+
+        @* Attachments *@
+        @if (State.Attachments.Count > 0)
+        {
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);">
+                            <strong>Attachments (@State.Attachments.Count)</strong>
+                        </MudText>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       OnClick="() => EditStep(7)"
+                                       aria-label="Edit attachments" />
+                    </MudStack>
+                    <MudStack Spacing="1">
+                        @foreach (var attachment in State.Attachments)
+                        {
+                            <MudText Typo="Typo.body2">
+                                📎 @attachment.FileName (@FormatFileSize(attachment.SizeBytes))
+                            </MudText>
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
 
         @* Submit error *@
         @if (_submitError is not null)
@@ -196,7 +185,7 @@
         {
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
                 <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" />
-                <MudText Typo="Typo.body2" Color="Color.Secondary">@_uploadStatus</MudText>
+                <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">@_uploadStatus</MudText>
             </MudStack>
         }
 
@@ -207,12 +196,9 @@
                    Disabled="_isSubmitting"
                    OnClick="HandleSubmit"
                    Style="text-transform: none;"
-                   Class="mt-4">
+                   Class="mt-6">
             @(_isSubmitting ? "Submitting..." : "Submit Service Request")
         </MudButton>
-        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
-            Step @State.CurrentStep of @State.TotalSteps
-        </MudText>
     </MudStack>
 </MudPaper>
 

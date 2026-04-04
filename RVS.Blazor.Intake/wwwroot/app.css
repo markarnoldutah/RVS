@@ -4,11 +4,29 @@
    Minimum viewport: 375px (iPhone SE)
    ============================================================ */
 
+/* Tetons background — fixed so the photo stays put as content scrolls.
+   A 30 % black gradient scrim is layered on top for text readability. */
+html {
+    background-image:
+        linear-gradient(rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0.30)),
+        url('_content/RVS.UI.Shared/images/tetons.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
 html, body {
     margin: 0;
     padding: 0;
     overflow-x: hidden;
     -webkit-text-size-adjust: 100%;
+}
+
+/* MudBlazor layout containers must be transparent to expose the background */
+body,
+.mud-layout {
+    background: transparent !important;
 }
 
 h1:focus {
@@ -24,6 +42,23 @@ h1:focus {
 
 .mud-input .mud-input-root {
     min-height: 44px;
+}
+
+/* --------------------------------------------------------
+   Wizard Step Card — 75 % opaque surface so the background
+   photo shows through while content remains readable.
+   -------------------------------------------------------- */
+.wizard-step-card {
+    background: color-mix(in srgb, var(--mud-palette-surface) 65%, transparent) !important;
+}
+
+/* --------------------------------------------------------
+   Input Borders — heavy black outline for readability
+   against the translucent card backgrounds.
+   -------------------------------------------------------- */
+.mud-input-outlined-border {
+    border-width: 3px !important;
+    border-color: #000 !important;
 }
 
 /* --------------------------------------------------------
@@ -73,6 +108,7 @@ h1:focus {
    Bottom AppBar: 48px (Dense MudAppBar default)
    -------------------------------------------------------- */
 .mud-main-content {
+    background: transparent !important;
     padding-top: 64px !important;
     padding-bottom: 48px !important;
 }

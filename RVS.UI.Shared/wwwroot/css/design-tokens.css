@@ -6,11 +6,11 @@
 
 :root {
     /* --------------------------------------------------------
-       Colors — Brand
+       Colors — Brand (Material Design Indigo)
        -------------------------------------------------------- */
-    --rvs-color-primary: #0F6CBD;
-    --rvs-color-primary-hover: #0D5BA3;
-    --rvs-color-primary-active: #0A4A85;
+    --rvs-color-primary: #3F51B5;           /* Indigo 500 */
+    --rvs-color-primary-hover: #3949AB;     /* Indigo 600 */
+    --rvs-color-primary-active: #303F9F;    /* Indigo 700 */
     --rvs-color-secondary: #6B6B6B;
     --rvs-color-secondary-hover: #5A5A5A;
 
@@ -107,4 +107,22 @@
     --rvs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);
     --rvs-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.14);
     --rvs-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.14);
+
+    /* --------------------------------------------------------
+       Images — shared assets from RVS.UI.Shared RCL
+       Usage: background-image: var(--rvs-image-tetons)
+       -------------------------------------------------------- */
+    --rvs-image-tetons: url('/_content/RVS.UI.Shared/images/tetons.jpg');
+}
+
+/* --------------------------------------------------------
+   Background — Tetons hero image
+   Covers the full element, centred, no repeat.
+   Usage: <div class="rvs-bg-tetons"> or Style="..." in Blazor
+   -------------------------------------------------------- */
+.rvs-bg-tetons {
+    background-image: var(--rvs-image-tetons);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }

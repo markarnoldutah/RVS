@@ -6,31 +6,25 @@
 <MudStack AlignItems="AlignItems.Center" Spacing="4"
           Style="max-width: 700px; margin: 0 auto;">
 
-    @* Back button — top-left, visible on steps 2–8 *@
+    @* Header row — Back button (left) + step progress (right), visible on steps 2–8 *@
     @if (_state.CurrentStep > 1)
     {
-        <MudButton Variant="Variant.Text"
-                   Color="Color.Default"
-                   StartIcon="@Icons.Material.Filled.ArrowBack"
-                   OnClick="HandlePreviousStep"
-                   Style="text-transform: none; align-self: flex-start;"
-                   aria-label="Go back">
-            Back
-        </MudButton>
-    }
-
-    @* Validation errors *@
-    @if (_validationErrors.Count > 0)
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-2" Style="width: 100%;"
-                  role="alert">
-            <ul style="margin: 0; padding-left: 16px;">
-                @foreach (var error in _validationErrors)
-                {
-                    <li>@error</li>
-                }
-            </ul>
-        </MudAlert>
+        <MudStack Row="true" AlignItems="AlignItems.Center"
+                  Class="pa-2 rounded"
+                  Style="width: 100%; background: color-mix(in srgb, var(--mud-palette-background-gray) 75%, transparent);">
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="HandlePreviousStep"
+                       Style="text-transform: none;"
+                       aria-label="Go back">
+                Back
+            </MudButton>
+            <MudSpacer />
+            <MudText Typo="Typo.caption">
+                Step @_state.CurrentStep of @_state.TotalSteps
+            </MudText>
+        </MudStack>
     }
 
     @* Wizard step content *@

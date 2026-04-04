@@ -25,6 +25,7 @@ public class IntakeWizardStateTests
         state.Phone.Should().BeNull();
         state.IsPrefilled.Should().BeFalse();
         state.Vin.Should().BeEmpty();
+        state.VinLookupSucceeded.Should().BeFalse();
         state.IsSubmitted.Should().BeFalse();
     }
 
