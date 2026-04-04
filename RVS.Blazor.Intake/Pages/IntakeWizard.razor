@@ -109,13 +109,23 @@
             return;
         }
 
-        await _state.GoToNextStepAsync();
+        if (_state.EditingFromReview)
+        {
+            _state.EditingFromReview = false;
+            await _state.GoToStepAsync(8);
+        }
+        else
+        {
+            await _state.GoToNextStepAsync();
+        }
+
         _validationErrors = [];
     }
 
     private async Task HandlePreviousStep()
     {
         _validationErrors = [];
+        _state.FieldErrors = [];
         await _state.GoToPreviousStepAsync();
     }
 
