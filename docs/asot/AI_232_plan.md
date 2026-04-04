@@ -1,5 +1,16 @@
 # AI-232: Sentiment Analysis Implementation Plan (Option B)
 
+## Status Update
+
+This issue plan is now governed by the cross-app architecture in `Docs/ASOT/AI_Architecture_Blueprint.md`.
+
+Apply the blueprint standards before implementation:
+
+- Use standardized AI endpoint naming under `/api/intake/{locationSlug}/ai/*` where customer-facing AI actions are exposed.
+- Return the shared AI response envelope (`success`, `result`, `confidence`, `warnings`, `provider`, `correlationId`) for AI-specific endpoints.
+- Emit tenant-scoped AI telemetry and enforce per-tenant throttling/budget controls.
+- Keep sentiment and other AI enrichment server-side and dealer-facing only unless explicitly approved for customer visibility.
+
 ## Overview
 
 Add server-side sentiment analysis to the intake orchestration pipeline. Sentiment is derived from the customer's `IssueDescription` text **exclusively on the server** during `IntakeOrchestrationService.ExecuteAsync()` — the customer never sees or sends any sentiment data. Results are stored on the `ServiceRequest` entity and surfaced only in the dealer-facing Manager app (detail page + service board cards).

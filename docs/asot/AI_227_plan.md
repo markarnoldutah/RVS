@@ -1,5 +1,16 @@
 # Implementation Plan: VIN Extraction from Photo (Option B2 — Azure OpenAI GPT-4o Vision)
 
+## Status Update
+
+This issue plan is now governed by the cross-app architecture in `Docs/ASOT/AI_Architecture_Blueprint.md`.
+
+Apply the blueprint standards before implementation:
+
+- Use standardized AI endpoint naming under `/api/intake/{locationSlug}/ai/*`.
+- Return the shared AI response envelope (`success`, `result`, `confidence`, `warnings`, `provider`, `correlationId`).
+- Emit tenant-scoped AI telemetry and enforce per-tenant throttling/budget controls.
+- Keep VIN extraction as assistive UI behavior with customer review before final submission.
+
 **Issue:** #227 — Intake: implement VIN extraction from photo
 **Approach:** Server-side VIN OCR via Azure OpenAI GPT-4o Vision, following existing `IVinDecoderService` / `AzureOpenAiCategorizationService` patterns
 
