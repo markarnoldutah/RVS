@@ -102,6 +102,7 @@ Use explicit nested routes under intake and service requests.
 - `POST /api/intake/{locationSlug}/ai/extract-vin`
 - `POST /api/intake/{locationSlug}/ai/transcribe-issue`
 - `POST /api/intake/{locationSlug}/ai/refine-issue-text`
+- `POST /api/intake/{locationSlug}/ai/suggest-category`
 - `POST /api/intake/{locationSlug}/ai/structure-issue`
 
 ### Diagnostics conversation endpoints
@@ -151,8 +152,13 @@ Introduce `AiClient` abstraction consumed by all UI apps:
   - Browser/native microphone capture
   - Optional local speech capture where available
 - Send media/transcript to API for canonical AI processing.
+- Speech-first step order is supported: capture description first, then auto-suggest issue category.
 - UX pattern for every AI assistive action:
   - `Draft generated` -> `Customer review/edit` -> `Accept`.
+- Category suggestion pattern:
+  - AI preselects the category and shows a "AI suggested" indicator.
+  - Category dropdown remains editable for user override.
+  - Submit-time orchestration still performs final categorization/validation.
 - Never trust client-side extracted fields as final; server returns canonical values.
 
 ## Manager app (`RVS.Blazor.Manager`)
@@ -230,7 +236,7 @@ Introduce `AiClient` abstraction consumed by all UI apps:
   - Client: Intake camera capture + review/accept UX.
 - **#232 speech-to-text**
   - Capability: `ISpeechToTextService` + `IIssueTextRefinementService`
-  - Endpoints: `POST /ai/transcribe-issue`, `POST /ai/refine-issue-text`
+  - Endpoints: `POST /ai/transcribe-issue`, `POST /ai/refine-issue-text`, `POST /ai/suggest-category`
   - Client: microphone affordance on issue field, editable result.
 - **#233 structured issue extraction from transcript**
   - Capability: `IIssueStructuringService`

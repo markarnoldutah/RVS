@@ -133,6 +133,35 @@
 - `200 OK`: Contract response returned.
 - `400 BadRequest`: Invalid transcript payload.
 
+## Endpoint 4: Category suggestion from description (#232 + FR-004)
+
+- **Method/Route:** `POST /api/intake/{locationSlug}/ai/suggest-category`
+- **Auth:** `[AllowAnonymous]`
+- **Rate limit:** `IntakeEndpoint` policy
+
+### Request DTO contract
+
+- **Type:** `IssueCategorySuggestionRequestDto`
+
+| Field | Type | Required | Rules |
+|------|------|----------|------|
+| `issueDescription` | string | Yes | 1..2000 chars |
+
+### Response DTO contract
+
+- **Type:** `AiOperationResponseDto<IssueCategorySuggestionResultDto>`
+
+`IssueCategorySuggestionResultDto`:
+
+| Field | Type | Required | Notes |
+|------|------|----------|------|
+| `issueCategory` | string? | No | Null when no confident suggestion is available |
+
+### Status codes
+
+- `200 OK`: Contract response returned.
+- `400 BadRequest`: Invalid description payload.
+
 ## Epic Phases and Issue Breakdown
 
 ### Phase 0: Cross-cutting foundation
@@ -176,9 +205,10 @@
 | TASK-018 | GREEN: Implement services `RVS.API/Integrations/AzureSpeechToTextService.cs`, `RVS.API/Integrations/MockSpeechToTextService.cs`, `RVS.API/Integrations/AzureOpenAiIssueTextRefinementService.cs`, `RVS.API/Integrations/RuleBasedIssueTextRefinementService.cs`. |  |  |
 | TASK-019 | RED: Add failing controller tests in `Tests/RVS.API.Tests/Controllers/IntakeControllerTests.cs` for `POST ai/transcribe-issue` and `POST ai/refine-issue-text`. |  |  |
 | TASK-020 | GREEN: Implement endpoints in `RVS.API/Controllers/IntakeController.cs` and wire into DI in `RVS.API/Program.cs`. |  |  |
-| TASK-021 | GREEN: Extend `RVS.UI.Shared/Services/IntakeApiClient.cs` with `TranscribeIssueAsync(...)` and `RefineIssueTextAsync(...)`. |  |  |
-| TASK-022 | GREEN: Update `RVS.Blazor.Intake` issue-description step component to support mic capture, spinner state, editable cleaned output, and fallback text input. |  |  |
-| TASK-023 | REFACTOR: Add/adjust tests in `Tests/RVS.UI.Shared.Tests/Services/IntakeApiClientTests.cs` and relevant Blazor tests for issue step UX behavior. |  |  |
+| TASK-021 | GREEN: Extend `RVS.UI.Shared/Services/IntakeApiClient.cs` with `TranscribeIssueAsync(...)`, `RefineIssueTextAsync(...)`, and `SuggestIssueCategoryAsync(...)`. |  |  |
+| TASK-022 | GREEN: Update `RVS.Blazor.Intake` issue-description step component to support mic capture, spinner state, editable cleaned output, speech-first ordering, and fallback text input. |  |  |
+| TASK-023 | GREEN: Add debounced category suggestion call on description completion and render an "AI suggested" indicator while keeping category override enabled. |  |  |
+| TASK-023A | REFACTOR: Add/adjust tests in `Tests/RVS.UI.Shared.Tests/Services/IntakeApiClientTests.cs` and relevant Blazor tests for issue step UX behavior and suggestion override logic. |  |  |
 
 ### Phase 3: Wave 1 hardening and release
 
@@ -205,10 +235,12 @@
 | `RVS.Domain/DTOs/VinExtractionResultDto.cs` | #227 | TASK-006 | Create result DTO |
 | `RVS.API/Integrations/MockVinExtractionService.cs` | #227 | TASK-008 | Create mock implementation |
 | `RVS.API/Integrations/AzureOpenAiVinExtractionService.cs` | #227 | TASK-008 | Create OpenAI implementation |
-| `RVS.API/Controllers/IntakeController.cs` | #227, #232 | TASK-010, TASK-020 | Add 3 AI endpoints and validation |
+| `RVS.API/Controllers/IntakeController.cs` | #227, #232 | TASK-010, TASK-020 | Add 4 AI endpoints and validation |
 | `RVS.UI.Shared/Services/IntakeApiClient.cs` | #227, #232 | TASK-011, TASK-021 | Add typed client methods |
 | `RVS.Blazor.Intake/Pages/VinLookupStep.razor` | #227 | TASK-012 | Invoke VIN extraction and confidence UX |
 | `RVS.Blazor.Intake/Pages/Issue*.razor` | #232 | TASK-022 | Mic UX + cleaned text review |
+| `RVS.Domain/DTOs/IssueCategorySuggestionRequestDto.cs` | #232 | TASK-016 | Create request DTO |
+| `RVS.Domain/DTOs/IssueCategorySuggestionResultDto.cs` | #232 | TASK-016 | Create result DTO |
 | `RVS.Domain/Integrations/ISpeechToTextService.cs` | #232 | TASK-015 | Create interface |
 | `RVS.Domain/Integrations/IIssueTextRefinementService.cs` | #232 | TASK-015 | Create interface |
 | `RVS.Domain/DTOs/IssueTranscriptionRequestDto.cs` | #232 | TASK-016 | Create request DTO |
@@ -223,7 +255,7 @@
 | `Tests/RVS.API.Tests/Integrations/MockVinExtractionServiceTests.cs` | #227 | TASK-007 | Add integration tests |
 | `Tests/RVS.API.Tests/Integrations/AzureOpenAiVinExtractionServiceTests.cs` | #227 | TASK-007 | Add integration tests |
 | `Tests/RVS.API.Tests/Controllers/IntakeControllerTests.cs` | #227, #232 | TASK-009, TASK-019 | Add endpoint tests |
-| `Tests/RVS.UI.Shared.Tests/Services/IntakeApiClientTests.cs` | #227, #232 | TASK-013, TASK-023 | Add client contract tests |
+| `Tests/RVS.UI.Shared.Tests/Services/IntakeApiClientTests.cs` | #227, #232 | TASK-013, TASK-023A | Add client contract tests |
 | `Tests/RVS.Domain.Tests/DTOs/IssueTranscriptionDtoTests.cs` | #232 | TASK-014 | Add DTO tests |
 | `Tests/RVS.Domain.Tests/DTOs/IssueTextRefinementDtoTests.cs` | #232 | TASK-014 | Add DTO tests |
 | `Tests/RVS.API.Tests/Integrations/AzureSpeechToTextServiceTests.cs` | #232 | TASK-017 | Add integration tests |
@@ -245,6 +277,7 @@
 - **AC-232-02:** Cleaned description is editable before submission.
 - **AC-232-03:** Failures do not block manual issue entry.
 - **AC-232-04:** Transcript/refinement endpoints return standardized envelope and confidence/provider metadata.
+- **AC-232-05:** Description-first flow auto-suggests category and preselects dropdown while preserving manual override.
 
 ## Risks and Mitigations
 
