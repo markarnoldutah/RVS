@@ -114,6 +114,12 @@ public sealed class IntakeWizardState
     /// </summary>
     public int? ReturnToStepAfterEdit { get; set; }
 
+    /// <summary>
+    /// Per-field validation errors populated by <see cref="ValidateCurrentStep"/>.
+    /// Maps field names (e.g., "FirstName", "Email") to their error messages.
+    /// </summary>
+    public Dictionary<string, string> FieldErrors { get; set; } = [];
+
     /// <summary>Event raised when state changes to notify UI components.</summary>
     public event Action? OnChange;
 
@@ -135,11 +141,6 @@ public sealed class IntakeWizardState
         if (CurrentStep < TotalStepCount)
         {
             CurrentStep++;
-            if (CurrentStep == TotalStepCount)
-            {
-                EditingFromReview = false;
-            }
-
             NotifyStateChanged();
             await PersistAsync();
         }
@@ -363,7 +364,6 @@ public sealed class IntakeWizardState
         Attachments = [];
         IsSubmitted = false;
         CreatedServiceRequestId = null;
-        EditingFromReview = false;
         FieldErrors = [];
 
         await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", StorageKey);
