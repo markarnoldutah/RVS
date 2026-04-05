@@ -347,7 +347,36 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ShouldRotateMagicLinkToken()
+    public async Task ExecuteAsync_WhenValidTokenExists_ShouldNotRotateMagicLinkToken()
+    {
+        SetupFullHappyPath();
+
+        // Arrange: pre-populate a valid (non-expired) token on the global account
+        var existingToken = "existing:token";
+        var existingExpiry = DateTime.UtcNow.AddDays(60);
+        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlobalCustomerAcct
+            {
+                Id = "gca_test",
+                Email = "jane@example.com",
+                FirstName = "Jane",
+                LastName = "Doe",
+                CreatedByUserId = "intake",
+                MagicLinkToken = existingToken,
+                MagicLinkExpiresAtUtc = existingExpiry,
+            });
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a =>
+                a.MagicLinkToken == existingToken &&
+                a.MagicLinkExpiresAtUtc == existingExpiry),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTokenIsNull_ShouldGenerateNewMagicLinkToken()
     {
         SetupFullHappyPath();
 
@@ -356,7 +385,37 @@ public class IntakeOrchestrationServiceTests
         _globalAcctRepoMock.Verify(r => r.UpdateAsync(
             It.Is<GlobalCustomerAcct>(a =>
                 a.MagicLinkToken != null &&
-                a.MagicLinkExpiresAtUtc.HasValue),
+                a.MagicLinkExpiresAtUtc.HasValue &&
+                a.MagicLinkExpiresAtUtc.Value > DateTime.UtcNow.AddDays(89)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTokenIsExpired_ShouldGenerateNewMagicLinkToken()
+    {
+        SetupFullHappyPath();
+
+        // Arrange: pre-populate an expired token on the global account
+        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlobalCustomerAcct
+            {
+                Id = "gca_test",
+                Email = "jane@example.com",
+                FirstName = "Jane",
+                LastName = "Doe",
+                CreatedByUserId = "intake",
+                MagicLinkToken = "old:expiredtoken",
+                MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(-1),
+            });
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a =>
+                a.MagicLinkToken != "old:expiredtoken" &&
+                a.MagicLinkToken != null &&
+                a.MagicLinkExpiresAtUtc.HasValue &&
+                a.MagicLinkExpiresAtUtc.Value > DateTime.UtcNow.AddDays(89)),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

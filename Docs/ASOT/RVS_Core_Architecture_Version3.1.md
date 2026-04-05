@@ -33,7 +33,7 @@ RVS is a B2B SaaS platform for RV dealership service management. The backend is 
 3. Tenant-scoped profile resolution + asset ownership tracking
 4. ServiceRequest creation with auto-categorization (AI + rule-based fallback)
 5. Append to asset ledger
-6. Update linkages (customer request count, magic-link rotation)
+6. Update linkages (customer request count, stable magic-link token)
 7. Send confirmation email
 
 **Magic-Link Design:** Customer sees all their SRs across corporations via `api/status/{token}`. Token embeds email-hash prefix enabling O(1) partition-key derivation (no cross-partition query).
@@ -295,8 +295,8 @@ One document cannot serve three different access patterns:
 │ CustomerProfile: add SR ID, increment count      │
 │ GlobalCustomerAcct: add assetId, add linked profile│
 │   reference (with locationId + locationName),    │
-│   rotate magic-link token                        │
-│   (format: base64url(emailHash):random_bytes)    │
+│   update magic-link token (generated once, reused;  │
+│   regenerated only if absent or expired)           │
 │ Cost: ~2 RU                                      │
 └──────────────────┬───────────────────────────────┘
                    │
@@ -363,7 +363,7 @@ Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepos
 2. Calls `ICustomerProfileService.ResolveOrCreateProfileAsync` with the resolved identity, asset identifier, and asset info. This handles shadow profile creation and asset ownership transfer.
 3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds a `CustomerSnapshotEmbedded` denormalized from the profile (firstName, lastName, email, phone, isReturningCustomer, priorRequestCount). Embeds `DiagnosticResponses` from the request DTO (captured during the AI-guided wizard step). Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary — the categorization service uses diagnostic responses (if present) to produce higher-quality results.
 4. Calls `IAssetLedgerService.RecordServiceEventAsync` to append the data moat entry with locationId and locationName.
-5. Updates linkages: increments `TotalRequestCount`, rotates the magic-link token on the global identity. Token format: `base64url(SHA256(email)[0..8]):random_bytes` — embeds the email hash so token lookup derives the partition key without a cross-partition query. (Service requests for a customer are retrieved via query: `WHERE tenantId = @t AND customerProfileId = @p` on the `serviceRequests` container — a cheap single-partition read (~3 RU) that avoids unbounded list growth on the profile document.)
+5. Updates linkages: increments `TotalRequestCount`, conditionally updates the magic-link token on the global identity (generated once when the account is first created or when the existing token has expired; reused on subsequent intakes). Token format: `base64url(SHA256(email)[0..8]):random_bytes` — embeds the email hash so token lookup derives the partition key without a cross-partition query. (Service requests for a customer are retrieved via query: `WHERE tenantId = @t AND customerProfileId = @p` on the `serviceRequests` container — a cheap single-partition read (~3 RU) that avoids unbounded list growth on the profile document.)
 6. Fires `INotificationService.SendIntakeConfirmationAsync` with the magic-link token (fire-and-forget).
 
 ### 7.2 CustomerProfileService (Shadow Profile + Asset Ownership)
@@ -544,8 +544,8 @@ rvs-attachments/
 |---|---|
 | **Token format** | `base64url(SHA256(email)[0..8]):random_bytes` — email-hash prefix embedded in token enables partition-key derivation on lookup (single-partition point read, no cross-partition query) |
 | **Token guessing** | Random portion is 32-byte cryptographic random (256-bit entropy), URL-safe Base64. The 8-byte email-hash prefix is non-secret metadata; security relies entirely on the random portion. |
-| **Token expiry** | 30-day default, configurable per tenant |
-| **Token rotation** | New token on every intake submission; previous invalidated |
+| **Token expiry** | 90-day default, configurable per tenant |
+| **Token rotation** | Token generated once per account; reused on subsequent intakes; regenerated only when absent or expired |
 | **Rate limiting** | `api/status/{token}` limited to 10 req/min per IP |
 | **PII exposure** | Status page returns first name + asset summaries only — no full email, no phone, no other customers' data |
 | **Cross-dealer visibility** | Customer sees their own requests across all corporations — intentional for customer convenience. No other customer's data is exposed. |

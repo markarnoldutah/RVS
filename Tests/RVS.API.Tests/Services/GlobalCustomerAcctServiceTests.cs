@@ -239,7 +239,7 @@ public class GlobalCustomerAcctServiceTests
 
         result.MagicLinkToken.Should().NotBeNullOrWhiteSpace();
         result.MagicLinkToken.Should().Contain(":");
-        result.MagicLinkExpiresAtUtc.Should().BeAfter(DateTime.UtcNow);
+        result.MagicLinkExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddDays(90), TimeSpan.FromSeconds(5));
         result.UpdatedByUserId.Should().Be("usr_test");
     }
 
