@@ -23,8 +23,8 @@ public sealed class MockVinExtractionService : IVinExtractionService
         ArgumentNullException.ThrowIfNull(imageData);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
 
-        _logger.LogDebug("MockVinExtractionService returning hardcoded VIN {Vin} for {ContentType} image ({Bytes} bytes)",
-            MockVin, contentType, imageData.Length);
+        _logger.LogDebug("MockVinExtractionService returning hardcoded VIN {Vin} for image ({Bytes} bytes)",
+            MockVin, imageData.Length);
 
         var result = new VinExtractionResult(MockVin, MockConfidence, nameof(MockVinExtractionService));
         return Task.FromResult<VinExtractionResult?>(result);
