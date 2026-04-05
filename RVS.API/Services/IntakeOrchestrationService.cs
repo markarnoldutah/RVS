@@ -225,9 +225,15 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _logger.LogInformation("Intake Step 6: Updated CustomerProfile {ProfileId} requestCount={Count}",
             profile.Id, profile.TotalRequestCount);
 
-        var token = GlobalCustomerAcctService.GenerateMagicLinkToken(normalizedEmail);
-        globalAcct.MagicLinkToken = token;
-        globalAcct.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30);
+        var tokenIsAbsent = globalAcct.MagicLinkToken is null;
+        var tokenIsExpired = globalAcct.MagicLinkExpiresAtUtc.HasValue &&
+                             globalAcct.MagicLinkExpiresAtUtc.Value <= DateTime.UtcNow;
+
+        if (tokenIsAbsent || tokenIsExpired)
+        {
+            globalAcct.MagicLinkToken = GlobalCustomerAcctService.GenerateMagicLinkToken(normalizedEmail);
+            globalAcct.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(90);
+        }
         if (!globalAcct.AllKnownAssetIds.Contains(assetId))
         {
             globalAcct.AllKnownAssetIds.Add(assetId);
@@ -255,7 +261,10 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         globalAcct.MarkAsUpdated("intake");
         await _globalCustomerAcctRepository.UpdateAsync(globalAcct, cancellationToken);
-        _logger.LogInformation("Intake Step 6: Rotated magic-link token for GlobalCustomerAcct {AcctId}",
+        _logger.LogInformation(
+            tokenIsAbsent || tokenIsExpired
+                ? "Intake Step 6: Generated new magic-link token for GlobalCustomerAcct {AcctId}"
+                : "Intake Step 6: Reused existing magic-link token for GlobalCustomerAcct {AcctId}",
             globalAcct.Id);
 
         // ── Step 7: Fire-and-forget notification ─────────────────────────────

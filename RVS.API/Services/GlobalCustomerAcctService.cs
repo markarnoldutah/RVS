@@ -103,7 +103,7 @@ public sealed class GlobalCustomerAcctService : IGlobalCustomerAcctService
 
         var token = GenerateMagicLinkToken(normalizedEmail);
         account.MagicLinkToken = token;
-        account.MagicLinkExpiresAtUtc = expiresAtUtc ?? DateTime.UtcNow.AddDays(30);
+        account.MagicLinkExpiresAtUtc = expiresAtUtc ?? DateTime.UtcNow.AddDays(90);
         account.MarkAsUpdated(_userContext.UserId);
 
         return await _repository.UpdateAsync(account, cancellationToken);

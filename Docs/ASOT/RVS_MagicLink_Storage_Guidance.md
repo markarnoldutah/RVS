@@ -12,10 +12,10 @@ This document resolves the P0 inconsistency between `RVS_PRD.md` Section 7.2 and
 
 **Rationale:** The current implementation already provides adequate security through:
 1. Cryptographically secure random token generation (16 random bytes + email hash prefix)
-2. Time-limited expiration (default 30 days, configurable)
+2. Time-limited expiration (default 90 days, configurable)
 3. Cosmos DB encryption at rest (Microsoft-managed keys)
 4. HTTPS-only transmission
-5. Single-use semantic (token rotated on next intake)
+5. Stable token (generated once per account; regenerated only when absent or expired)
 
 **Recommendation:** No code changes required. Remove hedging language from PRD Section 7.2. Document the security model explicitly in Core Architecture.
 
@@ -68,7 +68,7 @@ internal static string GenerateMagicLinkToken(string email)
 public string? MagicLinkToken { get; set; }
 
 /// <summary>
-/// Expiration time for the magic-link token. Default 30 days, configurable per tenant.
+/// Expiration time for the magic-link token. Default 90 days, configurable per tenant.
 /// </summary>
 [JsonProperty("magicLinkExpiresAtUtc")]
 public DateTime? MagicLinkExpiresAtUtc { get; set; }
@@ -130,10 +130,10 @@ public async Task<GlobalCustomerAcct?> GetByMagicLinkTokenAsync(string token, Ca
 | Threat | Attack Vector | Mitigation (Current) |
 |---|---|---|
 | **Token Theft (Network)** | Man-in-the-middle intercepts email with magic link URL | HTTPS-only transmission, email TLS |
-| **Token Theft (Email Compromise)** | Attacker gains access to customer's email inbox | Time-limited expiration (30 days), single-device semantics |
+| **Token Theft (Email Compromise)** | Attacker gains access to customer's email inbox | Time-limited expiration (90 days), single-device semantics |
 | **Token Theft (Database Breach)** | Attacker exfiltrates Cosmos DB backup or gains read access | Cosmos DB encryption at rest, RBAC, firewall |
 | **Token Guessing (Brute Force)** | Attacker generates random tokens and tests them | 128-bit entropy (2^128 possible values = computationally infeasible) |
-| **Token Replay** | Attacker reuses old token after customer generates new one | Token rotation on next intake (old token still valid until expiry) |
+| **Token Replay** | Attacker reuses old token after customer generates new one | Stable token with 90-day expiry; token regenerated only when absent or expired |
 | **Cross-Partition Scan** | Attacker attempts to enumerate all tokens | Not possible — query requires exact token match, indexed |
 
 ### 2.2 Hashed vs. Unhashed Storage Trade-Offs
@@ -144,7 +144,7 @@ public async Task<GlobalCustomerAcct?> GetByMagicLinkTokenAsync(string token, Ca
 - ✅ **Simple validation:** Direct equality check in Cosmos DB query (`c.magicLinkToken = @token`)
 - ✅ **Efficient lookup:** Indexed query, ~2-3 RU per validation
 - ✅ **No hash collision risk:** No birthday paradox concerns for short hash outputs
-- ✅ **Token rotation works:** Can replace old token without hash conflicts
+- ✅ **Token rotation works:** Can replace old token without hash conflicts (token regenerated on expiry)
 - ✅ **Already encrypted at rest:** Cosmos DB applies AES-256 encryption automatically
 - ✅ **Audit trail:** Can correlate token usage across Application Insights logs
 
@@ -165,7 +165,7 @@ public async Task<GlobalCustomerAcct?> GetByMagicLinkTokenAsync(string token, Ca
 - ❌ **Same query complexity:** Cosmos DB still requires cross-partition query (hashing doesn't enable partition-key derivation)
 - ❌ **Code complexity:** `ValidateMagicLinkTokenAsync` must hash incoming token before query (`SHA256.HashData(token)` → lookup)
 - ❌ **Hash collision risk:** With short-lived tokens and large token space, collision probability is negligible but non-zero
-- ❌ **No operational benefit:** Token rotation is already single-use semantic — hashing doesn't improve the security model meaningfully
+- ❌ **No operational benefit:** Token stability (reuse across intakes) aligns with the security model — hashing doesn't improve it meaningfully
 
 **Security Level:** **High** (marginal improvement over Option A for database breach scenario)
 
@@ -229,7 +229,7 @@ var suffixHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(s
    - Cosmos DB firewall restricts access to App Service IPs only
    - RBAC prevents unauthorized read access (only App Service managed identity)
    - Application Insights logs all token validation events with customer email (hashed)
-   - Time-limited expiration (30 days) limits breach window
+   - Time-limited expiration (90 days) limits breach window
 
 3. **Hashing provides marginal value:** If an attacker has read access to Cosmos DB, they already have:
    - Customer email, name, phone (PII)
@@ -239,7 +239,7 @@ var suffixHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(s
 
 4. **Industry precedent:** Password reset tokens (similar threat model) are often stored unhashed when:
    - Token entropy is high (128 bits)
-   - Tokens are time-limited (< 1 hour for password reset, 30 days for status page is acceptable)
+   - Tokens are time-limited (< 1 hour for password reset, 90 days for status page is acceptable)
    - Database is encrypted at rest
    - Access is HTTPS-only
    
@@ -267,10 +267,10 @@ var suffixHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(s
 **Update `RVS_PRD.md` Section 7.2** (remove hedging language):
 
 **Current (ambiguous):**
-> Magic-link tokens are cryptographically random, time-limited (configurable expiry, default 30 days), and **stored hashed if the implementation requires additional security hardening**.
+> Magic-link tokens are cryptographically random, time-limited (configurable expiry, default 90 days), and **stored hashed if the implementation requires additional security hardening**.
 
 **Revised (authoritative):**
-> Magic-link tokens are cryptographically random (128-bit entropy), time-limited (configurable expiry, default 30 days), and stored as-is in Cosmos DB. Tokens are protected by Cosmos DB encryption at rest (AES-256), HTTPS-only transmission, RBAC access controls, and time-based expiration. Token format includes an email-hash prefix enabling O(1) partition-key derivation during validation.
+> Magic-link tokens are cryptographically random (128-bit entropy), time-limited (configurable expiry, default 90 days), and stored as-is in Cosmos DB. Tokens are protected by Cosmos DB encryption at rest (AES-256), HTTPS-only transmission, RBAC access controls, and time-based expiration. Token format includes an email-hash prefix enabling O(1) partition-key derivation during validation.
 
 **Update `RVS_Core_Architecture_Version3.1.md` Section 13** (add security rationale):
 
@@ -282,8 +282,8 @@ var suffixHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(s
 > 
 > **Storage:** Tokens are stored unhashed in `GlobalCustomerAcct.magicLinkToken`. This design balances security and operational simplicity:
 > - **Entropy:** 128 bits (NIST SP 800-63B compliant)
-> - **Expiration:** 30 days (configurable per tenant)
-> - **Rotation:** Token replaced on next intake (soft single-use semantic)
+> - **Expiration:** 90 days (configurable per tenant)
+> - **Rotation:** Token generated once per account; reused on subsequent intakes; regenerated only when absent or expired
 > - **Protection:** Cosmos DB encryption at rest, RBAC, firewall, HTTPS-only
 > - **Threat mitigation:** Database breach exposes read-only customer data access — equivalent to the access the customer already has via their email. Token does not enable privilege escalation.
 
@@ -295,7 +295,7 @@ var suffixHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(s
 
 1. **Token enables write access:** If future requirements allow customers to update service requests via magic link (e.g., "Add another photo"), hashing becomes mandatory.
 2. **Token grants financial access:** If RVS adds billing/payment status via magic link, hashing is required (PCI-DSS applies).
-3. **Token does not expire:** If tokens become long-lived (> 90 days), hashing provides defense-in-depth against stale token abuse.
+3. **Token does not expire:** If tokens become very long-lived (> 180 days), hashing provides defense-in-depth against stale token abuse.
 4. **Compliance requirement:** If a specific customer contract requires SOC 2 Type II or ISO 27001 certification and the auditor mandates hashing all "authentication tokens."
 5. **Multi-tenant data exposure risk:** If a database breach could expose tokens from multiple dealerships (currently not possible — tokens only expose data scoped to one customer email).
 
@@ -324,15 +324,15 @@ var suffixHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(s
 | Security Control | Status | Notes |
 |---|---|---|
 | **High Entropy (128 bits)** | ✅ Implemented | `RandomNumberGenerator.Fill(randomBytes)` with 16 bytes |
-| **Time-Limited Expiration** | ✅ Implemented | Default 30 days, enforced in `ValidateMagicLinkTokenAsync` |
+| **Time-Limited Expiration** | ✅ Implemented | Default 90 days, enforced in `ValidateMagicLinkTokenAsync` |
 | **HTTPS-Only Transmission** | ✅ Enforced | App Service HTTPS redirect, email links use `https://` |
 | **Encryption at Rest** | ✅ Automatic | Cosmos DB AES-256 encryption (Microsoft-managed keys) |
 | **Encryption in Transit** | ✅ Automatic | TLS 1.2+ enforced on App Service and Cosmos DB |
 | **RBAC Access Control** | ✅ Implemented | Only App Service managed identity has Cosmos read access |
 | **Firewall Protection** | ✅ Implemented | Cosmos DB firewall restricts to App Service outbound IPs |
 | **Audit Logging** | ✅ Implemented | Application Insights logs all token validations with `TenantId` and hashed email |
-| **Token Rotation** | ✅ Implemented | Token replaced on next intake (`GenerateMagicLinkTokenAsync` called per intake) |
-| **Single-Use Semantic** | ⚠️ Soft enforcement | Old token remains valid until expiry — acceptable for status page (no write access) |
+| **Token Stability** | ✅ Implemented | Token generated once per account; reused on subsequent intakes; regenerated only when absent or expired |
+| **Single-Use Semantic** | ⚠️ Removed (by design) | Token is stable across intakes — acceptable for status page (read-only access, 90-day expiry, 128-bit entropy) |
 | **Rate Limiting** | ✅ Implemented | `[EnableRateLimiting("FixedWindow10Per10Sec")]` on status endpoint |
 | **No Logging of Token** | ✅ Verified | Application Insights logs do not capture query parameters (token in URL path) |
 
@@ -347,7 +347,7 @@ var suffixHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(s
 **Key Points:**
 
 1. ✅ **No code changes required** — current implementation is secure and correct
-2. ✅ **High entropy (128 bits)** and time-limited expiration (30 days) provide adequate security
+2. ✅ **High entropy (128 bits)** and time-limited expiration (90 days) provide adequate security
 3. ✅ **Defense-in-depth:** Cosmos DB encryption at rest, HTTPS, RBAC, firewall, audit logging
 4. ✅ **Threat model alignment:** Database breach exposes read-only status page access — equivalent to customer's existing access via email
 5. ✅ **Industry precedent:** Similar to GitHub password reset tokens, AWS STS credentials, Azure SAS tokens
