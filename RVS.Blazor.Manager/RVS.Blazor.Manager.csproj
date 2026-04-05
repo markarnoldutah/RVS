@@ -1,5 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
 
+  <!--
+    Manager is intentionally NOT a PWA.
+    No ServiceWorkerAssetsManifest, manifest.webmanifest, or service-worker.js are included.
+    Reason: MSAL redirect auth conflicts with service-worker fetch interception, users are on
+    reliable dealership networks, and real-time polling data cannot be meaningfully cached.
+    See Docs/ADR/ADR-001-manager-no-pwa.md for the full decision record.
+  -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
