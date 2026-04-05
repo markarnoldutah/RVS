@@ -23,32 +23,27 @@ param openAiCapacity int = 1
 @description('Optional. Name of an existing Key Vault to store OpenAI secrets. Leave empty to skip secret creation.')
 param keyVaultName string = ''
 
-// ── Variables ─────────────────────────────────────────────────
-
-var environmentDisplayName = {
-  dev: 'Development'
-  staging: 'Staging'
-  prod: 'Production'
-}
-
-var tags = {
-  Environment: environmentDisplayName[environmentName]
-  Workload: 'RVS'
-  CostCenter: 'Engineering'
-  Owner: 'platform-team@example.com'
-  ManagedBy: 'Bicep'
-}
-
 // ── Modules ───────────────────────────────────────────────────
+
+module openAiNaming 'modules/naming-tags.bicep' = {
+  name: 'deploy-openai-naming-${environmentName}'
+  params: {
+    resourceTypePrefix: 'oai'
+    appName: 'rvs'
+    workload: 'ai'
+    environmentName: environmentName
+    location: location
+  }
+}
 
 module openAi 'modules/openai.bicep' = {
   name: 'deploy-openai-${environmentName}'
   params: {
     location: location
     environmentName: environmentName
-    tags: tags
+    tags: openAiNaming.outputs.tags
     deploymentCapacity: openAiCapacity
-    resourceName: 'openai-${environmentName}'
+    resourceName: openAiNaming.outputs.resourceName
   }
 }
 
