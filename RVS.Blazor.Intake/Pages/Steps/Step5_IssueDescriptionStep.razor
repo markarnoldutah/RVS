@@ -35,7 +35,9 @@
                                Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
-                               AnchorOrigin="Origin.BottomCenter">
+                               AnchorOrigin="Origin.BottomCenter"
+                               TransformOrigin="Origin.TopCenter"
+                               RelativeWidth="DropdownWidth.Adaptive">
                         @foreach (var category in _categories)
                         {
                             <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
@@ -49,7 +51,9 @@
                                Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
-                               AnchorOrigin="Origin.BottomCenter">
+                               AnchorOrigin="Origin.BottomCenter"
+                               TransformOrigin="Origin.TopCenter"
+                               RelativeWidth="DropdownWidth.Adaptive">
                         <MudSelectItem T="string" Value="@("Electrical")">Electrical</MudSelectItem>
                         <MudSelectItem T="string" Value="@("Plumbing")">Plumbing</MudSelectItem>
                         <MudSelectItem T="string" Value="@("HVAC")">HVAC / Climate Control</MudSelectItem>
@@ -71,7 +75,9 @@
                            @bind-Value="State.Urgency"
                            Variant="Variant.Outlined"
                            Margin="Margin.Dense"
-                           AnchorOrigin="Origin.BottomCenter">
+                           AnchorOrigin="Origin.BottomCenter"
+                           TransformOrigin="Origin.TopCenter"
+                           RelativeWidth="DropdownWidth.Adaptive">
                     <MudSelectItem T="string" Value="@("Low")">
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Success" Size="Size.Small" />
@@ -108,7 +114,9 @@
                            @bind-Value="State.RvUsage"
                            Variant="Variant.Outlined"
                            Margin="Margin.Dense"
-                           AnchorOrigin="Origin.BottomCenter">
+                           AnchorOrigin="Origin.BottomCenter"
+                           TransformOrigin="Origin.TopCenter"
+                           RelativeWidth="DropdownWidth.Adaptive">
                     <MudSelectItem T="string" Value="@("Full-Time")">Full-Time</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Part-Time")">Part-Time</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Seasonal")">Seasonal</MudSelectItem>

@@ -40,24 +40,24 @@ public sealed class ThemeService
     {
         PaletteLight = new PaletteLight
         {
-            Primary = "#607D8B",              // BlueGray 500
-            PrimaryDarken = "#455A64",        // BlueGray 700
-            PrimaryLighten = "#CFD8DC",       // BlueGray 100
+            Primary = "#3F51B5",              // Indigo 500
+            PrimaryDarken = "#303F9F",        // Indigo 700
+            PrimaryLighten = "#C5CAE9",       // Indigo 100
             PrimaryContrastText = "#FFFFFF",
             Secondary = "#00897B",            // Teal 600
-            AppbarBackground = "#455A64",     // BlueGray 700
+            AppbarBackground = "#303F9F",     // Indigo 700
             AppbarText = "#FFFFFF",
             Background = "#FAFAFA",
             Surface = "#FFFFFF",
         },
         PaletteDark = new PaletteDark
         {
-            Primary = "#B0BEC5",              // BlueGray 200
-            PrimaryDarken = "#78909C",        // BlueGray 400
-            PrimaryLighten = "#ECEFF1",       // BlueGray 50
+            Primary = "#9FA8DA",              // Indigo 200
+            PrimaryDarken = "#7986CB",        // Indigo 300
+            PrimaryLighten = "#E8EAF6",       // Indigo 50
             PrimaryContrastText = "#000000",
             Secondary = "#4DB6AC",            // Teal 300
-            AppbarBackground = "#263238",     // BlueGray 900
+            AppbarBackground = "#1A237E",     // Indigo 900
             AppbarText = "#FFFFFF",
             Background = "#121212",
             Surface = "#1E1E1E",
