@@ -105,13 +105,17 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - The decoded VIN is stored in the structured `AssetInfoEmbedded.AssetId` field as `RV:{vin}`.
 
 - **FR-004: AI-guided issue wizard** (Priority: High)
-  - After the customer selects a top-level issue category (e.g., Slide System, Electrical, Plumbing, HVAC), the wizard presents contextual follow-up questions specific to that category.
+  - The intake flow supports description-first capture: after the customer enters or records issue description text, AI suggests a top-level issue category (e.g., Slide System, Electrical, Plumbing, HVAC).
+  - The suggested category is pre-selected in the category dropdown and clearly marked as AI-suggested.
+  - The category dropdown remains editable so the customer can override the AI suggestion before continuing.
+  - After category is set (AI-suggested or user-selected), the wizard presents contextual follow-up questions specific to that category.
   - Examples: for Refrigerator → ask absorption or residential type, error codes visible, shore power connected; for Slide-out → which slide number, manual override attempted; for Generator → runtime hours, last service date.
   - Follow-up answers are captured as structured `ServiceEventEmbedded` fields alongside the free-text description.
 
 - **FR-005: Speech-to-text issue description** (Priority: High)
   - The issue description field supports voice input via the browser's Web Speech API (or a native device microphone prompt on mobile).
   - After recording, AI cleans up and reformats the raw transcript into a coherent description.
+  - After cleanup, the Intake app calls `POST /api/intake/{locationSlug}/ai/suggest-category` with the reviewed description to prefill issue category.
   - The customer reviews and edits the AI-cleaned description before submission.
 
 - **FR-006: AI issue categorization and technician summary** (Priority: High)
@@ -206,7 +210,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 
 - **Step 1 — Contact info:** First name, last name, email, phone. If the customer has submitted before (email matched), their contact fields are pre-filled from their `GlobalCustomerAcct`.
 - **Step 2 — VIN and vehicle details:** VIN field with camera scan button. On scan or manual entry, the VIN is decoded and make/model/year fields are pre-populated. If the customer's `GlobalCustomerAcct` has prior assets, their known VINs are offered as one-tap options.
-- **Step 3 — Issue description:** A category selector (top-level lookup set) followed by the AI-guided wizard with contextual follow-up questions. The issue description text field supports speech-to-text input. After voice capture, AI cleans the transcript and the customer reviews the result before proceeding.
+- **Step 3 — Issue description + category assist:** The issue description text area appears first and supports speech-to-text input. After voice capture (or typed entry), AI cleans the transcript and suggests a top-level issue category. The category dropdown is pre-filled, visibly marked as AI-suggested, and remains editable. The AI-guided wizard then renders contextual follow-up questions for the selected category.
 - **Step 4 — Photos and videos:** A file upload area that accepts camera capture (on mobile) or file selection. Progress indicators shown per file. Files exceeding the configured size limit are rejected with a clear error message before submission.
 - **Step 5 — Urgency and usage:** A simple selector for urgency (routine, urgent, emergency) and whether the RV is a full-time or part-time residence.
 - **Step 6 — Review and submit:** A summary card showing all entered data. The customer can edit any section before submitting. On submit, the API runs the 6-step orchestration (identity resolution, profile upsert, VIN ownership check, asset ledger write, categorization, notification dispatch) and returns a 201.
@@ -226,6 +230,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - Mobile-first layout with large tap targets throughout the intake form.
 - VIN camera scan is the prominent default; manual entry is clearly accessible but secondary.
 - Speech-to-text is surfaced as a microphone icon on the issue description field — no instruction needed.
+- AI category suggestion appears inline as a subtle "AI suggested" indicator, and the category dropdown remains editable.
 - AI wizard follow-up questions load inline beneath the category selector, not on a new page or modal.
 - The dealer dashboard is a desktop-primary layout with a responsive fallback for tablet/mobile use.
 - Status badges on the dealer queue use consistent color coding: New (blue), In Progress (amber), Completed (green), Cancelled (grey).
@@ -239,7 +244,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 
 ## 6. Narrative
 
-Alex, a Grand Design owner, notices his slide-out making a grinding noise on a Thursday evening. He scans the QR code on a card the dealership handed him at his last purchase. The intake form opens on his phone instantly — no login, no app. He taps the camera icon, holds his phone up to the VIN plate, and the year, make, and model fill in automatically. He selects "Slide System" from the issue categories and answers three quick follow-up questions about which slide is affected and whether he tried the manual override. He taps the microphone, describes the grinding noise in his own words, and the AI cleans it up into a professional description that he confirms in two seconds. He records a 20-second video of the noise, uploads it, selects "Urgent," and hits submit. Thirty seconds later he has a confirmation email with a link to check his status anytime.
+Alex, a Grand Design owner, notices his slide-out making a grinding noise on a Thursday evening. He scans the QR code on a card the dealership handed him at his last purchase. The intake form opens on his phone instantly — no login, no app. He taps the camera icon, holds his phone up to the VIN plate, and the year, make, and model fill in automatically. He taps the microphone, describes the grinding noise in his own words, and the AI cleans it up into a professional description that he confirms in two seconds. The form then auto-suggests "Slide System" as the issue category; Alex keeps the suggested value and answers three quick follow-up questions about which slide is affected and whether he tried the manual override. He records a 20-second video of the noise, uploads it, selects "Urgent," and hits submit. Thirty seconds later he has a confirmation email with a link to check his status anytime.
 
 Maria, the service advisor, opens her dealer dashboard the next morning to find Alex's request already categorized as "Slide System — Hydraulic," with a technician summary that reads: "Customer reports grinding noise from rear slide-out during extension/retraction. Manual override not attempted. Video of noise included (1 attachment). Recommend hydraulic pump inspection prior to intake." She moves it to "In Progress," assigns a bay, and the customer gets an automatic email update. Jordan, the technician, walks up to Alex's unit with the symptom summary and video already on his tablet. He opens the bay knowing exactly what he needs to check.
 
@@ -255,7 +260,7 @@ Maria, the service advisor, opens her dealer dashboard the next morning to find 
 - **Azure Table Storage:** Lightweight append-only store for analytics counters and audit log caching.
 - **Email notifications:** Transactional email provider (e.g., SendGrid) injected behind `INotificationService`. Swap without changing the service layer.
 - **SFTP / DMS export:** ASP.NET Core background service or Azure Function triggered on schedule or on demand. Uses `SSH.NET` (or equivalent) for SFTP push. Per-tenant SFTP configuration stored in `TenantConfig`.
-- **AI categorization:** `ICategorizationService` abstraction. MVP: keyword-matching rule engine. AI upgrade path: Azure OpenAI or Azure AI Language API behind the same interface.
+- **AI categorization:** `ICategorizationService` abstraction. MVP: keyword-matching rule engine. AI upgrade path: Azure OpenAI or Azure AI Language API behind the same interface. Used both for pre-submit category suggestion (`POST /api/intake/{locationSlug}/ai/suggest-category`) and final submit-time categorization.
 - **VIN decoding:** NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`) for VIN decode (free, public). No API key required. VIN camera scanning uses the browser's `BarcodeDetector` API or a lightweight JavaScript barcode library (e.g., `zxing-js`) for client-side decode before sending to the API.
 
 ### 7.2 Data storage and privacy
@@ -393,7 +398,10 @@ The MVP comprises three distinct front-end applications, each optimized for its 
 - **ID:** RVS-003
 - **Description:** As an RV owner, I want to answer a few guided questions about my issue so that the service advisor and technician have structured context before my RV arrives.
 - **Acceptance criteria:**
-  - After selecting a top-level issue category, contextual follow-up questions appear inline within the form.
+  - After entering or recording issue description, the form auto-suggests a top-level issue category.
+  - The suggested category is pre-selected and clearly marked as AI-suggested.
+  - The customer can override the category before follow-up questions load.
+  - After category is set (suggested or overridden), contextual follow-up questions appear inline within the form.
   - At minimum, the following categories have distinct question trees: Slide System, Electrical, Plumbing, HVAC, Generator, Appliances, Roof/Seals, Chassis.
   - Wizard answers are submitted as structured key-value pairs alongside the free-text description.
   - Structured wizard fields populate the corresponding `ServiceEventEmbedded` fields in the `ServiceRequest`.
@@ -408,6 +416,8 @@ The MVP comprises three distinct front-end applications, each optimized for its 
   - Pressing the button activates the browser's Web Speech API (or native device microphone on mobile).
   - After recording ends, the captured transcript is sent to the AI cleanup endpoint.
   - The AI-cleaned description is displayed for customer review and editing before submission.
+  - After review, the cleaned description is sent to `POST /api/intake/{locationSlug}/ai/suggest-category` to prefill issue category.
+  - If category suggestion fails or confidence is low, the category dropdown remains empty/manual and submission still proceeds.
   - If speech recognition is unsupported by the browser, the microphone button is hidden and the text field remains primary.
   - The raw transcript is discarded after AI cleanup; only the reviewed text is submitted.
 

@@ -47,7 +47,7 @@ RVS is a B2B SaaS platform for RV dealership service management. It digitizes th
 - **Database:** Azure Cosmos DB (SQL API, 9 containers)
 - **Storage:** Azure Blob Storage (attachments)
 - **Identity:** Auth0 (JWT Bearer; `app_metadata` tenant scoping)
-- **AI:** Azure OpenAI (`gpt-4o-mini`) for issue categorization and diagnostic questions
+- **AI:** Azure OpenAI (`gpt-4o-mini`) for issue categorization, diagnostic questions, transcript cleanup, and category suggestion
 - **Notifications:** SendGrid (behind `INotificationService`)
 - **Frontend:** Blazor WebAssembly (Blazor.Intake + Blazor.Manager), MAUI Blazor Hybrid (MAUI.Tech); UI component library: **MudBlazor 9.x** (Material Design 3)
 
@@ -88,7 +88,8 @@ Customer = Anonymous (MVP); no Auth0 account required
 | Anonymous intake error rate | < 1% of submissions result in 5xx | APM error rate dashboard |
 | Cosmos RU cost per intake | ≤ 12 RU (cold path) | Cosmos diagnostics on intake controller |
 | Magic-link status page load | < 500 ms TTFB (P99) | Lighthouse / App Insights |
-| AI diagnostic question latency | < 1.5 seconds (P95) | APM trace on `ICategorizationService.GenerateDiagnosticQuestionsAsync` |
+| AI diagnostic question latency | < 1.5 seconds (P95) | APM trace on `ICategorizationService.SuggestDiagnosticQuestionsAsync` |
+| AI category suggestion latency | < 1.0 seconds (P95) | APM trace on `POST api/intake/{slug}/ai/suggest-category` |
 | Attachment upload (25 MB file) | < 10 seconds (P95; direct-to-blob via SAS) | Client telemetry |
 
 ### 3.2 MVP Ship Criteria
@@ -155,10 +156,16 @@ The intake API MUST call the NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`) 
 - Access: time-limited read SAS URIs (1-hour expiry), generated per request, never stored
 
 **FR-INTAKE-05 — Diagnostic questions (AI wizard)**
-- `POST api/intake/{slug}/diagnostic-questions` MUST call `ICategorizationService.GenerateDiagnosticQuestionsAsync` returning 2–4 contextual questions
+- `POST api/intake/{slug}/diagnostic-questions` MUST call `ICategorizationService.SuggestDiagnosticQuestionsAsync` returning 2–4 contextual questions
 - If Azure OpenAI is unavailable: return hardcoded fallback questions for the requested category (no 500)
 - `diagnosticResponses` submitted with the SR MUST be embedded in `ServiceRequestEmbedded.DiagnosticResponses`
 - The categorization step (Step 4) MUST use `diagnosticResponses` if present to improve accuracy
+
+**FR-INTAKE-05A — Description-first category suggestion**
+- `POST api/intake/{slug}/ai/suggest-category` MUST call `ICategorizationService.CategorizeAsync` using the reviewed issue description text.
+- The endpoint MUST return a typed AI envelope response (`AiOperationResponseDto<IssueCategorySuggestionResultDto>`) including `confidence`, `provider`, `warnings`, and `correlationId`.
+- The suggested category MUST be treated as assistive only. The intake UI MUST allow customer override before submission.
+- Submit-time orchestration MUST still perform final categorization as a defense-in-depth check.
 
 **FR-INTAKE-06 — Returning customer prefill**
 On customer submission with a known email address, the intake API MUST:
@@ -269,7 +276,7 @@ On `POST api/locations` or `PUT api/locations/{id}` (slug rename), `ILocationSer
 - Cosmos RU consumed per operation (from SDK `RequestCharge`)
 
 **App Insights telemetry:**
-- Custom events: `IntakeSubmitted`, `MagicLinkValidated`, `SlugNotFound`, `TenantGateBlocked`, `AICategorizationFailed`, `AICategorizationFallback`
+- Custom events: `IntakeSubmitted`, `MagicLinkValidated`, `SlugNotFound`, `TenantGateBlocked`, `AICategorizationFailed`, `AICategorizationFallback`, `AICategorySuggested`, `AICategorySuggestionFailed`
 - Dependency tracking: Cosmos DB calls, Azure OpenAI calls, SendGrid calls, NHTSA calls
 - Availability tests: `/health` endpoint pinged every 5 minutes from two Azure regions
 
@@ -426,8 +433,12 @@ Customer-facing endpoints (`/intake/*`, `/status/*`) MUST be `[AllowAnonymous]`.
 
 | Method | Route | Auth | Policy | Return | Notes |
 |---|---|---|---|---|---|
-| `GET` | `api/intake/{locationSlug}` | Anonymous | — | `IntakeConfigResponseDto` | Optional `?token=` for prefill |
+| `GET` | `api/intake/{locationSlug}/config` | Anonymous | — | `IntakeConfigResponseDto` | Optional `?token=` for prefill |
 | `POST` | `api/intake/{locationSlug}/diagnostic-questions` | Anonymous | — | `DiagnosticQuestionsResponseDto` | AI or fallback questions |
+| `POST` | `api/intake/{locationSlug}/ai/suggest-category` | Anonymous | — | `AiOperationResponseDto<IssueCategorySuggestionResultDto>` | Assistive category prefill from description |
+| `POST` | `api/intake/{locationSlug}/ai/transcribe-issue` | Anonymous | — | `AiOperationResponseDto<IssueTranscriptionResultDto>` | Speech-to-text and cleaned draft |
+| `POST` | `api/intake/{locationSlug}/ai/refine-issue-text` | Anonymous | — | `AiOperationResponseDto<IssueTextRefinementResultDto>` | Cleanup endpoint for transcript/text |
+| `POST` | `api/intake/{locationSlug}/ai/extract-vin` | Anonymous | — | `AiOperationResponseDto<VinExtractionResultDto>` | VIN extraction from captured image |
 | `POST` | `api/intake/{locationSlug}/service-requests` | Anonymous | — | `201 ServiceRequestSummaryDto` | Full 7-step orchestration |
 | `POST` | `api/intake/{locationSlug}/service-requests/{id}/attachments` | Anonymous | — | `201 AttachmentDto` | Customer photo upload |
 | `GET` | `api/status/{token}` | Anonymous | — | `CustomerStatusResponseDto` | Cross-dealer SR summary |
@@ -503,6 +514,23 @@ public record DiagnosticQuestionDto(
     List<string> Options,
     bool AllowFreeText,
     string? HelpText
+);
+
+public record AiOperationResponseDto<T>(
+  bool Success,
+  T? Result,
+  double Confidence,
+  List<string> Warnings,
+  string Provider,
+  string CorrelationId
+);
+
+public record IssueCategorySuggestionRequestDto(
+  string IssueDescription
+);
+
+public record IssueCategorySuggestionResultDto(
+  string? IssueCategory
 );
 ```
 
