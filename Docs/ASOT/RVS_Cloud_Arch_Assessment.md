@@ -280,13 +280,13 @@ The middleware reads `TenantConfig` on every authenticated request. The claim th
 
 ## Prioritized Action Plan
 
-| Priority | Issue | Action |
-|---|---|---|
-| 🔴 P0 | `RVS_Auth0_roles&perms.md` (V1) conflicts with V2 | Delete or clearly archive |
-| 🔴 P0 | `RVS_Context.md` is first-generation, misrepresents current design | Rewrite or retire |
-| 🔴 P0 | No billing/metering in PRD or Core Architecture | Add billing FR to PRD; add metering section to Core Architecture |
-| 🔴 P0 | No IaC / deployment topology document | Create Azure Infrastructure Architecture doc |
-| 🔴 P0 | Magic link token storage inconsistency between PRD and Core Arch | Decide hashed or raw; align both docs |
+| Priority | Issue | Action | Status |
+|---|---|---|---|
+| 🔴 P0 | `RVS_Auth0_roles&perms.md` (V1) conflicts with V2 | Delete or clearly archive | RESOLVED |
+| 🔴 P0 | `RVS_Context.md` is first-generation, misrepresents current design | Rewrite or retire | RESOLVED |
+| 🔴 P0 | No billing/metering in PRD or Core Architecture | Add billing FR to PRD; add metering section to Core Architecture | Doc created
+| 🔴 P0 | No IaC / deployment topology document | Create Azure Infrastructure Architecture doc | RESOLVED |
+| 🔴 P0 | Magic link token storage inconsistency between PRD and Core Arch | Decide hashed or raw; align both docs | RESOLVED |
 | 🟡 P1 | All cross-references say `RVS_Auth0_Identity.md` (not V2) | Fix 8 references in Core Architecture |
 | 🟡 P1 | Auth0 V2 dated March 10 — post-V3 permission changes not reflected | Sync date and permission matrix |
 | 🟡 P1 | No SFTP/DMS export design section | Add dedicated section to Core Architecture |

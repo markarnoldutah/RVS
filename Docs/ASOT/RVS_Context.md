@@ -1,6 +1,6 @@
 # RV Service Flow (RVS) — Platform Context
 
-**Authoritative Source of Truth (ASOT) — March 18, 2026**
+**Authoritative Source of Truth (ASOT) — April 4, 2026**
 
 A comprehensive platform overview for developers, investors, partners, and stakeholders. For detailed architecture and identity specifics, see companion documents [**RVS_PRD.md**](RVS_PRD.md), [**RVS_Core_Architecture_Version3.1.md**](RVS_Core_Architecture_Version3.1.md), and [**RVS_Auth0_Identity_Version2.md**](RVS_Auth0_Identity_Version2.md).
 
@@ -51,8 +51,8 @@ RVS is a cloud-based **service intake and workflow platform** that sits in front
 
 - **App:** `RVS.Blazor.Intake` — Blazor WebAssembly (Standalone PWA). All surfaces (landing page, guided wizard, confirmation, status pages) are routes within a single WASM SPA. No SSR, no SignalR. A service worker caches the WASM runtime after first load — subsequent visits skip the network download entirely.
 - **URL:** `https://app.rvserviceflow.com/intake/{locationSlug}` (location-specific, accessible via QR code)
-- **Submits:** VIN (camera scan or manual entry), make/model/year, issue description (text or speech-to-text), photos/videos (up to 10 files), urgency level, RV usage (full-time vs. part-time)
-- **Flow:** AI-guided intake wizard presents contextual follow-up questions based on issue category (e.g., for Refrigerator → ask absorption vs. residential type, error codes, shore power; for Slide-out → which slide number, manual override attempted)
+- **Submits:** VIN (camera scan or manual entry; AI-assisted photo extraction), make/model/year, issue description (text or speech-to-text with AI transcript cleanup), photos/videos (up to 10 files), urgency level, RV usage (full-time vs. part-time)
+- **Flow:** Description-first capture: after the customer enters or records an issue description, AI suggests a top-level issue category (pre-selected in the dropdown, clearly marked as AI-suggested, customer can override). The wizard then presents contextual follow-up questions specific to that category (e.g., for Refrigerator → absorption vs. residential, error codes, shore power; for Slide-out → which slide number, manual override attempted)
 - **Outcomes:** Service request created, customer receives confirmation email with magic-link status URL
 - **Design principle:** Frictionless, mobile-first, zero account burden
 
@@ -300,7 +300,7 @@ Used by every controller and service method to enforce tenant isolation, role ch
 | **Storage** | Azure Blob Storage | Photos, videos, attachments; tenant-scoped paths |
 | **Cache** | Azure Cosmos DB Integrated Cache | TTL on high-read containers |
 | **Identity** | Auth0 | JWT Bearer, Organizations (future) |
-| **AI** | Azure OpenAI | Issue categorization, technician summaries, diagnostic questions (Phase 2+) |
+| **AI** | Azure OpenAI (`gpt-4o-mini`); Azure AI Speech (STT) | **Wave 1 (active):** VIN extraction from photo, speech transcript cleanup, AI category suggestion. **Wave 2+:** Diagnostic questions, technician summaries, LLM-backed categorization |
 | **Notifications** | SendGrid (future) | Confirmation emails, status updates |
 
 ### 9.2 Frontend
@@ -352,17 +352,28 @@ Used by every controller and service method to enforce tenant isolation, role ch
 - Optional customer Auth0 accounts (persistent login + preference saving)
 - Enhanced magic-link (cross-dealer aggregation)
 
-### 10.3 Phase 3: AI & Diagnostics
+### 10.3 AI Assistive Intake (Wave 1 — Active)
 
-**Goal:** Intelligent intake wizard powered by Azure OpenAI.
+**Goal:** Deliver production-ready AI assistance directly in the customer intake flow.
+
+**Active sprint (Wave 1):**
+- VIN extraction from photo (`POST .../ai/extract-vin`) — AI parses VIN from a camera image with manual fallback
+- Speech-to-text + AI transcript cleanup (`POST .../ai/transcribe-issue`, `POST .../ai/refine-issue-text`) — raw audio → cleaned, editable description
+- AI category suggestion (`POST .../ai/suggest-category`) — description-first flow auto-suggests issue category, customer can override
+
+**Architecture:** All AI inference is server-side (`RVS.API`), wrapped in `AiOperationResponseDto<T>` envelopes with confidence, provider, and `correlationId`. Provider is `gpt-4o-mini`; all AI calls degrade gracefully on failure.
+
+### 10.4 Phase 3: Advanced AI & Diagnostics
+
+**Goal:** Intelligent diagnostic conversation and technician summaries powered by Azure OpenAI.
 
 **Adds:**
-- AI-guided diagnostic questions (contextual based on issue category)
+- AI-guided diagnostic questions (contextual based on issue category; issues #231 and #233)
 - AI-generated technician summaries (context from customer description + wizard answers)
-- LLM-backed issue categorization (replace rule-based fallback)
+- LLM-backed issue categorization as the default path (replaces rule-based fallback)
 - Section 10A field auto-population (repair action suggestions)
 
-### 10.4 Phase 4: Scheduling & Assignment
+### 10.5 Phase 4: Scheduling & Assignment
 
 **Goal:** Booking, bay assignment, technician routing.
 
@@ -373,7 +384,7 @@ Used by every controller and service method to enforce tenant isolation, role ch
 - Real-time technician availability
 - Customer appointment confirmation + reminders
 
-### 10.5 Phase 5: Parts Integration & Predictive Analytics
+### 10.6 Phase 5: Parts Integration & Predictive Analytics
 
 **Goal:** Supply chain integration + data moat monetization.
 
@@ -384,7 +395,7 @@ Used by every controller and service method to enforce tenant isolation, role ch
 - Predictive maintenance recommendations
 - Cross-dealer benchmarking reports
 
-### 10.6 Phase 6+: Industry Expansion & Verticalization
+### 10.7 Phase 6+: Industry Expansion & Verticalization
 
 **Goal:** Beyond RVs — marine, heavy equipment, agricultural.
 
@@ -509,8 +520,11 @@ Building multi-region replication from day 1:
 This context document is a **platform overview**. For deep dives, see:
 
 - **[RVS_PRD.md](RVS_PRD.md)** — Product requirements, user personas, functional/non-functional goals, feature list, Phase 1 MVP scope
+- **[RVS_Technical_PRD.md](RVS_Technical_PRD.md)** — Per-endpoint contracts, performance KPIs, security constraints, DTO appendix, telemetry events
 - **[RVS_Core_Architecture_Version3.1.md](RVS_Core_Architecture_Version3.1.md)** — Domain entities, Cosmos schema, repository interfaces, data flows, middleware pipeline, API surface, front-end application formats
-- **[RVS_Auth0_Identity_Version2.md](RVS_Auth0_Identity_Version2.md)** — Auth0 Organizations, RBAC matrix, JWT structure, ClaimsService, authorization policies, Login Action
+- **[Auth0/RVS_Auth0_Identity_Version2.md](Auth0/RVS_Auth0_Identity_Version2.md)** — Auth0 Organizations, RBAC matrix, JWT structure, ClaimsService, authorization policies, Login Action
+- **[AI_Architecture_Blueprint.md](AI_Architecture_Blueprint.md)** — Durable AI architecture: provider abstraction, envelope DTO, all AI endpoint routes, client patterns, and per-issue mapping
+- **[AI_Wave1_Implementation_Backlog.md](AI_Wave1_Implementation_Backlog.md)** — Wave 1 task breakdown: VIN extraction, speech cleanup, category suggestion — exact contracts, tasks, acceptance criteria
 - **[RVS_implementation_plan.md](RVS_implementation_plan.md)** — 8-phase implementation roadmap, per-phase deliverables, validation criteria, suggested starting point
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)** — RVS-specific coding conventions, patterns, project structure
 
@@ -533,4 +547,4 @@ This context document is a **platform overview**. For deep dives, see:
 
 **End of RVS_Context.md**
 
-*Last updated: March 18, 2026. For questions, refer to Architecture documents or contact the RVS platform team.*
+*Last updated: April 4, 2026. For questions, refer to Architecture documents or contact the RVS platform team.*
