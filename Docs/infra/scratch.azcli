@@ -1,1 +1,0 @@
-az deployment group create --resource-group rg-rvs-dev-westus3 --template-file infra/main.bicep --parameters infra/parameters/dev.bicepparam

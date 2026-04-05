@@ -1,0 +1,7 @@
+# List all Azure OpenAI accounts (to find your resource name)
+az cognitiveservices account list --query "[?kind=='OpenAI'].{Name:name, RG:resourceGroup}" -o table
+
+# Get the endpoint
+az cognitiveservices account show --name oai-rvs-ai-dev-wus3-s01-001 --resource-group rg-rvs-dev-westus3 --query "properties.endpoint" -o tsv
+az cognitiveservices account keys list --name oai-rvs-ai-dev-wus3-s01-001 --resource-group rg-rvs-dev-westus3 --query "key1" -o tsv
+az cognitiveservices account deployment list --name oai-rvs-ai-dev-wus3-s01-001 --resource-group rg-rvs-dev-westus3 --query "[].{Name:name, Model:properties.model.name}" -o table
