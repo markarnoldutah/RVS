@@ -362,7 +362,6 @@ else
 
 // Categorization
 builder.Services.AddSingleton<RuleBasedCategorizationService>();
-builder.Services.AddSingleton<RuleBasedIssueTextRefinementService>();
 if (useMockIntegrations)
 {
     builder.Services.AddSingleton<ICategorizationService, MockCategorizationService>();
