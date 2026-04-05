@@ -208,6 +208,90 @@ public sealed class IntakeApiClient
     }
 
     /// <summary>
+    /// Transcribes audio of an issue description using the server-side AI endpoint.
+    /// Returns the AI operation envelope with transcript and confidence score,
+    /// or <c>null</c> if the request could not be completed.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="request">Base64-encoded audio, content type, and optional locale.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>AI envelope with transcript, or <c>null</c> on network failure.</returns>
+    public async Task<AiOperationResponseDto<IssueTranscriptionResultDto>?> TranscribeIssueAsync(
+        string locationSlug,
+        IssueTranscriptionRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"api/intake/{Uri.EscapeDataString(locationSlug)}/ai/transcribe-issue",
+            request,
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<AiOperationResponseDto<IssueTranscriptionResultDto>>(
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Refines a raw transcript into a clean issue description using the server-side AI endpoint.
+    /// Returns the AI operation envelope with the cleaned description,
+    /// or <c>null</c> if the request could not be completed.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="request">Raw transcript and optional category context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>AI envelope with cleaned description, or <c>null</c> on network failure.</returns>
+    public async Task<AiOperationResponseDto<IssueTextRefinementResultDto>?> RefineIssueTextAsync(
+        string locationSlug,
+        IssueTextRefinementRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"api/intake/{Uri.EscapeDataString(locationSlug)}/ai/refine-issue-text",
+            request,
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<AiOperationResponseDto<IssueTextRefinementResultDto>>(
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Suggests an issue category from the given description using the server-side AI endpoint.
+    /// Returns the AI operation envelope with the suggested category,
+    /// or <c>null</c> if the request could not be completed.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="request">Free-text issue description.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>AI envelope with suggested category, or <c>null</c> on network failure.</returns>
+    public async Task<AiOperationResponseDto<IssueCategorySuggestionResultDto>?> SuggestIssueCategoryAsync(
+        string locationSlug,
+        IssueCategorySuggestionRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"api/intake/{Uri.EscapeDataString(locationSlug)}/ai/suggest-category",
+            request,
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<AiOperationResponseDto<IssueCategorySuggestionResultDto>>(
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
     /// Gets the customer status page data using a magic-link token.
     /// </summary>
     public async Task<CustomerStatusResponseDto> GetStatusAsync(
