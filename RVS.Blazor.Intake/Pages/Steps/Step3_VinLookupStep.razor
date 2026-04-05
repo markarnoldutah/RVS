@@ -239,6 +239,10 @@
         {
             _lookupFailed = true;
         }
+        catch (TaskCanceledException)
+        {
+            _lookupFailed = true;
+        }
         finally
         {
             _isLookingUp = false;
