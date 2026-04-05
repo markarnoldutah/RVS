@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
+using RVS.API.Integrations;
 using RVS.API.Mappers;
 using RVS.Domain.DTOs;
 using RVS.Domain.Integrations;
@@ -21,6 +23,8 @@ public class IntakeController : ControllerBase
     private readonly ICategorizationService _categorizationService;
     private readonly IAttachmentService _attachmentService;
     private readonly IVinDecoderService _vinDecoderService;
+    private readonly IVinExtractionService _vinExtractionService;
+    private readonly AiOptions _aiOptions;
 
     /// <summary>
     /// Initializes a new instance of <see cref="IntakeController"/>.
@@ -29,12 +33,16 @@ public class IntakeController : ControllerBase
         IIntakeOrchestrationService intakeService,
         ICategorizationService categorizationService,
         IAttachmentService attachmentService,
-        IVinDecoderService vinDecoderService)
+        IVinDecoderService vinDecoderService,
+        IVinExtractionService vinExtractionService,
+        IOptions<AiOptions> aiOptions)
     {
         _intakeService = intakeService;
         _categorizationService = categorizationService;
         _attachmentService = attachmentService;
         _vinDecoderService = vinDecoderService;
+        _vinExtractionService = vinExtractionService;
+        _aiOptions = aiOptions.Value;
     }
 
     /// <summary>
@@ -106,6 +114,74 @@ public class IntakeController : ControllerBase
             Manufacturer = result.Manufacturer,
             Model = result.Model,
             Year = result.Year
+        });
+    }
+
+    /// <summary>
+    /// Extracts a VIN from a photo using Azure OpenAI GPT-4o Vision.
+    /// Always returns HTTP 200 with an <see cref="AiOperationResponseDto{T}"/> envelope.
+    /// A zero confidence score indicates no VIN was found or extraction failed.
+    /// </summary>
+    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="request">Base64-encoded image and MIME content type.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>AI operation envelope with extracted VIN and confidence score.</returns>
+    [HttpPost("ai/extract-vin")]
+    public async Task<ActionResult<AiOperationResponseDto<VinExtractionResultDto>>> ExtractVin(
+        string locationSlug, [FromBody] VinExtractionRequestDto request, CancellationToken ct = default)
+    {
+        var correlationId = HttpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault()
+            ?? Guid.NewGuid().ToString();
+
+        if (string.IsNullOrWhiteSpace(request.ImageBase64))
+        {
+            return BadRequest(new { message = "ImageBase64 is required." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ContentType) || !request.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "ContentType must be a valid image MIME type (e.g. image/jpeg)." });
+        }
+
+        byte[] imageBytes;
+        try
+        {
+            imageBytes = Convert.FromBase64String(request.ImageBase64);
+        }
+        catch (FormatException)
+        {
+            return BadRequest(new { message = "ImageBase64 is not valid base64-encoded data." });
+        }
+
+        if (imageBytes.Length > _aiOptions.MaxImageBytes)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new { message = $"Image exceeds the maximum allowed size of {_aiOptions.MaxImageBytes / (1024 * 1024)} MB." });
+        }
+
+        var result = await _vinExtractionService.ExtractVinFromImageAsync(imageBytes, request.ContentType, ct);
+
+        if (result is null)
+        {
+            return Ok(new AiOperationResponseDto<VinExtractionResultDto>
+            {
+                Success = true,
+                Result = null,
+                Confidence = 0.0,
+                Warnings = ["Could not extract VIN from image."],
+                Provider = "VinExtractionService",
+                CorrelationId = correlationId
+            });
+        }
+
+        return Ok(new AiOperationResponseDto<VinExtractionResultDto>
+        {
+            Success = true,
+            Result = new VinExtractionResultDto { Vin = result.Vin },
+            Confidence = result.Confidence,
+            Warnings = [],
+            Provider = result.Provider,
+            CorrelationId = correlationId
         });
     }
 

@@ -180,6 +180,34 @@ public sealed class IntakeApiClient
     }
 
     /// <summary>
+    /// Extracts a VIN from a photo using the server-side AI vision endpoint.
+    /// Returns the AI operation envelope with VIN and confidence score,
+    /// or <c>null</c> if the request could not be completed.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="request">Base64-encoded image and content type.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>AI envelope with extracted VIN, or <c>null</c> on network failure.</returns>
+    public async Task<AiOperationResponseDto<VinExtractionResultDto>?> ExtractVinFromImageAsync(
+        string locationSlug,
+        VinExtractionRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"api/intake/{Uri.EscapeDataString(locationSlug)}/ai/extract-vin",
+            request,
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<AiOperationResponseDto<VinExtractionResultDto>>(
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
     /// Gets the customer status page data using a magic-link token.
     /// </summary>
     public async Task<CustomerStatusResponseDto> GetStatusAsync(

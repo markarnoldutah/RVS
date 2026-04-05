@@ -1,0 +1,85 @@
+// ──────────────────────────────────────────────────────────────
+// Module: Azure OpenAI – GPT-4o Vision deployment
+// ──────────────────────────────────────────────────────────────
+targetScope = 'resourceGroup'
+
+// ── Parameters ────────────────────────────────────────────────
+
+@description('The Azure region for the OpenAI resource.')
+param location string
+
+@description('The environment name used for resource naming and network policy.')
+@allowed([
+  'dev'
+  'staging'
+  'prod'
+])
+param environmentName string
+
+@description('Tags to apply to all resources created by this module.')
+param tags object
+
+@description('Model deployment capacity in thousands of tokens per minute (K TPM). 1 = 1 000 TPM.')
+@minValue(1)
+param deploymentCapacity int
+
+// ── Variables ─────────────────────────────────────────────────
+
+var resourceName = 'oai-rvs-${environmentName}'
+var deploymentName = 'gpt-4o'
+var isProduction = environmentName != 'dev'
+
+// ── Azure OpenAI Account ──────────────────────────────────────
+
+resource openAiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+  name: resourceName
+  location: location
+  kind: 'OpenAI'
+  sku: {
+    name: 'S0'
+  }
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    customSubDomainName: resourceName
+    publicNetworkAccess: isProduction ? 'Disabled' : 'Enabled'
+    networkAcls: {
+      defaultAction: isProduction ? 'Deny' : 'Allow'
+    }
+  }
+  tags: tags
+}
+
+// ── GPT-4o Vision Model Deployment ────────────────────────────
+
+resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: openAiAccount
+  name: deploymentName
+  sku: {
+    name: 'Standard'
+    capacity: deploymentCapacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-4o'
+      version: '2024-08-06'
+    }
+    versionUpgradeOption: 'NoAutoUpgrade'
+  }
+}
+
+// ── Outputs ───────────────────────────────────────────────────
+
+@description('The endpoint URL of the Azure OpenAI resource.')
+output endpoint string = openAiAccount.properties.endpoint
+
+@description('The resource name of the Azure OpenAI account.')
+output name string = openAiAccount.name
+
+@description('The name of the GPT-4o model deployment.')
+output deploymentName string = gpt4oDeployment.name
+
+@description('The principal ID of the system-assigned managed identity.')
+output principalId string = openAiAccount.identity.principalId
