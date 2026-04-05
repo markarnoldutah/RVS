@@ -75,16 +75,8 @@
         {
             <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="false"
                       Icon="@Icons.Material.Filled.ErrorOutline">
-                <MudText Typo="Typo.body2" Class="mb-1">
-                    <strong>VIN lookup was unsuccessful.</strong>
-                </MudText>
                 <MudText Typo="Typo.body2">
-                    Please double-check the number for typos or transposed characters.
-                    @if (_capturedImageUrl is not null)
-                    {
-                        @: If you used the camera, try capturing the VIN plate again with better lighting.
-                    }
-                    You can also proceed to enter vehicle details manually.
+                    We tried to retrieve your RV's information but could not. Are you sure the information is correct?
                 </MudText>
             </MudAlert>
         }
@@ -97,7 +89,7 @@
                            FullWidth="true"
                            OnClick="HandleProceedAnyway"
                            Style="text-transform: none;">
-                    Ignore and Continue
+                    Continue Anyway
                 </MudButton>
             }
             <MudButton Variant="Variant.Filled"
@@ -110,6 +102,10 @@
                 {
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                     @:Looking up…
+                }
+                else if (_lookupFailed)
+                {
+                    @:Try Lookup Again
                 }
                 else
                 {
@@ -231,12 +227,19 @@
                 State.Model = decoded.Model;
                 State.Year = decoded.Year;
                 State.VinLookupSucceeded = true;
+                await State.NotifyAndPersistAsync();
+                await OnNext.InvokeAsync();
             }
-
-            await State.NotifyAndPersistAsync();
-            await OnNext.InvokeAsync();
+            else
+            {
+                _lookupFailed = true;
+            }
         }
         catch (HttpRequestException)
+        {
+            _lookupFailed = true;
+        }
+        catch (TaskCanceledException)
         {
             _lookupFailed = true;
         }
