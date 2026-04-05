@@ -195,6 +195,35 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - The intake URL uses the dealer's location slug, creating a dealership-branded experience without requiring a custom domain in the MVP.
   - Future: custom domain support per dealership (Phase 2+).
 
+- **FR-019: Subscription plan tiers** (Priority: Critical)
+  - RVS offers three subscription tiers: **Starter** ($199/month, 500 SRs/month, 1 location), **Pro** ($349/month, 2,000 SRs/month, 5 locations), **Enterprise** ($499/month, unlimited SRs, unlimited locations).
+  - All tiers include the intake portal, dealer dashboard, service board, and asset ledger.
+  - SFTP export is available on Pro and Enterprise only.
+  - Each tenant's plan tier is stored in `TenantConfig.BillingConfig.PlanTier` and drives limit enforcement and feature gating.
+  - Enterprise tenants are exempt from all SR and location count enforcement.
+
+- **FR-020: Monthly service request limit enforcement** (Priority: Critical)
+  - On each service request submission, the platform increments an atomic per-tenant SR counter (`TenantConfig.BillingConfig.CurrentPeriodSrCount`) for billing period tracking.
+  - If a Starter or Pro tenant's counter equals or exceeds their plan limit, the intake endpoint returns HTTP 402 with a customer-friendly message ("This dealership has reached its monthly service request limit. Please contact your service manager.").
+  - The 402 response does not expose plan tier, limit count, or upgrade URL to anonymous customers.
+  - At 80% of the monthly limit, the platform emits a warning event; the dealer dashboard displays an upgrade banner ("You've used X% of your monthly service requests. Upgrade to avoid interruption.").
+  - When the limit is reached, the dashboard displays a blocking error banner.
+  - The SR counter resets to 0 at the start of each new billing period.
+
+- **FR-021: Location limit enforcement** (Priority: High)
+  - Starter tenants are limited to 1 active location; Pro tenants to 5; Enterprise tenants are unlimited.
+  - Attempting to create a location beyond the plan limit returns HTTP 402 with an upgrade prompt: "Your plan allows a maximum of N location(s). Upgrade to Pro or Enterprise to add more locations."
+  - Location limit enforcement applies to the authenticated dealer-facing location creation endpoint only (not to the intake portal).
+
+- **FR-022: Billing lifecycle and Stripe integration** (Priority: Critical)
+  - New tenants receive a 30-day free trial on the Starter plan tier. No credit card is required during the trial.
+  - Trial meter: SR limits and enforcement apply during the trial period.
+  - Trial expiry: when the trial period ends and no Stripe subscription is active, `TenantAccessGateMiddleware` returns HTTP 402. The intake portal renders a friendly error. The dealer dashboard redirects to an upgrade page.
+  - Subscription management is handled via Stripe. Tenant provisioning creates a Stripe Customer object and an initial Stripe Subscription linked to the selected plan tier.
+  - Stripe webhook events update `TenantConfig.BillingConfig` on subscription changes: plan upgrades/downgrades update limits immediately; subscription cancellation disables the tenant access gate.
+  - A `GET /api/tenants/billing/usage` endpoint returns current billing status (plan tier, SR count, limit, period start, trial status, location count) for the authenticated dealer dashboard.
+  - Platform admins can manually extend `trialEndsAtUtc` as a sales concession lever.
+
 ---
 
 ## 5. User experience
@@ -576,6 +605,39 @@ The MVP comprises three distinct front-end applications, each optimized for its 
 - **Acceptance criteria:**
   - The platform admin can create a new tenant via `POST /api/platform/tenants`.
   - Provisioning creates: a `TenantConfig` (with access gate enabled), a `Dealership` document, a default `Location`, and an Auth0 `app_metadata` entry for the initial admin user.
+  - Provisioning also creates a Stripe Customer object and a Stripe Subscription (Starter tier by default) with a 30-day trial period. `TenantConfig.BillingConfig.StripeCustomerId`, `StripeSubscriptionId`, and `TrialEndsAtUtc` are stored on the config.
   - The provisioning endpoint requires the `platform:tenants:manage` permission.
   - A tenant can be disabled via `PUT /api/platform/tenants/{id}/access-gate`, which sets the `TenantAccessGateEmbedded.IsEnabled` flag. All subsequent authenticated requests from that tenant receive HTTP 403.
   - Tenant IDs are immutable once created.
+
+### 9.19. Monitor and respond to monthly usage limits
+
+- **ID:** RVS-019
+- **Description:** As a service manager, I want to see how many service requests my dealership has used this month so that I can plan for peak periods and avoid unexpected intake interruptions.
+- **Acceptance criteria:**
+  - The dealer dashboard calls `GET /api/tenants/billing/usage` and displays current billing status: plan tier, SR count, monthly limit, usage percentage, billing period start, trial status.
+  - When usage reaches or exceeds 80% of the monthly limit, the dashboard header renders a warning banner with the current usage percentage and an upgrade prompt.
+  - When usage reaches 100%, the dashboard renders a blocking error banner: "Monthly limit reached. New service requests are paused until {nextResetDate}."
+  - Banner updates reflect within one dashboard refresh cycle (no WebSocket required).
+  - Enterprise tenants do not see usage limit banners (no limit applies).
+
+### 9.20. Upgrade subscription plan
+
+- **ID:** RVS-020
+- **Description:** As a dealer owner or corporate admin, I want to upgrade my subscription plan so that I can accommodate higher service request volumes or add more locations.
+- **Acceptance criteria:**
+  - The dealer dashboard includes an upgrade call-to-action on the billing usage banner and on the settings/billing page.
+  - Plan upgrades are processed via the Stripe Customer Portal (hosted by Stripe) or an upgrade flow within the dashboard.
+  - On upgrade, the Stripe `customer.subscription.updated` webhook fires and the API updates `TenantConfig.BillingConfig.PlanTier`, `MaxMonthlyServiceRequests`, `MaxLocations`, and `IsSftpEnabled` immediately.
+  - After a plan upgrade, the SR limit enforcement threshold reflects the new plan limits on the next intake submission.
+  - Downgrade is available but requires confirmation that current usage is within the lower tier's limits. Attempting to downgrade while over the new tier's limit displays an error.
+
+### 9.21. Handle trial expiry and payment failure
+
+- **ID:** RVS-021
+- **Description:** As a dealer admin approaching the end of my free trial, I want to receive timely notice so that I can add a payment method before intake is interrupted.
+- **Acceptance criteria:**
+  - When `trialEndsAtUtc` is within 7 days, the dealer dashboard shows an info banner: "Your free trial ends in N days. Add a payment method to continue."
+  - When the trial expires with no active Stripe subscription, `TenantAccessGateMiddleware` returns HTTP 402. The intake portal renders a friendly error message (not the raw 402 body). The dealer dashboard redirects to an upgrade/payment page.
+  - On `invoice.payment_failed` webhook, the platform emits an internal alert and enters a 3-day grace period. The tenant is not immediately disabled. After the grace period (Stripe dunning exhausted), the tenant access gate is set to disabled.
+  - On `invoice.payment_succeeded`, the billing period is reset and normal access resumes immediately.

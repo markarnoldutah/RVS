@@ -49,7 +49,7 @@ h1:focus {
    photo shows through while content remains readable.
    -------------------------------------------------------- */
 .wizard-step-card {
-    background: color-mix(in srgb, var(--mud-palette-surface) 65%, transparent) !important;
+    background: color-mix(in srgb, var(--mud-palette-surface) 100%, transparent) !important;
 }
 
 /* --------------------------------------------------------

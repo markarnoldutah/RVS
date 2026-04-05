@@ -870,6 +870,166 @@ The `ServiceRequest.Status` field has been expanded from 4 to 8 values to align 
 
 ---
 
+## 19. Billing & Metering Architecture
+
+This section summarizes the billing and metering design for RVS. For the full specification, see **`RVS_Billing_Metering_Architecture.md`**.
+
+### 19.1 Plan Tiers
+
+| Tier | Price | Service Requests / Month | Locations | SFTP |
+|---|---|---|---|---|
+| **Starter** | $199/mo | 500 | 1 | No |
+| **Pro** | $349/mo | 2,000 | 5 | Yes |
+| **Enterprise** | $499/mo | Unlimited | Unlimited | Yes |
+
+Enterprise tenants bypass all SR and location count enforcement. All tiers include the intake portal, dealer dashboard, and asset ledger.
+
+### 19.2 TenantConfig — BillingConfig Embedment
+
+`TenantConfig` embeds a `BillingConfig` object:
+
+```json
+{
+  "billingConfig": {
+    "planTier": "Pro",
+    "stripeCustomerId": "cus_abc123",
+    "stripeSubscriptionId": "sub_xyz789",
+    "billingPeriodStartDay": 1,
+    "currentPeriodSrCount": 347,
+    "currentPeriodStart": "2026-04-01T00:00:00Z",
+    "trialEndsAtUtc": null,
+    "maxMonthlyServiceRequests": 2000,
+    "maxLocations": 5,
+    "isSftpEnabled": true,
+    "attachmentRetentionDays": 365
+  }
+}
+```
+
+**Counter strategy:** Each SR creation issues a Cosmos atomic patch `IncrementAsync("/billingConfig/currentPeriodSrCount", 1)` (~1 RU, O(1), consistent). A daily Azure Function (timer trigger at 00:01 UTC on `billingPeriodStartDay`) resets the counter and updates `currentPeriodStart`. No change feed or aggregation job is needed for the counter.
+
+### 19.3 Billable and Observable Metrics
+
+**Primary billable metric:** `sr_created_count` — incremented on each SR creation, partitioned by `tenantId` and billing period.
+
+**Secondary observable metrics (non-billable):**
+
+| Metric | Purpose |
+|---|---|
+| `ai_categorization_calls` | Azure OpenAI cost attribution |
+| `ai_categorization_fallback_rate` | AI health monitoring |
+| `attachment_storage_bytes` | Blob lifecycle policy enforcement |
+| `api_request_count` | Noisy neighbor detection |
+| `sftp_export_success` / `sftp_export_failure` | SLA monitoring |
+| `magic_link_sends` | Notification cost attribution |
+| `cosmos_ru_consumed` | Internal cost allocation |
+
+All metrics are emitted as Application Insights `CustomEvent` or `CustomMetric` with dimensions: `tenantId`, `locationId`, `operationType`, `planTier`, `stampId`.
+
+### 19.4 Enforcement Points
+
+**SR limit — `IntakeOrchestrationService.SubmitIntakeAsync` (before Step 3 — SR write):**
+
+```
+if PlanTier != Enterprise AND currentPeriodSrCount >= maxMonthlyServiceRequests
+  → HTTP 402 (customer-safe message, no plan details exposed)
+```
+
+At 80% of limit, emit `PlanLimitWarning` custom event → dashboard warning banner.
+
+**Location limit — `LocationService.CreateAsync`:**
+
+```
+if PlanTier != Enterprise AND active_location_count >= maxLocations
+  → HTTP 402 (dealer-facing message with upgrade prompt)
+```
+
+**SFTP feature gate — `SftpExportService`:** Check `BillingConfig.IsSftpEnabled` before scheduling export. Feature flag, not a usage counter.
+
+**Trial expiry — `TenantAccessGateMiddleware`:** When `trialEndsAtUtc` is non-null and past, and `stripeSubscriptionId` is null → HTTP 402. This is the only 402 case in the middleware; plan limit enforcement remains in the service layer (not middleware) to avoid per-request Cosmos reads.
+
+### 19.5 Stripe Integration
+
+| Stripe Object | RVS Mapping |
+|---|---|
+| **Customer** | One per `tenantId`; created at tenant provisioning |
+| **Product** | One per tier (`RVS Starter`, `RVS Pro`, `RVS Enterprise`) |
+| **Price** | One per Product (monthly recurring) |
+| **Subscription** | One per Customer |
+| **Webhook** | `POST /api/billing/stripe/webhook` |
+
+**Webhook events handled:**
+
+| Event | Action |
+|---|---|
+| `invoice.payment_succeeded` | Reset `currentPeriodStart`; log payment |
+| `invoice.payment_failed` | Alert platform admin; 3-day grace period before disabling tenant |
+| `customer.subscription.updated` | Update `planTier`, limits, `isSftpEnabled` in `TenantConfig` |
+| `customer.subscription.deleted` | Set `AccessGate.LoginsEnabled = false` |
+| `customer.subscription.trial_will_end` | Emit Application Insights event; trigger in-app notification |
+
+All webhook payloads are validated using the `Stripe-Signature` header. The Stripe webhook secret is stored in Azure Key Vault (not `appsettings.json`).
+
+**Interface contract (to be implemented):**
+
+```csharp
+// Domain/Interfaces/IStripeService.cs
+public interface IStripeService
+{
+    Task<string> CreateCustomerAsync(string tenantId, string tenantName, string adminEmail, CancellationToken ct = default);
+    Task<string> CreateSubscriptionAsync(string stripeCustomerId, string planTier, int trialDays, CancellationToken ct = default);
+    Task UpdateSubscriptionPlanAsync(string stripeSubscriptionId, string newPlanTier, CancellationToken ct = default);
+    Task CancelSubscriptionAsync(string stripeSubscriptionId, CancellationToken ct = default);
+}
+```
+
+**New API endpoints:**
+
+```
+POST /api/billing/stripe/webhook   [AllowAnonymous] — Stripe signs the payload
+GET  /api/tenants/billing/usage    [Authorize]      — Current period usage for dealer dashboard
+```
+
+### 19.6 Dealer Dashboard — Billing Usage Visibility
+
+`GET /api/tenants/billing/usage` response:
+
+```json
+{
+  "planTier": "Pro",
+  "currentPeriodSrCount": 1680,
+  "maxMonthlyServiceRequests": 2000,
+  "usagePercent": 84,
+  "currentPeriodStart": "2026-04-01T00:00:00Z",
+  "trialEndsAtUtc": null,
+  "isTrialActive": false,
+  "locationCount": 3,
+  "maxLocations": 5
+}
+```
+
+Dashboard banner rules:
+
+| Condition | Banner |
+|---|---|
+| `usagePercent >= 80 && < 100` | Warning — upgrade prompt |
+| `usagePercent >= 100` | Error — intake paused until next reset |
+| Trial ends within 7 days | Info — add payment method |
+| Trial expired | Error — redirect to upgrade page |
+
+### 19.7 Free Trial Design
+
+- Default: 30 days from provisioning, no credit card required.
+- SR counting and Starter limits apply during the trial.
+- Trial-to-paid: Stripe activation clears `trialEndsAtUtc` immediately.
+- Platform admin can manually extend `trialEndsAtUtc` (sales concession lever).
+
+### 19.8 Implementation Sequencing
+
+See `RVS_Billing_Metering_Architecture.md` Section 8 for the full implementation priority table. Key prerequisite: Azure Key Vault must be provisioned before Stripe webhook secret or Stripe API key can be moved out of `appsettings.json` (blocks Steps 6–8).
+
+---
+
 ---
 
 ## ⚠️ CRITICAL GAPS — Assessment Action Items
@@ -898,9 +1058,9 @@ The following issues are identified in `RVS_SaaS_Architecture_Assessment.md` and
   - Action: Move SFTP credentials to Azure Key Vault. Store only `privateKeySecretUri` in `TenantConfig`.
   - See: Assessment "Security" section
 
-5. **Billing/Metering Infrastructure Missing**
+5. **Billing/Metering Infrastructure Missing** ✅ Design Complete — See Section 19
   - Impact: Cannot charge customers, violates SaaS WAF principle "Understand your cost/revenue relationship"
-  - Action: Design lightweight metering layer: `PlanTier` field in `TenantConfig`, monthly SR count tracking (change feed or scheduled job), Stripe Billing integration, overage enforcement in `TenantAccessGateMiddleware`
+  - Status: Full design spec in `RVS_Billing_Metering_Architecture.md`; architecture captured in Section 19. Implementation pending.
   - See: Assessment "Cost Optimization" section, Cloud Arch Assessment
 
 ### 🟡 HIGH — P1 (Must have before MVP launch to production)
