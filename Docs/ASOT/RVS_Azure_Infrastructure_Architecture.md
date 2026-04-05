@@ -39,7 +39,7 @@ Each environment uses a dedicated resource group for logical isolation and RBAC 
 │ Azure Subscription: RVS Production                          │
 │                                                             │
 │  ┌────────────────────────────────────────────────────┐   │
-│  │ Resource Group: rg-rvs-dev-westus2                  │   │
+│  │ Resource Group: rg-rvs-dev-westus3                  │   │
 │  │  • App Service Plan (B1)                            │   │
 │  │  • App Service (API)                                │   │
 │  │  • Cosmos DB Account (dev-shared, manual 400 RU)    │   │
@@ -50,7 +50,7 @@ Each environment uses a dedicated resource group for logical isolation and RBAC 
 │  └────────────────────────────────────────────────────┘   │
 │                                                             │
 │  ┌────────────────────────────────────────────────────┐   │
-│  │ Resource Group: rg-rvs-staging-westus2              │   │
+│  │ Resource Group: rg-rvs-staging-westus3              │   │
 │  │  • App Service Plan (P1v3)                          │   │
 │  │  • App Service (API) with staging slot              │   │
 │  │  • Cosmos DB Account (autoscale 400-4000 RU)        │   │
@@ -62,7 +62,7 @@ Each environment uses a dedicated resource group for logical isolation and RBAC 
 │  └────────────────────────────────────────────────────┘   │
 │                                                             │
 │  ┌────────────────────────────────────────────────────┐   │
-│  │ Resource Group: rg-rvs-prod-westus2                 │   │
+│  │ Resource Group: rg-rvs-prod-westus3                 │   │
 │  │  • App Service Plan (P2v3, zone redundant)          │   │
 │  │  • App Service (API) with staging slot              │   │
 │  │  • Cosmos DB Account (autoscale 400-10000 RU)       │   │
@@ -82,7 +82,7 @@ Follow [Azure naming best practices](https://learn.microsoft.com/azure/cloud-ado
 
 | Resource Type | Pattern | Example |
 |---|---|---|
-| Resource Group | `rg-{workload}-{env}-{region}` | `rg-rvs-prod-westus2` |
+| Resource Group | `rg-{workload}-{env}-{region}` | `rg-rvs-prod-westus3` |
 | App Service Plan | `plan-{workload}-{env}` | `plan-rvs-prod` |
 | App Service | `app-{workload}-api-{env}` | `app-rvs-api-prod` |
 | Cosmos DB Account | `cosmos-{workload}-{env}` | `cosmos-rvs-prod` |
@@ -251,7 +251,7 @@ resource appService 'Microsoft.Web/sites@2023-01-01' = {
 
 **Consistency Level:** Session (default, balances latency and consistency for single-region writes)
 
-**Multi-Region Writes:** Disabled (MVP). Single write region (West US 2), optional read replica in East US 2 (GA phase).
+**Multi-Region Writes:** Disabled (MVP). Single write region (West US 3), optional read replica in East US (GA phase).
 
 **Backup Policy:**
 - **Mode:** Continuous (7-day point-in-time restore)
@@ -977,11 +977,11 @@ az login
 az account set --subscription "RVS Production"
 
 # Create resource group
-az group create --name rg-rvs-prod-westus2 --location westus2
+az group create --name rg-rvs-prod-westus3 --location westus3
 
 # Deploy infrastructure
 az deployment group create \
-  --resource-group rg-rvs-prod-westus2 \
+  --resource-group rg-rvs-prod-westus3 \
   --template-file infrastructure/main.bicep \
   --parameters infrastructure/environments/prod.bicepparam
 
@@ -995,13 +995,13 @@ az keyvault secret set --vault-name kv-rvs-prod-x7m2 --name openai-api-key --val
 ```bash
 # What-If mode (dry run)
 az deployment group what-if \
-  --resource-group rg-rvs-prod-westus2 \
+  --resource-group rg-rvs-prod-westus3 \
   --template-file infrastructure/main.bicep \
   --parameters infrastructure/environments/prod.bicepparam
 
 # Apply changes
 az deployment group create \
-  --resource-group rg-rvs-prod-westus2 \
+  --resource-group rg-rvs-prod-westus3 \
   --template-file infrastructure/main.bicep \
   --parameters infrastructure/environments/prod.bicepparam
 ```
@@ -1064,8 +1064,8 @@ on:
 
 env:
   DOTNET_VERSION: '10.0.x'
-  AZURE_RESOURCE_GROUP_STAGING: rg-rvs-staging-westus2
-  AZURE_RESOURCE_GROUP_PROD: rg-rvs-prod-westus2
+  AZURE_RESOURCE_GROUP_STAGING: rg-rvs-staging-westus3
+  AZURE_RESOURCE_GROUP_PROD: rg-rvs-prod-westus3
 
 jobs:
   build-and-test:
@@ -1169,8 +1169,8 @@ jobs:
 
 | Secret Name | Purpose | How to Obtain |
 |---|---|---|
-| `AZURE_CREDENTIALS_STAGING` | Service Principal JSON for Staging | `az ad sp create-for-rbac --name sp-rvs-staging --role Contributor --scopes /subscriptions/{sub-id}/resourceGroups/rg-rvs-staging-westus2 --sdk-auth` |
-| `AZURE_CREDENTIALS_PROD` | Service Principal JSON for Production | `az ad sp create-for-rbac --name sp-rvs-prod --role Contributor --scopes /subscriptions/{sub-id}/resourceGroups/rg-rvs-prod-westus2 --sdk-auth` |
+| `AZURE_CREDENTIALS_STAGING` | Service Principal JSON for Staging | `az ad sp create-for-rbac --name sp-rvs-staging --role Contributor --scopes /subscriptions/{sub-id}/resourceGroups/rg-rvs-staging-westus3 --sdk-auth` |
+| `AZURE_CREDENTIALS_PROD` | Service Principal JSON for Production | `az ad sp create-for-rbac --name sp-rvs-prod --role Contributor --scopes /subscriptions/{sub-id}/resourceGroups/rg-rvs-prod-westus3 --sdk-auth` |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN_INTAKE_STAGING` | Deployment token for Intake app | From Static Web App resource in Azure Portal |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN_MANAGER_STAGING` | Deployment token for Manager app | From Static Web App resource in Azure Portal |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN_INTAKE_PROD` | Deployment token for Intake app | From Static Web App resource in Azure Portal |
@@ -1205,7 +1205,7 @@ jobs:
 ```bash
 # Run tenant provisioning via Azure CLI + Bicep
 az deployment group create \
-  --resource-group rg-rvs-prod-westus2 \
+  --resource-group rg-rvs-prod-westus3 \
   --template-file infrastructure/modules/tenant-provisioning.bicep \
   --parameters \
     tenantId="org_blue_compass_rv" \
@@ -1242,7 +1242,7 @@ az cosmosdb sql database list-restorable-timestamps \
 az cosmosdb restore \
   --account-name cosmos-rvs-prod-restored \
   --restore-timestamp "2026-04-01T12:00:00Z" \
-  --location "West US 2"
+  --location "West US 3"
 ```
 
 ### 13.2 Blob Storage Backup
@@ -1251,7 +1251,7 @@ az cosmosdb restore \
 
 **Blob Versioning:** Enabled (immutable history, protects against overwrites)
 
-**Geo-Replication (GRS):** Automatic async replication to paired region (East US 2)
+**Geo-Replication (GRS):** Automatic async replication to paired region (East US)
 
 **Recovery Point Objective (RPO):** < 15 minutes (Azure SLA for GRS)
 
@@ -1322,7 +1322,7 @@ az keyvault secret restore \
 
 ### 14.3 Compliance Readiness
 
-**Data Residency:** All resources deployed in **West US 2** (primary), **East US 2** (failover replica for Cosmos DB and GRS blobs)
+**Data Residency:** All resources deployed in **West US 3** (primary), **East US** (failover replica for Cosmos DB and GRS blobs)
 
 **Data Classification:**
 - **PII (Customer email, phone, name):** Encrypted at rest, access logged
@@ -1386,7 +1386,7 @@ az keyvault secret restore \
 **Architecture Changes:**
 
 1. **Cosmos DB:** Enable multi-region writes (Active-Active). Add read replicas in target regions.
-2. **App Service:** Deploy App Service instances in each region (West US 2, East US, West Europe).
+2. **App Service:** Deploy App Service instances in each region (West US 3, East US, West Europe).
 3. **Azure Traffic Manager or Front Door:** Route users to nearest region based on latency.
 4. **Blob Storage:** Use ZRS (zone-redundant) or GZRS (geo-zone-redundant) in each region. Replicate via Azure Data Factory or AzCopy.
 5. **Auth0:** No change (Auth0 is globally distributed by default).

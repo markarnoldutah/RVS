@@ -547,11 +547,11 @@ public async Task<TenantConfig> GetCachedAsync(string tenantId, CancellationToke
 
 ## Global Distribution Strategy
 
-- **Current**: Single-region (West US 2) — appropriate for MVP
-- **Phase 2 Recommendation**: Add East US 2 read replica with automatic failover
+- **Current**: Single-region (West US 3) — appropriate for MVP
+- **Phase 2 Recommendation**: Add East US read replica with automatic failover
   - **Consistency Level**: Session (default) with occasional Bounded Staleness for analytics
   - **Conflict Resolution**: Last-Writer-Wins (default) — acceptable since write operations are always region-local
-  - **Regional Failover**: Automatic failover enabled with West US 2 as primary
+  - **Regional Failover**: Automatic failover enabled with West US 3 as primary
   - **Cost**: ~2x storage cost for replication, but no additional RU cost for reads from replicas
 - **Phase 3+**: If customer base expands internationally, add EU region with data residency controls
 
