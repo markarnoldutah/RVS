@@ -11,16 +11,16 @@
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="2">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Small" />
                     <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Contact Information</strong></MudText>
                     <MudSpacer />
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                   Size="Size.Small"
-                                   Color="Color.Primary"
-                                   OnClick="() => EditStep(2)"
-                                   aria-label="Edit contact info" />
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Edit"
+                               OnClick="() => EditStep(2)"
+                               Style="text-transform: none;">Edit</MudButton>
                 </MudStack>
-                <MudSimpleTable Dense="true" Elevation="0">
+                <MudSimpleTable Elevation="0" Class="review-table">
                     <tbody>
                         <tr><td><strong>Name</strong></td><td>@State.FirstName @State.LastName</td></tr>
                         <tr><td><strong>Email</strong></td><td>@State.Email</td></tr>
@@ -37,16 +37,16 @@
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="2">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.DirectionsCarFilled" Color="Color.Primary" Size="Size.Small" />
                     <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Vehicle Information</strong></MudText>
                     <MudSpacer />
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                   Size="Size.Small"
-                                   Color="Color.Primary"
-                                   OnClick="() => EditStep(3)"
-                                   aria-label="Edit vehicle info" />
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Edit"
+                               OnClick="() => EditStep(3)"
+                               Style="text-transform: none;">Edit</MudButton>
                 </MudStack>
-                <MudSimpleTable Dense="true" Elevation="0">
+                <MudSimpleTable Elevation="0" Class="review-table">
                     <tbody>
                         <tr><td><strong>VIN</strong></td><td>@State.Vin</td></tr>
                         @if (!string.IsNullOrWhiteSpace(State.Manufacturer))
@@ -70,19 +70,19 @@
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="2">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Description" Color="Color.Primary" Size="Size.Small" />
                     <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Issue Details</strong></MudText>
                     <MudSpacer />
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                   Size="Size.Small"
-                                   Color="Color.Primary"
-                                   OnClick="() => EditStep(5)"
-                                   aria-label="Edit issue details" />
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Edit"
+                               OnClick="() => EditStep(5)"
+                               Style="text-transform: none;">Edit</MudButton>
                 </MudStack>
-                <MudSimpleTable Dense="true" Elevation="0">
+                <MudSimpleTable Elevation="0" Class="review-table">
                     <tbody>
                         <tr><td><strong>Category</strong></td><td>@State.IssueCategory</td></tr>
-                        <tr><td><strong>Description</strong></td><td>@State.IssueDescription</td></tr>
+                        <tr><td><strong>Description</strong></td><td style="white-space: pre-wrap;">@State.IssueDescription</td></tr>
                         @if (!string.IsNullOrWhiteSpace(State.Urgency))
                         {
                             <tr><td><strong>Urgency</strong></td><td>@State.Urgency</td></tr>
@@ -102,20 +102,20 @@
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Primary" Size="Size.Small" />
                         <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Diagnostic Responses</strong></MudText>
                         <MudSpacer />
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                       Size="Size.Small"
-                                       Color="Color.Primary"
-                                       OnClick="() => EditStep(6)"
-                                       aria-label="Edit diagnostic responses" />
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   OnClick="() => EditStep(6)"
+                                   Style="text-transform: none;">Edit</MudButton>
                     </MudStack>
                     <MudStack Spacing="3">
                         @foreach (var response in State.DiagnosticResponses)
                         {
                             <div>
-                                <MudText Typo="Typo.body2" Style="font-weight: 500;">
+                                <MudText Typo="Typo.body1" Style="font-weight: 500;">
                                     @response.QuestionText
                                 </MudText>
                                 @if (response.SelectedOptions.Count > 0)
@@ -123,7 +123,7 @@
                                     <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
                                         @foreach (var option in response.SelectedOptions)
                                         {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary"
+                                            <MudChip T="string" Color="Color.Primary"
                                                      Variant="Variant.Outlined">
                                                 @option
                                             </MudChip>
@@ -132,7 +132,7 @@
                                 }
                                 @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
                                 {
-                                    <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);" Class="mt-1">
+                                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);" Class="mt-1">
                                         @response.FreeTextResponse
                                     </MudText>
                                 }
@@ -149,21 +149,21 @@
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" Size="Size.Small" />
                         <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);">
                             <strong>Attachments (@State.Attachments.Count)</strong>
                         </MudText>
                         <MudSpacer />
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                       Size="Size.Small"
-                                       Color="Color.Primary"
-                                       OnClick="() => EditStep(7)"
-                                       aria-label="Edit attachments" />
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   OnClick="() => EditStep(7)"
+                                   Style="text-transform: none;">Edit</MudButton>
                     </MudStack>
                     <MudStack Spacing="1">
                         @foreach (var attachment in State.Attachments)
                         {
-                            <MudText Typo="Typo.body2">
+                            <MudText Typo="Typo.body1">
                                 📎 @attachment.FileName (@FormatFileSize(attachment.SizeBytes))
                             </MudText>
                         }

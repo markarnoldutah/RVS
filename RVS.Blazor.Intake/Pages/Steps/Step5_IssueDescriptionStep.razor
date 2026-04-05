@@ -10,6 +10,22 @@
 
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Description</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Provide as much detail as possible about the issue</MudText>
+                <MudTextField @bind-Value="State.IssueDescription"
+                              T="string"
+                              Validation="@(new Func<string?, string?>(ValidateDescription))"
+                              Lines="5"
+                              MaxLength="2000"
+                              Counter="2000"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Placeholder="Describe the issue in detail..." />
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
                 <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue Category</MudText>
                 <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Select the area that best describes the issue</MudText>
                 @if (_categories.Count > 0)
@@ -44,22 +60,6 @@
                         <MudSelectItem T="string" Value="@("Other")">Other</MudSelectItem>
                     </MudSelect>
                 }
-            </MudStack>
-        </MudPaper>
-
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-            <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Description</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Provide as much detail as possible about the issue</MudText>
-                <MudTextField @bind-Value="State.IssueDescription"
-                              T="string"
-                              Validation="@(new Func<string?, string?>(ValidateDescription))"
-                              Lines="5"
-                              MaxLength="2000"
-                              Counter="2000"
-                              Variant="Variant.Outlined"
-                              Margin="Margin.Dense"
-                              Placeholder="Describe the issue in detail..." />
             </MudStack>
         </MudPaper>
 

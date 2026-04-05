@@ -53,12 +53,20 @@ h1:focus {
 }
 
 /* --------------------------------------------------------
-   Input Borders — heavy black outline for readability
-   against the translucent card backgrounds.
+   Input Borders — thicker outline for readability against
+   the translucent card backgrounds.  Colour is left to
+   MudBlazor so hover / focus / theme states work correctly.
    -------------------------------------------------------- */
 .mud-input-outlined-border {
     border-width: 3px !important;
-    border-color: #000 !important;
+}
+
+/* --------------------------------------------------------
+   Review Tables — match cell font-size to body1 (1rem) so
+   review-page text matches the input fields on other steps.
+   -------------------------------------------------------- */
+.review-table td {
+    font-size: 1rem !important;
 }
 
 /* --------------------------------------------------------

@@ -59,14 +59,13 @@
             <MudStack Spacing="1">
                 <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Year</MudText>
                 <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">The model year of the vehicle</MudText>
-                <MudNumericField @bind-Value="State.Year"
-                                 T="int?"
-                                 Validation="@(new Func<int?, string?>(ValidateYear))"
-                                 Variant="Variant.Outlined"
-                                 Margin="Margin.Dense"
-                                 Placeholder="e.g., 2023"
-                                 Min="1900"
-                                 Max="@(DateTime.UtcNow.Year + 2)" />
+                <MudTextField @bind-Value="State.Year"
+                              T="int?"
+                              Validation="@(new Func<int?, string?>(ValidateYear))"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              InputMode="InputMode.numeric"
+                              Placeholder="e.g., 2023" />
             </MudStack>
         </MudPaper>
 
@@ -95,8 +94,14 @@
     private string? ValidateModel(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "Model is required" : null;
 
-    private string? ValidateYear(int? value) =>
-        _submitted && !value.HasValue ? "Year is required" : null;
+    private string? ValidateYear(int? value)
+    {
+        if (!_submitted) return null;
+        if (!value.HasValue) return "Year is required";
+        if (value < 1900) return "Year must be 1900 or later";
+        if (value > DateTime.UtcNow.Year + 2) return $"Year must not exceed {DateTime.UtcNow.Year + 2}";
+        return null;
+    }
 
     private async Task HandleNext()
     {
