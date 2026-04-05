@@ -11,7 +11,7 @@
   - Concurrent users: ~50–200 during peak hours at MVP; ~5k–10k at full scale
   - Average document sizes: ServiceRequest ~5–15KB, CustomerProfile ~2–5KB, AssetLedgerEntry ~1–2KB, Dealership ~1–2KB, Location ~1KB, GlobalCustomerAcct ~1–3KB, LookupSet ~5–20KB, SlugLookup ~0.5KB, TenantConfig ~0.5KB
   - Total estimated data: ~50GB at full scale (dominated by service-requests + asset-ledger)
-- **Geographic Distribution**: Single-region (West US 2) for MVP. Multi-region read replicas planned for Phase 2+.
+- **Geographic Distribution**: Single-region (West US 3) for MVP. Multi-region read replicas planned for Phase 2+.
 
 ## Access Patterns Analysis
 
@@ -147,7 +147,7 @@
 - **GlobalCustomerAcct.LinkedProfiles.DealershipName**: Denormalized for status page. **Correct.**
 
 ### Global Distribution
-- MVP: Single region (West US 2)
+- MVP: Single region (West US 3)
 - Phase 2+: Multi-region read replicas with Session consistency
 - No multi-region writes needed (service operations are location-specific)
 

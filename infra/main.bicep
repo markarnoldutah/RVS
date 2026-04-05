@@ -6,7 +6,7 @@ targetScope = 'resourceGroup'
 // ── Parameters ────────────────────────────────────────────────
 
 @description('The Azure region for all resources.')
-param location string = 'westus2'
+param location string = 'westus3'
 
 @description('The target environment (dev, staging, or prod).')
 @allowed([

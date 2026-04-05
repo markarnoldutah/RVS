@@ -48,18 +48,18 @@ az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
 
 # 3. Create the resource group (if it doesn't exist)
 az group create \
-  --name rg-rvs-dev-westus2 \
-  --location westus2
+  --name rg-rvs-dev-westus3 \
+  --location westus3
 
 # 4. Deploy
 az deployment group create \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --template-file infra/main.bicep \
   --parameters infra/parameters/dev.bicepparam
 
 # 5. (Optional) Deploy with Key Vault secret injection
 az deployment group create \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --template-file infra/main.bicep \
   --parameters infra/parameters/dev.bicepparam \
   --parameters keyVaultName='kv-rvs-dev-x7m2'
@@ -68,10 +68,10 @@ az deployment group create \
 ### Deploy Prod
 
 ```bash
-az group create --name rg-rvs-prod-westus2 --location westus2
+az group create --name rg-rvs-prod-westus3 --location westus3
 
 az deployment group create \
-  --resource-group rg-rvs-prod-westus2 \
+  --resource-group rg-rvs-prod-westus3 \
   --template-file infra/main.bicep \
   --parameters infra/parameters/prod.bicepparam \
   --parameters keyVaultName='kv-rvs-prod-ab12'
@@ -108,14 +108,14 @@ Retrieve the values after deployment:
 ```bash
 # Endpoint
 az deployment group show \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --name deploy-openai-dev \
   --query properties.outputs.openAiEndpoint.value -o tsv
 
 # API key
 az cognitiveservices account keys list \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query key1 -o tsv
 ```
 
@@ -155,23 +155,23 @@ A typical VIN extraction request uses ~1,000 input tokens (image + prompt) and ~
 # 1. Confirm the resource exists
 az cognitiveservices account show \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query '{name:name, endpoint:properties.endpoint, provisioningState:properties.provisioningState}'
 
 # 2. Confirm the model deployment
 az cognitiveservices account deployment list \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query '[].{name:name, model:properties.model.name, version:properties.model.version, capacity:sku.capacity}'
 
 # 3. Quick smoke test (requires jq)
 ENDPOINT=$(az cognitiveservices account show \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query properties.endpoint -o tsv)
 API_KEY=$(az cognitiveservices account keys list \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query key1 -o tsv)
 
 curl -s "${ENDPOINT}openai/deployments/gpt-4o/chat/completions?api-version=2024-02-01" \
