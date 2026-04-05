@@ -282,6 +282,9 @@ builder.Services.AddScoped<IIntakeOrchestrationService, IntakeOrchestrationServi
 #region Integration Clients
 var useMockIntegrations = builder.Configuration.GetValue<bool>("Integrations:UseMocks");
 
+// AI options — payload limits and allowed media types for all AI endpoints
+builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
+
 // VIN Decoder
 if (useMockIntegrations)
 {
