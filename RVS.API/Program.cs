@@ -303,6 +303,41 @@ else
     });
 }
 
+// VIN Extraction (AI Vision)
+if (useMockIntegrations)
+{
+    builder.Services.AddSingleton<IVinExtractionService, MockVinExtractionService>();
+}
+else
+{
+    var openAiEndpoint = builder.Configuration["AzureOpenAi:Endpoint"];
+    if (!string.IsNullOrWhiteSpace(openAiEndpoint))
+    {
+        var visionDeploymentName = builder.Configuration["AzureOpenAi:VisionDeploymentName"]
+            ?? builder.Configuration["AzureOpenAi:DeploymentName"]
+            ?? "gpt-4o";
+        builder.Services.AddHttpClient<IVinExtractionService, AzureOpenAiVinExtractionService>(client =>
+        {
+            var baseUrl = openAiEndpoint.TrimEnd('/') + $"/openai/deployments/{visionDeploymentName}/";
+            client.BaseAddress = new Uri(baseUrl);
+            var apiKey = builder.Configuration["AzureOpenAi:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                client.DefaultRequestHeaders.Add("api-key", apiKey);
+            }
+        })
+        .AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
+        });
+    }
+    else
+    {
+        builder.Services.AddSingleton<IVinExtractionService, MockVinExtractionService>();
+    }
+}
+
 // Categorization
 builder.Services.AddSingleton<RuleBasedCategorizationService>();
 if (useMockIntegrations)

@@ -58,17 +58,35 @@
         {
             <MudPaper Elevation="1" Class="pa-3">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <img src="@_capturedImageUrl" alt="Captured VIN photo"
-                         style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; flex-shrink: 0;" />
+                    <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;">
+                        <img src="@_capturedImageUrl" alt="Captured VIN photo"
+                             style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px;" />
+                        @if (_isExtracting)
+                        {
+                            <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.7); border-radius: 4px;">
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                            </div>
+                        }
+                    </div>
                     <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
-                        <MudText Typo="Typo.body2">VIN photo captured</MudText>
+                        <MudText Typo="Typo.body2">
+                            @(_isExtracting ? "Extracting VIN…" : "VIN photo captured")
+                        </MudText>
                     </MudStack>
                     <MudIconButton Icon="@Icons.Material.Filled.Close"
                                    Size="Size.Small"
+                                   Disabled="_isExtracting"
                                    OnClick="ClearCapturedImage"
                                    aria-label="Remove captured photo" />
                 </MudStack>
             </MudPaper>
+        }
+
+        @if (_extractionMessage is not null)
+        {
+            <MudAlert Severity="@_extractionSeverity" Variant="Variant.Outlined" Dense="true">
+                <MudText Typo="Typo.body2">@_extractionMessage</MudText>
+            </MudAlert>
         }
 
         @if (_lookupFailed)
@@ -119,6 +137,8 @@
 
 @code {
     private const long MaxCameraCaptureSizeBytes = 10 * 1024 * 1024;
+    private const double VinAutoFillThreshold = 0.7;
+    private const double VinAutoLookupThreshold = 0.9;
 
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
@@ -130,7 +150,10 @@
     private InputFile? _cameraInput;
     private string? _capturedImageUrl;
     private bool _isLookingUp;
+    private bool _isExtracting;
     private bool _lookupFailed;
+    private string? _extractionMessage;
+    private Severity _extractionSeverity = Severity.Info;
 
     private string? ValidateVin(string? value)
     {
@@ -194,17 +217,61 @@
         var file = e.File;
         if (file is null) return;
 
+        _extractionMessage = null;
+
         var buffer = new byte[file.Size];
         await using var stream = file.OpenReadStream(maxAllowedSize: MaxCameraCaptureSizeBytes);
         _ = await stream.ReadAsync(buffer);
         var base64 = Convert.ToBase64String(buffer);
         _capturedImageUrl = $"data:{file.ContentType};base64,{base64}";
+
+        _isExtracting = true;
         StateHasChanged();
+
+        try
+        {
+            var request = new VinExtractionRequestDto
+            {
+                ImageBase64 = base64,
+                ContentType = file.ContentType
+            };
+
+            var response = await IntakeApi.ExtractVinFromImageAsync(State.Slug, request);
+
+            if (response is { Success: true, Result.Vin: { } vin } && response.Confidence >= VinAutoFillThreshold)
+            {
+                HandleVinChanged(vin);
+                _extractionMessage = $"VIN extracted from photo: {vin}";
+                _extractionSeverity = Severity.Success;
+
+                if (response.Confidence >= VinAutoLookupThreshold)
+                {
+                    await HandleLookup();
+                    return;
+                }
+            }
+            else
+            {
+                _extractionMessage = "We couldn't read the VIN from the photo. Please enter it manually.";
+                _extractionSeverity = Severity.Info;
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _extractionMessage = "We couldn't read the VIN from the photo. Please enter it manually.";
+            _extractionSeverity = Severity.Info;
+        }
+        finally
+        {
+            _isExtracting = false;
+            StateHasChanged();
+        }
     }
 
     private void ClearCapturedImage()
     {
         _capturedImageUrl = null;
+        _extractionMessage = null;
     }
 
     private async Task HandleLookup()

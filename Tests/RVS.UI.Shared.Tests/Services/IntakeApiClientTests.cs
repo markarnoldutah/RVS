@@ -277,6 +277,75 @@ public class IntakeApiClientTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    // ── ExtractVinFromImageAsync ─────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ExtractVinFromImageAsync_WhenLocationSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+        var request = new VinExtractionRequestDto { ImageBase64 = "abc==", ContentType = "image/jpeg" };
+
+        var act = () => sut.ExtractVinFromImageAsync(slug!, request);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task ExtractVinFromImageAsync_WhenRequestIsNull_ShouldThrowArgumentNullException()
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.ExtractVinFromImageAsync("slug", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task ExtractVinFromImageAsync_WhenApiReturns200_ShouldDeserializeResponse()
+    {
+        var expected = new AiOperationResponseDto<VinExtractionResultDto>
+        {
+            Success = true,
+            Result = new VinExtractionResultDto { Vin = "1RGDE4428R1000001" },
+            Confidence = 0.95,
+            Warnings = [],
+            Provider = "MockVinExtractionService",
+            CorrelationId = "corr-001"
+        };
+
+        var handler = new FakeHttpHandler(HttpStatusCode.OK, expected);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var request = new VinExtractionRequestDto { ImageBase64 = "abc==", ContentType = "image/jpeg" };
+        var result = await sut.ExtractVinFromImageAsync("my-slug", request);
+
+        result.Should().NotBeNull();
+        result!.Success.Should().BeTrue();
+        result.Result!.Vin.Should().Be("1RGDE4428R1000001");
+        result.Confidence.Should().Be(0.95);
+        result.Provider.Should().Be("MockVinExtractionService");
+        handler.LastRequest!.RequestUri!.ToString().Should().Contain("my-slug");
+        handler.LastRequest.RequestUri.ToString().Should().Contain("ai/extract-vin");
+        handler.LastRequest.Method.Should().Be(HttpMethod.Post);
+    }
+
+    [Fact]
+    public async Task ExtractVinFromImageAsync_WhenApiReturnsError_ShouldThrowHttpRequestException()
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.BadRequest, new { message = "Bad request" });
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var request = new VinExtractionRequestDto { ImageBase64 = "abc==", ContentType = "image/jpeg" };
+        var act = () => sut.ExtractVinFromImageAsync("slug", request);
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
     // ── Test helper ──────────────────────────────────────────────────────
 
     private sealed class FakeHttpHandler : HttpMessageHandler

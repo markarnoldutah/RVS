@@ -1,7 +1,10 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Moq;
 using RVS.API.Controllers;
+using RVS.API.Integrations;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
@@ -15,15 +18,23 @@ public class IntakeControllerTests
     private readonly Mock<ICategorizationService> _categorizationMock = new();
     private readonly Mock<IAttachmentService> _attachmentServiceMock = new();
     private readonly Mock<IVinDecoderService> _vinDecoderServiceMock = new();
+    private readonly Mock<IVinExtractionService> _vinExtractionServiceMock = new();
     private readonly IntakeController _sut;
 
     public IntakeControllerTests()
     {
+        var aiOptions = Options.Create(new AiOptions { MaxImageBytes = 5 * 1024 * 1024 });
         _sut = new IntakeController(
             _intakeServiceMock.Object,
             _categorizationMock.Object,
             _attachmentServiceMock.Object,
-            _vinDecoderServiceMock.Object);
+            _vinDecoderServiceMock.Object,
+            _vinExtractionServiceMock.Object,
+            aiOptions);
+        _sut.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
     }
 
     [Fact]
@@ -213,5 +224,90 @@ public class IntakeControllerTests
         var createdResult = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
         var dto = createdResult.Value.Should().BeOfType<AttachmentDto>().Subject;
         dto.FileName.Should().Be("photo.jpg");
+    }
+
+    // ── ExtractVin ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ExtractVin_WhenExtractionSucceeds_ShouldReturnOkWithVin()
+    {
+        var imageBytes = new byte[] { 0xFF, 0xD8, 0xFF };
+        var base64 = Convert.ToBase64String(imageBytes);
+        var request = new VinExtractionRequestDto { ImageBase64 = base64, ContentType = "image/jpeg" };
+
+        _vinExtractionServiceMock.Setup(s => s.ExtractVinFromImageAsync(imageBytes, "image/jpeg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VinExtractionResult("1RGDE4428R1000001", 0.95, "MockVinExtractionService"));
+
+        var result = await _sut.ExtractVin("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<VinExtractionResultDto>>().Subject;
+        dto.Success.Should().BeTrue();
+        dto.Result!.Vin.Should().Be("1RGDE4428R1000001");
+        dto.Confidence.Should().Be(0.95);
+        dto.Provider.Should().Be("MockVinExtractionService");
+    }
+
+    [Fact]
+    public async Task ExtractVin_WhenExtractionReturnsNull_ShouldReturnOkWithNullResultAndWarning()
+    {
+        var imageBytes = new byte[] { 0xFF, 0xD8, 0xFF };
+        var base64 = Convert.ToBase64String(imageBytes);
+        var request = new VinExtractionRequestDto { ImageBase64 = base64, ContentType = "image/jpeg" };
+
+        _vinExtractionServiceMock.Setup(s => s.ExtractVinFromImageAsync(imageBytes, "image/jpeg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((VinExtractionResult?)null);
+
+        var result = await _sut.ExtractVin("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<VinExtractionResultDto>>().Subject;
+        dto.Success.Should().BeTrue();
+        dto.Result.Should().BeNull();
+        dto.Confidence.Should().Be(0.0);
+        dto.Warnings.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ExtractVin_WhenImageBase64IsEmpty_ShouldReturn400()
+    {
+        var request = new VinExtractionRequestDto { ImageBase64 = "", ContentType = "image/jpeg" };
+
+        var result = await _sut.ExtractVin("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task ExtractVin_WhenContentTypeIsNotImage_ShouldReturn400()
+    {
+        var base64 = Convert.ToBase64String(new byte[] { 0x00 });
+        var request = new VinExtractionRequestDto { ImageBase64 = base64, ContentType = "application/json" };
+
+        var result = await _sut.ExtractVin("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task ExtractVin_WhenImageBase64IsInvalid_ShouldReturn400()
+    {
+        var request = new VinExtractionRequestDto { ImageBase64 = "not-valid-base64!!!", ContentType = "image/jpeg" };
+
+        var result = await _sut.ExtractVin("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task ExtractVin_WhenImageExceedsMaxSize_ShouldReturn413()
+    {
+        // 6 MB > 5 MB max
+        var largeBase64 = Convert.ToBase64String(new byte[6 * 1024 * 1024]);
+        var request = new VinExtractionRequestDto { ImageBase64 = largeBase64, ContentType = "image/jpeg" };
+
+        var result = await _sut.ExtractVin("test-slug", request);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(413);
     }
 }
