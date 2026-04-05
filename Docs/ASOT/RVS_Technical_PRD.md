@@ -139,7 +139,7 @@ On receipt of a valid `ServiceRequestCreateRequestDto`, the API MUST execute the
 3. Resolve asset ownership (deactivate prior owner if VIN transferred)
 4. Create `ServiceRequest` with embedded customer snapshot, AI categorization, and technician summary
 5. Append `AssetLedgerEntry` (write-once, non-blocking on failure)
-6. Update linkages (increment request count, rotate magic-link token)
+6. Update linkages (increment request count, stable magic-link token — generated once, reused; regenerated only when absent or expired)
 7. Fire-and-forget confirmation email via `INotificationService`
 
 Steps 1–6 MUST complete before returning `201`. Step 7 MUST NOT block the response.
@@ -348,8 +348,8 @@ Standard error codes:
 | Field | Type | Constraints |
 |---|---|---|
 | `id` | string | Partition key = `/email`; normalized lowercase |
-| `magicLinkToken` | string | Format: `base64url(SHA256(email)[0..8]):random_bytes`; rotated on every intake |
-| `magicLinkExpiresAtUtc` | DateTime | Default 30 days; configurable per tenant |
+| `magicLinkToken` | string | Format: `base64url(SHA256(email)[0..8]):random_bytes`; generated once, reused; regenerated only when absent or expired |
+| `magicLinkExpiresAtUtc` | DateTime | Default 90 days; configurable per tenant |
 | `linkedProfiles` | array | Each has `tenantId`, `customerProfileId`, `locationId`, `locationName` |
 
 **AssetLedgerEntry**
@@ -616,7 +616,7 @@ Search input validation: reject any `Keyword` containing `<`, `>`, `;`, `'`, `"`
 | Threat | Mitigation |
 |---|---|
 | Token enumeration | 256-bit cryptographic random suffix; infeasible to guess |
-| Token theft via URL sharing | 30-day expiry; rotated on every intake submission |
+| Token theft via URL sharing | 90-day expiry; stable token (bookmarkable status page) |
 | Cross-customer data leakage | Status page only returns data for the token's owner; partition key derived from email-hash, not walked |
 | Replay after expiry | `magicLinkExpiresAtUtc` checked server-side; return `410 Gone` |
 | Rate-based scanning | 10 req/min per IP on `api/status/{token}` |
