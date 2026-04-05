@@ -6,7 +6,7 @@ targetScope = 'resourceGroup'
 // ── Parameters ────────────────────────────────────────────────
 
 @description('The Azure region for all resources.')
-param location string = 'westus2'
+param location string = 'westus3'
 
 @description('The target environment (dev, staging, or prod).')
 @allowed([
@@ -23,38 +23,32 @@ param openAiCapacity int = 1
 @description('Optional. Name of an existing Key Vault to store OpenAI secrets. Leave empty to skip secret creation.')
 param keyVaultName string = ''
 
-@description('Deployment stamp identifier for scale units.')
-param stamp string = 's01'
-
-@description('Resource instance number used for deterministic naming.')
-param instance string = '001'
-
 // ── Variables ─────────────────────────────────────────────────
 
-// ── Modules ───────────────────────────────────────────────────
-
-module naming 'modules/naming-tags.bicep' = {
-  name: 'build-naming-${environmentName}'
-  params: {
-    resourceTypePrefix: 'oai'
-    appName: 'rvs'
-    workload: 'ai'
-    environmentName: environmentName
-    location: location
-    stamp: stamp
-    instance: instance
-    tenantModel: 'shared'
-  }
+var environmentDisplayName = {
+  dev: 'Development'
+  staging: 'Staging'
+  prod: 'Production'
 }
+
+var tags = {
+  Environment: environmentDisplayName[environmentName]
+  Workload: 'RVS'
+  CostCenter: 'Engineering'
+  Owner: 'platform-team@example.com'
+  ManagedBy: 'Bicep'
+}
+
+// ── Modules ───────────────────────────────────────────────────
 
 module openAi 'modules/openai.bicep' = {
   name: 'deploy-openai-${environmentName}'
   params: {
     location: location
     environmentName: environmentName
-    resourceName: naming.outputs.resourceName
-    tags: naming.outputs.tags
+    tags: tags
     deploymentCapacity: openAiCapacity
+    resourceName: 'openai-${environmentName}'
   }
 }
 

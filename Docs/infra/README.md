@@ -27,7 +27,6 @@ az provider register --namespace Microsoft.CognitiveServices
 infra/
 ├── main.bicep                          # Orchestration template
 ├── modules/
-│   ├── naming-tags.bicep               # Shared naming + tags helper
 │   ├── openai.bicep                    # Azure OpenAI + GPT-4o deployment
 │   └── openai-keyvault-secrets.bicep   # Stores OpenAI secrets in Key Vault
 ├── parameters/
@@ -49,19 +48,18 @@ az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
 
 # 3. Create the resource group (if it doesn't exist)
 az group create \
-  --name rg-rvs-dev-westus2 \
-  --location westus2
+  --name rg-rvs-dev-westus3 \
+  --location westus3
 
 # 4. Deploy
 az deployment group create \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --template-file infra/main.bicep \
-  --parameters infra/parameters/dev.bicepparam \
-  --parameters stamp='s01' instance='001'
+  --parameters infra/parameters/dev.bicepparam
 
 # 5. (Optional) Deploy with Key Vault secret injection
 az deployment group create \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --template-file infra/main.bicep \
   --parameters infra/parameters/dev.bicepparam \
   --parameters keyVaultName='kv-rvs-dev-x7m2'
@@ -70,13 +68,12 @@ az deployment group create \
 ### Deploy Prod
 
 ```bash
-az group create --name rg-rvs-prod-westus2 --location westus2
+az group create --name rg-rvs-prod-westus3 --location westus3
 
 az deployment group create \
-  --resource-group rg-rvs-prod-westus2 \
+  --resource-group rg-rvs-prod-westus3 \
   --template-file infra/main.bicep \
   --parameters infra/parameters/prod.bicepparam \
-  --parameters stamp='s01' instance='001' \
   --parameters keyVaultName='kv-rvs-prod-ab12'
 ```
 
@@ -111,14 +108,14 @@ Retrieve the values after deployment:
 ```bash
 # Endpoint
 az deployment group show \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --name deploy-openai-dev \
   --query properties.outputs.openAiEndpoint.value -o tsv
 
 # API key
 az cognitiveservices account keys list \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query key1 -o tsv
 ```
 
@@ -147,7 +144,7 @@ Set them in `appsettings.Development.json` or as environment variables:
 | **Staging** | 10 | ~$0 pay-as-you-go | Same billing model, higher burst limit |
 | **Prod** | 30 | ~$0 pay-as-you-go | Standard deployment; billed per token |
 
-Azure OpenAI pricing changes over time and may vary by region, model, and billing plan. Verify current GPT-4o pricing on the official Azure pricing page before using these estimates: https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/
+GPT-4o pricing (as of 2024): **$2.50 / 1M input tokens**, **$10.00 / 1M output tokens**.
 A typical VIN extraction request uses ~1,000 input tokens (image + prompt) and ~50 output tokens.
 
 ---
@@ -158,23 +155,23 @@ A typical VIN extraction request uses ~1,000 input tokens (image + prompt) and ~
 # 1. Confirm the resource exists
 az cognitiveservices account show \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query '{name:name, endpoint:properties.endpoint, provisioningState:properties.provisioningState}'
 
 # 2. Confirm the model deployment
 az cognitiveservices account deployment list \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query '[].{name:name, model:properties.model.name, version:properties.model.version, capacity:sku.capacity}'
 
 # 3. Quick smoke test (requires jq)
 ENDPOINT=$(az cognitiveservices account show \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query properties.endpoint -o tsv)
 API_KEY=$(az cognitiveservices account keys list \
   --name oai-rvs-dev \
-  --resource-group rg-rvs-dev-westus2 \
+  --resource-group rg-rvs-dev-westus3 \
   --query key1 -o tsv)
 
 curl -s "${ENDPOINT}openai/deployments/gpt-4o/chat/completions?api-version=2024-02-01" \
@@ -192,7 +189,7 @@ curl -s "${ENDPOINT}openai/deployments/gpt-4o/chat/completions?api-version=2024-
 
 | Decision | Rationale |
 |---|---|
-| **GPT-4o `2024-08-06`** | GA version selected for this deployment at the time of writing; verify the current latest supported version before deployment |
+| **GPT-4o `2024-08-06`** | Latest GA version with native vision support |
 | **Standard deployment SKU** | Pay-per-token; no reserved capacity cost |
 | **`NoAutoUpgrade` version policy** | Prevents unexpected model behaviour changes in production |
 | **Public network disabled (staging/prod)** | Defence-in-depth; access via Private Endpoint or VNet integration |
