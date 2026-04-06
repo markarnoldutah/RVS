@@ -23,6 +23,9 @@ param openAiCapacity int = 1
 @description('Optional. Name of an existing Key Vault to store OpenAI secrets. Leave empty to skip secret creation.')
 param keyVaultName string = ''
 
+@description('Optional. Name of the model deployment used for text workloads (issue text refinement, category suggestion). Defaults to the standard gpt-4o deployment name when both workloads share the same deployment.')
+param textDeploymentName string = 'gpt-4o'
+
 // ── Modules ───────────────────────────────────────────────────
 
 module openAiNaming 'modules/naming-tags.bicep' = {
@@ -53,6 +56,7 @@ module keyVaultSecrets 'modules/openai-keyvault-secrets.bicep' = if (!empty(keyV
     keyVaultName: keyVaultName
     openAiName: openAi.outputs.name
     openAiDeploymentName: openAi.outputs.deploymentName
+    openAiTextDeploymentName: textDeploymentName
   }
 }
 
