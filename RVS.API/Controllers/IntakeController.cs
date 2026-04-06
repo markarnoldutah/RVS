@@ -24,6 +24,8 @@ public class IntakeController : ControllerBase
     private readonly IAttachmentService _attachmentService;
     private readonly IVinDecoderService _vinDecoderService;
     private readonly IVinExtractionService _vinExtractionService;
+    private readonly ISpeechToTextService _speechToTextService;
+    private readonly IIssueTextRefinementService _issueTextRefinementService;
     private readonly AiOptions _aiOptions;
 
     /// <summary>
@@ -35,6 +37,8 @@ public class IntakeController : ControllerBase
         IAttachmentService attachmentService,
         IVinDecoderService vinDecoderService,
         IVinExtractionService vinExtractionService,
+        ISpeechToTextService speechToTextService,
+        IIssueTextRefinementService issueTextRefinementService,
         IOptions<AiOptions> aiOptions)
     {
         _intakeService = intakeService;
@@ -42,6 +46,8 @@ public class IntakeController : ControllerBase
         _attachmentService = attachmentService;
         _vinDecoderService = vinDecoderService;
         _vinExtractionService = vinExtractionService;
+        _speechToTextService = speechToTextService;
+        _issueTextRefinementService = issueTextRefinementService;
         _aiOptions = aiOptions.Value;
     }
 
@@ -178,6 +184,181 @@ public class IntakeController : ControllerBase
         {
             Success = true,
             Result = new VinExtractionResultDto { Vin = result.Vin },
+            Confidence = result.Confidence,
+            Warnings = [],
+            Provider = result.Provider,
+            CorrelationId = correlationId
+        });
+    }
+
+    /// <summary>
+    /// Transcribes audio of an issue description into text using a speech-to-text engine.
+    /// Optionally returns a cleaned description suitable for the issue description field.
+    /// Always returns HTTP 200 with an <see cref="AiOperationResponseDto{T}"/> envelope.
+    /// </summary>
+    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="request">Base64-encoded audio and MIME content type.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>AI operation envelope with transcript and confidence score.</returns>
+    [HttpPost("ai/transcribe-issue")]
+    public async Task<ActionResult<AiOperationResponseDto<IssueTranscriptionResultDto>>> TranscribeIssue(
+        string locationSlug, [FromBody] IssueTranscriptionRequestDto request, CancellationToken ct = default)
+    {
+        var correlationId = HttpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault()
+            ?? Guid.NewGuid().ToString();
+
+        if (string.IsNullOrWhiteSpace(request.AudioBase64))
+        {
+            return BadRequest(new { message = "AudioBase64 is required." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ContentType) || !request.ContentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "ContentType must be a valid audio MIME type (e.g. audio/webm)." });
+        }
+
+        byte[] audioBytes;
+        try
+        {
+            audioBytes = Convert.FromBase64String(request.AudioBase64);
+        }
+        catch (FormatException)
+        {
+            return BadRequest(new { message = "AudioBase64 is not valid base64-encoded data." });
+        }
+
+        if (audioBytes.Length > _aiOptions.MaxAudioBytes)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new { message = $"Audio exceeds the maximum allowed size of {_aiOptions.MaxAudioBytes / (1024 * 1024)} MB." });
+        }
+
+        var locale = request.Locale ?? "en-US";
+        var result = await _speechToTextService.TranscribeAudioAsync(audioBytes, request.ContentType, locale, ct);
+
+        if (result is null)
+        {
+            return Ok(new AiOperationResponseDto<IssueTranscriptionResultDto>
+            {
+                Success = true,
+                Result = null,
+                Confidence = 0.0,
+                Warnings = ["Could not transcribe audio."],
+                Provider = "SpeechToTextService",
+                CorrelationId = correlationId
+            });
+        }
+
+        return Ok(new AiOperationResponseDto<IssueTranscriptionResultDto>
+        {
+            Success = true,
+            Result = new IssueTranscriptionResultDto
+            {
+                RawTranscript = result.RawTranscript,
+                CleanedDescription = result.CleanedDescription
+            },
+            Confidence = result.Confidence,
+            Warnings = [],
+            Provider = result.Provider,
+            CorrelationId = correlationId
+        });
+    }
+
+    /// <summary>
+    /// Refines a raw speech-to-text transcript into a clean, customer-editable issue description.
+    /// Always returns HTTP 200 with an <see cref="AiOperationResponseDto{T}"/> envelope.
+    /// </summary>
+    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="request">Raw transcript and optional category context.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>AI operation envelope with the cleaned description.</returns>
+    [HttpPost("ai/refine-issue-text")]
+    public async Task<ActionResult<AiOperationResponseDto<IssueTextRefinementResultDto>>> RefineIssueText(
+        string locationSlug, [FromBody] IssueTextRefinementRequestDto request, CancellationToken ct = default)
+    {
+        var correlationId = HttpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault()
+            ?? Guid.NewGuid().ToString();
+
+        if (string.IsNullOrWhiteSpace(request.RawTranscript))
+        {
+            return BadRequest(new { message = "RawTranscript is required." });
+        }
+
+        if (request.RawTranscript.Length > 4000)
+        {
+            return BadRequest(new { message = "RawTranscript must not exceed 4,000 characters." });
+        }
+
+        var result = await _issueTextRefinementService.RefineTranscriptAsync(request.RawTranscript, request.IssueCategory, ct);
+
+        if (result is null)
+        {
+            return Ok(new AiOperationResponseDto<IssueTextRefinementResultDto>
+            {
+                Success = true,
+                Result = null,
+                Confidence = 0.0,
+                Warnings = ["Could not refine transcript."],
+                Provider = "IssueTextRefinementService",
+                CorrelationId = correlationId
+            });
+        }
+
+        return Ok(new AiOperationResponseDto<IssueTextRefinementResultDto>
+        {
+            Success = true,
+            Result = new IssueTextRefinementResultDto { CleanedDescription = result.CleanedDescription },
+            Confidence = result.Confidence,
+            Warnings = [],
+            Provider = result.Provider,
+            CorrelationId = correlationId
+        });
+    }
+
+    /// <summary>
+    /// Suggests an issue category based on the provided issue description text.
+    /// Always returns HTTP 200 with an <see cref="AiOperationResponseDto{T}"/> envelope.
+    /// </summary>
+    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="request">Free-text issue description.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>AI operation envelope with the suggested category.</returns>
+    [HttpPost("ai/suggest-category")]
+    public async Task<ActionResult<AiOperationResponseDto<IssueCategorySuggestionResultDto>>> SuggestCategory(
+        string locationSlug, [FromBody] IssueCategorySuggestionRequestDto request, CancellationToken ct = default)
+    {
+        var correlationId = HttpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault()
+            ?? Guid.NewGuid().ToString();
+
+        if (string.IsNullOrWhiteSpace(request.IssueDescription))
+        {
+            return BadRequest(new { message = "IssueDescription is required." });
+        }
+
+        if (request.IssueDescription.Length > 2000)
+        {
+            return BadRequest(new { message = "IssueDescription must not exceed 2,000 characters." });
+        }
+
+        var result = await _issueTextRefinementService.SuggestCategoryAsync(request.IssueDescription, ct);
+
+        if (result is null)
+        {
+            return Ok(new AiOperationResponseDto<IssueCategorySuggestionResultDto>
+            {
+                Success = true,
+                Result = null,
+                Confidence = 0.0,
+                Warnings = ["Could not suggest a category."],
+                Provider = "IssueTextRefinementService",
+                CorrelationId = correlationId
+            });
+        }
+
+        return Ok(new AiOperationResponseDto<IssueCategorySuggestionResultDto>
+        {
+            Success = true,
+            Result = new IssueCategorySuggestionResultDto { IssueCategory = result.IssueCategory },
             Confidence = result.Confidence,
             Warnings = [],
             Provider = result.Provider,

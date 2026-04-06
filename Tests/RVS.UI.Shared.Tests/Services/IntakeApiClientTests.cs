@@ -346,6 +346,215 @@ public class IntakeApiClientTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    // ── TranscribeIssueAsync ─────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task TranscribeIssueAsync_WhenLocationSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = "abc==", ContentType = "audio/webm" };
+
+        var act = () => sut.TranscribeIssueAsync(slug!, request);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task TranscribeIssueAsync_WhenRequestIsNull_ShouldThrowArgumentNullException()
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.TranscribeIssueAsync("slug", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task TranscribeIssueAsync_WhenApiReturns200_ShouldDeserializeResponse()
+    {
+        var expected = new AiOperationResponseDto<IssueTranscriptionResultDto>
+        {
+            Success = true,
+            Result = new IssueTranscriptionResultDto
+            {
+                RawTranscript = "My water heater broke",
+                CleanedDescription = "Water heater is broken."
+            },
+            Confidence = 0.92,
+            Warnings = [],
+            Provider = "MockSpeechToTextService",
+            CorrelationId = "corr-001"
+        };
+
+        var handler = new FakeHttpHandler(HttpStatusCode.OK, expected);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = "abc==", ContentType = "audio/webm" };
+        var result = await sut.TranscribeIssueAsync("my-slug", request);
+
+        result.Should().NotBeNull();
+        result!.Success.Should().BeTrue();
+        result.Result!.RawTranscript.Should().Be("My water heater broke");
+        result.Result.CleanedDescription.Should().Be("Water heater is broken.");
+        result.Confidence.Should().Be(0.92);
+        result.Provider.Should().Be("MockSpeechToTextService");
+        handler.LastRequest!.RequestUri!.ToString().Should().Contain("my-slug");
+        handler.LastRequest.RequestUri.ToString().Should().Contain("ai/transcribe-issue");
+        handler.LastRequest.Method.Should().Be(HttpMethod.Post);
+    }
+
+    [Fact]
+    public async Task TranscribeIssueAsync_WhenApiReturnsError_ShouldThrowHttpRequestException()
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.BadRequest, new { message = "Bad request" });
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = "abc==", ContentType = "audio/webm" };
+        var act = () => sut.TranscribeIssueAsync("slug", request);
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    // ── RefineIssueTextAsync ─────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RefineIssueTextAsync_WhenLocationSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+        var request = new IssueTextRefinementRequestDto { RawTranscript = "some text" };
+
+        var act = () => sut.RefineIssueTextAsync(slug!, request);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task RefineIssueTextAsync_WhenRequestIsNull_ShouldThrowArgumentNullException()
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.RefineIssueTextAsync("slug", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task RefineIssueTextAsync_WhenApiReturns200_ShouldDeserializeResponse()
+    {
+        var expected = new AiOperationResponseDto<IssueTextRefinementResultDto>
+        {
+            Success = true,
+            Result = new IssueTextRefinementResultDto { CleanedDescription = "Water heater stopped working." },
+            Confidence = 0.88,
+            Warnings = [],
+            Provider = "RuleBasedIssueTextRefinementService",
+            CorrelationId = "corr-002"
+        };
+
+        var handler = new FakeHttpHandler(HttpStatusCode.OK, expected);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var request = new IssueTextRefinementRequestDto { RawTranscript = "um my water heater stopped working" };
+        var result = await sut.RefineIssueTextAsync("my-slug", request);
+
+        result.Should().NotBeNull();
+        result!.Success.Should().BeTrue();
+        result.Result!.CleanedDescription.Should().Be("Water heater stopped working.");
+        handler.LastRequest!.RequestUri!.ToString().Should().Contain("my-slug");
+        handler.LastRequest.RequestUri.ToString().Should().Contain("ai/refine-issue-text");
+        handler.LastRequest.Method.Should().Be(HttpMethod.Post);
+    }
+
+    [Fact]
+    public async Task RefineIssueTextAsync_WhenApiReturnsError_ShouldThrowHttpRequestException()
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.BadRequest, new { message = "Bad request" });
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var request = new IssueTextRefinementRequestDto { RawTranscript = "some text" };
+        var act = () => sut.RefineIssueTextAsync("slug", request);
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    // ── SuggestIssueCategoryAsync ────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SuggestIssueCategoryAsync_WhenLocationSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+        var request = new IssueCategorySuggestionRequestDto { IssueDescription = "battery issue" };
+
+        var act = () => sut.SuggestIssueCategoryAsync(slug!, request);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task SuggestIssueCategoryAsync_WhenRequestIsNull_ShouldThrowArgumentNullException()
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.SuggestIssueCategoryAsync("slug", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task SuggestIssueCategoryAsync_WhenApiReturns200_ShouldDeserializeResponse()
+    {
+        var expected = new AiOperationResponseDto<IssueCategorySuggestionResultDto>
+        {
+            Success = true,
+            Result = new IssueCategorySuggestionResultDto { IssueCategory = "Electrical" },
+            Confidence = 0.85,
+            Warnings = [],
+            Provider = "RuleBasedIssueTextRefinementService",
+            CorrelationId = "corr-003"
+        };
+
+        var handler = new FakeHttpHandler(HttpStatusCode.OK, expected);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var request = new IssueCategorySuggestionRequestDto { IssueDescription = "The battery is dead" };
+        var result = await sut.SuggestIssueCategoryAsync("my-slug", request);
+
+        result.Should().NotBeNull();
+        result!.Success.Should().BeTrue();
+        result.Result!.IssueCategory.Should().Be("Electrical");
+        result.Confidence.Should().Be(0.85);
+        handler.LastRequest!.RequestUri!.ToString().Should().Contain("my-slug");
+        handler.LastRequest.RequestUri.ToString().Should().Contain("ai/suggest-category");
+        handler.LastRequest.Method.Should().Be(HttpMethod.Post);
+    }
+
+    [Fact]
+    public async Task SuggestIssueCategoryAsync_WhenApiReturnsError_ShouldThrowHttpRequestException()
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.BadRequest, new { message = "Bad request" });
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var request = new IssueCategorySuggestionRequestDto { IssueDescription = "something" };
+        var act = () => sut.SuggestIssueCategoryAsync("slug", request);
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
     // ── Test helper ──────────────────────────────────────────────────────
 
     private sealed class FakeHttpHandler : HttpMessageHandler

@@ -341,6 +341,28 @@ else
     }
 }
 
+// Speech-to-Text
+if (useMockIntegrations)
+{
+    builder.Services.AddSingleton<ISpeechToTextService, MockSpeechToTextService>();
+}
+else
+{
+    // Future: wire AzureSpeechToTextService with Azure Speech SDK
+    builder.Services.AddSingleton<ISpeechToTextService, MockSpeechToTextService>();
+}
+
+// Issue Text Refinement + Category Suggestion
+if (useMockIntegrations)
+{
+    builder.Services.AddSingleton<IIssueTextRefinementService, RuleBasedIssueTextRefinementService>();
+}
+else
+{
+    // Future: wire AzureOpenAiIssueTextRefinementService with Azure OpenAI
+    builder.Services.AddSingleton<IIssueTextRefinementService, RuleBasedIssueTextRefinementService>();
+}
+
 // Categorization
 builder.Services.AddSingleton<RuleBasedCategorizationService>();
 if (useMockIntegrations)

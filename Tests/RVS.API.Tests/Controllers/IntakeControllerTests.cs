@@ -19,17 +19,21 @@ public class IntakeControllerTests
     private readonly Mock<IAttachmentService> _attachmentServiceMock = new();
     private readonly Mock<IVinDecoderService> _vinDecoderServiceMock = new();
     private readonly Mock<IVinExtractionService> _vinExtractionServiceMock = new();
+    private readonly Mock<ISpeechToTextService> _speechToTextServiceMock = new();
+    private readonly Mock<IIssueTextRefinementService> _issueTextRefinementServiceMock = new();
     private readonly IntakeController _sut;
 
     public IntakeControllerTests()
     {
-        var aiOptions = Options.Create(new AiOptions { MaxImageBytes = 5 * 1024 * 1024 });
+        var aiOptions = Options.Create(new AiOptions { MaxImageBytes = 5 * 1024 * 1024, MaxAudioBytes = 10 * 1024 * 1024 });
         _sut = new IntakeController(
             _intakeServiceMock.Object,
             _categorizationMock.Object,
             _attachmentServiceMock.Object,
             _vinDecoderServiceMock.Object,
             _vinExtractionServiceMock.Object,
+            _speechToTextServiceMock.Object,
+            _issueTextRefinementServiceMock.Object,
             aiOptions);
         _sut.ControllerContext = new ControllerContext
         {
@@ -309,5 +313,217 @@ public class IntakeControllerTests
         var result = await _sut.ExtractVin("test-slug", request);
 
         result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(413);
+    }
+
+    // ── TranscribeIssue ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task TranscribeIssue_WhenTranscriptionSucceeds_ShouldReturnOkWithTranscript()
+    {
+        var audioBytes = new byte[] { 0x00, 0x01, 0x02 };
+        var base64 = Convert.ToBase64String(audioBytes);
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = base64, ContentType = "audio/webm" };
+
+        _speechToTextServiceMock.Setup(s => s.TranscribeAudioAsync(audioBytes, "audio/webm", "en-US", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SpeechToTextResult("My water heater broke", "Water heater is broken.", 0.92, "MockSpeechToTextService"));
+
+        var result = await _sut.TranscribeIssue("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<IssueTranscriptionResultDto>>().Subject;
+        dto.Success.Should().BeTrue();
+        dto.Result!.RawTranscript.Should().Be("My water heater broke");
+        dto.Result.CleanedDescription.Should().Be("Water heater is broken.");
+        dto.Confidence.Should().Be(0.92);
+        dto.Provider.Should().Be("MockSpeechToTextService");
+    }
+
+    [Fact]
+    public async Task TranscribeIssue_WhenTranscriptionReturnsNull_ShouldReturnOkWithNullResultAndWarning()
+    {
+        var audioBytes = new byte[] { 0x00, 0x01, 0x02 };
+        var base64 = Convert.ToBase64String(audioBytes);
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = base64, ContentType = "audio/webm" };
+
+        _speechToTextServiceMock.Setup(s => s.TranscribeAudioAsync(audioBytes, "audio/webm", "en-US", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SpeechToTextResult?)null);
+
+        var result = await _sut.TranscribeIssue("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<IssueTranscriptionResultDto>>().Subject;
+        dto.Success.Should().BeTrue();
+        dto.Result.Should().BeNull();
+        dto.Confidence.Should().Be(0.0);
+        dto.Warnings.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task TranscribeIssue_WhenAudioBase64IsEmpty_ShouldReturn400()
+    {
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = "", ContentType = "audio/webm" };
+
+        var result = await _sut.TranscribeIssue("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task TranscribeIssue_WhenContentTypeIsNotAudio_ShouldReturn400()
+    {
+        var base64 = Convert.ToBase64String(new byte[] { 0x00 });
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = base64, ContentType = "application/json" };
+
+        var result = await _sut.TranscribeIssue("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task TranscribeIssue_WhenAudioBase64IsInvalid_ShouldReturn400()
+    {
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = "not-valid-base64!!!", ContentType = "audio/webm" };
+
+        var result = await _sut.TranscribeIssue("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task TranscribeIssue_WhenAudioExceedsMaxSize_ShouldReturn413()
+    {
+        var largeBase64 = Convert.ToBase64String(new byte[11 * 1024 * 1024]);
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = largeBase64, ContentType = "audio/webm" };
+
+        var result = await _sut.TranscribeIssue("test-slug", request);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(413);
+    }
+
+    [Fact]
+    public async Task TranscribeIssue_WhenLocaleProvided_ShouldUseProvidedLocale()
+    {
+        var audioBytes = new byte[] { 0x00 };
+        var base64 = Convert.ToBase64String(audioBytes);
+        var request = new IssueTranscriptionRequestDto { AudioBase64 = base64, ContentType = "audio/webm", Locale = "es-MX" };
+
+        _speechToTextServiceMock.Setup(s => s.TranscribeAudioAsync(audioBytes, "audio/webm", "es-MX", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SpeechToTextResult("Mi calentador de agua se rompió", null, 0.88, "MockSpeechToTextService"));
+
+        var result = await _sut.TranscribeIssue("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<IssueTranscriptionResultDto>>().Subject;
+        dto.Result!.RawTranscript.Should().Be("Mi calentador de agua se rompió");
+    }
+
+    // ── RefineIssueText ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RefineIssueText_WhenRefinementSucceeds_ShouldReturnOkWithCleanedDescription()
+    {
+        var request = new IssueTextRefinementRequestDto { RawTranscript = "um my water heater stopped working" };
+
+        _issueTextRefinementServiceMock.Setup(s => s.RefineTranscriptAsync("um my water heater stopped working", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IssueTextRefinementResult("Water heater stopped working.", 0.88, "RuleBasedIssueTextRefinementService"));
+
+        var result = await _sut.RefineIssueText("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<IssueTextRefinementResultDto>>().Subject;
+        dto.Success.Should().BeTrue();
+        dto.Result!.CleanedDescription.Should().Be("Water heater stopped working.");
+        dto.Confidence.Should().Be(0.88);
+    }
+
+    [Fact]
+    public async Task RefineIssueText_WhenRefinementReturnsNull_ShouldReturnOkWithNullResult()
+    {
+        var request = new IssueTextRefinementRequestDto { RawTranscript = "some text" };
+
+        _issueTextRefinementServiceMock.Setup(s => s.RefineTranscriptAsync("some text", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IssueTextRefinementResult?)null);
+
+        var result = await _sut.RefineIssueText("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<IssueTextRefinementResultDto>>().Subject;
+        dto.Result.Should().BeNull();
+        dto.Warnings.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task RefineIssueText_WhenRawTranscriptIsEmpty_ShouldReturn400()
+    {
+        var request = new IssueTextRefinementRequestDto { RawTranscript = "" };
+
+        var result = await _sut.RefineIssueText("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task RefineIssueText_WhenRawTranscriptExceedsMaxLength_ShouldReturn400()
+    {
+        var request = new IssueTextRefinementRequestDto { RawTranscript = new string('x', 4001) };
+
+        var result = await _sut.RefineIssueText("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    // ── SuggestCategory ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SuggestCategory_WhenSuggestionSucceeds_ShouldReturnOkWithCategory()
+    {
+        var request = new IssueCategorySuggestionRequestDto { IssueDescription = "The battery is dead" };
+
+        _issueTextRefinementServiceMock.Setup(s => s.SuggestCategoryAsync("The battery is dead", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IssueCategorySuggestionResult("Electrical", 0.85, "RuleBasedIssueTextRefinementService"));
+
+        var result = await _sut.SuggestCategory("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<IssueCategorySuggestionResultDto>>().Subject;
+        dto.Success.Should().BeTrue();
+        dto.Result!.IssueCategory.Should().Be("Electrical");
+        dto.Confidence.Should().Be(0.85);
+    }
+
+    [Fact]
+    public async Task SuggestCategory_WhenSuggestionReturnsNull_ShouldReturnOkWithNullResult()
+    {
+        var request = new IssueCategorySuggestionRequestDto { IssueDescription = "something is wrong" };
+
+        _issueTextRefinementServiceMock.Setup(s => s.SuggestCategoryAsync("something is wrong", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IssueCategorySuggestionResult?)null);
+
+        var result = await _sut.SuggestCategory("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<IssueCategorySuggestionResultDto>>().Subject;
+        dto.Result.Should().BeNull();
+        dto.Warnings.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task SuggestCategory_WhenDescriptionIsEmpty_ShouldReturn400()
+    {
+        var request = new IssueCategorySuggestionRequestDto { IssueDescription = "" };
+
+        var result = await _sut.SuggestCategory("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task SuggestCategory_WhenDescriptionExceedsMaxLength_ShouldReturn400()
+    {
+        var request = new IssueCategorySuggestionRequestDto { IssueDescription = new string('x', 2001) };
+
+        var result = await _sut.SuggestCategory("test-slug", request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 }
