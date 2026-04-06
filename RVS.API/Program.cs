@@ -381,8 +381,33 @@ if (useMockIntegrations)
 }
 else
 {
-    // Future: wire AzureOpenAiIssueTextRefinementService with Azure OpenAI
-    builder.Services.AddSingleton<IIssueTextRefinementService, RuleBasedIssueTextRefinementService>();
+    var openAiEndpoint = builder.Configuration["AzureOpenAi:Endpoint"];
+    if (!string.IsNullOrWhiteSpace(openAiEndpoint))
+    {
+        var textDeploymentName = builder.Configuration["AzureOpenAi:TextDeploymentName"]
+            ?? builder.Configuration["AzureOpenAi:DeploymentName"]
+            ?? "gpt-4o";
+        builder.Services.AddHttpClient<IIssueTextRefinementService, AzureOpenAiIssueTextRefinementService>(client =>
+        {
+            var baseUrl = openAiEndpoint.TrimEnd('/') + $"/openai/deployments/{textDeploymentName}/";
+            client.BaseAddress = new Uri(baseUrl);
+            var apiKey = builder.Configuration["AzureOpenAi:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                client.DefaultRequestHeaders.Add("api-key", apiKey);
+            }
+        })
+        .AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(20);
+        });
+    }
+    else
+    {
+        // Fall back to rule-based when AzureOpenAi:Endpoint is not configured.
+        builder.Services.AddSingleton<IIssueTextRefinementService, RuleBasedIssueTextRefinementService>();
+    }
 }
 
 // Categorization
