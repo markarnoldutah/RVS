@@ -246,6 +246,7 @@ public class AzureSpeechToTextServiceTests
             return new { RecognitionStatus = status };
         }
 
+        var lexical = displayText.ToLowerInvariant();
         return new
         {
             RecognitionStatus = status,
@@ -257,9 +258,9 @@ public class AzureSpeechToTextServiceTests
                 new
                 {
                     Confidence = confidence,
-                    Lexical = displayText.ToLowerInvariant(),
-                    ITN = displayText.ToLowerInvariant(),
-                    MaskedITN = displayText.ToLowerInvariant(),
+                    Lexical = lexical,
+                    ITN = lexical,
+                    MaskedITN = lexical,
                     Display = displayText
                 }
             }

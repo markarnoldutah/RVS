@@ -53,9 +53,13 @@ public sealed class AzureSpeechToTextService : ISpeechToTextService
         {
             var relativeUrl = string.Format(QueryTemplate, Uri.EscapeDataString(locale));
 
+            // Sanitize user-supplied strings before logging to prevent log-injection attacks.
+            var safeContentType = Sanitize(contentType);
+            var safeLocale = Sanitize(locale);
+
             _logger.LogDebug(
                 "Sending audio to Azure Speech ({Bytes} bytes, {ContentType}, {Locale})",
-                audioData.Length, contentType, locale);
+                audioData.Length, safeContentType, safeLocale);
 
             using var content = new ByteArrayContent(audioData);
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
@@ -116,6 +120,15 @@ public sealed class AzureSpeechToTextService : ISpeechToTextService
             return null;
         }
     }
+
+    // ── Private helpers ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Strips newline characters from user-supplied strings to prevent log-injection attacks.
+    /// </summary>
+    private static string Sanitize(string value) =>
+        value.Replace("\r", string.Empty, StringComparison.Ordinal)
+             .Replace("\n", string.Empty, StringComparison.Ordinal);
 
     // ── Private response types ────────────────────────────────────────────
 
