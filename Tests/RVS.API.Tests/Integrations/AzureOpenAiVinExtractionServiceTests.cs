@@ -140,6 +140,26 @@ public class AzureOpenAiVinExtractionServiceTests
         result.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task ExtractVinFromImageAsync_WhenApiReturnsErrorStatusCode_ShouldReturnNull(HttpStatusCode statusCode)
+    {
+        var response = new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent(
+                """{"error":{"code":"DeploymentNotFound","message":"The API deployment does not exist."}}""",
+                Encoding.UTF8,
+                "application/json")
+        };
+        var sut = CreateService(response);
+
+        var result = await sut.ExtractVinFromImageAsync(SampleJpeg, "image/jpeg");
+
+        result.Should().BeNull();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private AzureOpenAiVinExtractionService CreateService(HttpResponseMessage response)

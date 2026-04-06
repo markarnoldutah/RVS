@@ -334,7 +334,10 @@ else
     }
     else
     {
-        builder.Services.AddSingleton<IVinExtractionService, MockVinExtractionService>();
+        // AzureOpenAi:Endpoint is required when Integrations:UseMocks is false.
+        throw new InvalidOperationException(
+            "AzureOpenAi:Endpoint must be configured when Integrations:UseMocks is false. " +
+            "Either set the endpoint or enable mocks for local development.");
     }
 }
 
