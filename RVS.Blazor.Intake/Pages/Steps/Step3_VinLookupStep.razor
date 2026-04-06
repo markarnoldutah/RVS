@@ -246,6 +246,8 @@
 
                 if (response.Confidence >= VinAutoLookupThreshold)
                 {
+                    StateHasChanged();
+                    await Task.Yield();
                     await HandleLookup();
                     return;
                 }

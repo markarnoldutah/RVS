@@ -348,8 +348,30 @@ if (useMockIntegrations)
 }
 else
 {
-    // Future: wire AzureSpeechToTextService with Azure Speech SDK
-    builder.Services.AddSingleton<ISpeechToTextService, MockSpeechToTextService>();
+    var speechRegion = builder.Configuration["AzureSpeech:Region"];
+    var speechKey = builder.Configuration["AzureSpeech:ApiKey"];
+    if (!string.IsNullOrWhiteSpace(speechRegion) && !string.IsNullOrWhiteSpace(speechKey))
+    {
+        builder.Services.AddHttpClient<ISpeechToTextService, AzureSpeechToTextService>(client =>
+        {
+            // Base address for the Azure Cognitive Services Speech REST API.
+            // The service appends ?language={locale}&format=detailed per request.
+            client.BaseAddress = new Uri(
+                $"https://{speechRegion}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1");
+            client.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", speechKey);
+        })
+        .AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(20);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(40);
+        });
+    }
+    else
+    {
+        // AzureSpeech:Region and AzureSpeech:ApiKey are required when Integrations:UseMocks is false.
+        // Fall back to mock so startup is not blocked during initial Azure Speech onboarding.
+        builder.Services.AddSingleton<ISpeechToTextService, MockSpeechToTextService>();
+    }
 }
 
 // Issue Text Refinement + Category Suggestion
