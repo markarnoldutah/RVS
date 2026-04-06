@@ -1,0 +1,71 @@
+# ──────────────────────────────────────────────────────────────
+# RVS – Azure Speech-to-Text: Dev Deployment Commands
+# ──────────────────────────────────────────────────────────────
+# Run these commands in order to deploy the Speech resource in dev.
+# Prerequisites: Azure CLI 2.61+, Bicep CLI 0.28+, Contributor access
+#   on the target resource group.
+
+# ── 0. One-time: register the Cognitive Services provider ─────
+az provider register --namespace Microsoft.CognitiveServices
+
+# ── 1. Log in and set the target subscription ─────────────────
+az login
+az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
+
+# ── 2. Create the resource group (skip if it already exists) ──
+az group create \
+  --name rg-rvs-dev-westus3 \
+  --location westus3
+
+# ── 3. Deploy – free tier (F0), no Key Vault ──────────────────
+az deployment group create \
+  --name deploy-speech-dev \
+  --resource-group rg-rvs-dev-westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/speech-main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/speech-dev.bicepparam
+
+# ── 3b. Deploy with Key Vault secret injection (optional) ─────
+az deployment group create \
+  --name deploy-speech-dev \
+  --resource-group rg-rvs-dev-westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/speech-main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/speech-dev.bicepparam \
+  --parameters keyVaultName='kv-rvs-dev-x7m2'
+
+# ── 4. Retrieve the resource name from deployment outputs ──────
+az deployment group show \
+  --resource-group rg-rvs-dev-westus3 \
+  --name deploy-speech-dev \
+  --query "properties.outputs.speechResourceName.value" -o tsv
+
+# ── 5. Retrieve the API key (copy into appsettings.Development.json) ──
+SPEECH_NAME=$(az deployment group show \
+  --resource-group rg-rvs-dev-westus3 \
+  --name deploy-speech-dev \
+  --query "properties.outputs.speechResourceName.value" -o tsv)
+
+az cognitiveservices account keys list \
+  --name "$SPEECH_NAME" \
+  --resource-group rg-rvs-dev-westus3 \
+  --query key1 -o tsv
+
+# ── 6. Verify the resource ─────────────────────────────────────
+az cognitiveservices account show \
+  --name "$SPEECH_NAME" \
+  --resource-group rg-rvs-dev-westus3 \
+  --query '{name:name, kind:kind, sku:sku.name, provisioningState:properties.provisioningState}' \
+  -o json
+
+# ── 7. Quick smoke test (requires curl) ───────────────────────
+SPEECH_KEY=$(az cognitiveservices account keys list \
+  --name "$SPEECH_NAME" \
+  --resource-group rg-rvs-dev-westus3 \
+  --query key1 -o tsv)
+
+# POST a silent WAV header to confirm the endpoint accepts requests.
+# Expected response: {"RecognitionStatus":"InitialSilenceTimeout", ...}
+curl -s -X POST \
+  "https://westus3.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed" \
+  -H "Ocp-Apim-Subscription-Key: ${SPEECH_KEY}" \
+  -H "Content-Type: audio/wav" \
+  --data-binary @/dev/null
