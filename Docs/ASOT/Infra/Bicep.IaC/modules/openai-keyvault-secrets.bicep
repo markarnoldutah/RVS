@@ -14,8 +14,11 @@ param openAiName string
 @description('The resource group containing the Azure OpenAI resource. Defaults to the current resource group.')
 param openAiResourceGroup string = resourceGroup().name
 
-@description('The name of the GPT-4o vision model deployment.')
+@description('The name of the GPT-4o vision model deployment (used for VIN extraction).')
 param openAiDeploymentName string = 'gpt-4o'
+
+@description('The name of the GPT-4o text model deployment (used for issue text refinement and category suggestion). Defaults to the vision deployment name when the same deployment handles both workloads.')
+param openAiTextDeploymentName string = openAiDeploymentName
 
 // ── Existing Resource References ──────────────────────────────
 
@@ -53,6 +56,15 @@ resource deploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   name: 'AzureOpenAi--VisionDeploymentName'
   properties: {
     value: openAiDeploymentName
+    contentType: 'text/plain'
+  }
+}
+
+resource textDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'AzureOpenAi--TextDeploymentName'
+  properties: {
+    value: openAiTextDeploymentName
     contentType: 'text/plain'
   }
 }
