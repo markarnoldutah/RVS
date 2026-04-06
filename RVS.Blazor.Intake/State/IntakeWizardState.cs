@@ -80,6 +80,9 @@ public sealed class IntakeWizardState
     /// <summary>Issue category selected from LookupSet (Step 5).</summary>
     public string IssueCategory { get; set; } = string.Empty;
 
+    /// <summary>Whether the current issue category was suggested by AI (Step 5).</summary>
+    public bool IsCategorySuggestedByAi { get; set; }
+
     /// <summary>Issue description text, max 2000 characters (Step 5).</summary>
     public string IssueDescription { get; set; } = string.Empty;
 
@@ -280,6 +283,7 @@ public sealed class IntakeWizardState
             Model = Model,
             Year = Year,
             IssueCategory = IssueCategory,
+            IsCategorySuggestedByAi = IsCategorySuggestedByAi,
             IssueDescription = IssueDescription,
             Urgency = Urgency,
             RvUsage = RvUsage,
@@ -319,6 +323,7 @@ public sealed class IntakeWizardState
             Model = data.Model;
             Year = data.Year;
             IssueCategory = data.IssueCategory;
+            IsCategorySuggestedByAi = data.IsCategorySuggestedByAi;
             IssueDescription = data.IssueDescription;
             Urgency = data.Urgency;
             RvUsage = data.RvUsage;
@@ -355,6 +360,7 @@ public sealed class IntakeWizardState
         Model = null;
         Year = null;
         IssueCategory = string.Empty;
+        IsCategorySuggestedByAi = false;
         IssueDescription = string.Empty;
         Urgency = null;
         RvUsage = null;
@@ -558,6 +564,7 @@ internal sealed class IntakeWizardStateData
     public string? Model { get; set; }
     public int? Year { get; set; }
     public string IssueCategory { get; set; } = string.Empty;
+    public bool IsCategorySuggestedByAi { get; set; }
     public string IssueDescription { get; set; } = string.Empty;
     public string? Urgency { get; set; }
     public string? RvUsage { get; set; }

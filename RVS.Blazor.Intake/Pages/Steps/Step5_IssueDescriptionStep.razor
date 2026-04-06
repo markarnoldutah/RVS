@@ -11,7 +11,32 @@
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="1">
                 <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Description</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Provide as much detail as possible about the issue</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Tap the mic to describe the issue, or type it below</MudText>
+
+                @* Microphone capture button *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="@(_isRecording ? Color.Error : Color.Primary)"
+                               StartIcon="@(_isRecording ? Icons.Material.Filled.Stop : Icons.Material.Filled.Mic)"
+                               OnClick="ToggleRecording"
+                               Disabled="_isTranscribing"
+                               Style="text-transform: none;">
+                        @(_isRecording ? "Stop Recording" : "Tap to Speak")
+                    </MudButton>
+                    @if (_isTranscribing)
+                    {
+                        <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Transcribing...</MudText>
+                    }
+                </MudStack>
+
+                @if (!string.IsNullOrWhiteSpace(_transcriptionError))
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                        @_transcriptionError You can still type your description below.
+                    </MudAlert>
+                }
+
                 <MudTextField @bind-Value="State.IssueDescription"
                               T="string"
                               Validation="@(new Func<string?, string?>(ValidateDescription))"
@@ -26,12 +51,26 @@
 
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue Category</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue Category</MudText>
+                    @if (State.IsCategorySuggestedByAi)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" Class="mr-1" />
+                            AI Suggested
+                        </MudChip>
+                    }
+                    @if (_isSuggestingCategory)
+                    {
+                        <MudProgressCircular Size="Size.Small" Color="Color.Info" Indeterminate="true" />
+                    }
+                </MudStack>
                 <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Select the area that best describes the issue</MudText>
                 @if (_categories.Count > 0)
                 {
                     <MudSelect T="string"
-                               @bind-Value="State.IssueCategory"
+                               Value="State.IssueCategory"
+                               ValueChanged="OnCategoryChanged"
                                Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
@@ -47,7 +86,8 @@
                 else
                 {
                     <MudSelect T="string"
-                               @bind-Value="State.IssueCategory"
+                               Value="State.IssueCategory"
+                               ValueChanged="OnCategoryChanged"
                                Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
@@ -140,10 +180,17 @@
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private MudForm _form = default!;
     private bool _submitted;
     private List<LookupItemDto> _categories = [];
+    private bool _isRecording;
+    private bool _isTranscribing;
+    private bool _isSuggestingCategory;
+    private string? _transcriptionError;
+    private CancellationTokenSource? _suggestCategoryCts;
 
     protected override void OnInitialized()
     {
@@ -151,6 +198,114 @@
         {
             _categories = categories.Where(c => c.IsSelectable).ToList();
         }
+    }
+
+    private async Task ToggleRecording()
+    {
+        if (_isRecording)
+        {
+            _isRecording = false;
+            _isTranscribing = true;
+            _transcriptionError = null;
+            StateHasChanged();
+
+            try
+            {
+                var audioBase64 = await JS.InvokeAsync<string?>("rvs_stopRecording");
+                if (string.IsNullOrWhiteSpace(audioBase64))
+                {
+                    _transcriptionError = "No audio was captured.";
+                    return;
+                }
+
+                var request = new IssueTranscriptionRequestDto
+                {
+                    AudioBase64 = audioBase64,
+                    ContentType = "audio/webm"
+                };
+
+                var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
+                if (result?.Result is not null)
+                {
+                    State.IssueDescription = result.Result.CleanedDescription
+                        ?? result.Result.RawTranscript
+                        ?? string.Empty;
+                    StateHasChanged();
+
+                    await RequestCategorySuggestion();
+                }
+                else
+                {
+                    _transcriptionError = "Could not transcribe the audio.";
+                }
+            }
+            catch (Exception)
+            {
+                _transcriptionError = "Transcription failed.";
+            }
+            finally
+            {
+                _isTranscribing = false;
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            _transcriptionError = null;
+            try
+            {
+                await JS.InvokeVoidAsync("rvs_startRecording");
+                _isRecording = true;
+            }
+            catch (Exception)
+            {
+                _transcriptionError = "Microphone access was denied or is unavailable.";
+            }
+        }
+    }
+
+    private async Task RequestCategorySuggestion()
+    {
+        if (string.IsNullOrWhiteSpace(State.IssueDescription) || State.IssueDescription.Length < 10)
+            return;
+
+        _suggestCategoryCts?.Cancel();
+        _suggestCategoryCts = new CancellationTokenSource();
+        var ct = _suggestCategoryCts.Token;
+
+        _isSuggestingCategory = true;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(500, ct);
+
+            var request = new IssueCategorySuggestionRequestDto
+            {
+                IssueDescription = State.IssueDescription
+            };
+
+            var result = await IntakeApi.SuggestIssueCategoryAsync(State.Slug, request, ct);
+            if (result?.Result?.IssueCategory is not null && !ct.IsCancellationRequested)
+            {
+                State.IssueCategory = result.Result.IssueCategory;
+                State.IsCategorySuggestedByAi = true;
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { }
+        finally
+        {
+            _isSuggestingCategory = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnCategoryChanged(string? value)
+    {
+        State.IssueCategory = value ?? string.Empty;
+        State.IsCategorySuggestedByAi = false;
     }
 
     private string? ValidateIssueCategory(string? value) =>
