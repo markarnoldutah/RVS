@@ -1,6 +1,9 @@
-# RVS – Azure OpenAI Infrastructure (Bicep)
+# RVS – Azure AI Infrastructure (Bicep)
 
-Infrastructure as Code for the **VIN Extraction from Photo** feature powered by Azure OpenAI GPT-4o Vision.
+Infrastructure as Code for the AI-powered features in RVS:
+
+- **VIN Extraction from Photo** — powered by Azure OpenAI GPT-4o Vision (`main.bicep`)
+- **Speech-to-Text** — powered by Azure Cognitive Services Speech (`speech-main.bicep`)
 
 ---
 
@@ -24,15 +27,22 @@ az provider register --namespace Microsoft.CognitiveServices
 ## Repository Layout
 
 ```text
-infra/
-├── main.bicep                          # Orchestration template
+Docs/ASOT/Infra/Bicep.IaC/
+├── main.bicep                              # OpenAI orchestration template
+├── speech-main.bicep                       # Speech-to-Text orchestration template
 ├── modules/
-│   ├── openai.bicep                    # Azure OpenAI + GPT-4o deployment
-│   └── openai-keyvault-secrets.bicep   # Stores OpenAI secrets in Key Vault
+│   ├── naming-tags.bicep                   # Shared naming & tagging helper
+│   ├── openai.bicep                        # Azure OpenAI + GPT-4o deployment
+│   ├── openai-keyvault-secrets.bicep       # Stores OpenAI secrets in Key Vault
+│   ├── speech.bicep                        # Azure Cognitive Services Speech resource
+│   └── speech-keyvault-secrets.bicep       # Stores Speech secrets in Key Vault
 ├── parameters/
-│   ├── dev.bicepparam                  # Dev environment values
-│   └── prod.bicepparam                 # Prod environment values
-└── README.md                           # This file
+│   ├── dev.bicepparam                      # OpenAI dev values
+│   ├── prod.bicepparam                     # OpenAI prod values
+│   └── speech-dev.bicepparam               # Speech dev values
+├── scratch.azcli                           # OpenAI post-deploy inspection commands
+├── speech.azcli                            # Speech dev deployment & inspection commands
+└── README.md                               # This file
 ```
 
 ---
@@ -194,3 +204,86 @@ curl -s "${ENDPOINT}openai/deployments/gpt-4o/chat/completions?api-version=2024-
 | **`NoAutoUpgrade` version policy** | Prevents unexpected model behaviour changes in production |
 | **Public network disabled (staging/prod)** | Defence-in-depth; access via Private Endpoint or VNet integration |
 | **System-assigned managed identity** | Enables RBAC-based access to other Azure resources without secrets |
+
+---
+
+## Speech-to-Text Infrastructure
+
+### Quick-Start – Deploy Speech Dev
+
+```bash
+# 1. Log in
+az login
+
+# 2. Set the target subscription
+az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
+
+# 3. Create the resource group (if it doesn't exist)
+az group create \
+  --name rg-rvs-dev-westus3 \
+  --location westus3
+
+# 4. Deploy Speech (free tier – F0)
+az deployment group create \
+  --name deploy-speech-dev \
+  --resource-group rg-rvs-dev-westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/speech-main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/speech-dev.bicepparam
+
+# 5. (Optional) Deploy with Key Vault secret injection
+az deployment group create \
+  --name deploy-speech-dev \
+  --resource-group rg-rvs-dev-westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/speech-main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/speech-dev.bicepparam \
+  --parameters keyVaultName='kv-rvs-dev-x7m2'
+```
+
+See `speech.azcli` for full post-deploy inspection and smoke-test commands.
+
+### Connecting the RVS API to Azure Speech
+
+The deployed resource maps to the following **appsettings** keys:
+
+| appsettings Key | Source | Example Value |
+|---|---|---|
+| `AzureSpeech:Region` | Deployment output `speechRegion` | `westus3` |
+| `AzureSpeech:ApiKey` | `az cognitiveservices account keys list … --query key1` | `abc123…` |
+
+When `keyVaultName` is provided, secrets are stored automatically as:
+
+- `AzureSpeech--Region`
+- `AzureSpeech--ApiKey`
+
+Set them in `appsettings.Development.json` or as environment variables:
+
+```json
+{
+  "AzureSpeech": {
+    "Region": "westus3",
+    "ApiKey": "<KEY>"
+  }
+}
+```
+
+> **Note:** When both `AzureSpeech:Region` and `AzureSpeech:ApiKey` are absent (or when
+> `Integrations:UseMocks` is `true`), the API automatically falls back to `MockSpeechToTextService`
+> so local development is not blocked.
+
+### Speech Estimated Monthly Costs
+
+| Environment | SKU | Est. Cost | Notes |
+|---|---|---|---|
+| **Dev** | F0 (free) | $0 | 5 hours of audio recognition/month included |
+| **Staging** | S0 | Pay-per-use | ~$1 per audio hour |
+| **Prod** | S0 | Pay-per-use | ~$1 per audio hour |
+
+### Speech Architecture Decision Records
+
+| Decision | Rationale |
+|---|---|
+| **`SpeechServices` kind** | Targets the regional REST STT endpoint used by `AzureSpeechToTextService` |
+| **F0 (free) for dev** | Eliminates cost for development; automatically upgraded to S0 for staging/prod |
+| **Regional endpoint (no custom subdomain required)** | App uses `https://{region}.stt.speech.microsoft.com/…` — custom subdomain is provisioned but optional |
+| **Public network enabled (dev only)** | Matches OpenAI pattern; staging/prod lock down public access |
+| **System-assigned managed identity** | Consistent with OpenAI module; enables future RBAC-based integrations |
