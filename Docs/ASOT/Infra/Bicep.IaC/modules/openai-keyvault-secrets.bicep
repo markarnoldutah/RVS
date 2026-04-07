@@ -20,6 +20,9 @@ param openAiDeploymentName string = 'gpt-4o'
 @description('The name of the GPT-4o text model deployment (used for issue text refinement and category suggestion). Defaults to the vision deployment name when the same deployment handles both workloads.')
 param openAiTextDeploymentName string = openAiDeploymentName
 
+@description('The name of the Whisper model deployment (used for speech-to-text transcription).')
+param openAiWhisperDeploymentName string = 'whisper'
+
 // ── Existing Resource References ──────────────────────────────
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
@@ -65,6 +68,15 @@ resource textDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01'
   name: 'AzureOpenAi--TextDeploymentName'
   properties: {
     value: openAiTextDeploymentName
+    contentType: 'text/plain'
+  }
+}
+
+resource whisperDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'AzureOpenAi--WhisperDeploymentName'
+  properties: {
+    value: openAiWhisperDeploymentName
     contentType: 'text/plain'
   }
 }

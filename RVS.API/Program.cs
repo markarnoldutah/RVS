@@ -341,24 +341,26 @@ else
     }
 }
 
-// Speech-to-Text
+// Speech-to-Text (Azure OpenAI Whisper)
 if (useMockIntegrations)
 {
     builder.Services.AddSingleton<ISpeechToTextService, MockSpeechToTextService>();
 }
 else
 {
-    var speechRegion = builder.Configuration["AzureSpeech:Region"];
-    var speechKey = builder.Configuration["AzureSpeech:ApiKey"];
-    if (!string.IsNullOrWhiteSpace(speechRegion) && !string.IsNullOrWhiteSpace(speechKey))
+    var whisperEndpoint = builder.Configuration["AzureOpenAi:Endpoint"];
+    if (!string.IsNullOrWhiteSpace(whisperEndpoint))
     {
-        builder.Services.AddHttpClient<ISpeechToTextService, AzureSpeechToTextService>(client =>
+        var whisperDeploymentName = builder.Configuration["AzureOpenAi:WhisperDeploymentName"] ?? "whisper";
+        builder.Services.AddHttpClient<ISpeechToTextService, AzureWhisperSpeechToTextService>(client =>
         {
-            // Base address for the Azure Cognitive Services Speech REST API.
-            // The service appends ?language={locale}&format=detailed per request.
-            client.BaseAddress = new Uri(
-                $"https://{speechRegion}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1");
-            client.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", speechKey);
+            var baseUrl = whisperEndpoint.TrimEnd('/') + $"/openai/deployments/{whisperDeploymentName}/";
+            client.BaseAddress = new Uri(baseUrl);
+            var apiKey = builder.Configuration["AzureOpenAi:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                client.DefaultRequestHeaders.Add("api-key", apiKey);
+            }
         })
         .AddStandardResilienceHandler(options =>
         {
@@ -369,8 +371,8 @@ else
     }
     else
     {
-        // AzureSpeech:Region and AzureSpeech:ApiKey are required when Integrations:UseMocks is false.
-        // Fall back to mock so startup is not blocked during initial Azure Speech onboarding.
+        // AzureOpenAi:Endpoint is required when Integrations:UseMocks is false.
+        // Fall back to mock so startup is not blocked during initial onboarding.
         builder.Services.AddSingleton<ISpeechToTextService, MockSpeechToTextService>();
     }
 }

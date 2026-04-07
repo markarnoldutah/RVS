@@ -20,6 +20,10 @@ param environmentName string = 'dev'
 @minValue(1)
 param openAiCapacity int = 1
 
+@description('Whisper deployment capacity in thousands of tokens per minute (K TPM). Dev = 1.')
+@minValue(1)
+param whisperCapacity int = 1
+
 @description('Optional. Name of an existing Key Vault to store OpenAI secrets. Leave empty to skip secret creation.')
 param keyVaultName string = ''
 
@@ -46,6 +50,7 @@ module openAi 'modules/openai.bicep' = {
     environmentName: environmentName
     tags: openAiNaming.outputs.tags
     deploymentCapacity: openAiCapacity
+    whisperCapacity: whisperCapacity
     resourceName: openAiNaming.outputs.resourceName
   }
 }
@@ -56,6 +61,7 @@ module keyVaultSecrets 'modules/openai-keyvault-secrets.bicep' = if (!empty(keyV
     keyVaultName: keyVaultName
     openAiName: openAi.outputs.name
     openAiDeploymentName: openAi.outputs.deploymentName
+    openAiWhisperDeploymentName: openAi.outputs.whisperDeploymentName
     openAiTextDeploymentName: textDeploymentName
   }
 }
@@ -67,6 +73,9 @@ output openAiEndpoint string = openAi.outputs.endpoint
 
 @description('The name of the GPT-4o vision model deployment.')
 output openAiDeploymentName string = openAi.outputs.deploymentName
+
+@description('The name of the Whisper speech-to-text model deployment.')
+output whisperDeploymentName string = openAi.outputs.whisperDeploymentName
 
 @description('The resource group containing all deployed resources.')
 output resourceGroupName string = resourceGroup().name

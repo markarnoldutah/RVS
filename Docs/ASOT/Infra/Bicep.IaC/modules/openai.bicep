@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────────────────────
-// Module: Azure OpenAI – GPT-4o Vision deployment
+// Module: Azure OpenAI – GPT-4o Vision + Whisper STT deployments
 // ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
@@ -26,9 +26,14 @@ param tags object
 @minValue(1)
 param deploymentCapacity int
 
+@description('Whisper deployment capacity in thousands of tokens per minute (K TPM). 1 = 1 000 TPM.')
+@minValue(1)
+param whisperCapacity int = 1
+
 // ── Variables ─────────────────────────────────────────────────
 
 var deploymentName = 'gpt-4o'
+var whisperDeploymentName = 'whisper'
 var isProduction = environmentName != 'dev'
 
 // ── Azure OpenAI Account ──────────────────────────────────────
@@ -72,6 +77,28 @@ resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-
   }
 }
 
+// ── Whisper Speech-to-Text Model Deployment ───────────────────
+
+resource whisperDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: openAiAccount
+  name: whisperDeploymentName
+  sku: {
+    name: 'Standard'
+    capacity: whisperCapacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'whisper'
+      version: '001'
+    }
+    versionUpgradeOption: 'OnceCurrentVersionExpired'
+  }
+  dependsOn: [
+    gpt4oDeployment
+  ]
+}
+
 // ── Outputs ───────────────────────────────────────────────────
 
 @description('The endpoint URL of the Azure OpenAI resource.')
@@ -82,6 +109,9 @@ output name string = openAiAccount.name
 
 @description('The name of the GPT-4o model deployment.')
 output deploymentName string = gpt4oDeployment.name
+
+@description('The name of the Whisper speech-to-text model deployment.')
+output whisperDeploymentName string = whisperDeployment.name
 
 @description('The principal ID of the system-assigned managed identity.')
 output principalId string = openAiAccount.identity.principalId
