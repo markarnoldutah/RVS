@@ -367,6 +367,62 @@ public class IntakeController : ControllerBase
     }
 
     /// <summary>
+    /// Infers urgency and RV usage from the given issue description.
+    /// Always returns HTTP 200 with an <see cref="AiOperationResponseDto{T}"/> envelope.
+    /// Either or both result fields may be <c>null</c> when inference is not confident.
+    /// </summary>
+    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="request">Free-text issue description.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>AI envelope with inferred urgency and RV usage.</returns>
+    [HttpPost("ai/suggest-insights")]
+    public async Task<ActionResult<AiOperationResponseDto<IssueInsightsSuggestionResultDto>>> SuggestInsights(
+        string locationSlug, [FromBody] IssueInsightsSuggestionRequestDto request, CancellationToken ct = default)
+    {
+        var correlationId = HttpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault()
+            ?? Guid.NewGuid().ToString();
+
+        if (string.IsNullOrWhiteSpace(request.IssueDescription))
+        {
+            return BadRequest(new { message = "IssueDescription is required." });
+        }
+
+        if (request.IssueDescription.Length > 2000)
+        {
+            return BadRequest(new { message = "IssueDescription must not exceed 2,000 characters." });
+        }
+
+        var result = await _issueTextRefinementService.SuggestInsightsAsync(request.IssueDescription, ct);
+
+        if (result is null)
+        {
+            return Ok(new AiOperationResponseDto<IssueInsightsSuggestionResultDto>
+            {
+                Success = true,
+                Result = null,
+                Confidence = 0.0,
+                Warnings = ["Could not infer urgency or RV usage."],
+                Provider = "IssueTextRefinementService",
+                CorrelationId = correlationId
+            });
+        }
+
+        return Ok(new AiOperationResponseDto<IssueInsightsSuggestionResultDto>
+        {
+            Success = true,
+            Result = new IssueInsightsSuggestionResultDto
+            {
+                Urgency = result.Urgency,
+                RvUsage = result.RvUsage
+            },
+            Confidence = result.Confidence,
+            Warnings = [],
+            Provider = result.Provider,
+            CorrelationId = correlationId
+        });
+    }
+
+    /// <summary>
     /// Submits a new service request through the customer intake flow.
     /// Orchestrates customer account creation, profile resolution, and SR creation.
     /// </summary>

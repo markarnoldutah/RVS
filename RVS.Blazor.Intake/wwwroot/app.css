@@ -44,6 +44,21 @@ h1:focus {
     min-height: 44px;
 }
 
+/* Vertically center MudSelect selected text.
+   The 44 px min-height tap-target rule inflates the root container
+   beyond Dense's natural ~38 px.  Force flex + center at every level
+   so the selected-value text doesn't sit at the top of the extra space.
+   !important is required to beat MudBlazor's compiled specificity. */
+.mud-select .mud-input-root {
+    display: flex !important;
+    align-items: center !important;
+}
+
+.mud-select .mud-input-root .mud-input-slot {
+    display: flex !important;
+    align-items: center !important;
+}
+
 /* --------------------------------------------------------
    Wizard Step Card — 75 % opaque surface so the background
    photo shows through while content remains readable.

@@ -61,8 +61,7 @@
                     @if (State.IsCategorySuggestedByAi)
                     {
                         <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
-                            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" Class="mr-1" />
-                            AI Suggested
+                            Suggested
                         </MudChip>
                     }
                     @if (_isSuggestingCategory)
@@ -114,49 +113,51 @@
 
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Urgency</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Urgency</MudText>
+                    @if (State.IsUrgencySuggestedByAi)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                            Suggested
+                        </MudChip>
+                    }
+                    @if (_isSuggestingInsights)
+                    {
+                        <MudProgressCircular Size="Size.Small" Color="Color.Info" Indeterminate="true" />
+                    }
+                </MudStack>
                 <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How urgent is this service need?</MudText>
                 <MudSelect T="string"
-                           @bind-Value="State.Urgency"
+                           Value="State.Urgency"
+                           ValueChanged="OnUrgencyChanged"
                            Variant="Variant.Outlined"
                            Margin="Margin.Dense"
                            AnchorOrigin="Origin.BottomCenter"
                            TransformOrigin="Origin.TopCenter"
                            RelativeWidth="DropdownWidth.Adaptive">
-                    <MudSelectItem T="string" Value="@("Low")">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Success" Size="Size.Small" />
-                            Low
-                        </MudStack>
-                    </MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Medium")">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Info" Size="Size.Small" />
-                            Medium
-                        </MudStack>
-                    </MudSelectItem>
-                    <MudSelectItem T="string" Value="@("High")">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Warning" Size="Size.Small" />
-                            High
-                        </MudStack>
-                    </MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Critical")">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" />
-                            Critical
-                        </MudStack>
-                    </MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
                 </MudSelect>
             </MudStack>
         </MudPaper>
 
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">RV Usage</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">RV Usage</MudText>
+                    @if (State.IsRvUsageSuggestedByAi)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                            Suggested
+                        </MudChip>
+                    }
+                </MudStack>
                 <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How often do you use your RV?</MudText>
                 <MudSelect T="string"
-                           @bind-Value="State.RvUsage"
+                           Value="State.RvUsage"
+                           ValueChanged="OnRvUsageChanged"
                            Variant="Variant.Outlined"
                            Margin="Margin.Dense"
                            AnchorOrigin="Origin.BottomCenter"
@@ -195,8 +196,10 @@
     private bool _isTranscribing;
     private bool _isRefining;
     private bool _isSuggestingCategory;
+    private bool _isSuggestingInsights;
     private string? _transcriptionError;
     private CancellationTokenSource? _suggestCategoryCts;
+    private CancellationTokenSource? _suggestInsightsCts;
 
     protected override void OnInitialized()
     {
@@ -238,10 +241,13 @@
                     State.IssueDescription = result.Result.CleanedDescription
                         ?? rawTranscript;
 
-                    // Refine transcript via GPT-4o for filler removal, punctuation, etc.
+                    // Fire insights extraction from the raw transcript immediately —
+                    // the refine prompt strips lifestyle/urgency context we need.
                     _isTranscribing = false;
                     _isRefining = true;
                     StateHasChanged();
+
+                    var insightsTask = RequestInsightsSuggestion(rawTranscript);
 
                     try
                     {
@@ -267,7 +273,8 @@
                     }
 
                     StateHasChanged();
-                    await RequestCategorySuggestion();
+                    // Category uses the cleaned description; insights already in-flight from raw transcript
+                    await Task.WhenAll(insightsTask, RequestCategorySuggestion());
                 }
                 else
                 {
@@ -341,6 +348,66 @@
     {
         State.IssueCategory = value ?? string.Empty;
         State.IsCategorySuggestedByAi = false;
+    }
+
+    private void OnUrgencyChanged(string? value)
+    {
+        State.Urgency = value;
+        State.IsUrgencySuggestedByAi = false;
+    }
+
+    private void OnRvUsageChanged(string? value)
+    {
+        State.RvUsage = value;
+        State.IsRvUsageSuggestedByAi = false;
+    }
+
+    private async Task RequestInsightsSuggestion(string rawTranscript)
+    {
+        if (string.IsNullOrWhiteSpace(rawTranscript) || rawTranscript.Length < 10)
+            return;
+
+        _suggestInsightsCts?.Cancel();
+        _suggestInsightsCts = new CancellationTokenSource();
+        var ct = _suggestInsightsCts.Token;
+
+        _isSuggestingInsights = true;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(500, ct);
+
+            var request = new IssueInsightsSuggestionRequestDto
+            {
+                IssueDescription = rawTranscript
+            };
+
+            var result = await IntakeApi.SuggestIssueInsightsAsync(State.Slug, request, ct);
+            if (result?.Result is not null && !ct.IsCancellationRequested)
+            {
+                if (result.Result.Urgency is not null)
+                {
+                    State.Urgency = result.Result.Urgency;
+                    State.IsUrgencySuggestedByAi = true;
+                }
+
+                if (result.Result.RvUsage is not null)
+                {
+                    State.RvUsage = result.Result.RvUsage;
+                    State.IsRvUsageSuggestedByAi = true;
+                }
+
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { }
+        finally
+        {
+            _isSuggestingInsights = false;
+            StateHasChanged();
+        }
     }
 
     private string? ValidateIssueCategory(string? value) =>

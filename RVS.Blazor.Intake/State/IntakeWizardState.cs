@@ -83,6 +83,12 @@ public sealed class IntakeWizardState
     /// <summary>Whether the current issue category was suggested by AI (Step 5).</summary>
     public bool IsCategorySuggestedByAi { get; set; }
 
+    /// <summary>Whether the current urgency was suggested by AI (Step 5).</summary>
+    public bool IsUrgencySuggestedByAi { get; set; }
+
+    /// <summary>Whether the current RV usage was suggested by AI (Step 5).</summary>
+    public bool IsRvUsageSuggestedByAi { get; set; }
+
     /// <summary>Issue description text, max 2000 characters (Step 5).</summary>
     public string IssueDescription { get; set; } = string.Empty;
 

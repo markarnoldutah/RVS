@@ -28,6 +28,17 @@ public interface IIssueTextRefinementService
     /// is available. Never throws — callers should fall back to manual selection on <c>null</c>.
     /// </returns>
     Task<IssueCategorySuggestionResult?> SuggestCategoryAsync(string issueDescription, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Infers urgency and RV usage from the given issue description.
+    /// </summary>
+    /// <param name="issueDescription">Free-text description provided by the customer.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// Insights result with inferred urgency and RV usage, or <c>null</c> if no confident
+    /// inference is available. Never throws — callers should leave the fields unset on <c>null</c>.
+    /// </returns>
+    Task<IssueInsightsSuggestionResult?> SuggestInsightsAsync(string issueDescription, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -45,3 +56,12 @@ public sealed record IssueTextRefinementResult(string CleanedDescription, double
 /// <param name="Confidence">Confidence score in the range 0.0–1.0.</param>
 /// <param name="Provider">Identifier for the service implementation that fulfilled the request.</param>
 public sealed record IssueCategorySuggestionResult(string? IssueCategory, double Confidence, string Provider);
+
+/// <summary>
+/// Result of an issue insights suggestion operation.
+/// </summary>
+/// <param name="Urgency">Inferred urgency (e.g. "Low", "High", "Critical"), or <c>null</c> when not determinable.</param>
+/// <param name="RvUsage">Inferred RV usage pattern (e.g. "Full-Time", "Seasonal"), or <c>null</c> when not determinable.</param>
+/// <param name="Confidence">Confidence score in the range 0.0–1.0.</param>
+/// <param name="Provider">Identifier for the service implementation that fulfilled the request.</param>
+public sealed record IssueInsightsSuggestionResult(string? Urgency, string? RvUsage, double Confidence, string Provider);

@@ -24,11 +24,31 @@ public sealed class AzureOpenAiIssueTextRefinementService : IIssueTextRefinement
     private static readonly string[] ValidCategories =
         ["Electrical", "Plumbing", "HVAC", "Appliance", "Structural", "Slide-Out", "Awning"];
 
+    private static readonly string[] ValidUrgencies =
+        ["Low", "Medium", "High", "Critical"];
+
+    private static readonly string[] ValidRvUsages =
+        ["Full-Time", "Part-Time", "Seasonal", "Occasional"];
+
     private static readonly string SuggestSystemPrompt =
         "You are an RV service intake assistant. Given an issue description, suggest the most appropriate category " +
         $"from this list: {string.Join(", ", ValidCategories)}. " +
         "If no category fits well, use null for the category. " +
         "Return ONLY a JSON object: {\"category\": \"<category or null>\", \"confidence\": <0.0-1.0>}.";
+
+    private static readonly string InsightsSystemPrompt =
+        "You are an RV service intake assistant. Analyze the customer's issue description to infer two signals:\n" +
+        "1. urgency — one of [Low, Medium, High, Critical] or null if not determinable:\n" +
+        "   - Critical: safety risk, not drivable, gas/propane leak, fire risk, brake failure\n" +
+        "   - High: major system failure (no heat in winter, no running water), unit unusable\n" +
+        "   - Medium: partial failure with workaround available, planned trip approaching\n" +
+        "   - Low: minor cosmetic, convenience, or non-urgent maintenance issue\n" +
+        "2. rv_usage — one of [Full-Time, Part-Time, Seasonal, Occasional] or null if not determinable:\n" +
+        "   - Full-Time: customer lives in the RV permanently\n" +
+        "   - Part-Time: uses regularly on weekends or several times per month\n" +
+        "   - Seasonal: uses primarily in summer, winter, or one specific season\n" +
+        "   - Occasional: uses a few times per year or infrequently\n" +
+        "Return ONLY a JSON object: {\"urgency\": \"<value or null>\", \"rv_usage\": \"<value or null>\", \"confidence\": <0.0-1.0>}.";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -179,6 +199,80 @@ public sealed class AzureOpenAiIssueTextRefinementService : IIssueTextRefinement
         }
     }
 
+    /// <inheritdoc />
+    public async Task<IssueInsightsSuggestionResult?> SuggestInsightsAsync(string issueDescription, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(issueDescription);
+
+        try
+        {
+            var requestBody = BuildTextRequestBody(InsightsSystemPrompt, issueDescription);
+            _logger.LogDebug("Sending insights suggestion request ({Length} chars)", issueDescription.Length);
+
+            var response = await _httpClient.PostAsJsonAsync(
+                $"chat/completions?api-version={ApiVersion}",
+                requestBody,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError(
+                    "Azure OpenAI insights suggestion returned HTTP {StatusCode}: {ErrorBody}",
+                    (int)response.StatusCode,
+                    errorBody);
+                return null;
+            }
+
+            var completion = await response.Content.ReadFromJsonAsync<ChatCompletionResponse>(JsonOptions, cancellationToken);
+            var content = completion?.Choices?.FirstOrDefault()?.Message?.Content;
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                _logger.LogWarning("Azure OpenAI insights suggestion returned empty content");
+                return null;
+            }
+
+            var payload = JsonSerializer.Deserialize<InsightsPayload>(content, JsonOptions);
+            if (payload is null)
+            {
+                _logger.LogWarning("Azure OpenAI insights suggestion returned null payload");
+                return null;
+            }
+
+            var urgency = payload.Urgency is not null
+                ? ValidUrgencies.FirstOrDefault(u => u.Equals(payload.Urgency, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+            var rvUsage = payload.RvUsage is not null
+                ? ValidRvUsages.FirstOrDefault(u => u.Equals(payload.RvUsage, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+            if (payload.Urgency is not null && urgency is null)
+                _logger.LogWarning("Azure OpenAI suggested an unknown urgency: {Urgency}", payload.Urgency);
+
+            if (payload.RvUsage is not null && rvUsage is null)
+                _logger.LogWarning("Azure OpenAI suggested an unknown RV usage: {RvUsage}", payload.RvUsage);
+
+            return new IssueInsightsSuggestionResult(urgency, rvUsage, payload.Confidence, ProviderName);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Azure OpenAI insights suggestion network error (Status: {StatusCode})", ex.StatusCode);
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Azure OpenAI insights suggestion timed out or was cancelled");
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Azure OpenAI insights suggestion returned unparseable response");
+            return null;
+        }
+    }
+
     private static JsonObject BuildTextRequestBody(string systemPrompt, string userMessage)
     {
         return new JsonObject
@@ -233,6 +327,18 @@ public sealed class AzureOpenAiIssueTextRefinementService : IIssueTextRefinement
     {
         [JsonPropertyName("category")]
         public string? Category { get; init; }
+
+        [JsonPropertyName("confidence")]
+        public double Confidence { get; init; }
+    }
+
+    private sealed class InsightsPayload
+    {
+        [JsonPropertyName("urgency")]
+        public string? Urgency { get; init; }
+
+        [JsonPropertyName("rv_usage")]
+        public string? RvUsage { get; init; }
 
         [JsonPropertyName("confidence")]
         public double Confidence { get; init; }

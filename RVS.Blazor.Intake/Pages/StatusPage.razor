@@ -4,97 +4,122 @@
 
 @if (_loading)
 {
-    <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-        <MudText Typo="Typo.body1">Loading your service requests…</MudText>
+    <MudStack AlignItems="AlignItems.Center" Class="mt-8">
+        <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 480px;">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                    Loading your service requests…
+                </MudText>
+            </MudStack>
+        </MudPaper>
     </MudStack>
 }
 else if (_errorState == ErrorState.InvalidToken)
 {
-    <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
-        <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
-                 Style="font-size: 4rem;" />
-
-        <MudText Typo="Typo.h4" Align="Align.Center">
-            Invalid Link
-        </MudText>
-
-        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
-            This status link is not valid. Please check the link in your email and try again.
-        </MudText>
-
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Home"
-                   Href="/"
-                   Style="text-transform: none;">
-            Return Home
-        </MudButton>
+    <MudStack AlignItems="AlignItems.Center" Class="mt-8">
+        <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 480px;">
+            <MudStack Spacing="4">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
+                             Style="font-size: 3rem;" />
+                    <MudText Typo="Typo.h5" Align="Align.Center">Invalid Confirmation Number</MudText>
+                    <MudText Typo="Typo.body1" Align="Align.Center"
+                             Style="color: var(--mud-palette-text-secondary);">
+                        We couldn't find a request matching that confirmation number. Please double-check the number in your email and try again.
+                    </MudText>
+                </MudStack>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Search"
+                           Href="/status"
+                           Style="text-transform: none;">
+                    Try a Different Number
+                </MudButton>
+            </MudStack>
+        </MudPaper>
     </MudStack>
 }
 else if (_errorState == ErrorState.ExpiredToken)
 {
-    <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
-        <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning"
-                 Style="font-size: 4rem;" />
-
-        <MudText Typo="Typo.h4" Align="Align.Center">
-            Link Expired
-        </MudText>
-
-        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
-            This status link has expired. Please request a new status link from the dealership
-            or submit a new service request to receive an updated link.
-        </MudText>
-
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Home"
-                   Href="/"
-                   Style="text-transform: none;">
-            Return Home
-        </MudButton>
+    <MudStack AlignItems="AlignItems.Center" Class="mt-8">
+        <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 480px;">
+            <MudStack Spacing="4">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning"
+                             Style="font-size: 3rem;" />
+                    <MudText Typo="Typo.h5" Align="Align.Center">Link Expired</MudText>
+                    <MudText Typo="Typo.body1" Align="Align.Center"
+                             Style="color: var(--mud-palette-text-secondary);">
+                        This status link has expired. Please request a new status link from the dealership
+                        or submit a new service request to receive an updated link.
+                    </MudText>
+                </MudStack>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Home"
+                           Href="/"
+                           Style="text-transform: none;">
+                    Return Home
+                </MudButton>
+            </MudStack>
+        </MudPaper>
     </MudStack>
 }
 else if (_errorState == ErrorState.Unexpected)
 {
-    <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mt-8">
-        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error"
-                 Style="font-size: 4rem;" />
-
-        <MudText Typo="Typo.h4" Align="Align.Center">
-            Something Went Wrong
-        </MudText>
-
-        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
-            We were unable to load your service requests. Please try again later.
-        </MudText>
-
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Refresh"
-                   OnClick="RetryLoad"
-                   Style="text-transform: none;">
-            Try Again
-        </MudButton>
+    <MudStack AlignItems="AlignItems.Center" Class="mt-8">
+        <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 480px;">
+            <MudStack Spacing="4">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error"
+                             Style="font-size: 3rem;" />
+                    <MudText Typo="Typo.h5" Align="Align.Center">Something Went Wrong</MudText>
+                    <MudText Typo="Typo.body1" Align="Align.Center"
+                             Style="color: var(--mud-palette-text-secondary);">
+                        We were unable to load your service requests. Please try again later.
+                    </MudText>
+                </MudStack>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="RetryLoad"
+                           Style="text-transform: none;">
+                    Try Again
+                </MudButton>
+            </MudStack>
+        </MudPaper>
     </MudStack>
 }
 else if (_statusResponse is not null)
 {
     <MudStack Spacing="6" Class="mt-4">
-        <MudText Typo="Typo.h4">
-            Hi @_statusResponse.FirstName, here are your service requests
-        </MudText>
+        <MudPaper Elevation="2" Class="pa-6 rounded-lg">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.h5">
+                    Hi @_statusResponse.FirstName
+                </MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                    Here are your active service requests.
+                </MudText>
+            </MudStack>
+        </MudPaper>
 
         @if (_statusResponse.ServiceRequests.Count == 0)
         {
-            <MudStack AlignItems="AlignItems.Center" Spacing="3">
-                <MudIcon Icon="@Icons.Material.Filled.EditNote" Color="Color.Default"
-                         Style="font-size: 4rem;" />
-                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
-                    You have no active service requests at this time.
-                </MudText>
-            </MudStack>
+            <MudPaper Elevation="2" Class="pa-6 rounded-lg">
+                <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                    <MudIcon Icon="@Icons.Material.Filled.EditNote" Color="Color.Default"
+                             Style="font-size: 3rem;" />
+                    <MudText Typo="Typo.body1" Align="Align.Center"
+                             Style="color: var(--mud-palette-text-secondary);">
+                        You have no active service requests at this time.
+                    </MudText>
+                </MudStack>
+            </MudPaper>
         }
         else
         {
@@ -117,7 +142,7 @@ else if (_statusResponse is not null)
 
                                     <MudDivider />
 
-                                    <MudSimpleTable Dense="true" Elevation="0">
+                                    <MudSimpleTable Elevation="0" Class="review-table">
                                         <tbody>
                                             <tr>
                                                 <td><strong>Issue Category</strong></td>
@@ -146,7 +171,7 @@ else if (_statusResponse is not null)
         }
 
         <MudStack AlignItems="AlignItems.Center">
-            <MudButton Variant="Variant.Outlined"
+            <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Home"
                        Href="/"

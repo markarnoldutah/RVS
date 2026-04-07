@@ -292,6 +292,34 @@ public sealed class IntakeApiClient
     }
 
     /// <summary>
+    /// Infers urgency and RV usage from the given issue description using the server-side AI endpoint.
+    /// Returns the AI operation envelope with the inferred values,
+    /// or <c>null</c> if the request could not be completed.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="request">Free-text issue description.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>AI envelope with inferred urgency and RV usage, or <c>null</c> on network failure.</returns>
+    public async Task<AiOperationResponseDto<IssueInsightsSuggestionResultDto>?> SuggestIssueInsightsAsync(
+        string locationSlug,
+        IssueInsightsSuggestionRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"api/intake/{Uri.EscapeDataString(locationSlug)}/ai/suggest-insights",
+            request,
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<AiOperationResponseDto<IssueInsightsSuggestionResultDto>>(
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
     /// Gets the customer status page data using a magic-link token.
     /// </summary>
     public async Task<CustomerStatusResponseDto> GetStatusAsync(

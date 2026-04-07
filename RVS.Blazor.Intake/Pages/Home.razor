@@ -1,40 +1,37 @@
 @page "/"
 
 <PageTitle>RV Service Flow — Customer Intake</PageTitle>
-
+<MudPaper Elevation="1" Class="pa-4" Style="background: rgba(255, 255, 255, 0.85);">
 <MudStack AlignItems="AlignItems.Center" Spacing="6" Class="mt-8">
     <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary" Size="Size.Large"
              Style="font-size: 4rem;" />
 
-    <MudText Typo="Typo.h3" Align="Align.Center" GutterBottom="true">
-        Welcome to RV Service Flow
+
+            <MudText Typo="Typo.h4" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
+        RV Service Flow
     </MudText>
 
-    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
-        Submit a new service request for your RV. No account required.
-    </MudText>
+
 
     <MudButton Variant="Variant.Filled"
                Color="Color.Primary"
                Size="Size.Large"
-               StartIcon="@Icons.Material.Filled.EditNote"
-               Href="/intake"
+               StartIcon="@Icons.Material.Filled.Add"
+               Href="/intake/blue-compass-slc"
                Style="text-transform: none; min-width: 250px;">
-        Start Service Request
+        New Service Request
     </MudButton>
+    @* <MudDivider Class="my-4" Style="width: 300px;" /> *@
 
-    <MudDivider Class="my-4" Style="width: 300px;" />
 
-    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
-        Already submitted a request?
-    </MudText>
 
-    <MudButton Variant="Variant.Outlined"
-               Color="Color.Primary"
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Info"
                Size="Size.Large"
                StartIcon="@Icons.Material.Filled.Search"
                Href="/status"
                Style="text-transform: none; min-width: 250px;">
-        Check Request Status
+        Check Status
     </MudButton>
 </MudStack>
+</MudPaper>

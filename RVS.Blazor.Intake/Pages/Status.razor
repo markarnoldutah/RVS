@@ -2,38 +2,49 @@
 
 <PageTitle>Check Request Status</PageTitle>
 
-<MudStack AlignItems="AlignItems.Center" Spacing="5" Class="mt-8">
-    <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Primary"
-             Style="font-size: 4rem;" />
+<MudStack AlignItems="AlignItems.Center" Class="mt-8">
+    <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 480px;">
+        <MudStack Spacing="4">
 
-    <MudText Typo="Typo.h4" Align="Align.Center">
-        Check Request Status
-    </MudText>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Primary"
+                         Style="font-size: 3rem;" />
+                <MudText Typo="Typo.h5" Align="Align.Center">
+                    Check Request Status
+                </MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center"
+                         Style="color: var(--mud-palette-text-secondary);">
+                    Enter your confirmation number to view the status of your service request.
+                </MudText>
+            </MudStack>
 
-    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
-        Enter your confirmation number to view the status of your service request.
-    </MudText>
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">
+                        Confirmation Number
+                    </MudText>
+                    <MudTextField @bind-Value="_confirmationNumber"
+                                  Placeholder="e.g., SR-2026-00742"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Immediate="true"
+                                  autocomplete="off"
+                                  OnKeyDown="HandleKeyDown" />
+                </MudStack>
+            </MudPaper>
 
-    <MudStack AlignItems="AlignItems.Center" Spacing="3" Style="width: 100%; max-width: 400px;">
-        <MudTextField @bind-Value="_confirmationNumber"
-                      Label="Confirmation Number"
-                      Placeholder="e.g., SR-2026-00742"
-                      Variant="Variant.Outlined"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.ConfirmationNumber"
-                      Immediate="true"
-                      autocomplete="off"
-                      OnKeyDown="HandleKeyDown" />
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       StartIcon="@Icons.Material.Filled.Search"
+                       OnClick="LookupStatus"
+                       Disabled="@string.IsNullOrWhiteSpace(_confirmationNumber)"
+                       Style="text-transform: none;">
+                Look Up Status
+            </MudButton>
 
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Search"
-                   OnClick="LookupStatus"
-                   Disabled="@string.IsNullOrWhiteSpace(_confirmationNumber)"
-                   Style="text-transform: none; min-width: 200px;">
-            Look Up Status
-        </MudButton>
-    </MudStack>
+        </MudStack>
+    </MudPaper>
 </MudStack>
 
 @code {

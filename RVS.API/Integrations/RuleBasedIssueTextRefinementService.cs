@@ -67,6 +67,17 @@ public sealed class RuleBasedIssueTextRefinementService : IIssueTextRefinementSe
         return Task.FromResult<IssueCategorySuggestionResult?>(result);
     }
 
+    /// <inheritdoc />
+    public Task<IssueInsightsSuggestionResult?> SuggestInsightsAsync(string issueDescription, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(issueDescription);
+
+        // Keyword-based urgency/usage inference is not reliable enough for a production fallback.
+        // Return null so the UI leaves the fields blank for manual selection.
+        _logger.LogDebug("RuleBasedIssueTextRefinementService skipping insights suggestion (no AI configured)");
+        return Task.FromResult<IssueInsightsSuggestionResult?>(null);
+    }
+
     private static string CleanTranscript(string raw)
     {
         var cleaned = raw.Trim();
