@@ -19,7 +19,7 @@
                                Color="@(_isRecording ? Color.Error : Color.Primary)"
                                StartIcon="@(_isRecording ? Icons.Material.Filled.Stop : Icons.Material.Filled.Mic)"
                                OnClick="ToggleRecording"
-                               Disabled="_isTranscribing"
+                               Disabled="@(_isTranscribing || _isRefining)"
                                Style="text-transform: none;">
                         @(_isRecording ? "Stop Recording" : "Tap to Speak")
                     </MudButton>
@@ -27,6 +27,11 @@
                     {
                         <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
                         <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Transcribing...</MudText>
+                    }
+                    else if (_isRefining)
+                    {
+                        <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Cleaning up transcript...</MudText>
                     }
                 </MudStack>
 
@@ -188,6 +193,7 @@
     private List<LookupItemDto> _categories = [];
     private bool _isRecording;
     private bool _isTranscribing;
+    private bool _isRefining;
     private bool _isSuggestingCategory;
     private string? _transcriptionError;
     private CancellationTokenSource? _suggestCategoryCts;
@@ -227,11 +233,40 @@
                 var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
                 if (result?.Result is not null)
                 {
+                    // Start with the Whisper result as a baseline
+                    var rawTranscript = result.Result.RawTranscript ?? string.Empty;
                     State.IssueDescription = result.Result.CleanedDescription
-                        ?? result.Result.RawTranscript
-                        ?? string.Empty;
+                        ?? rawTranscript;
+
+                    // Refine transcript via GPT-4o for filler removal, punctuation, etc.
+                    _isTranscribing = false;
+                    _isRefining = true;
                     StateHasChanged();
 
+                    try
+                    {
+                        var refinementRequest = new IssueTextRefinementRequestDto
+                        {
+                            RawTranscript = rawTranscript,
+                            IssueCategory = State.IssueCategory
+                        };
+
+                        var refined = await IntakeApi.RefineIssueTextAsync(State.Slug, refinementRequest);
+                        if (!string.IsNullOrWhiteSpace(refined?.Result?.CleanedDescription))
+                        {
+                            State.IssueDescription = refined.Result.CleanedDescription;
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Refinement is best-effort; the Whisper result is already set
+                    }
+                    finally
+                    {
+                        _isRefining = false;
+                    }
+
+                    StateHasChanged();
                     await RequestCategorySuggestion();
                 }
                 else
