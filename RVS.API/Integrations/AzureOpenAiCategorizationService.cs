@@ -101,7 +101,8 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
             var userMessage = BuildDiagnosticUserMessage(issueCategory, issueDescription, manufacturer, model, year);
             var requestBody = BuildChatRequestBody(DiagnosticSystemPrompt, userMessage);
 
-            _logger.LogDebug("Sending diagnostic question generation request for category {Category}", issueCategory);
+            _logger.LogDebug("Sending diagnostic question generation request for category {Category}",
+                new string(issueCategory.Where(c => !char.IsControl(c)).ToArray()));
 
             var response = await _httpClient.PostAsJsonAsync(
                 $"chat/completions?api-version={ApiVersion}",
@@ -137,7 +138,7 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
             var questions = payload.Questions
                 .Select(q => new DiagnosticQuestionItem(
                     q.QuestionText ?? "Follow-up question",
-                    (IReadOnlyList<string>)(q.Options ?? []),
+                    q.Options ?? [],
                     q.AllowFreeText,
                     q.HelpText))
                 .ToList()
