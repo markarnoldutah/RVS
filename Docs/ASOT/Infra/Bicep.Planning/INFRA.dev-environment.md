@@ -757,7 +757,7 @@ The plan implements 8 Bicep modules and updates the orchestration template in de
 | TASK-018 | Rewrite `main.bicep` to import and wire all modules | Replace `Docs/infra/main.bicep` — add parameters for environment, location, and all environment-specific SKU/capacity overrides. Module deployment order: (1) logAnalytics, (2) appInsights → logAnalytics.outputs.resourceId, (3) keyVault, (4) cosmosDb, (5) storage, (6) appServicePlan, (7) appService → plan.outputs.resourceId + appInsights.outputs.resourceId, (8) rbacAssignments → appService.outputs.systemAssignedMIPrincipalId + kv/storage/cosmos resourceIds, (9) openAi (existing), (10) openAiKvSecrets → keyVault.outputs.name (conditional), (11) staticWebAppIntake, (12) staticWebAppManager. Output all resource names and the API default hostname. |
 | TASK-019 | Update `parameters/dev.bicepparam` with all new parameters | Extend `Docs/infra/parameters/dev.bicepparam`: `environmentName='dev'`, `location='westus3'`, `appServicePlanSku='B1'`, `cosmosDbMaxThroughput=400` (manual), `storageReplication='Standard_LRS'`, `staticWebAppSku='Free'`, `openAiCapacity=1`, `enablePurgeProtection=false`, `logRetentionDays=90`. |
 | TASK-020 | Validate full template compiles with `az bicep build` | Run `az bicep build --file main.bicep` to verify all module references resolve |
-| TASK-021 | Test deployment with `what-if` mode | Run `az deployment group what-if --resource-group rg-rvs-api-dev-wus3-s01-001 --template-file main.bicep --parameters parameters/dev.bicepparam` |
+| TASK-021 | Test deployment with `what-if` mode | Run `az deployment group what-if --resource-group rg-rvs-api-dev-wus3-s01-001 --template-file ../Bicep.IaC/main.bicep --parameters ../Bicep.IaC/parameters/dev.bicepparam` |
 
 ---
 

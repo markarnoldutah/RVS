@@ -62,14 +62,14 @@ az group create \
 # 4. Deploy
 az deployment group create \
   --resource-group rg-rvs-dev-westus3 \
-  --template-file infra/main.bicep \
-  --parameters infra/parameters/dev.bicepparam
+  --template-file main.bicep \
+  --parameters parameters/dev.bicepparam
 
 # 5. (Optional) Deploy with Key Vault secret injection
 az deployment group create \
   --resource-group rg-rvs-dev-westus3 \
-  --template-file infra/main.bicep \
-  --parameters infra/parameters/dev.bicepparam \
+  --template-file main.bicep \
+  --parameters parameters/dev.bicepparam \
   --parameters keyVaultName='kv-rvs-dev-x7m2'
 ```
 
@@ -80,8 +80,8 @@ az group create --name rg-rvs-prod-westus3 --location westus3
 
 az deployment group create \
   --resource-group rg-rvs-prod-westus3 \
-  --template-file infra/main.bicep \
-  --parameters infra/parameters/prod.bicepparam \
+  --template-file main.bicep \
+  --parameters parameters/prod.bicepparam \
   --parameters keyVaultName='kv-rvs-prod-ab12'
 ```
 

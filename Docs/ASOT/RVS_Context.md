@@ -2,7 +2,7 @@
 
 **Authoritative Source of Truth (ASOT) — April 4, 2026**
 
-A comprehensive platform overview for developers, investors, partners, and stakeholders. For detailed architecture and identity specifics, see companion documents [**RVS_PRD.md**](RVS_PRD.md), [**RVS_Core_Architecture_Version3.1.md**](RVS_Core_Architecture_Version3.1.md), and [**RVS_Auth0_Identity_Version2.md**](RVS_Auth0_Identity_Version2.md).
+A comprehensive platform overview for developers, investors, partners, and stakeholders. For detailed architecture and identity specifics, see companion documents [**RVS_PRD.md**](RVS_PRD.md), [**RVS_Core_Architecture_Version3.1.md**](../Obsolete/RVS_Core_Architecture_Version3.1.md), and [**RVS_Auth0_Identity_Version2.md**](Auth0/RVS_Auth0_Identity_Version2.md).
 
 ---
 
@@ -521,12 +521,12 @@ This context document is a **platform overview**. For deep dives, see:
 
 - **[RVS_PRD.md](RVS_PRD.md)** — Product requirements, user personas, functional/non-functional goals, feature list, Phase 1 MVP scope
 - **[RVS_Technical_PRD.md](RVS_Technical_PRD.md)** — Per-endpoint contracts, performance KPIs, security constraints, DTO appendix, telemetry events
-- **[RVS_Core_Architecture_Version3.1.md](RVS_Core_Architecture_Version3.1.md)** — Domain entities, Cosmos schema, repository interfaces, data flows, middleware pipeline, API surface, front-end application formats
+- **[RVS_Core_Architecture_Version3.1.md](../Obsolete/RVS_Core_Architecture_Version3.1.md)** — Domain entities, Cosmos schema, repository interfaces, data flows, middleware pipeline, API surface, front-end application formats
 - **[Auth0/RVS_Auth0_Identity_Version2.md](Auth0/RVS_Auth0_Identity_Version2.md)** — Auth0 Organizations, RBAC matrix, JWT structure, ClaimsService, authorization policies, Login Action
-- **[AI_Architecture_Blueprint.md](AI_Architecture_Blueprint.md)** — Durable AI architecture: provider abstraction, envelope DTO, all AI endpoint routes, client patterns, and per-issue mapping
-- **[AI_Wave1_Implementation_Backlog.md](AI_Wave1_Implementation_Backlog.md)** — Wave 1 task breakdown: VIN extraction, speech cleanup, category suggestion — exact contracts, tasks, acceptance criteria
+- **[AI_Architecture_Blueprint.md](AI/AI_Architecture_Blueprint.md)** — Durable AI architecture: provider abstraction, envelope DTO, all AI endpoint routes, client patterns, and per-issue mapping
+- **[AI_Wave1_Implementation_Backlog.md](AI/AI_Wave1_Implementation_Backlog.md)** — Wave 1 task breakdown: VIN extraction, speech cleanup, category suggestion — exact contracts, tasks, acceptance criteria
 - **[RVS_implementation_plan.md](RVS_implementation_plan.md)** — 8-phase implementation roadmap, per-phase deliverables, validation criteria, suggested starting point
-- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** — RVS-specific coding conventions, patterns, project structure
+- **[.github/copilot-instructions.md](../../.github/copilot-instructions.md)** — RVS-specific coding conventions, patterns, project structure
 
 ---
 

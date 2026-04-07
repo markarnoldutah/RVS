@@ -11,12 +11,12 @@
 
 | Document | Purpose |
 |---|---|
-| [RVS_Core_Architecture_Version3.1.md](RVS_Core_Architecture_Version3.1.md) | Domain model, data layer, orchestration flows, API surface |
-| [RVS_Auth0_Identity_Version2.md](RVS_Auth0_Identity_Version2.md) | RBAC model, JWT structure, ClaimsService, `app_metadata` tenant scoping |
+| [RVS_Core_Architecture_Version3.1.md](../Obsolete/RVS_Core_Architecture_Version3.1.md) | Domain model, data layer, orchestration flows, API surface |
+| [RVS_Auth0_Identity_Version2.md](Auth0/RVS_Auth0_Identity_Version2.md) | RBAC model, JWT structure, ClaimsService, `app_metadata` tenant scoping |
 | [RVS_Context.md](RVS_Context.md) | Platform overview, business model, investor/partner context |
 | [RVS_PRD.md](RVS_PRD.md) | Product goals, user personas, user stories (v1.1) |
 | [RVS_implementation_plan.md](RVS_implementation_plan.md) | 8-phase build roadmap |
-| [.github/copilot-instructions.md](../../../.github/copilot-instructions.md) | Coding conventions, project patterns |
+| [.github/copilot-instructions.md](../../.github/copilot-instructions.md) | Coding conventions, project patterns |
 
 ---
 

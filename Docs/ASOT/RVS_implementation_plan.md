@@ -12,14 +12,14 @@
 | Document | Purpose |
 |---|---|
 | [RVS_Technical_PRD.md](RVS_Technical_PRD.md) | Testable requirements, API contracts, data model, security |
-| [RVS_Core_Architecture_Version3.1.md](RVS_Core_Architecture_Version3.1.md) | Domain model, Cosmos schema, orchestration flows |
-| [RVS_Auth0_Identity_Version2.md](RVS_Auth0_Identity_Version2.md) | RBAC, JWT claims, Auth0 Organization model |
+| [RVS_Core_Architecture_Version3.1.md](../Obsolete/RVS_Core_Architecture_Version3.1.md) | Domain model, Cosmos schema, orchestration flows |
+| [RVS_Auth0_Identity_Version2.md](Auth0/RVS_Auth0_Identity_Version2.md) | RBAC, JWT claims, Auth0 Organization model |
 | [RVS_PRD.md](RVS_PRD.md) | Product goals, personas, user stories |
-| [RVS_FrontEnd_Solution.md](../FrontEnd/RVS_FrontEnd_Solution.md) | App format decisions, render modes, code reuse strategy |
-| [RVS_Features_Blazor.Intake_App.md](../FrontEnd/RVS_Features_Blazor.Intake_App.md) | Customer intake app feature spec |
-| [RVS_Features_Blazor.Manager.md](../FrontEnd/RVS_Features_Blazor.Manager.md) | Manager desktop feature spec |
-| [RVS_Features_MAUI.Tech.md](../FrontEnd/RVS_Features_MAUI.Tech.md) | Technician mobile feature spec |
-| [copilot-instructions.md](../../../.github/copilot-instructions.md) | Coding conventions and patterns |
+| [RVS_FrontEnd_Solution.md](FrontEnd/RVS_FrontEnd_Solution.md) | App format decisions, render modes, code reuse strategy |
+| [RVS_Features_Blazor.Intake_App.md](FrontEnd/Intake/RVS_Features_Blazor.Intake_App.md) | Customer intake app feature spec |
+| [RVS_Features_Blazor.Manager.md](FrontEnd/Manager/RVS_Features_Blazor.Manager.md) | Manager desktop feature spec |
+| [RVS_Features_MAUI.Tech.md](FrontEnd/Techs/RVS_Features_MAUI.Tech.md) | Technician mobile feature spec |
+| [copilot-instructions.md](../../.github/copilot-instructions.md) | Coding conventions and patterns |
 
 ---
 
