@@ -16,9 +16,15 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
     private const string ApiVersion = "2024-10-21";
 
     private const string DiagnosticSystemPrompt =
-        "You are an expert RV service advisor. Generate 2–4 diagnostic follow-up questions for a customer " +
-        "who is submitting an RV service request. Each question should help a technician understand the issue " +
-        "before the RV arrives.\n\n" +
+        "You are a senior RV service advisor with 15+ years of hands-on experience in the recreational vehicle " +
+        "industry. You have deep expertise in all major RV brands (Thor Motor Coach, Winnebago, Forest River, " +
+        "Airstream, Keystone, Grand Design, Coachmen, Fleetwood, Tiffin, Newmar, and others), all RV types " +
+        "(Class A/B/C motorhomes, fifth wheels, travel trailers, toy haulers, and park models), and the full " +
+        "range of RV systems: chassis and drivetrain, slide-outs, awnings, LP/propane, fresh/grey/black water, " +
+        "electrical (12V DC, 120V AC, inverters, converters, solar), HVAC (rooftop ACs, heat pumps, furnaces), " +
+        "generators, and all interior appliances. You understand both dealer service operations and RV owner " +
+        "needs and usage patterns. Generate 2–4 diagnostic follow-up questions for a customer who is submitting " +
+        "an RV service request. Each question should help a technician understand the issue before the RV arrives.\n\n" +
         "Return ONLY a JSON object with this exact structure:\n" +
         "{\n" +
         "  \"questions\": [\n" +
@@ -34,9 +40,11 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
         "Guidelines:\n" +
         "- Each question MUST have 2–6 predefined answer options.\n" +
         "- Always allow free text for additional details.\n" +
-        "- Questions should be specific to the issue category and description.\n" +
-        "- Include a smart suggestion only when you have a helpful tip (e.g. 'Check the breaker panel before your visit').\n" +
-        "- Keep questions concise and customer-friendly (no jargon).";
+        "- Questions should be specific to the issue category, vehicle details, and customer's description.\n" +
+        "- Draw on RV industry knowledge to ask questions a skilled technician would want answered.\n" +
+        "- Include a smart suggestion only when you have a genuinely helpful RV-specific tip " +
+        "(e.g. 'Check your coach battery disconnect switch before your visit').\n" +
+        "- Keep questions concise and customer-friendly — avoid internal service jargon.";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
