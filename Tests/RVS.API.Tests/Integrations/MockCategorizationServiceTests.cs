@@ -44,9 +44,37 @@ public class MockCategorizationServiceTests
     {
         var result = await _sut.SuggestDiagnosticQuestionsAsync("Electrical");
 
-        result.Should().HaveCount(3);
-        result[0].Should().Contain("describe the issue");
-        result[1].Should().Contain("first notice");
-        result[2].Should().Contain("intermittent");
+        result.Questions.Should().HaveCount(3);
+        result.Questions[0].QuestionText.Should().Contain("describe the issue");
+        result.Questions[1].QuestionText.Should().Contain("first notice");
+        result.Questions[2].QuestionText.Should().Contain("intermittent");
+        result.Provider.Should().Be(nameof(MockCategorizationService));
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_ShouldReturnQuestionsWithOptions()
+    {
+        var result = await _sut.SuggestDiagnosticQuestionsAsync("Electrical");
+
+        result.Questions.Should().AllSatisfy(q =>
+        {
+            q.AllowFreeText.Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenDescriptionProvided_ShouldReturnSmartSuggestion()
+    {
+        var result = await _sut.SuggestDiagnosticQuestionsAsync("Electrical", issueDescription: "Battery won't charge");
+
+        result.SmartSuggestion.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenNoDescription_ShouldNotReturnSmartSuggestion()
+    {
+        var result = await _sut.SuggestDiagnosticQuestionsAsync("Electrical");
+
+        result.SmartSuggestion.Should().BeNull();
     }
 }

@@ -86,19 +86,44 @@ public class AzureOpenAiCategorizationServiceTests
     }
 
     [Fact]
-    public async Task SuggestDiagnosticQuestionsAsync_WhenApiSucceeds_ShouldReturnQuestions()
+    public async Task SuggestDiagnosticQuestionsAsync_WhenApiSucceeds_ShouldReturnStructuredQuestions()
     {
-        var questions = new List<string> { "Q1?", "Q2?", "Q3?" };
+        var chatResponse = new
+        {
+            choices = new[]
+            {
+                new
+                {
+                    message = new
+                    {
+                        content = JsonSerializer.Serialize(new
+                        {
+                            questions = new[]
+                            {
+                                new { question_text = "Is the battery new?", options = new[] { "Yes", "No" }, allow_free_text = true, help_text = (string?)null },
+                                new { question_text = "When did it start?", options = new[] { "Today", "This week" }, allow_free_text = true, help_text = "Approximate timing helps." }
+                            },
+                            smart_suggestion = "Check the battery terminals for corrosion."
+                        })
+                    }
+                }
+            }
+        };
+
         var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(JsonSerializer.Serialize(questions), Encoding.UTF8, new MediaTypeHeaderValue("application/json"))
+            Content = new StringContent(JsonSerializer.Serialize(chatResponse), Encoding.UTF8, new MediaTypeHeaderValue("application/json"))
         };
 
         var sut = CreateService(response);
-        var result = await sut.SuggestDiagnosticQuestionsAsync("Electrical");
+        var result = await sut.SuggestDiagnosticQuestionsAsync("Electrical", "Battery won't charge");
 
-        result.Should().HaveCount(3);
-        result[0].Should().Be("Q1?");
+        result.Questions.Should().HaveCount(2);
+        result.Questions[0].QuestionText.Should().Be("Is the battery new?");
+        result.Questions[0].Options.Should().Contain("Yes");
+        result.Questions[1].HelpText.Should().Be("Approximate timing helps.");
+        result.SmartSuggestion.Should().Be("Check the battery terminals for corrosion.");
+        result.Provider.Should().Be(nameof(AzureOpenAiCategorizationService));
     }
 
     [Fact]
@@ -114,8 +139,70 @@ public class AzureOpenAiCategorizationServiceTests
 
         var result = await sut.SuggestDiagnosticQuestionsAsync("Electrical");
 
-        result.Should().HaveCount(3);
-        result[0].Should().Contain("12V DC or 120V AC");
+        result.Questions.Should().HaveCount(3);
+        result.Questions[0].QuestionText.Should().Contain("12V DC or 120V AC");
+        result.Provider.Should().Be(nameof(RuleBasedCategorizationService));
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenApiReturnsEmptyContent_ShouldFallBackToRuleBased()
+    {
+        var chatResponse = new
+        {
+            choices = new[]
+            {
+                new { message = new { content = "" } }
+            }
+        };
+
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(chatResponse), Encoding.UTF8, new MediaTypeHeaderValue("application/json"))
+        };
+
+        var sut = CreateService(response);
+        var result = await sut.SuggestDiagnosticQuestionsAsync("Electrical");
+
+        result.Questions.Should().HaveCount(3);
+        result.Provider.Should().Be(nameof(RuleBasedCategorizationService));
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenApiReturnsNonSuccessStatus_ShouldFallBackToRuleBased()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent("Internal Server Error")
+        };
+
+        var sut = CreateService(response);
+        var result = await sut.SuggestDiagnosticQuestionsAsync("Plumbing");
+
+        result.Questions.Should().HaveCount(3);
+        result.Provider.Should().Be(nameof(RuleBasedCategorizationService));
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenApiReturnsInvalidJson_ShouldFallBackToRuleBased()
+    {
+        var chatResponse = new
+        {
+            choices = new[]
+            {
+                new { message = new { content = "not valid json {{{" } }
+            }
+        };
+
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(chatResponse), Encoding.UTF8, new MediaTypeHeaderValue("application/json"))
+        };
+
+        var sut = CreateService(response);
+        var result = await sut.SuggestDiagnosticQuestionsAsync("Electrical");
+
+        result.Questions.Should().HaveCount(3);
+        result.Provider.Should().Be(nameof(RuleBasedCategorizationService));
     }
 
     private AzureOpenAiCategorizationService CreateService(HttpResponseMessage response)
