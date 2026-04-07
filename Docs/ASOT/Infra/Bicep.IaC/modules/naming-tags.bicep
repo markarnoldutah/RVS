@@ -56,6 +56,7 @@ var regionCodeByLocation = {
   westus2: 'wus2'
   westus3: 'wus3'
   eastus2: 'eus2'
+  northcentralus: 'ncus'
   westeurope: 'weu'
 }
 

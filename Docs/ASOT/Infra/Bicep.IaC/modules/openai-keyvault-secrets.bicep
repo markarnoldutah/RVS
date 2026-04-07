@@ -1,6 +1,9 @@
 // ──────────────────────────────────────────────────────────────
 // Module: Store Azure OpenAI secrets in Key Vault
 // ──────────────────────────────────────────────────────────────
+// Deploys into the primary resource group where the Key Vault
+// lives. References the Whisper OpenAI account cross-RG.
+// ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
 // ── Parameters ────────────────────────────────────────────────
@@ -8,11 +11,14 @@ targetScope = 'resourceGroup'
 @description('The name of the existing Key Vault where secrets will be stored.')
 param keyVaultName string
 
-@description('The name of the Azure OpenAI resource to retrieve connection details from.')
+@description('The name of the primary Azure OpenAI resource (GPT-4o) in the current resource group.')
 param openAiName string
 
-@description('The resource group containing the Azure OpenAI resource. Defaults to the current resource group.')
-param openAiResourceGroup string = resourceGroup().name
+@description('The name of the Whisper Azure OpenAI resource (lives in a separate resource group).')
+param whisperOpenAiName string
+
+@description('The resource group containing the Whisper Azure OpenAI resource.')
+param whisperOpenAiResourceGroup string
 
 @description('The name of the GPT-4o vision model deployment (used for VIN extraction).')
 param openAiDeploymentName string = 'gpt-4o'
@@ -29,12 +35,20 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: keyVaultName
 }
 
+// GPT-4o account — same resource group as this module deployment (primary RG)
 resource openAiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
   name: openAiName
-  scope: resourceGroup(openAiResourceGroup)
+}
+
+// Whisper account — different resource group (ncus RG)
+resource whisperAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+  name: whisperOpenAiName
+  scope: resourceGroup(whisperOpenAiResourceGroup)
 }
 
 // ── Key Vault Secrets ─────────────────────────────────────────
+
+// -- Primary OpenAI (GPT-4o, westus3) --
 
 resource endpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
@@ -68,6 +82,26 @@ resource textDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01'
   name: 'AzureOpenAi--TextDeploymentName'
   properties: {
     value: openAiTextDeploymentName
+    contentType: 'text/plain'
+  }
+}
+
+// -- Whisper (dedicated region: northcentralus) --
+
+resource whisperEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'AzureOpenAi--WhisperEndpoint'
+  properties: {
+    value: whisperAccount.properties.endpoint
+    contentType: 'text/plain'
+  }
+}
+
+resource whisperApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'AzureOpenAi--WhisperApiKey'
+  properties: {
+    value: whisperAccount.listKeys().key1
     contentType: 'text/plain'
   }
 }

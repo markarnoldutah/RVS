@@ -341,14 +341,16 @@ else
     }
 }
 
-// Speech-to-Text (Azure OpenAI Whisper)
+// Speech-to-Text (Azure OpenAI Whisper) — uses a dedicated endpoint in northcentralus
+// because Whisper 001 Standard is not available in westus3.
 if (useMockIntegrations)
 {
     builder.Services.AddSingleton<ISpeechToTextService, MockSpeechToTextService>();
 }
 else
 {
-    var whisperEndpoint = builder.Configuration["AzureOpenAi:Endpoint"];
+    var whisperEndpoint = builder.Configuration["AzureOpenAi:WhisperEndpoint"]
+        ?? builder.Configuration["AzureOpenAi:Endpoint"];
     if (!string.IsNullOrWhiteSpace(whisperEndpoint))
     {
         var whisperDeploymentName = builder.Configuration["AzureOpenAi:WhisperDeploymentName"] ?? "whisper";
@@ -356,7 +358,8 @@ else
         {
             var baseUrl = whisperEndpoint.TrimEnd('/') + $"/openai/deployments/{whisperDeploymentName}/";
             client.BaseAddress = new Uri(baseUrl);
-            var apiKey = builder.Configuration["AzureOpenAi:ApiKey"];
+            var apiKey = builder.Configuration["AzureOpenAi:WhisperApiKey"]
+                ?? builder.Configuration["AzureOpenAi:ApiKey"];
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
                 client.DefaultRequestHeaders.Add("api-key", apiKey);
@@ -371,7 +374,7 @@ else
     }
     else
     {
-        // AzureOpenAi:Endpoint is required when Integrations:UseMocks is false.
+        // AzureOpenAi:WhisperEndpoint (or AzureOpenAi:Endpoint fallback) is required when mocks are disabled.
         // Fall back to mock so startup is not blocked during initial onboarding.
         builder.Services.AddSingleton<ISpeechToTextService, MockSpeechToTextService>();
     }
