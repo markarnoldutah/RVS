@@ -159,6 +159,62 @@ public class ServiceRequestMapperTests
         dto.DiagnosticResponses[0].FreeTextResponse.Should().Be("Clicks once");
     }
 
+    [Fact]
+    public void ToDetailDto_WhenAiEnrichmentIsNull_ShouldReturnNullAiEnrichment()
+    {
+        var entity = new ServiceRequest { AiEnrichment = null };
+
+        var dto = entity.ToDetailDto();
+
+        dto.AiEnrichment.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenAiEnrichmentIsPopulated_ShouldMapAllFields()
+    {
+        var enrichedAt = new DateTime(2026, 4, 7, 12, 0, 0, DateTimeKind.Utc);
+        var entity = new ServiceRequest
+        {
+            AiEnrichment = new AiEnrichmentMetadataEmbedded
+            {
+                CategorySuggestionProvider = "AzureOpenAiIssueTextRefinementService",
+                CategorySuggestionConfidence = 0.91,
+                DiagnosticQuestionsProvider = "AzureOpenAiCategorizationService",
+                TranscriptionProvider = "AzureWhisperSpeechToTextService",
+                TranscriptionConfidence = 0.88,
+                VinExtractionProvider = "AzureOpenAiVinExtractionService",
+                VinExtractionConfidence = 0.95,
+                InsightsSuggestionProvider = "AzureOpenAiIssueTextRefinementService",
+                InsightsSuggestionConfidence = 0.82,
+                EnrichedAtUtc = enrichedAt
+            }
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.AiEnrichment.Should().NotBeNull();
+        dto.AiEnrichment!.CategorySuggestionProvider.Should().Be("AzureOpenAiIssueTextRefinementService");
+        dto.AiEnrichment.CategorySuggestionConfidence.Should().Be(0.91);
+        dto.AiEnrichment.DiagnosticQuestionsProvider.Should().Be("AzureOpenAiCategorizationService");
+        dto.AiEnrichment.TranscriptionProvider.Should().Be("AzureWhisperSpeechToTextService");
+        dto.AiEnrichment.TranscriptionConfidence.Should().Be(0.88);
+        dto.AiEnrichment.VinExtractionProvider.Should().Be("AzureOpenAiVinExtractionService");
+        dto.AiEnrichment.VinExtractionConfidence.Should().Be(0.95);
+        dto.AiEnrichment.InsightsSuggestionProvider.Should().Be("AzureOpenAiIssueTextRefinementService");
+        dto.AiEnrichment.InsightsSuggestionConfidence.Should().Be(0.82);
+        dto.AiEnrichment.EnrichedAtUtc.Should().Be(enrichedAt);
+    }
+
+    [Fact]
+    public void ToDto_AiEnrichmentMetadata_WhenEntityIsNull_ShouldThrowArgumentNullException()
+    {
+        AiEnrichmentMetadataEmbedded? entity = null;
+
+        var act = () => entity!.ToDto();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
     // ── ToSummaryDto ─────────────────────────────────────────────────────────
 
     [Fact]

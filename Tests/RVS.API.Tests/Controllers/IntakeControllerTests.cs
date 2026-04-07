@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using RVS.API.Controllers;
@@ -21,6 +22,7 @@ public class IntakeControllerTests
     private readonly Mock<IVinExtractionService> _vinExtractionServiceMock = new();
     private readonly Mock<ISpeechToTextService> _speechToTextServiceMock = new();
     private readonly Mock<IIssueTextRefinementService> _issueTextRefinementServiceMock = new();
+    private readonly Mock<ILogger<IntakeController>> _loggerMock = new();
     private readonly IntakeController _sut;
 
     public IntakeControllerTests()
@@ -34,7 +36,8 @@ public class IntakeControllerTests
             _vinExtractionServiceMock.Object,
             _speechToTextServiceMock.Object,
             _issueTextRefinementServiceMock.Object,
-            aiOptions);
+            aiOptions,
+            _loggerMock.Object);
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()

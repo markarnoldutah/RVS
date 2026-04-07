@@ -24,6 +24,7 @@ public sealed record ServiceRequestDetailResponseDto
     public List<string> RequiredSkills { get; init; } = [];
     public List<DiagnosticResponseDto> DiagnosticResponses { get; init; } = [];
     public List<AttachmentDto> Attachments { get; init; } = [];
+    public AiEnrichmentMetadataDto? AiEnrichment { get; init; }
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
 }
