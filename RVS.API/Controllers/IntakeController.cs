@@ -72,23 +72,33 @@ public class IntakeController : ControllerBase
 
     /// <summary>
     /// Returns AI-generated diagnostic follow-up questions based on the selected issue category.
+    /// Accepts optional context (description, asset info) for more targeted questions.
     /// </summary>
     /// <param name="locationSlug">Location slug (route segment).</param>
-    /// <param name="request">Request containing the issue category.</param>
+    /// <param name="request">Request containing the issue category and optional context.</param>
     /// <param name="ct">Cancellation token.</param>
     [HttpPost("diagnostic-questions")]
     public async Task<ActionResult<DiagnosticQuestionsResponseDto>> GetDiagnosticQuestions(
         string locationSlug, [FromBody] DiagnosticQuestionsRequest request, CancellationToken ct = default)
     {
-        var questions = await _categorizationService.SuggestDiagnosticQuestionsAsync(request.IssueCategory, ct);
+        var result = await _categorizationService.SuggestDiagnosticQuestionsAsync(
+            request.IssueCategory,
+            request.IssueDescription,
+            request.Manufacturer,
+            request.Model,
+            request.Year,
+            ct);
 
         var dto = new DiagnosticQuestionsResponseDto
         {
-            Questions = questions.Select(q => new DiagnosticQuestionDto
+            Questions = result.Questions.Select(q => new DiagnosticQuestionDto
             {
-                QuestionText = q,
-                AllowFreeText = true
-            }).ToList()
+                QuestionText = q.QuestionText,
+                Options = q.Options.ToList(),
+                AllowFreeText = q.AllowFreeText,
+                HelpText = q.HelpText
+            }).ToList(),
+            SmartSuggestion = result.SmartSuggestion
         };
 
         return Ok(dto);
@@ -485,7 +495,27 @@ public class IntakeController : ControllerBase
 public sealed record DiagnosticQuestionsRequest
 {
     /// <summary>
-    /// The issue category to generate diagnostic questions for.
+    /// The issue category to generate diagnostic questions for (required).
     /// </summary>
     public required string IssueCategory { get; init; }
+
+    /// <summary>
+    /// Optional customer-provided issue description for additional context.
+    /// </summary>
+    public string? IssueDescription { get; init; }
+
+    /// <summary>
+    /// Optional RV manufacturer name for model-specific questions.
+    /// </summary>
+    public string? Manufacturer { get; init; }
+
+    /// <summary>
+    /// Optional RV model name for model-specific questions.
+    /// </summary>
+    public string? Model { get; init; }
+
+    /// <summary>
+    /// Optional RV model year for age-relevant questions.
+    /// </summary>
+    public int? Year { get; init; }
 }

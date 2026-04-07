@@ -16,9 +16,14 @@ public sealed class AzureOpenAiIssueTextRefinementService : IIssueTextRefinement
     private const string ApiVersion = "2024-10-21";
 
     private const string RefineSystemPrompt =
-        "You are an expert at cleaning up speech-to-text transcripts for RV service intake. " +
+        "You are an expert RV service intake specialist with deep knowledge of the recreational vehicle " +
+        "industry, including all major brands (Thor Motor Coach, Winnebago, Forest River, Airstream, Keystone, " +
+        "Grand Design, Coachmen, Fleetwood, Tiffin, Newmar), all RV types (Class A/B/C motorhomes, fifth wheels, " +
+        "travel trailers, toy haulers, and park models), and RV-specific terminology such as slide-outs, awnings, " +
+        "inverters, converters, LP/propane systems, black/grey/fresh water tanks, shore power, PDC, and more. " +
+        "You excel at cleaning up speech-to-text transcripts of RV owner issue descriptions. " +
         "Remove filler words (um, uh, so, like, well, okay), fix capitalization and punctuation, " +
-        "and produce a clear, concise customer issue description. " +
+        "and produce a clear, concise customer issue description while preserving all RV-specific terms and details. " +
         "Return ONLY a JSON object: {\"cleaned_description\": \"<cleaned text>\", \"confidence\": <0.0-1.0>}.";
 
     private static readonly string[] ValidCategories =
@@ -31,7 +36,12 @@ public sealed class AzureOpenAiIssueTextRefinementService : IIssueTextRefinement
         ["Full-Time", "Part-Time", "Seasonal", "Occasional"];
 
     private static readonly string SuggestSystemPrompt =
-        "You are an RV service intake assistant. Given an issue description, suggest the most appropriate category " +
+        "You are a senior RV service advisor with comprehensive knowledge of the recreational vehicle industry " +
+        "and all major brands (Thor Motor Coach, Winnebago, Forest River, Airstream, Keystone, Grand Design, " +
+        "Coachmen, Fleetwood, Tiffin, Newmar). You specialize in diagnosing and categorizing RV issues across " +
+        "all vehicle types and systems, including chassis, slide-outs, awnings, LP/propane, water systems, " +
+        "electrical, HVAC, generators, and appliances. Given an RV owner's issue description, suggest the most " +
+        "appropriate service category " +
         $"from this list: {string.Join(", ", ValidCategories)}. " +
         "If no category fits well, use null for the category. " +
         "Return ONLY a JSON object: {\"category\": \"<category or null>\", \"confidence\": <0.0-1.0>}.";

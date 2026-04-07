@@ -62,8 +62,9 @@ public class RuleBasedCategorizationServiceTests
     {
         var result = await _sut.SuggestDiagnosticQuestionsAsync(category);
 
-        result.Should().HaveCount(3);
-        result.Should().AllSatisfy(q => q.Should().NotBeNullOrWhiteSpace());
+        result.Questions.Should().HaveCount(3);
+        result.Questions.Should().AllSatisfy(q => q.QuestionText.Should().NotBeNullOrWhiteSpace());
+        result.Provider.Should().Be(nameof(RuleBasedCategorizationService));
     }
 
     [Fact]
@@ -71,7 +72,33 @@ public class RuleBasedCategorizationServiceTests
     {
         var result = await _sut.SuggestDiagnosticQuestionsAsync("Unknown");
 
-        result.Should().HaveCount(3);
-        result[0].Should().Contain("describe the issue");
+        result.Questions.Should().HaveCount(3);
+        result.Questions[0].QuestionText.Should().Contain("describe the issue");
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenKnownCategory_ShouldReturnQuestionsWithOptions()
+    {
+        var result = await _sut.SuggestDiagnosticQuestionsAsync("Electrical");
+
+        result.Questions.Should().AllSatisfy(q =>
+        {
+            q.Options.Should().NotBeEmpty();
+            q.AllowFreeText.Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_ShouldAcceptOptionalContextParameters()
+    {
+        var result = await _sut.SuggestDiagnosticQuestionsAsync(
+            "Electrical",
+            issueDescription: "Battery won't charge",
+            manufacturer: "Thor",
+            model: "Ace",
+            year: 2023);
+
+        result.Questions.Should().HaveCount(3);
+        result.SmartSuggestion.Should().BeNull();
     }
 }

@@ -91,18 +91,37 @@ public class IntakeControllerTests
     }
 
     [Fact]
-    public async Task GetDiagnosticQuestions_ShouldReturnOkWithQuestions()
+    public async Task GetDiagnosticQuestions_ShouldReturnOkWithStructuredQuestions()
     {
-        _categorizationMock.Setup(s => s.SuggestDiagnosticQuestionsAsync("Electrical", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<string> { "Is the battery new?", "When did the issue start?" });
+        var questionsResult = new DiagnosticQuestionsResult(
+            [
+                new DiagnosticQuestionItem("Is the battery new?", ["Yes", "No"], true, "Check the label on the battery."),
+                new DiagnosticQuestionItem("When did the issue start?", ["Today", "This week"], true, null)
+            ],
+            SmartSuggestion: "Check the battery terminals for corrosion.",
+            Provider: "TestProvider");
 
-        var request = new DiagnosticQuestionsRequest { IssueCategory = "Electrical" };
+        _categorizationMock.Setup(s => s.SuggestDiagnosticQuestionsAsync(
+                "Electrical", "Battery dead", "Thor", "Ace", 2023, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(questionsResult);
+
+        var request = new DiagnosticQuestionsRequest
+        {
+            IssueCategory = "Electrical",
+            IssueDescription = "Battery dead",
+            Manufacturer = "Thor",
+            Model = "Ace",
+            Year = 2023
+        };
         var result = await _sut.GetDiagnosticQuestions("test-slug", request);
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = okResult.Value.Should().BeOfType<DiagnosticQuestionsResponseDto>().Subject;
         dto.Questions.Should().HaveCount(2);
         dto.Questions[0].QuestionText.Should().Be("Is the battery new?");
+        dto.Questions[0].Options.Should().Contain("Yes");
+        dto.Questions[0].HelpText.Should().Be("Check the label on the battery.");
+        dto.SmartSuggestion.Should().Be("Check the battery terminals for corrosion.");
     }
 
     [Fact]

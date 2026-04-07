@@ -425,11 +425,21 @@ if (useMockIntegrations)
 else
 {
     var openAiEndpoint = builder.Configuration["AzureOpenAi:Endpoint"];
+    var openAiApiKey = builder.Configuration["AzureOpenAi:ApiKey"];
     if (!string.IsNullOrWhiteSpace(openAiEndpoint))
     {
+        var categorizationDeploymentName = builder.Configuration["AzureOpenAi:TextDeploymentName"]
+            ?? builder.Configuration["AzureOpenAi:DeploymentName"]
+            ?? "gpt-4o";
+
         builder.Services.AddHttpClient<ICategorizationService, AzureOpenAiCategorizationService>(client =>
         {
-            client.BaseAddress = new Uri(openAiEndpoint);
+            var baseUrl = openAiEndpoint.TrimEnd('/') + $"/openai/deployments/{categorizationDeploymentName}/";
+            client.BaseAddress = new Uri(baseUrl);
+            if (!string.IsNullOrWhiteSpace(openAiApiKey))
+            {
+                client.DefaultRequestHeaders.Add("api-key", openAiApiKey);
+            }
         })
         .AddStandardResilienceHandler(options =>
         {
