@@ -62,7 +62,7 @@ public sealed class AzureSpeechToTextService : ISpeechToTextService
                 audioData.Length, safeContentType, safeLocale);
 
             using var content = new ByteArrayContent(audioData);
-            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+            content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
 
             var response = await _httpClient.PostAsync(relativeUrl, content, cancellationToken);
 

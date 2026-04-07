@@ -211,8 +211,8 @@
 
             try
             {
-                var audioBase64 = await JS.InvokeAsync<string?>("rvs_stopRecording");
-                if (string.IsNullOrWhiteSpace(audioBase64))
+                var recording = await JS.InvokeAsync<AudioRecordingResult?>("rvs_stopRecording");
+                if (recording is null || string.IsNullOrWhiteSpace(recording.Audio))
                 {
                     _transcriptionError = "No audio was captured.";
                     return;
@@ -220,8 +220,8 @@
 
                 var request = new IssueTranscriptionRequestDto
                 {
-                    AudioBase64 = audioBase64,
-                    ContentType = "audio/webm"
+                    AudioBase64 = recording.Audio,
+                    ContentType = recording.MimeType
                 };
 
                 var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
@@ -327,4 +327,9 @@
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
     }
+
+    /// <summary>
+    /// Mirrors the JS object returned by rvs_stopRecording: { audio, mimeType }.
+    /// </summary>
+    private sealed record AudioRecordingResult(string? Audio, string MimeType);
 }

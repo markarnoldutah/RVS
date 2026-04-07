@@ -364,6 +364,7 @@ else
         {
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(20);
             options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(40);
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(40); // must be >= 2 × AttemptTimeout
         });
     }
     else

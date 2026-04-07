@@ -15,16 +15,43 @@ window.rvs_triggerClick = function (element) {
  */
 window._rvs_mediaRecorder = null;
 window._rvs_audioChunks = [];
+window._rvs_negotiatedMimeType = '';
+
+/**
+ * Negotiates the best audio MIME type supported by the browser for Azure Speech compatibility.
+ * Prefers audio/ogg;codecs=opus (natively supported by Azure Speech REST API v1).
+ * Falls back to audio/webm variants if OGG is unavailable.
+ * @returns {string} The best supported MIME type, or empty string if none matched.
+ * @private
+ */
+function _rvs_negotiateMimeType() {
+    var preferred = [
+        'audio/ogg; codecs=opus',
+        'audio/webm; codecs=opus',
+        'audio/webm'
+    ];
+    for (var i = 0; i < preferred.length; i++) {
+        if (MediaRecorder.isTypeSupported(preferred[i])) {
+            return preferred[i];
+        }
+    }
+    return '';
+}
 
 /**
  * Starts recording audio from the user's microphone.
- * Requests microphone permission and begins capturing audio in webm format.
+ * Requests microphone permission and begins capturing audio in the best format
+ * supported by the browser for Azure Speech compatibility (preferring OGG Opus).
  * @returns {Promise<void>}
  */
 window.rvs_startRecording = async function () {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     window._rvs_audioChunks = [];
-    window._rvs_mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    window._rvs_negotiatedMimeType = _rvs_negotiateMimeType();
+    var recorderOptions = window._rvs_negotiatedMimeType
+        ? { mimeType: window._rvs_negotiatedMimeType }
+        : {};
+    window._rvs_mediaRecorder = new MediaRecorder(stream, recorderOptions);
 
     window._rvs_mediaRecorder.ondataavailable = function (event) {
         if (event.data.size > 0) {
@@ -36,19 +63,21 @@ window.rvs_startRecording = async function () {
 };
 
 /**
- * Stops recording and returns the captured audio as a base64-encoded string.
+ * Stops recording and returns the captured audio as a base64-encoded string
+ * along with the MIME type used during recording.
  * Releases the microphone after stopping.
- * @returns {Promise<string|null>} Base64-encoded audio data, or null if no audio was captured.
+ * @returns {Promise<{audio: string|null, mimeType: string}>} Base64-encoded audio data and MIME type.
  */
 window.rvs_stopRecording = function () {
     return new Promise(function (resolve) {
         if (!window._rvs_mediaRecorder || window._rvs_mediaRecorder.state === 'inactive') {
-            resolve(null);
+            resolve({ audio: null, mimeType: '' });
             return;
         }
 
         window._rvs_mediaRecorder.onstop = function () {
-            const blob = new Blob(window._rvs_audioChunks, { type: 'audio/webm' });
+            var mimeType = window._rvs_negotiatedMimeType || 'audio/webm';
+            const blob = new Blob(window._rvs_audioChunks, { type: mimeType });
             window._rvs_audioChunks = [];
 
             // Release microphone tracks
@@ -67,7 +96,7 @@ window.rvs_stopRecording = function () {
                         base64 = base64.substring(idx + 1);
                     }
                 }
-                resolve(base64 || null);
+                resolve({ audio: base64 || null, mimeType: mimeType });
             };
             reader.readAsDataURL(blob);
         };

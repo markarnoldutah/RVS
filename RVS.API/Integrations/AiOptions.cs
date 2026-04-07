@@ -48,6 +48,7 @@ public sealed class AiOptions
     /// </summary>
     public string[] AllowedAudioTypes { get; set; } =
     [
+        "audio/ogg",
         "audio/webm",
         "audio/wav",
         "audio/mp4"

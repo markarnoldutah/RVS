@@ -5,3 +5,6 @@ az cognitiveservices account list --query "[?kind=='OpenAI'].{Name:name, RG:reso
 az cognitiveservices account show --name oai-rvs-ai-dev-wus3-s01-001 --resource-group rg-rvs-dev-westus3 --query "properties.endpoint" -o tsv
 az cognitiveservices account keys list --name oai-rvs-ai-dev-wus3-s01-001 --resource-group rg-rvs-dev-westus3 --query "key1" -o tsv
 az cognitiveservices account deployment list --name oai-rvs-ai-dev-wus3-s01-001 --resource-group rg-rvs-dev-westus3 --query "[].{Name:name, Model:properties.model.name}" -o table
+
+# speech
+az deployment group create --name deploy-speech-dev2 --resource-group rg-rvs-dev-westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/speech-main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/speech-dev.bicepparam
