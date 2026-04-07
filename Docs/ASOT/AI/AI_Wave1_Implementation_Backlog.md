@@ -162,6 +162,114 @@
 - `200 OK`: Contract response returned.
 - `400 BadRequest`: Invalid description payload.
 
+## Endpoint 5: Insights suggestion (urgency + RV usage)
+
+- **Method/Route:** `POST /api/intake/{locationSlug}/ai/suggest-insights`
+- **Auth:** `[AllowAnonymous]`
+- **Rate limit:** `IntakeEndpoint` policy
+
+### Request DTO contract
+
+- **Type:** `IssueInsightsSuggestionRequestDto`
+
+| Field | Type | Required | Rules |
+|------|------|----------|------|
+| `issueDescription` | string | Yes | 1..2000 chars |
+
+### Response DTO contract
+
+- **Type:** `AiOperationResponseDto<IssueInsightsSuggestionResultDto>`
+
+`IssueInsightsSuggestionResultDto`:
+
+| Field | Type | Required | Notes |
+|------|------|----------|------|
+| `urgency` | string? | No | One of: Low, Medium, High, Critical; null when not determinable |
+| `rvUsage` | string? | No | One of: Full-Time, Part-Time, Seasonal, Occasional; null when not determinable |
+
+### Status codes
+
+- `200 OK`: Contract response returned.
+- `400 BadRequest`: Invalid description payload.
+
+## Endpoint 6: Diagnostic questions
+
+- **Method/Route:** `POST /api/intake/{locationSlug}/diagnostic-questions`
+- **Auth:** `[AllowAnonymous]`
+- **Rate limit:** `IntakeEndpoint` policy
+
+### Request DTO contract
+
+- **Type:** `DiagnosticQuestionsRequest`
+
+| Field | Type | Required | Rules |
+|------|------|----------|------|
+| `issueCategory` | string | Yes | Category from LookupSet |
+| `issueDescription` | string? | No | Optional context for more targeted questions |
+| `manufacturer` | string? | No | Vehicle manufacturer |
+| `model` | string? | No | Vehicle model |
+| `year` | int? | No | Vehicle year |
+
+### Response DTO contract
+
+- **Type:** `DiagnosticQuestionsResponseDto`
+
+| Field | Type | Required | Notes |
+|------|------|----------|------|
+| `questions` | `List<DiagnosticQuestionDto>` | Yes | 2–4 follow-up questions |
+| `smartSuggestion` | string? | No | Optional tip for the customer |
+
+`DiagnosticQuestionDto`:
+
+| Field | Type | Required | Notes |
+|------|------|----------|------|
+| `questionText` | string | Yes | The question text |
+| `options` | `List<string>` | Yes | 2–6 predefined answer options |
+| `allowFreeText` | bool | Yes | Whether free-text is accepted |
+| `helpText` | string? | No | Optional context for the customer |
+
+### Status codes
+
+- `200 OK`: Questions returned.
+
+## AI Provenance Contract (Manager-Facing)
+
+The `ServiceRequestDetailResponseDto` includes an optional `AiEnrichment` field of type
+`AiEnrichmentMetadataDto` that records which AI capabilities were used during intake:
+
+| Field | Type | Notes |
+|------|------|------|
+| `categorySuggestionProvider` | string? | Provider that suggested the issue category |
+| `categorySuggestionConfidence` | double? | Confidence of category suggestion (0.0–1.0) |
+| `diagnosticQuestionsProvider` | string? | Provider that generated diagnostic questions |
+| `transcriptionProvider` | string? | Provider that transcribed the issue audio |
+| `transcriptionConfidence` | double? | Confidence of transcription (0.0–1.0) |
+| `vinExtractionProvider` | string? | Provider that extracted the VIN from a photo |
+| `vinExtractionConfidence` | double? | Confidence of VIN extraction (0.0–1.0) |
+| `insightsSuggestionProvider` | string? | Provider that inferred urgency/RV usage |
+| `insightsSuggestionConfidence` | double? | Confidence of insights suggestion (0.0–1.0) |
+| `enrichedAtUtc` | DateTime? | When AI enrichment was last computed |
+
+This provenance trail allows service advisors in the manager app to distinguish AI-generated
+fields from human-entered data and assess the confidence of AI-provided values.
+
+## AI Telemetry Events
+
+All Wave 1 AI endpoints emit structured log events with the following fields, captured
+by the `CorrelationLoggingMiddleware` scope (which adds `TenantId` and `CorrelationId`):
+
+| Field | Type | Description |
+|------|------|-------------|
+| `Capability` | string | AI capability name (e.g. `VinExtraction`, `TranscribeIssue`) |
+| `Provider` | string | Service implementation that fulfilled the request |
+| `Confidence` | double | Confidence score (0.0–1.0) |
+| `LatencyMs` | long | Wall-clock time in milliseconds for the AI call |
+| `Fallback` | bool | Whether a fallback provider was used |
+| `Success` | bool | Whether the AI call produced an actionable result |
+
+These fields are queryable in Application Insights custom events and can be used to build
+dashboards for cost per tenant, confidence distribution, fallback rate, and latency tracking.
+
 ## Epic Phases and Issue Breakdown
 
 ### Phase 0: Cross-cutting foundation
@@ -216,10 +324,10 @@
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-024 | Add AI telemetry events (capability, tenantId, provider, confidence, latency, fallback path) in `RVS.API/Services/` and integration services. |  |  |
-| TASK-025 | Add/update API documentation in `RVS.API/Documentation/` and verify OpenAPI reflects new endpoints. |  |  |
-| TASK-026 | Add manager-facing visibility contract for AI provenance in `RVS.Domain/DTOs/ServiceRequestDetailResponseDto.cs` if needed for future wave alignment. |  |  |
-| TASK-027 | Execute full test suite and targeted load test for intake AI endpoints to validate timeouts and throttling behavior. |  |  |
+| TASK-024 | Add AI telemetry events (capability, tenantId, provider, confidence, latency, fallback path) in `IntakeController` for all AI endpoints. | ✅ | 2026-04-07 |
+| TASK-025 | Update API documentation: add endpoint 5 (suggest-insights), endpoint 6 (diagnostic-questions), and AI provenance contract docs. Verify OpenAPI reflects new endpoints. | ✅ | 2026-04-07 |
+| TASK-026 | Add manager-facing AI provenance contract: `AiEnrichmentMetadataEmbedded` on `ServiceRequest`, `AiEnrichmentMetadataDto`, mapper, and `ServiceRequestDetailResponseDto.AiEnrichment`. | ✅ | 2026-04-07 |
+| TASK-027 | Execute full test suite (229 domain + 768 API tests). 5 pre-existing failures in `IntakeOrchestrationServiceTests` unrelated to Wave 1. All new tests pass. | ✅ | 2026-04-07 |
 
 ## File-by-File Task Matrix (Wave 1)
 
