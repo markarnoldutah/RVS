@@ -259,7 +259,7 @@
                 _uploadStatus = $"Uploading attachments (0/{pendingFiles.Count})…";
                 StateHasChanged();
 
-                var failedCount = 0;
+                var failedUploadCount = 0;
 
                 for (var i = 0; i < pendingFiles.Count; i++)
                 {
@@ -299,14 +299,14 @@
                     catch (Exception ex)
                     {
                         file.ErrorMessage = $"Upload failed: {ex.Message}";
-                        failedCount++;
+                        failedUploadCount++;
                     }
                 }
 
                 _uploadProgress = 100;
                 StateHasChanged();
 
-                State.FailedUploadCount = failedCount;
+                State.FailedUploadCount = failedUploadCount;
                 _uploadStatus = null;
                 _uploadProgress = null;
             }
