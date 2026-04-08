@@ -9,12 +9,15 @@
 
         @if (_isLoading)
         {
-            <MudStack Spacing="3" aria-busy="true" aria-label="Generating diagnostic questions">
-                <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" />
-                @for (var i = 0; i < 3; i++)
-                {
-                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="100px" />
-                }
+            <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="py-6"
+                      aria-busy="true" aria-label="Generating diagnostic questions">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                    Generating diagnostic questions…
+                </MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
+                    This may take a few moments
+                </MudText>
             </MudStack>
         }
         else if (_error is not null)

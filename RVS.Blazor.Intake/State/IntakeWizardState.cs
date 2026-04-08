@@ -367,6 +367,8 @@ public sealed class IntakeWizardState
         Year = null;
         IssueCategory = string.Empty;
         IsCategorySuggestedByAi = false;
+        IsUrgencySuggestedByAi = false;
+        IsRvUsageSuggestedByAi = false;
         IssueDescription = string.Empty;
         Urgency = null;
         RvUsage = null;

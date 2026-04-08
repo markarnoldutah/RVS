@@ -5,7 +5,6 @@ namespace RVS.Blazor.Intake.Services;
 public enum ThemeMode
 {
     Light,
-    Dark,
     HighContrast
 }
 
@@ -28,13 +27,18 @@ public sealed class ThemeService
         }
     }
 
+    public bool IsHighContrast => _mode == ThemeMode.HighContrast;
+
     public MudTheme CurrentTheme => _mode switch
     {
         ThemeMode.HighContrast => HighContrastTheme,
         _ => DefaultTheme
     };
 
-    public bool IsDarkMode => _mode == ThemeMode.Dark;
+    public void Toggle()
+    {
+        Mode = _mode == ThemeMode.Light ? ThemeMode.HighContrast : ThemeMode.Light;
+    }
 
     private static readonly MudTheme DefaultTheme = new()
     {
@@ -49,20 +53,6 @@ public sealed class ThemeService
             AppbarText = "#FFFFFF",
             Background = "#FAFAFA",
             Surface = "#FFFFFF",
-        },
-        PaletteDark = new PaletteDark
-        {
-            Primary = "#9FA8DA",              // Indigo 200
-            PrimaryDarken = "#7986CB",        // Indigo 300
-            PrimaryLighten = "#E8EAF6",       // Indigo 50
-            PrimaryContrastText = "#000000",
-            Secondary = "#4DB6AC",            // Teal 300
-            AppbarBackground = "#1A237E",     // Indigo 900
-            AppbarText = "#FFFFFF",
-            Background = "#121212",
-            Surface = "#1E1E1E",
-            DrawerBackground = "#1E1E1E",
-            DrawerText = "#FFFFFFB3",
         },
         Typography = new Typography
         {
