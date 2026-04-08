@@ -211,6 +211,55 @@ public class IntakeOrchestrationServiceTests
         result.CustomerSnapshot.FirstName.Should().Be("Jane");
         result.CustomerSnapshot.LastName.Should().Be("Doe");
         result.CustomerSnapshot.Email.Should().Be("jane@example.com");
+        result.CustomerSnapshot.Phone.Should().Be("801-555-1234");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNewGlobalAcct_ShouldSavePhone()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _globalAcctRepoMock.Verify(r => r.CreateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.Phone == "801-555-1234"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingGlobalAcct_ShouldUpdatePhone()
+    {
+        SetupFullHappyPath(globalAcctExists: true);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.Phone == "801-555-1234"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNewProfile_ShouldSavePhone()
+    {
+        SetupFullHappyPath(profileExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _profileRepoMock.Verify(r => r.CreateAsync(
+            It.Is<CustomerProfile>(p => p.Phone == "801-555-1234"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingProfile_ShouldUpdatePhone()
+    {
+        SetupFullHappyPath(profileExists: true);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.Phone == "801-555-1234"),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
     [Fact]

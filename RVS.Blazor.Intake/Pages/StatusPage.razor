@@ -140,6 +140,10 @@ else if (_statusResponse is not null)
                                         }
                                     </MudStack>
 
+                                    <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+                                        @GetStatusDescription(sr.Status)
+                                    </MudText>
+
                                     <MudDivider />
 
                                     <MudSimpleTable Elevation="0" Class="review-table">
@@ -148,6 +152,13 @@ else if (_statusResponse is not null)
                                                 <td><strong>Issue Category</strong></td>
                                                 <td>@(string.IsNullOrWhiteSpace(sr.IssueCategory) ? "—" : sr.IssueCategory)</td>
                                             </tr>
+                                            @if (!string.IsNullOrWhiteSpace(sr.AssetDisplay))
+                                            {
+                                                <tr>
+                                                    <td><strong>Vehicle</strong></td>
+                                                    <td>@sr.AssetDisplay</td>
+                                                </tr>
+                                            }
                                             <tr>
                                                 <td><strong>Submitted</strong></td>
                                                 <td>@sr.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
@@ -247,4 +258,14 @@ else if (_statusResponse is not null)
         ExpiredToken,
         Unexpected
     }
+
+    private static string GetStatusDescription(string status) => status?.Trim().ToLowerInvariant() switch
+    {
+        "new" => "Your request has been received and is awaiting review by a service advisor.",
+        "in progress" or "in-progress" => "A technician is actively working on your service request.",
+        "awaiting parts" or "awaiting-parts" => "Your repair requires parts that have been ordered. We'll update you when they arrive.",
+        "completed" => "Your service has been completed. Please contact the dealership for pickup details.",
+        "cancelled" => "This service request has been cancelled.",
+        _ => "Your request is being processed."
+    };
 }
