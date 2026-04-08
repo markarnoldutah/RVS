@@ -116,6 +116,9 @@ public sealed class IntakeWizardState
     /// <summary>The created service request ID after submission.</summary>
     public string? CreatedServiceRequestId { get; set; }
 
+    /// <summary>Number of file uploads that failed during submission (runtime-only, not persisted).</summary>
+    public int FailedUploadCount { get; set; }
+
     /// <summary>
     /// When set, the next call to <see cref="GoToNextStepAsync"/> or <see cref="GoToPreviousStepAsync"/>
     /// will navigate to this step instead of the natural next/previous step.
@@ -376,6 +379,7 @@ public sealed class IntakeWizardState
         Attachments = [];
         IsSubmitted = false;
         CreatedServiceRequestId = null;
+        FailedUploadCount = 0;
         FieldErrors = [];
 
         await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", StorageKey);

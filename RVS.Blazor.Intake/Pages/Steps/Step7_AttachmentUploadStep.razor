@@ -116,7 +116,7 @@
                    OnClick="HandleNext"
                    Style="text-transform: none;"
                    Class="mt-6">
-            Review
+            @(State.Attachments.Count > 0 ? "Upload" : "Continue")
         </MudButton>
     </MudStack>
 </MudPaper>

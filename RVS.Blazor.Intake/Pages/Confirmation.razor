@@ -18,6 +18,15 @@
                 and contact you to schedule service. You will receive a confirmation email shortly.
             </MudText>
 
+            @if (UploadFailures > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mt-2" Style="width: 100%;">
+                    @(UploadFailures == 1
+                        ? "1 attachment failed to upload. Please contact us if you need to resubmit your files."
+                        : $"{UploadFailures} attachments failed to upload. Please contact us if you need to resubmit your files.")
+                </MudAlert>
+            }
+
             <MudDivider Style="width: 100%;" />
 
             <MudStack Spacing="2" Style="width: 100%;">
@@ -41,3 +50,8 @@
         </MudStack>
     </MudPaper>
 </MudStack>
+
+@code {
+    [SupplyParameterFromQuery(Name = "uploadFailures")]
+    public int UploadFailures { get; set; }
+}
