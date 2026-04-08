@@ -3,6 +3,21 @@
 
 <PageTitle>Service Request Intake — @(_state.Config?.LocationName ?? "Loading...")</PageTitle>
 
+@if (_initializing)
+{
+    <MudStack AlignItems="AlignItems.Center" Class="mt-8">
+        <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 700px;">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                    Loading…
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+}
+else
+{
 <MudStack AlignItems="AlignItems.Center" Spacing="4"
           Style="max-width: 700px; margin: 0 auto;">
 
@@ -67,6 +82,7 @@
         }
     </div>
 </MudStack>
+}
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
@@ -76,6 +92,7 @@
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
     private List<string> _validationErrors = [];
+    private bool _initializing = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -92,6 +109,8 @@
             _state.Slug = Slug;
            _state.Token = Token;
         }
+
+        _initializing = false;
     }
 
     protected override void OnParametersSet()

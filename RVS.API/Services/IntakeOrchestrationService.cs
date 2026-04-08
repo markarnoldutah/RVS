@@ -77,6 +77,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 Email = normalizedEmail,
                 FirstName = request.Customer.FirstName.Trim(),
                 LastName = request.Customer.LastName.Trim(),
+                Phone = request.Customer.Phone?.Trim(),
                 CreatedByUserId = "intake",
             };
             globalAcct = await _globalCustomerAcctRepository.CreateAsync(globalAcct, cancellationToken);
@@ -85,6 +86,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         }
         else
         {
+            globalAcct.Phone = request.Customer.Phone?.Trim();
             _logger.LogInformation("Intake Step 2: Resolved existing GlobalCustomerAcct {AcctId} for {Email}",
                 globalAcct.Id, normalizedEmail);
         }
@@ -100,6 +102,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 Email = normalizedEmail,
                 FirstName = request.Customer.FirstName.Trim(),
                 LastName = request.Customer.LastName.Trim(),
+                Phone = request.Customer.Phone?.Trim(),
                 Name = $"{request.Customer.FirstName.Trim()} {request.Customer.LastName.Trim()}",
                 GlobalCustomerAcctId = globalAcct.Id,
                 CreatedByUserId = "intake",
@@ -110,6 +113,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         }
         else
         {
+            profile.Phone = request.Customer.Phone?.Trim();
             _logger.LogInformation("Intake Step 3: Resolved existing CustomerProfile {ProfileId} in tenant {TenantId}",
                 profile.Id, tenantId);
         }
