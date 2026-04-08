@@ -124,6 +124,14 @@ public class ServiceRequest : EntityBase
     /// </summary>
     [JsonProperty("rvUsage")]
     public string? RvUsage { get; set; }
+
+    /// <summary>
+    /// AI enrichment provenance metadata. Records which AI capabilities were
+    /// used during intake, their providers, and confidence scores.
+    /// Null when no AI enrichment was applied.
+    /// </summary>
+    [JsonProperty("aiEnrichment")]
+    public AiEnrichmentMetadataEmbedded? AiEnrichment { get; set; }
 }
 
 // ---------------------------------------------------------------------------
@@ -260,4 +268,75 @@ public class DiagnosticResponseEmbedded
 
     [JsonProperty("freeTextResponse")]
     public string? FreeTextResponse { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: AiEnrichmentMetadataEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// Records AI provenance metadata for the intake workflow so that the manager app
+/// can display which fields were AI-generated, by which provider, and with what confidence.
+/// </summary>
+public class AiEnrichmentMetadataEmbedded
+{
+    /// <summary>
+    /// Provider that produced the issue category suggestion, or <c>null</c> if manually selected.
+    /// </summary>
+    [JsonProperty("categorySuggestionProvider")]
+    public string? CategorySuggestionProvider { get; set; }
+
+    /// <summary>
+    /// Confidence score of the issue category suggestion (<c>0.0</c> to <c>1.0</c>).
+    /// </summary>
+    [JsonProperty("categorySuggestionConfidence")]
+    public double? CategorySuggestionConfidence { get; set; }
+
+    /// <summary>
+    /// Provider that generated diagnostic questions (e.g. Azure OpenAI vs rule-based).
+    /// </summary>
+    [JsonProperty("diagnosticQuestionsProvider")]
+    public string? DiagnosticQuestionsProvider { get; set; }
+
+    /// <summary>
+    /// Provider that transcribed the issue audio, or <c>null</c> if no audio was submitted.
+    /// </summary>
+    [JsonProperty("transcriptionProvider")]
+    public string? TranscriptionProvider { get; set; }
+
+    /// <summary>
+    /// Confidence score of the audio transcription (<c>0.0</c> to <c>1.0</c>).
+    /// </summary>
+    [JsonProperty("transcriptionConfidence")]
+    public double? TranscriptionConfidence { get; set; }
+
+    /// <summary>
+    /// Provider that extracted the VIN from a photo, or <c>null</c> if VIN was entered manually.
+    /// </summary>
+    [JsonProperty("vinExtractionProvider")]
+    public string? VinExtractionProvider { get; set; }
+
+    /// <summary>
+    /// Confidence score of VIN extraction (<c>0.0</c> to <c>1.0</c>).
+    /// </summary>
+    [JsonProperty("vinExtractionConfidence")]
+    public double? VinExtractionConfidence { get; set; }
+
+    /// <summary>
+    /// Provider that inferred urgency and RV usage, or <c>null</c> if not inferred.
+    /// </summary>
+    [JsonProperty("insightsSuggestionProvider")]
+    public string? InsightsSuggestionProvider { get; set; }
+
+    /// <summary>
+    /// Confidence score of the urgency/RV-usage inference (<c>0.0</c> to <c>1.0</c>).
+    /// </summary>
+    [JsonProperty("insightsSuggestionConfidence")]
+    public double? InsightsSuggestionConfidence { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when AI enrichment metadata was last computed.
+    /// </summary>
+    [JsonProperty("enrichedAtUtc")]
+    public DateTime? EnrichedAtUtc { get; set; }
 }
