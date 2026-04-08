@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -27,6 +28,7 @@ public class IntakeController : ControllerBase
     private readonly ISpeechToTextService _speechToTextService;
     private readonly IIssueTextRefinementService _issueTextRefinementService;
     private readonly AiOptions _aiOptions;
+    private readonly ILogger<IntakeController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="IntakeController"/>.
@@ -39,7 +41,8 @@ public class IntakeController : ControllerBase
         IVinExtractionService vinExtractionService,
         ISpeechToTextService speechToTextService,
         IIssueTextRefinementService issueTextRefinementService,
-        IOptions<AiOptions> aiOptions)
+        IOptions<AiOptions> aiOptions,
+        ILogger<IntakeController> logger)
     {
         _intakeService = intakeService;
         _categorizationService = categorizationService;
@@ -49,6 +52,7 @@ public class IntakeController : ControllerBase
         _speechToTextService = speechToTextService;
         _issueTextRefinementService = issueTextRefinementService;
         _aiOptions = aiOptions.Value;
+        _logger = logger;
     }
 
     /// <summary>
@@ -81,6 +85,7 @@ public class IntakeController : ControllerBase
     public async Task<ActionResult<DiagnosticQuestionsResponseDto>> GetDiagnosticQuestions(
         string locationSlug, [FromBody] DiagnosticQuestionsRequest request, CancellationToken ct = default)
     {
+        var sw = Stopwatch.StartNew();
         var result = await _categorizationService.SuggestDiagnosticQuestionsAsync(
             request.IssueCategory,
             request.IssueDescription,
@@ -88,6 +93,12 @@ public class IntakeController : ControllerBase
             request.Model,
             request.Year,
             ct);
+        var elapsedMs = sw.ElapsedMilliseconds;
+
+        var isFallback = result.Provider is nameof(RuleBasedCategorizationService) or nameof(MockCategorizationService);
+        _logger.LogInformation(
+            "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+            "DiagnosticQuestions", result.Provider, 1.0, elapsedMs, isFallback, true);
 
         var dto = new DiagnosticQuestionsResponseDto
         {
@@ -175,10 +186,17 @@ public class IntakeController : ControllerBase
                 new { message = $"Image exceeds the maximum allowed size of {_aiOptions.MaxImageBytes / (1024 * 1024)} MB." });
         }
 
+        var sw = Stopwatch.StartNew();
         var result = await _vinExtractionService.ExtractVinFromImageAsync(imageBytes, request.ContentType, ct);
+
+        var elapsedMs = sw.ElapsedMilliseconds;
 
         if (result is null)
         {
+            _logger.LogInformation(
+                "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+                "VinExtraction", "VinExtractionService", 0.0, elapsedMs, false, false);
+
             return Ok(new AiOperationResponseDto<VinExtractionResultDto>
             {
                 Success = true,
@@ -189,6 +207,10 @@ public class IntakeController : ControllerBase
                 CorrelationId = correlationId
             });
         }
+
+        _logger.LogInformation(
+            "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+            "VinExtraction", result.Provider, result.Confidence, elapsedMs, false, true);
 
         return Ok(new AiOperationResponseDto<VinExtractionResultDto>
         {
@@ -244,10 +266,16 @@ public class IntakeController : ControllerBase
         }
 
         var locale = request.Locale ?? "en-US";
+        var sw = Stopwatch.StartNew();
         var result = await _speechToTextService.TranscribeAudioAsync(audioBytes, request.ContentType, locale, ct);
+        var elapsedMs = sw.ElapsedMilliseconds;
 
         if (result is null)
         {
+            _logger.LogInformation(
+                "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+                "TranscribeIssue", "SpeechToTextService", 0.0, elapsedMs, false, false);
+
             return Ok(new AiOperationResponseDto<IssueTranscriptionResultDto>
             {
                 Success = true,
@@ -258,6 +286,10 @@ public class IntakeController : ControllerBase
                 CorrelationId = correlationId
             });
         }
+
+        _logger.LogInformation(
+            "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+            "TranscribeIssue", result.Provider, result.Confidence, elapsedMs, false, true);
 
         return Ok(new AiOperationResponseDto<IssueTranscriptionResultDto>
         {
@@ -299,10 +331,16 @@ public class IntakeController : ControllerBase
             return BadRequest(new { message = "RawTranscript must not exceed 4,000 characters." });
         }
 
+        var sw = Stopwatch.StartNew();
         var result = await _issueTextRefinementService.RefineTranscriptAsync(request.RawTranscript, request.IssueCategory, ct);
+        var elapsedMs = sw.ElapsedMilliseconds;
 
         if (result is null)
         {
+            _logger.LogInformation(
+                "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+                "RefineIssueText", "IssueTextRefinementService", 0.0, elapsedMs, false, false);
+
             return Ok(new AiOperationResponseDto<IssueTextRefinementResultDto>
             {
                 Success = true,
@@ -313,6 +351,10 @@ public class IntakeController : ControllerBase
                 CorrelationId = correlationId
             });
         }
+
+        _logger.LogInformation(
+            "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+            "RefineIssueText", result.Provider, result.Confidence, elapsedMs, false, true);
 
         return Ok(new AiOperationResponseDto<IssueTextRefinementResultDto>
         {
@@ -350,10 +392,16 @@ public class IntakeController : ControllerBase
             return BadRequest(new { message = "IssueDescription must not exceed 2,000 characters." });
         }
 
+        var sw = Stopwatch.StartNew();
         var result = await _issueTextRefinementService.SuggestCategoryAsync(request.IssueDescription, ct);
+        var elapsedMs = sw.ElapsedMilliseconds;
 
         if (result is null)
         {
+            _logger.LogInformation(
+                "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+                "SuggestCategory", "IssueTextRefinementService", 0.0, elapsedMs, false, false);
+
             return Ok(new AiOperationResponseDto<IssueCategorySuggestionResultDto>
             {
                 Success = true,
@@ -364,6 +412,10 @@ public class IntakeController : ControllerBase
                 CorrelationId = correlationId
             });
         }
+
+        _logger.LogInformation(
+            "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+            "SuggestCategory", result.Provider, result.Confidence, elapsedMs, false, true);
 
         return Ok(new AiOperationResponseDto<IssueCategorySuggestionResultDto>
         {
@@ -402,10 +454,16 @@ public class IntakeController : ControllerBase
             return BadRequest(new { message = "IssueDescription must not exceed 2,000 characters." });
         }
 
+        var sw = Stopwatch.StartNew();
         var result = await _issueTextRefinementService.SuggestInsightsAsync(request.IssueDescription, ct);
+        var elapsedMs = sw.ElapsedMilliseconds;
 
         if (result is null)
         {
+            _logger.LogInformation(
+                "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+                "SuggestInsights", "IssueTextRefinementService", 0.0, elapsedMs, false, false);
+
             return Ok(new AiOperationResponseDto<IssueInsightsSuggestionResultDto>
             {
                 Success = true,
@@ -416,6 +474,10 @@ public class IntakeController : ControllerBase
                 CorrelationId = correlationId
             });
         }
+
+        _logger.LogInformation(
+            "AI telemetry: {Capability} completed — Provider={Provider}, Confidence={Confidence}, LatencyMs={LatencyMs}, Fallback={Fallback}, Success={Success}",
+            "SuggestInsights", result.Provider, result.Confidence, elapsedMs, false, true);
 
         return Ok(new AiOperationResponseDto<IssueInsightsSuggestionResultDto>
         {

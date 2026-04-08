@@ -39,6 +39,7 @@ public static class ServiceRequestMapper
             RequiredSkills = entity.RequiredSkills,
             DiagnosticResponses = entity.DiagnosticResponses.Select(d => d.ToDto()).ToList(),
             Attachments = entity.Attachments.Select(a => a.ToDto()).ToList(),
+            AiEnrichment = entity.AiEnrichment?.ToDto(),
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
@@ -268,6 +269,28 @@ public static class ServiceRequestMapper
             QuestionText = response.QuestionText,
             SelectedOptions = response.SelectedOptions,
             FreeTextResponse = response.FreeTextResponse
+        };
+    }
+
+    /// <summary>
+    /// Maps an <see cref="AiEnrichmentMetadataEmbedded"/> to an <see cref="AiEnrichmentMetadataDto"/>.
+    /// </summary>
+    public static AiEnrichmentMetadataDto ToDto(this AiEnrichmentMetadataEmbedded entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new AiEnrichmentMetadataDto
+        {
+            CategorySuggestionProvider = entity.CategorySuggestionProvider,
+            CategorySuggestionConfidence = entity.CategorySuggestionConfidence,
+            DiagnosticQuestionsProvider = entity.DiagnosticQuestionsProvider,
+            TranscriptionProvider = entity.TranscriptionProvider,
+            TranscriptionConfidence = entity.TranscriptionConfidence,
+            VinExtractionProvider = entity.VinExtractionProvider,
+            VinExtractionConfidence = entity.VinExtractionConfidence,
+            InsightsSuggestionProvider = entity.InsightsSuggestionProvider,
+            InsightsSuggestionConfidence = entity.InsightsSuggestionConfidence,
+            EnrichedAtUtc = entity.EnrichedAtUtc
         };
     }
 }
