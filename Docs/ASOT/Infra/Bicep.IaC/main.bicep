@@ -43,6 +43,22 @@ param keyVaultName string = ''
 @description('Optional. Name of the model deployment used for text workloads (issue text refinement, category suggestion). Defaults to the standard gpt-4o deployment name when both workloads share the same deployment.')
 param textDeploymentName string = 'gpt-4o'
 
+@description('When true, deploys a general-purpose v2 storage account (Standard_LRS) into the primary resource group. Set to false for production until a production storage design is finalized.')
+param deployStorageAccount bool = false
+
+@description('Override the storage account name. Leave empty to use the computed default (strvs<env>wus3001). Must be 3-24 lowercase alphanumeric characters and globally unique.')
+@maxLength(24)
+param storageAccountNameOverride string = ''
+
+// ── Variables ─────────────────────────────────────────────────
+
+// Storage account names must be 3-24 lowercase alphanumeric characters with no hyphens.
+// Default follows the pattern: st + rvs + <env> + wus3 + 001 (e.g. strvsdevwus3001).
+var defaultStorageAccountName = 'strvs${environmentName}wus3001'
+var resolvedStorageAccountName = empty(storageAccountNameOverride)
+  ? defaultStorageAccountName
+  : storageAccountNameOverride
+
 // ── Resource Groups ───────────────────────────────────────────
 
 resource rgPrimary 'Microsoft.Resources/resourceGroups@2024-07-01' = {
@@ -135,6 +151,23 @@ module keyVaultSecrets 'modules/openai-keyvault-secrets.bicep' = if (!empty(keyV
   }
 }
 
+// -- Storage Account (primary region: westus3, dev-only by default) --
+
+module storage 'modules/storage-account.bicep' = if (deployStorageAccount) {
+  name: 'deploy-storage-${environmentName}'
+  scope: rgPrimary
+  params: {
+    location: location
+    storageAccountName: resolvedStorageAccountName
+    sku: 'Standard_LRS'
+    tags: {
+      Application: 'rvs'
+      Environment: environmentName
+      ManagedBy: 'Bicep'
+    }
+  }
+}
+
 // ── Outputs ───────────────────────────────────────────────────
 
 @description('The primary resource group name (GPT-4o + Key Vault).')
@@ -154,3 +187,11 @@ output whisperEndpoint string = whisper.outputs.endpoint
 
 @description('The name of the Whisper speech-to-text model deployment.')
 output whisperDeploymentName string = whisper.outputs.whisperDeploymentName
+
+@description('The name of the storage account, if deployed.')
+output storageAccountName string = deployStorageAccount ? resolvedStorageAccountName : ''
+
+@description('The primary blob endpoint of the storage account, if deployed.')
+output storageBlobEndpoint string = deployStorageAccount
+  ? 'https://${resolvedStorageAccountName}.blob.${environment().suffixes.storage}/'
+  : ''
