@@ -717,7 +717,7 @@ Search input validation: reject any `Keyword` containing `<`, `>`, `;`, `'`, `"`
 | Delivery | Fire-and-forget; failure MUST NOT fail the intake transaction |
 | From address (email) | `noreply@notifications.rvserviceflow.com` |
 | From number (SMS) | Shared toll-free number (configured in `AzureCommunicationServices:Sms:FromPhoneNumber`) |
-| Customer preference | `email` (default), `sms`, or `both` — "and/or" opt-in during intake |
+| Customer preference | `email` (default) or `sms` — either/or choice during intake |
 
 ### 10.7 DMS Export (SFTP)
 
