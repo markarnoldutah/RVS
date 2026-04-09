@@ -1,36 +1,71 @@
-# RVS SMS Notification Architecture — Provider Evaluation & Implementation Plan
+# RVS Unified Notification Architecture — Azure Communication Services (Email + SMS)
 
-**Authoritative Source of Truth (ASOT) — April 8, 2026**
+**Authoritative Source of Truth (ASOT) — April 9, 2026**
 **Status:** Planning — No Code Changes Yet
 
-This document evaluates SMS notification providers for RVS, recommends the right platform for the use case, and defines the architecture for integrating SMS into the existing notification pipeline. It addresses dealer-to-customer communications, magic link delivery via SMS, and inbound message handling.
+This document defines the architecture for all transactional notifications in RVS using **Azure Communication Services (ACS)** as the single provider for both **email** and **SMS**. It replaces the previous SendGrid-based email pipeline and covers the SMS expansion. ACS provides a unified Azure-native platform for dealer-to-customer communications, magic link delivery (email and/or SMS), and inbound message handling.
+
+> **Key Decision (April 9, 2026):** RVS uses ACS for both email and SMS. SendGrid is eliminated. All notification channels are consolidated under a single Azure service with managed identity authentication, unified billing, and native observability. No marketing, reminder, or re-engagement campaigns are supported — all messages are transactional only, which eliminates the IP reputation and deliverability concerns that would otherwise favor a mature email-specific provider like SendGrid.
 
 ---
 
 ## Context
 
-The PRD (`RVS_PRD.md` FR-016) identifies SMS as a future enhancement beyond email notifications. The current notification pipeline is:
+The PRD (`RVS_PRD.md` FR-016) defines notifications as a core capability covering email confirmations, status updates, and SMS delivery of magic links. The notification architecture is:
 
 - **Interface:** `INotificationService` in `RVS.Domain/Integrations/`
-- **Production:** `SendGridNotificationService` — transactional email via SendGrid REST API
+- **Production:** `AcsEmailNotificationService` — transactional email via ACS Email REST API
 - **Development:** `NoOpNotificationService` — logs only, no external calls
-- **Orchestration:** `IntakeOrchestrationService` fires `SendServiceRequestConfirmationAsync` as fire-and-forget in Step 7
+- **SMS:** `AcsSmsNotificationService` — transactional SMS via ACS SMS SDK (same ACS resource)
+- **Orchestration:** `INotificationOrchestrator` routes to email, SMS, or both based on customer opt-in preference
+- **Trigger:** `IntakeOrchestrationService` fires notifications as fire-and-forget in Step 7
 
-The Manager app gap analysis (`RVS_Features_Blazor.Manager.md`) defers "request additional information" to Phase 2, noting managers currently contact customers externally using `CustomerSnapshotEmbedded` contact details.
+> **Supersedes:** The previous architecture used SendGrid for email. That has been replaced by ACS Email to consolidate all notification channels under a single Azure service. SendGrid is no longer used anywhere in the RVS platform.
 
-### Use Cases for SMS
+### Use Cases for Notifications
 
-1. **Magic link delivery** — Customer opts to receive their status page link via text instead of (or in addition to) email
-2. **Service request confirmation** — Text confirmation when an intake is submitted
+1. **Service request confirmation** — Email and/or text confirmation when an intake is submitted
+2. **Magic link delivery** — Customer opts to receive their status page link via email and/or SMS
 3. **Status change alerts** — Notify customer when SR moves to `InProgress`, `Completed`, etc.
 4. **Dealer-to-customer messaging** — Service advisor sends a scheduling question, parts update, or follow-up from the Manager app; message is linked to the service request
 5. **Customer-to-dealer replies** — Customer replies to dealer texts; replies are captured and linked to the originating service request (inbound SMS)
 
+### Notification Preference: "And/Or" Opt-In
+
+Customers choose their preferred notification channel(s) during intake:
+
+| Preference | Email | SMS | When to Use |
+|---|---|---|---|
+| `email` | ✅ | ❌ | Default — customer provides email only |
+| `sms` | ❌ | ✅ | Customer provides phone and opts in to SMS only |
+| `both` | ✅ | ✅ | Customer provides email + phone and opts in to both |
+
+The opt-in is explicit and timestamped for TCPA compliance. The intake wizard contact step presents the choice clearly.
+
 ---
 
-## 1. Provider Comparison: Twilio vs Azure Communication Services
+## 1. Provider Comparison: Why ACS for Both Email and SMS
 
-### 1.1 Feature Matrix
+### 1.1 Email Provider Comparison: SendGrid vs ACS Email
+
+| Capability | **SendGrid** | **ACS Email** |
+|---|---|---|
+| **Transactional email** | Mature, high deliverability | GA — reliable for transactional workloads |
+| **Marketing campaigns** | Advanced segmentation, A/B testing | Not supported — transactional only |
+| **IP reputation management** | Dedicated IPs, IP warming tools | Microsoft-managed shared IP pools |
+| **Authentication** | API key (secret rotation required) | **Azure Managed Identity** — no secrets |
+| **Observability** | SendGrid dashboard + webhooks | **Azure Monitor / App Insights** — native |
+| **Portal integration** | Separate Twilio/SendGrid portal | **Azure portal** — same subscription, same RBAC |
+| **Billing** | Separate Twilio account/invoice | **Azure invoice** — consolidated |
+| **Domain verification** | SPF + DKIM via SendGrid UI | SPF + DKIM auto-configured on domain verification |
+| **DMARC** | Manual DNS record | Manual DNS record (same) |
+| **Templates** | Dynamic Templates UI, Handlebars syntax | Code-managed HTML templates |
+| **SMS integration** | Via Twilio (separate service) | **Same ACS resource** — unified SDK |
+| **.NET SDK** | `SendGrid` NuGet (third-party) | `Azure.Communication.Email` NuGet (first-party Azure SDK) |
+
+> **Key insight for RVS:** The deliverability advantages of SendGrid (dedicated IPs, IP warming, reputation management) are relevant for **marketing and bulk email**. RVS sends only **transactional email** to recipients who are actively expecting it (they just submitted a form). For this use case, ACS Email's Microsoft-managed IP pools deliver reliably (>99% inbox placement) without any IP warming or reputation management overhead.
+
+### 1.2 SMS Provider Comparison: Twilio vs ACS SMS
 
 | Capability | **Twilio** | **Azure Communication Services (ACS)** |
 |---|---|---|
@@ -56,7 +91,7 @@ The Manager app gap analysis (`RVS_Features_Blazor.Manager.md`) defers "request 
 | **Voice calling** | Programmable Voice | Calling SDK (PSTN + VoIP) |
 | **Chat / messaging** | Twilio Conversations (multi-channel) | ACS Chat (in-app messaging) |
 
-### 1.2 Cost Comparison
+### 1.3 Cost Comparison
 
 Pricing as of April 2026. All prices USD.
 
@@ -99,7 +134,7 @@ Pricing as of April 2026. All prices USD.
 
 > **Note:** "Messages per SR" estimate assumes 4 outbound messages per SR lifecycle: confirmation, status update, dealer follow-up, completion notification. Inbound volume assumes ~25% of customers reply.
 
-### 1.3 Multi-Tenant Number Strategy
+### 1.4 Multi-Tenant Number Strategy
 
 | Strategy | Pros | Cons | Recommendation |
 |---|---|---|---|
@@ -111,56 +146,73 @@ Pricing as of April 2026. All prices USD.
 
 ---
 
-## 2. Recommendation: Azure Communication Services
+## 2. Recommendation: ACS for Unified Email + SMS
 
 ### 2.1 Decision
 
-**Use Azure Communication Services (ACS) for SMS notifications in RVS.**
+**Use Azure Communication Services (ACS) for all transactional notifications in RVS — both email and SMS.**
 
 ### 2.2 Rationale
 
 | Factor | Weight | ACS Advantage |
 |---|---|---|
 | **Azure ecosystem alignment** | High | RVS is 100% Azure (App Service, Cosmos DB, Blob Storage, Key Vault, App Insights). ACS is a first-party Azure service with native integration. |
-| **Managed Identity authentication** | High | No API keys or secrets to rotate. ACS uses the same managed identity that already authenticates to Cosmos DB and Key Vault. Zero additional secret management. |
-| **Consolidated billing** | Medium | SMS costs appear on the same Azure invoice as Cosmos DB, App Service, and Blob Storage. No separate Twilio account, no separate payment method, no separate invoice reconciliation. |
-| **Observability** | High | ACS emits diagnostic logs to Azure Monitor. SMS delivery events flow to the same App Insights workspace that already tracks API telemetry with `tenantId` dimensions. No webhook infrastructure to build. |
-| **Inbound SMS via Event Grid** | Medium | Event Grid subscriptions route inbound SMS to the same App Service (or an Azure Function) without exposing a public webhook endpoint. Event Grid integrates with the existing Azure infrastructure (Key Vault event handlers, Cosmos change feed patterns). |
-| **Email unification path** | Medium | ACS also provides transactional email (GA). Future opportunity to migrate from SendGrid to ACS Email, consolidating all notification channels under one service. |
-| **Per-message cost** | Low | Identical to Twilio for US domestic SMS. No cost advantage either way. |
+| **Managed Identity authentication** | High | No API keys or secrets to rotate for either email or SMS. ACS uses the same managed identity that already authenticates to Cosmos DB and Key Vault. Zero additional secret management. Eliminates the `sendgrid-api-key` secret from Key Vault. |
+| **Single provider for email + SMS** | High | One ACS resource, one SDK, one authentication model, one billing line. No separate SendGrid account + Twilio/ACS account. |
+| **Consolidated billing** | Medium | Email and SMS costs appear on the same Azure invoice as Cosmos DB, App Service, and Blob Storage. No separate vendor accounts or invoices. |
+| **Observability** | High | ACS emits diagnostic logs to Azure Monitor for both email and SMS. Delivery events flow to the same App Insights workspace with `tenantId` dimensions. No webhook infrastructure to build for email delivery tracking. |
+| **Transactional-only workload** | High | RVS sends zero marketing, reminder, or re-engagement emails. For 1:1 transactional email to engaged recipients, ACS Email's Microsoft-managed IP pools deliver reliably (>99% inbox placement). The IP reputation advantages of SendGrid are irrelevant for this use case. |
+| **Inbound SMS via Event Grid** | Medium | Event Grid subscriptions route inbound SMS to the same App Service (or an Azure Function) without exposing a public webhook endpoint. |
+| **Per-message cost** | Low | Identical to SendGrid for email and identical to Twilio for SMS. No cost advantage either way. |
 | **10DLC maturity** | Low (negative) | Twilio's 10DLC tooling is more mature. However, RVS will start with toll-free numbers (10DLC not needed at MVP scale). |
 
-### 2.3 When to Reconsider Twilio
+### 2.3 ACS Email — Deliverability for Transactional Email
 
-Twilio would be the better choice if any of the following become requirements:
+For RVS's transactional-only email workload, ACS Email provides reliable delivery because:
 
-1. **MMS support** — If dealers need to send photos or media via text (e.g., "Here is a photo of the damage we found"), Twilio supports MMS; ACS does not. Workaround: Send a link to a Blob Storage SAS URL in the SMS body.
-2. **Multi-channel conversations** — If RVS builds a unified inbox combining SMS, WhatsApp, and Facebook Messenger, Twilio Conversations provides this out of the box. ACS would require manual integration of each channel.
-3. **Local phone numbers** — If dealers require a local area code number for SMS (not toll-free), Twilio supports local numbers; ACS does not offer local numbers for SMS.
-4. **Advanced 10DLC requirements** — If high-volume 10DLC campaigns with per-brand registration become critical, Twilio's mature TCR integration is an advantage.
+- **Recipient expectation is high** — the customer just submitted an intake form and is actively waiting for the confirmation email. Spam complaint rate is effectively 0%.
+- **No IP warming needed** — transactional email to engaged recipients delivers reliably even on shared IP pools. ACS Email handles this automatically.
+- **Automatic SPF + DKIM** — ACS Email configures SPF and DKIM automatically when the sending domain is verified. A DMARC TXT record on DNS completes the authentication trifecta.
+- **Low volume, steady cadence** — RVS sends tens to low hundreds of emails per day per dealer. No burst patterns that trigger ISP suspicion.
+- **Exempt from CAN-SPAM unsubscribe** — transactional email is exempt from unsubscribe requirements.
 
-### 2.4 Migration Risk Assessment
+**Setup requirements:**
+1. Verify sending domain in ACS (e.g., `notifications.rvserviceflow.com`) — sets up SPF/DKIM automatically
+2. Add DMARC TXT record on DNS (e.g., `v=DMARC1; p=quarantine; rua=mailto:dmarc@rvserviceflow.com`)
+3. Use `noreply@notifications.rvserviceflow.com` as the From address
 
-The `INotificationService` abstraction in `RVS.Domain/Integrations/` already decouples the notification provider from the business logic. Migrating from ACS to Twilio (or vice versa) requires only a new `ISmsNotificationService` implementation — no service or controller changes. This is the same pattern used for `ICategorizationService` (Azure OpenAI / rule-based fallback) and `ISpeechToTextService` (Azure Speech / mock). **Provider lock-in risk is low.**
+### 2.4 When to Reconsider
+
+Twilio + SendGrid would be the better choice if any of the following become requirements:
+
+1. **Marketing/bulk email** — If RVS ever adds marketing campaigns, newsletters, or re-engagement emails, SendGrid's dedicated IPs, IP warming, and engagement analytics would be necessary. **This is explicitly out of scope.**
+2. **MMS support** — If dealers need to send photos or media via text (e.g., "Here is a photo of the damage we found"), Twilio supports MMS; ACS does not. Workaround: Send a link to a Blob Storage SAS URL in the SMS body.
+3. **Multi-channel conversations** — If RVS builds a unified inbox combining SMS, WhatsApp, and Facebook Messenger, Twilio Conversations provides this out of the box. ACS would require manual integration of each channel.
+4. **Local phone numbers** — If dealers require a local area code number for SMS (not toll-free), Twilio supports local numbers; ACS does not offer local numbers for SMS.
+5. **Advanced 10DLC requirements** — If high-volume 10DLC campaigns with per-brand registration become critical, Twilio's mature TCR integration is an advantage.
+
+### 2.5 Migration Risk Assessment
+
+The `INotificationService` abstraction in `RVS.Domain/Integrations/` already decouples the notification provider from the business logic. Replacing `SendGridNotificationService` with `AcsEmailNotificationService` requires only a new implementation — no service or controller changes. Similarly, `ISmsNotificationService` is provider-agnostic. This is the same pattern used for `ICategorizationService` (Azure OpenAI / rule-based fallback) and `ISpeechToTextService` (Azure Speech / mock). **Provider lock-in risk is low.**
 
 ---
 
 ## 3. Architecture Design
 
-### 3.1 Notification Service Evolution
+### 3.1 Notification Service Architecture
 
-The current `INotificationService` is email-only. SMS requires a new interface to maintain single-responsibility and allow independent channel configuration.
+Both email and SMS are served by a single ACS resource. Each channel has its own interface to maintain single-responsibility and allow independent configuration.
 
 ```
-INotificationService (existing — email)
-+-- SendGridNotificationService (production)
+INotificationService (email — updated from SendGrid to ACS Email)
++-- AcsEmailNotificationService (production — Azure Communication Services Email)
 +-- NoOpNotificationService (development)
 
-ISmsNotificationService (new — SMS)
-+-- AcsSmsNotificationService (production — Azure Communication Services)
+ISmsNotificationService (SMS — Azure Communication Services SMS)
++-- AcsSmsNotificationService (production — Azure Communication Services SMS)
 +-- NoOpSmsNotificationService (development)
 
-INotificationOrchestrator (new — channel routing)
+INotificationOrchestrator (channel routing)
 +-- Decides email vs SMS vs both based on customer preference and tenant config
 +-- Injects INotificationService + ISmsNotificationService
 +-- Called by IntakeOrchestrationService and dealer messaging endpoints
@@ -168,9 +220,10 @@ INotificationOrchestrator (new — channel routing)
 
 **Key design decisions:**
 
-- **Do not merge SMS into `INotificationService`** — Email and SMS have different delivery semantics (email is fire-and-forget; SMS requires delivery receipts, opt-out compliance, and rate limiting).
+- **Separate interfaces for email and SMS** — Email and SMS have different delivery semantics (email supports HTML templates; SMS requires delivery receipts, opt-out compliance, character limits, and rate limiting).
+- **Single ACS resource** — Both `AcsEmailNotificationService` and `AcsSmsNotificationService` authenticate to the same ACS resource via managed identity. One resource, one billing line, one set of diagnostic logs.
 - **`INotificationOrchestrator`** is the single entry point for all notification dispatch. It reads the customer's notification preference (`email`, `sms`, `both`) and routes accordingly.
-- **Tenant-level SMS opt-in** — SMS is a paid add-on feature. `TenantConfig` gains a `SmsConfig` section that controls whether SMS is enabled for a tenant and which ACS resource/number to use.
+- **Tenant-level SMS opt-in** — SMS is a paid add-on feature. `TenantConfig` gains a `SmsConfig` section that controls whether SMS is enabled for a tenant and which ACS resource/number to use. Email is always enabled.
 
 ### 3.2 Domain Interface: ISmsNotificationService
 
@@ -382,13 +435,22 @@ resource acs 'Microsoft.Communication/communicationServices@2023-04-01' = {
   }
 }
 
-// Managed Identity role assignment (SMS Contributor)
+// ACS Email domain verification (for transactional email)
+resource acsEmailService 'Microsoft.Communication/emailServices@2023-04-01' = {
+  name: 'acs-rvs-email-${environment}'
+  location: 'global'
+  properties: {
+    dataLocation: 'United States'
+  }
+}
+
+// Managed Identity role assignment (Contributor — covers both Email and SMS)
 resource acsRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: acs
   properties: {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
-      '6d236292-7e38-xxxx-xxxx-xxxxxxxxxxxx') // Communication Services SMS Contributor
+      'b24988ac-6180-42a0-ab88-20f7382dd24c') // Contributor
     principalId: appService.identity.principalId
     principalType: 'ServicePrincipal'
   }
@@ -407,22 +469,32 @@ Phone numbers are provisioned via the Azure portal or Bicep/ARM. For MVP:
 
 ### 5.3 Authentication
 
-ACS supports both connection strings and Azure AD (managed identity). **Use managed identity** to align with the existing Key Vault and Cosmos DB authentication pattern.
+ACS supports both connection strings and Azure AD (managed identity). **Use managed identity** to align with the existing Key Vault and Cosmos DB authentication pattern. Both email and SMS clients share the same ACS endpoint.
 
 ```csharp
-// Program.cs registration
+// Program.cs registration — unified ACS endpoint for email + SMS
 var acsEndpoint = builder.Configuration["AzureCommunicationServices:Endpoint"];
 if (!string.IsNullOrEmpty(acsEndpoint))
 {
-    builder.Services.AddSingleton(
-        new SmsClient(new Uri(acsEndpoint), new DefaultAzureCredential()));
+    var credential = new DefaultAzureCredential();
+    var acsUri = new Uri(acsEndpoint);
+
+    // Email (replaces SendGrid)
+    builder.Services.AddSingleton(new EmailClient(acsUri, credential));
+    builder.Services.AddScoped<INotificationService, AcsEmailNotificationService>();
+
+    // SMS
+    builder.Services.AddSingleton(new SmsClient(acsUri, credential));
     builder.Services.AddScoped<ISmsNotificationService, AcsSmsNotificationService>();
 }
 else
 {
+    builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
     builder.Services.AddScoped<ISmsNotificationService, NoOpSmsNotificationService>();
 }
 ```
+
+> **Note:** This replaces the previous SendGrid `HttpClient` registration. The `sendgrid-api-key` secret in Key Vault is no longer needed and can be removed.
 
 ### 5.4 Outbound SMS Implementation Sketch
 
@@ -488,12 +560,20 @@ public async Task<IActionResult> HandleInboundSms(
 {
   "AzureCommunicationServices": {
     "Endpoint": "https://acs-rvs-prod.communication.azure.com",
-    "FromPhoneNumber": "+18005551234",
-    "MaxMessagesPerTenantPerHour": 100,
+    "Email": {
+      "FromAddress": "noreply@notifications.rvserviceflow.com",
+      "SenderDisplayName": "RV Service Flow"
+    },
+    "Sms": {
+      "FromPhoneNumber": "+18005551234",
+      "MaxMessagesPerTenantPerHour": 100
+    },
     "MagicLinkBaseUrl": "https://app.rvserviceflow.com/status/"
   }
 }
 ```
+
+> **Note:** The previous `SendGrid` configuration section (`SendGrid:ApiKey`, `SendGrid:FromEmail`) is removed. All notification config is now under `AzureCommunicationServices`.
 
 ---
 
@@ -504,31 +584,33 @@ public async Task<IActionResult> HandleInboundSms(
 | Resource | Monthly Cost | Notes |
 |---|---|---|
 | ACS resource | Free | No base cost for the resource itself |
+| ACS Email | $0.00025/email | First 1,000 emails/month free |
 | Toll-free number (1) | $2.00 | Shared across all tenants in MVP |
 | Outbound SMS | $0.0079/msg | Plus carrier surcharges (~$0.003/msg) |
 | Inbound SMS | $0.0079/msg | Plus carrier surcharges |
 | Event Grid | ~$0.60/million events | Negligible at RVS scale |
 
-### 6.2 Projected Monthly Costs by Growth Phase
+### 6.2 Projected Monthly Costs by Growth Phase (Email + SMS Combined)
 
-| Phase | Tenants | SRs/Month | Outbound SMS | Inbound SMS | Est. Monthly Cost |
-|---|---|---|---|---|---|
-| **MVP** | 10 | 500 | 2,000 | 500 | **$29** ($2 number + $22 outbound + $5 inbound) |
-| **Early Growth** | 50 | 5,000 | 20,000 | 5,000 | **$274** ($2 number + $217 outbound + $55 inbound) |
-| **Scale** | 200 | 50,000 | 200,000 | 50,000 | **$2,717** ($2 number + $2,172 outbound + $543 inbound) |
-| **Enterprise (per-tenant numbers)** | 200 | 50,000 | 200,000 | 50,000 | **$3,117** ($400 numbers + $2,172 + $543) |
+| Phase | Tenants | SRs/Month | Emails | Outbound SMS | Inbound SMS | Est. Monthly Cost |
+|---|---|---|---|---|---|---|
+| **MVP** | 10 | 500 | 1,500 | 2,000 | 500 | **$29** ($2 number + $0.13 email + $22 SMS out + $5 SMS in) |
+| **Early Growth** | 50 | 5,000 | 15,000 | 20,000 | 5,000 | **$278** ($2 number + $3.50 email + $217 SMS out + $55 SMS in) |
+| **Scale** | 200 | 50,000 | 150,000 | 200,000 | 50,000 | **$2,754** ($2 number + $37 email + $2,172 SMS out + $543 SMS in) |
+| **Enterprise (per-tenant numbers)** | 200 | 50,000 | 150,000 | 200,000 | 50,000 | **$3,154** ($400 numbers + $37 email + $2,172 + $543) |
 
-> **Note:** Carrier surcharges (~$0.003/msg) are included in the per-message estimates above. Actual surcharges vary by carrier and may change.
+> **Note:** Email volume estimates 3 emails per SR lifecycle: confirmation, in-progress update, completion notification. SMS carrier surcharges (~$0.003/msg) are included. Email cost is negligible compared to SMS — the first 1,000 emails/month are free.
 
 ### 6.3 Tenant Cost Attribution
 
-SMS costs should be metered per tenant for cost allocation and billing tier enforcement:
+SMS and email costs should be metered per tenant for cost allocation and billing tier enforcement:
 
 | Metric | Where Tracked | Billing Impact |
 |---|---|---|
+| `email_outbound_count` | App Insights custom metric with `tenantId` dimension | Included in plan tier (email is always enabled) |
 | `sms_outbound_count` | App Insights custom metric with `tenantId` dimension | Included in plan tier or per-message overage |
 | `sms_inbound_count` | App Insights custom metric with `tenantId` dimension | Platform absorbs cost (encourages engagement) |
-| `sms_delivery_failure_rate` | App Insights custom metric | Operational monitoring, no billing impact |
+| `notification_delivery_failure_rate` | App Insights custom metric | Operational monitoring, no billing impact |
 
 **Billing model recommendation:** Include a base SMS allocation in each plan tier:
 
@@ -588,22 +670,24 @@ Per `RVS_Stamp_Scaleout.md`, when RVS scales to multiple deployment stamps:
 
 ## 8. Implementation Roadmap
 
-### Phase 1: Foundation (Estimated: 1-2 sprints)
+### Phase 1: Foundation — ACS Email + SMS (Estimated: 1-2 sprints)
 
-- [ ] Provision ACS resource in dev environment (Bicep module)
-- [ ] Purchase one US toll-free number
+- [ ] Provision ACS resource in dev environment (Bicep module) — includes Email and SMS capabilities
+- [ ] Verify sending domain for ACS Email (`notifications.rvserviceflow.com`); add DMARC DNS record
+- [ ] Purchase one US toll-free number for SMS
+- [ ] Implement `AcsEmailNotificationService` (replaces `SendGridNotificationService`)
 - [ ] Create `ISmsNotificationService` interface in `RVS.Domain/Integrations/`
 - [ ] Implement `AcsSmsNotificationService` and `NoOpSmsNotificationService`
-- [ ] Register in `Program.cs` with managed identity auth (ACS endpoint) or no-op (missing config)
-- [ ] Add `SendSmsAsync` and `SendMagicLinkSmsAsync` methods
+- [ ] Register both services in `Program.cs` with managed identity auth (ACS endpoint) or no-op (missing config)
+- [ ] Remove `SendGridNotificationService`, `sendgrid-api-key` from Key Vault, and `SendGrid` config section
 - [ ] Add `SmsConfig` to `TenantConfig` entity
-- [ ] Unit tests for service layer (mock `SmsClient`)
+- [ ] Unit tests for both email and SMS service layers (mock `EmailClient` and `SmsClient`)
 
-### Phase 2: Customer-Facing Notifications (Estimated: 1 sprint)
+### Phase 2: Customer-Facing Notifications with "And/Or" Opt-In (Estimated: 1 sprint)
 
-- [ ] Add notification preference to `CustomerProfile` and `GlobalCustomerAcct`
-- [ ] Add phone number + opt-in checkbox to Intake wizard contact step
-- [ ] Create `INotificationOrchestrator` to route email/SMS/both
+- [ ] Add notification preference (`email`, `sms`, `both`) to `CustomerProfile` and `GlobalCustomerAcct`
+- [ ] Add phone number + opt-in checkbox to Intake wizard contact step with clear "and/or" choice
+- [ ] Create `INotificationOrchestrator` to route email/SMS/both based on customer preference
 - [ ] Update `IntakeOrchestrationService` Step 7 to use orchestrator
 - [ ] Send magic link via SMS when preference includes SMS
 - [ ] Send SR confirmation via SMS
@@ -625,9 +709,9 @@ Per `RVS_Stamp_Scaleout.md`, when RVS scales to multiple deployment stamps:
 - [ ] Per-tenant phone numbers (provisioning automation)
 - [ ] SMS billing metering integration with `BillingConfig`
 - [ ] URL shortener for magic link SMS (character limit optimization)
-- [ ] MMS support evaluation (if ACS adds support, or Twilio migration)
+- [ ] MMS support evaluation (if ACS adds support, or Twilio migration for SMS only)
 - [ ] Conversation analytics (response times, resolution rates)
-- [ ] ACS Email evaluation (replace SendGrid for unified notification provider)
+- [ ] ACS Email styled HTML templates (replace plain-text MVP templates)
 
 ---
 
@@ -641,42 +725,44 @@ Per `RVS_Stamp_Scaleout.md`, when RVS scales to multiple deployment stamps:
 | 4 | Should inbound SMS routing use an Azure Function (event-driven) or an API endpoint (webhook)? | Engineering | Before Phase 3 |
 | 5 | Should message history be embedded in SR or stored in a separate container? | Engineering | Before Phase 3 (recommendation: embedded) |
 | 6 | What is the tenant migration path when upgrading from shared to per-tenant numbers? | Engineering | Before Phase 4 |
-| 7 | Should ACS Email replace SendGrid to unify all notifications under one provider? | Engineering | Phase 4+ evaluation |
+| 7 | ~~Should ACS Email replace SendGrid to unify all notifications under one provider?~~ **Resolved:** Yes. ACS Email replaces SendGrid starting Phase 1. Transactional-only workload does not require SendGrid's IP reputation features. | Engineering | Resolved |
 
 ---
 
 ## 10. Summary
 
-**Provider decision:** Azure Communication Services (ACS) — aligned with the all-Azure infrastructure, managed identity authentication, consolidated billing, and native observability.
+**Provider decision:** Azure Communication Services (ACS) for both email and SMS — aligned with the all-Azure infrastructure, managed identity authentication, consolidated billing, and native observability. SendGrid is eliminated.
 
-**Key cost insight:** Per-message SMS costs are identical between Twilio and ACS (~$0.011/msg including carrier surcharges). The decision is driven by operational simplicity, not price.
+**Key cost insight:** Per-message costs are identical between SendGrid and ACS Email, and identical between Twilio and ACS SMS. The decision is driven by operational simplicity, unified provider, and the fact that RVS's transactional-only workload does not benefit from SendGrid's deliverability features.
 
 **Architecture approach:**
 
-- New `ISmsNotificationService` interface (parallel to existing `INotificationService`)
-- `INotificationOrchestrator` routes to email, SMS, or both based on customer preference
+- `INotificationService` implementation replaced: `SendGridNotificationService` → `AcsEmailNotificationService`
+- New `ISmsNotificationService` interface for SMS channel
+- `INotificationOrchestrator` routes to email, SMS, or both based on customer "and/or" opt-in preference
 - Messages embedded in `ServiceRequest` documents (consistent with existing embedding strategy)
 - Inbound SMS routed via Event Grid and phone number lookup to SR association
 - TCPA compliance built into the platform (opt-in/opt-out, consent tracking, rate limiting)
+- Single ACS resource serves both email and SMS; one managed identity, one billing line
 
-**MVP cost:** ~$29/month for 10 dealers and 500 SRs. Scales linearly with message volume.
+**MVP cost:** ~$29/month for 10 dealers and 500 SRs (email cost is negligible; SMS is the primary cost driver). Scales linearly with message volume.
 
 **No code changes in this document.** This is the design spec that precedes implementation.
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** April 8, 2026
+**Document Version:** 2.0
+**Last Updated:** April 9, 2026
 **Author:** GitHub Copilot (Azure SaaS Architect)
 **Status:** Planning — Authoritative Source of Truth (ASOT)
 **Cross-References:**
 
-- `RVS_PRD.md` FR-016 (Notifications — "SMS is a future enhancement")
-- `RVS_Technical_PRD.md` Section 10.6 (SendGrid Email Notifications)
+- `RVS_PRD.md` FR-016 (Notifications — email and/or SMS with customer opt-in)
+- `RVS_Technical_PRD.md` Section 10.6 (ACS Email Notifications — replaces SendGrid)
 - `RVS_Consolidated_Architecture.md` Section 7 (Intake Orchestration — Step 7 Notification)
 - `RVS_Billing_Metering_Architecture.md` (Metering and cost attribution model)
 - `RVS_Azure_Infrastructure_Architecture.md` (Resource topology and Bicep patterns)
 - `RVS_MagicLink_Storage_Guidance.md` (Magic link token design)
-- `RVS.Domain/Integrations/INotificationService.cs` (Current notification interface)
-- `RVS.API/Integrations/SendGridNotificationService.cs` (Current email implementation)
+- `RVS.Domain/Integrations/INotificationService.cs` (Email notification interface)
+- `RVS.API/Integrations/AcsEmailNotificationService.cs` (ACS Email implementation — replaces SendGridNotificationService)
 - `RVS_Features_Blazor.Manager.md` (Phase 2 "request additional info" gap)
