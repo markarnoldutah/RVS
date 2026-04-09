@@ -54,7 +54,7 @@ The repo contains a fully implemented **healthcare benefits verification system*
 | 10+ services (including intake orchestrator) | ~10 classes | Intake orchestration = highest complexity |
 | 8+ controllers | ~8 classes | Mechanical once services exist |
 | 6+ mapper classes | ~6 files | Mechanical transforms |
-| External integrations | NHTSA, Azure OpenAI, SendGrid, Blob SAS | 4 integration clients |
+| External integrations | NHTSA, Azure OpenAI, ACS (Email + SMS), Blob SAS | 4 integration clients |
 | Cosmos seed tool | Rewrite for RVS containers | 9 containers with test data |
 | `RVS.UI.Shared` Razor Class Library | Shared components, DTOs, CSS tokens | Foundation for all 3 frontends |
 | `Blazor.Intake` Blazor WASM | 7-step intake wizard + status page | Most complex frontend |
@@ -104,7 +104,7 @@ This plan covers the **full MVP including all three frontend applications**. The
 |---|---|
 | Dedicated SignalR Service Board hub | MVP ships with configurable long polling (default 5m); dedicated SignalR hub added in vNEXT |
 | DMS SFTP export (§10.7) | Manual CSV export sufficient for MVP |
-| SendGrid styled email templates | Intake confirmation = plain-text via `INotificationService`; styled templates post-MVP |
+| ACS Email styled HTML templates | Intake confirmation = plain-text via `INotificationService`; styled templates post-MVP |
 | Azure Tables pre-aggregation (GAP-05) | Direct Cosmos analytics sufficient at MVP volume |
 | Change feed asset ledger enrichment (GAP-02) | Phase 5–6 per architecture |
 | Load testing (§12.4) | Stretch goal Week 12; otherwise immediate post-MVP |
@@ -199,7 +199,7 @@ Create all interfaces in `RVS.Domain/Interfaces/`:
 - `ITenantConfigService`, `ITenantConfigRepository`
 - `ILookupService`, `ILookupRepository`
 - `ICategorizationService` (Azure OpenAI + fallback)
-- `INotificationService` (SendGrid + no-op dev)
+- `INotificationService` (ACS Email + no-op dev)
 - `IVinDecoderService` (NHTSA)
 - `IBlobStorageService` (SAS generation + upload)
 - `IUserContextAccessor` — adapt existing
@@ -302,7 +302,7 @@ This is the **highest complexity phase** — the intake orchestrator is the core
 | `NhtsaVinDecoderClient` : `IVinDecoderService` | `RVS.API/Integrations/` | HTTP GET to vPIC API; 3s timeout; on failure return null (FR-INTAKE-03) |
 | `AzureOpenAiCategorizationService` : `ICategorizationService` | `RVS.API/Integrations/` | Azure OpenAI `gpt-4o-mini`; 5s timeout; structured JSON response; fallback to rule-based (FR-INTAKE-05) |
 | `RuleBasedCategorizationService` : `ICategorizationService` | `RVS.API/Integrations/` | Hardcoded question sets per issue category; used as fallback |
-| `SendGridNotificationService` : `INotificationService` | `RVS.API/Integrations/` | Fire-and-forget email; plain-text MVP; `INotificationService` for swappability |
+| `AcsEmailNotificationService` : `INotificationService` | `RVS.API/Integrations/` | Fire-and-forget email via ACS Email; plain-text MVP; `INotificationService` for swappability |
 | `NoOpNotificationService` : `INotificationService` | `RVS.API/Integrations/` | Dev/test no-op implementation |
 | `BlobStorageService` : `IBlobStorageService` | `RVS.Infra.AzBlobRepository/` | SAS generation (upload: 15min, read: 1hr); path: `{tenantId}/{locationId}/{srId}/{attId}_{filename}` |
 
@@ -344,7 +344,7 @@ Step 5: Append AssetLedgerEntry (write-once; non-blocking on failure)
 Step 6: Update linkages:
         - Increment CustomerProfile.requestCount
         - Rotate GlobalCustomerAcct.magicLinkToken
-Step 7: Fire-and-forget INotificationService.SendIntakeConfirmationAsync()
+Step 7: Fire-and-forget INotificationOrchestrator.SendIntakeConfirmationAsync()
 ```
 
 Steps 1–6 must complete before returning `201`. Step 7 must not block the response.
@@ -445,7 +445,7 @@ Complete DI registration for all services, repositories, integration clients, an
   "AzureBlobStorage": { "ServiceUri": "https://..." },
   "AzureOpenAi": { "Endpoint": "...", "DeploymentName": "gpt-4o-mini", "MaxTokens": 500, "TimeoutSeconds": 5 },
   "Nhtsa": { "BaseUrl": "https://vpic.nhtsa.dot.gov/api/" },
-  "SendGrid": { "FromAddress": "noreply@rvserviceflow.com" }
+  "AzureCommunicationServices": { "Endpoint": "https://acs-rvs-dev.communication.azure.com", "Email": { "FromAddress": "noreply@notifications.rvserviceflow.com" } }
 }
 ```
 
@@ -710,7 +710,7 @@ Verify against Tech PRD §9:
 | Azure Static Web Apps (`Blazor.Manager`) | Deploy WASM; same hosting pattern as Blazor.Intake |
 | Cosmos DB | Provision account; run seed tool for 9 containers; verify index policies |
 | Azure Blob Storage | Create `rvs-attachments` container; configure CORS for direct SAS upload |
-| Azure Key Vault | Store: OpenAI key, SendGrid key; grant API Managed Identity `get` + `list` |
+| Azure Key Vault | Store: OpenAI key; grant API Managed Identity `get` + `list`. ACS uses managed identity (no key needed). |
 | App Insights | Link to API + frontends; configure availability test on `/health` |
 | Auth0 | Configure API audience; create dev Organization; seed test users with roles |
 
@@ -748,7 +748,7 @@ For each of the 5 design partner dealerships:
 | P0 | Dedicated SignalR hub for real-time Service Board (replaces long polling) | 3–5 days |
 | P1 | `MAUI.Tech` voice notes (MAUI Essentials speech-to-text) | 3–5 days |
 | P1 | `MAUI.Tech` bay-based tablet kiosk mode | 3–5 days |
-| P1 | SendGrid styled email templates | 2–3 days |
+| P1 | ACS Email styled HTML templates | 2–3 days |
 | P1 | DMS SFTP export | 1 week |
 | P2 | Azure Tables analytics pre-aggregation | 1 week |
 | P2 | Load testing (50 concurrent/min) | 2–3 days |

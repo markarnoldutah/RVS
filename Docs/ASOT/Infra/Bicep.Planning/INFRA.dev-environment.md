@@ -139,7 +139,7 @@ name: keyVault
 kind: AVM
 avmModule: br/public:avm/res/key-vault/vault:0.13.3
 
-purpose: Centralized secret management for Auth0, OpenAI, SendGrid, and App Insights connection strings
+purpose: Centralized secret management for Auth0, OpenAI, and App Insights connection strings. Azure Communication Services (email + SMS) authenticates via managed identity — no secret required.
 dependsOn: []
 
 parameters:

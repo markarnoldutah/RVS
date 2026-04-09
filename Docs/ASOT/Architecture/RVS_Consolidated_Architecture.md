@@ -296,7 +296,7 @@ All services are `sealed`, inject repository interfaces + `IUserContextAccessor`
 
 ### 7.1 ServiceRequestService (Primary Orchestrator)
 
-Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepository`, `IGlobalCustomerAcctService`, `ICustomerProfileService`, `IAssetLedgerService`, `IDealershipService`, `ILocationService`, `ICategorizationService`, `INotificationService`, `IUserContextAccessor`.
+Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepository`, `IGlobalCustomerAcctService`, `ICustomerProfileService`, `IAssetLedgerService`, `IDealershipService`, `ILocationService`, `ICategorizationService`, `INotificationService`, `ISmsNotificationService`, `INotificationOrchestrator`, `IUserContextAccessor`.
 
 **`CreateServiceRequestAsync(tenantId, locationId, request)`** executes Steps 1–6 sequentially:
 
@@ -305,7 +305,7 @@ Implements the 7-step intake flow from Section 6. Injects: `IServiceRequestRepos
 3. Builds the `ServiceRequest` entity. Stamps `tenantId` and `locationId`. Embeds `CustomerSnapshotEmbedded`. Embeds `DiagnosticResponses` from the request DTO. Calls `ICategorizationService.CategorizeAsync` for auto-categorization and technician summary.
 4. Calls `IAssetLedgerService.RecordServiceEventAsync` to append the data moat entry.
 5. Updates linkages: increments `TotalRequestCount`, conditionally updates the magic-link token on the global identity. Token format: `base64url(SHA256(email)[0..8]):random_bytes`.
-6. Fires `INotificationService.SendIntakeConfirmationAsync` with the magic-link token (fire-and-forget).
+6. Fires `INotificationOrchestrator.SendIntakeConfirmationAsync` which routes to email and/or SMS based on customer preference (fire-and-forget).
 
 ### 7.2 CustomerProfileService (Shadow Profile + Asset Ownership)
 
@@ -347,7 +347,7 @@ Authorization policies referenced below are defined in **RVS_Auth0_Identity_Vers
 
 **ServiceRequestsController** — Route: `api/dealerships/{dealershipId}/service-requests`. Actions: `GET {id}` (CanReadServiceRequests), `POST search` (CanSearchServiceRequests), `PUT {id}` (CanUpdateServiceRequests), `PATCH batch-outcome` (CanUpdateServiceRequests — up to 25 SRs per call), `DELETE {id}` (CanDeleteServiceRequests). Location filtering applied server-side via `ClaimsService.HasAccessToLocation()`.
 
-> **Phase 2 — Request Additional Information:** MVP: Managers contact the customer via phone/email outside the system using `CustomerSnapshotEmbedded` contact details. Phase 2: Add `POST api/dealerships/{id}/service-requests/{srId}/follow-ups` with `INotificationService.SendFollowUpRequestAsync`.
+> **Phase 2 — Request Additional Information:** MVP: Managers contact the customer via phone/email outside the system using `CustomerSnapshotEmbedded` contact details. Phase 2: Add `POST api/dealerships/{id}/service-requests/{srId}/follow-ups` with `INotificationOrchestrator.SendFollowUpRequestAsync` (routes to email and/or SMS based on customer preference).
 
 **AttachmentsController** — Route: `api/dealerships/{dealershipId}/service-requests/{serviceRequestId}/attachments`. Actions: `POST` (CanUploadAttachments — authenticated upload for dealer staff/technicians), `GET {attachmentId}` (CanReadAttachments), `DELETE {attachmentId}` (CanDeleteAttachments).
 
@@ -988,9 +988,9 @@ For warranty claims or dealer disputes, field-level change attribution may be ne
 
 ### 20.12 Notification Service — No Dead Letter Handling
 
-`INotificationService.SendIntakeConfirmationAsync` is fire-and-forget. If SendGrid is down, the customer never receives their magic-link email. No retry, no audit trail.
+`INotificationOrchestrator` dispatches email via `INotificationService` (ACS Email) and SMS via `ISmsNotificationService` (ACS SMS) as fire-and-forget. If ACS is down, the customer never receives their magic-link notification. No retry, no audit trail.
 
-**MVP mitigation:** Log failures to Application Insights with tenant ID, SR ID, and customer email (hashed). Add retry with exponential backoff using `Microsoft.Extensions.Http.Resilience`. Phase 2: Azure Service Bus for durable notification queuing.
+**MVP mitigation:** Log failures to Application Insights with tenant ID, SR ID, and customer email (hashed). Add retry with exponential backoff using `Microsoft.Extensions.Http.Resilience`. ACS delivery status events via Event Grid provide delivery confirmation for both email and SMS. Phase 2: Azure Service Bus for durable notification queuing.
 
 ---
 
