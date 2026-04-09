@@ -13,6 +13,8 @@ public sealed record ServiceRequestUpdateRequestDto
     public required string Priority { get; init; }
     public string? Urgency { get; init; }
     public string? RvUsage { get; init; }
+    public string? HasExtendedWarranty { get; init; }
+    public string? ApproxPurchaseDate { get; init; }
     public string? AssignedTechnicianId { get; init; }
     public string? AssignedBayId { get; init; }
     public DateTime? ScheduledDateUtc { get; init; }

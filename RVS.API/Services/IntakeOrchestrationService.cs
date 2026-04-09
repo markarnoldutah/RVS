@@ -162,6 +162,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             TechnicianSummary = technicianSummary,
             Urgency = request.Urgency?.Trim(),
             RvUsage = request.RvUsage?.Trim(),
+            HasExtendedWarranty = request.HasExtendedWarranty?.Trim(),
+            ApproxPurchaseDate = request.ApproxPurchaseDate?.Trim(),
             CustomerSnapshot = new CustomerSnapshotEmbedded
             {
                 FirstName = request.Customer.FirstName.Trim(),

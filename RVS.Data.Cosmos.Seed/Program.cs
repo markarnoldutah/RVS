@@ -66,6 +66,7 @@ try
     var serviceRequests = BuildServiceRequests();
     var assetLedgerEntries = BuildAssetLedgerEntries();
     var lookupSets = BuildLookupSets();
+    var warrantyRules = BuildRvWarrantyRules();
 
     // ── 3. Seed each container (idempotent via upsert) ──────────────────
     await SeedItemsAsync(containers["dealerships"], dealerships, d => new PartitionKey(d.TenantId), "dealerships");
@@ -77,6 +78,7 @@ try
     await SeedItemsAsync(containers["slug-lookups"], slugLookups, sl => new PartitionKey(sl.Slug), "slug-lookups");
     await SeedItemsAsync(containers["tenant-configs"], tenantConfigs, tc => new PartitionKey(tc.TenantId), "tenant-configs");
     await SeedItemsAsync(containers["lookup-sets"], lookupSets, ls => new PartitionKey(ls.Category), "lookup-sets");
+    await SeedItemsAsync(containers["rv-warranty-rules"], warrantyRules, wr => new PartitionKey(wr.Manufacturer), "rv-warranty-rules");
 
     // Tenants go into the dealerships container (same PK /tenantId, discriminated by type)
     await SeedItemsAsync(containers["dealerships"], tenants, t => new PartitionKey(t.TenantId), "tenants (in dealerships container)");
@@ -380,6 +382,29 @@ static List<ContainerProperties> BuildContainerDefinitions()
                         new() { Path = "/category", Order = CompositePathSortOrder.Ascending },
                         new() { Path = "/name", Order = CompositePathSortOrder.Ascending },
                     },
+                },
+            },
+        },
+
+        // 10. rv-warranty-rules — PK=/manufacturer (global reference data for RV warranty rules)
+        new ContainerProperties
+        {
+            Id = "rv-warranty-rules",
+            PartitionKeyPath = "/manufacturer",
+            IndexingPolicy = new IndexingPolicy
+            {
+                IndexingMode = IndexingMode.Consistent,
+                Automatic = true,
+                IncludedPaths =
+                {
+                    new IncludedPath { Path = "/manufacturer/?" },
+                    new IncludedPath { Path = "/brandDivision/?" },
+                    new IncludedPath { Path = "/type/?" },
+                },
+                ExcludedPaths =
+                {
+                    new ExcludedPath { Path = "/*" },
+                    new ExcludedPath { Path = "/_etag/?" },
                 },
             },
         },
@@ -1470,4 +1495,30 @@ static List<LookupSet> BuildLookupSets() =>
             new LookupItem { Code = "Warranty Claim", Name = "Warranty Claim", Description = "Repair covered under manufacturer warranty", SortOrder = 100 },
         ],
     },
+];
+
+// ── RV Warranty Rules (20) ──────────────────────────────────────────────
+
+static List<RvWarrantyRule> BuildRvWarrantyRules() =>
+[
+    new RvWarrantyRule { Id = "wrr_01", TenantId = "GLOBAL", Name = "Thor Motor Coach", Manufacturer = "Thor Industries", BrandDivision = "Thor Motor Coach", BaseWarranty = "1 year", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "Mileage limits often apply", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_02", TenantId = "GLOBAL", Name = "Winnebago", Manufacturer = "Winnebago Industries", BrandDivision = "Winnebago", BaseWarranty = "1 year / 15k mi", StructuralWarranty = "3 years / 36k mi", RoofWarranty = "10 years", Notes = "One of the more structured programs", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_03", TenantId = "GLOBAL", Name = "Grand Design", Manufacturer = "Winnebago Industries", BrandDivision = "Grand Design", BaseWarranty = "1 year", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "Strong owner support reputation", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_04", TenantId = "GLOBAL", Name = "Forest River", Manufacturer = "Forest River", BrandDivision = "Forest River (various brands)", BaseWarranty = "1 year", StructuralWarranty = "1–3 years (varies)", RoofWarranty = "10–12 years", Notes = "Highly brand-dependent", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_05", TenantId = "GLOBAL", Name = "Forest River (BH)", Manufacturer = "Berkshire Hathaway", BrandDivision = "Forest River (parent)", BaseWarranty = "1 year", StructuralWarranty = "1–3 years", RoofWarranty = "10–12 years", Notes = "Same umbrella as above", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_06", TenantId = "GLOBAL", Name = "Keystone", Manufacturer = "Keystone RV", BrandDivision = "Keystone", BaseWarranty = "1 year", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "One of the more standardized", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_07", TenantId = "GLOBAL", Name = "Fleetwood", Manufacturer = "REV Group", BrandDivision = "Fleetwood", BaseWarranty = "1 year", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "Diesel pushers may differ", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_08", TenantId = "GLOBAL", Name = "Holiday Rambler", Manufacturer = "REV Group", BrandDivision = "Holiday Rambler", BaseWarranty = "1 year", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "Similar to Fleetwood", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_09", TenantId = "GLOBAL", Name = "Tiffin", Manufacturer = "Tiffin Motorhomes", BrandDivision = "Tiffin", BaseWarranty = "1 year", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "Known for strong service support", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_10", TenantId = "GLOBAL", Name = "Jayco", Manufacturer = "Jayco (Thor)", BrandDivision = "Jayco", BaseWarranty = "2 years", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "One of the longest base warranties", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_11", TenantId = "GLOBAL", Name = "Entegra Coach", Manufacturer = "Jayco (Thor)", BrandDivision = "Entegra Coach", BaseWarranty = "2 years", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "Premium segment", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_12", TenantId = "GLOBAL", Name = "Coachmen", Manufacturer = "Coachmen (Forest River)", BrandDivision = "Coachmen", BaseWarranty = "1 year", StructuralWarranty = "1–3 years", RoofWarranty = "10–12 years", Notes = "Entry to mid-tier", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_13", TenantId = "GLOBAL", Name = "Dutchmen", Manufacturer = "Dutchmen (Thor)", BrandDivision = "Dutchmen", BaseWarranty = "1 year", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "Similar to Keystone", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_14", TenantId = "GLOBAL", Name = "KZ RV", Manufacturer = "KZ RV (Thor)", BrandDivision = "KZ RV", BaseWarranty = "1–2 years", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "Some models offer 2-year base", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_15", TenantId = "GLOBAL", Name = "Heartland", Manufacturer = "Heartland RV (Thor)", BrandDivision = "Heartland", BaseWarranty = "1 year", StructuralWarranty = "3 years", RoofWarranty = "10–12 years", Notes = "Popular mid-market", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_16", TenantId = "GLOBAL", Name = "Airstream", Manufacturer = "Airstream (Thor)", BrandDivision = "Airstream", BaseWarranty = "3 years", StructuralWarranty = "3 years", RoofWarranty = "N/A", Notes = "Aluminum shell, different structure", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_17", TenantId = "GLOBAL", Name = "Newmar", Manufacturer = "Newmar (Winnebago)", BrandDivision = "Newmar", BaseWarranty = "1 year", StructuralWarranty = "5 years", RoofWarranty = "10–12 years", Notes = "Higher-end diesel segment", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_18", TenantId = "GLOBAL", Name = "Dynamax", Manufacturer = "Dynamax (Forest River)", BrandDivision = "Dynamax", BaseWarranty = "1 year", StructuralWarranty = "3–5 years", RoofWarranty = "10–12 years", Notes = "Super C motorhomes", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_19", TenantId = "GLOBAL", Name = "Pleasure-Way", Manufacturer = "Pleasure-Way", BrandDivision = "Pleasure-Way", BaseWarranty = "3 years", StructuralWarranty = "5 years", RoofWarranty = "N/A", Notes = "Class B vans, premium build", CreatedByUserId = "seed" },
+    new RvWarrantyRule { Id = "wrr_20", TenantId = "GLOBAL", Name = "Leisure Travel Vans", Manufacturer = "Leisure Travel Vans", BrandDivision = "Leisure Travel Vans", BaseWarranty = "2 years", StructuralWarranty = "5 years", RoofWarranty = "N/A", Notes = "High-end Class B/C", CreatedByUserId = "seed" },
 ];
