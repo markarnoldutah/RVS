@@ -450,7 +450,7 @@ resource lifecyclePolicy 'Microsoft.Storage/storageAccounts/managementPolicies@2
 | `auth0-management-api-key` | Auth0 Management API token | 90 days |
 | `openai-api-key` | Azure OpenAI service key | 180 days |
 | `appinsights-connection-string` | Application Insights telemetry | Never (rotate on compromise) |
-| `sendgrid-api-key` | Email notification service | 90 days |
+| ~~`sendgrid-api-key`~~ | ~~Email notification service~~ | Removed — ACS uses managed identity |
 | `sftp-key-{tenantId}` | Per-tenant SFTP private keys | Per tenant request |
 | `cosmos-connection-string` | Emergency fallback (not used in code) | Never |
 

@@ -48,7 +48,7 @@ RVS is a B2B SaaS platform for RV dealership service management. It digitizes th
 - **Storage:** Azure Blob Storage (attachments)
 - **Identity:** Auth0 (JWT Bearer; `app_metadata` tenant scoping)
 - **AI:** Azure OpenAI (`gpt-4o-mini`) for issue categorization, diagnostic questions, transcript cleanup, and category suggestion
-- **Notifications:** SendGrid (behind `INotificationService`)
+- **Notifications:** Azure Communication Services (ACS) for both email and SMS (behind `INotificationService` + `ISmsNotificationService`)
 - **Frontend:** Blazor WebAssembly (Blazor.Intake + Blazor.Manager), MAUI Blazor Hybrid (MAUI.Tech); UI component library: **MudBlazor 9.x** (Material Design 3)
 
 ### 2.2 Multi-Tenancy Model
@@ -277,7 +277,7 @@ On `POST api/locations` or `PUT api/locations/{id}` (slug rename), `ILocationSer
 
 **App Insights telemetry:**
 - Custom events: `IntakeSubmitted`, `MagicLinkValidated`, `SlugNotFound`, `TenantGateBlocked`, `AICategorizationFailed`, `AICategorizationFallback`, `AICategorySuggested`, `AICategorySuggestionFailed`
-- Dependency tracking: Cosmos DB calls, Azure OpenAI calls, SendGrid calls, NHTSA calls
+- Dependency tracking: Cosmos DB calls, Azure OpenAI calls, ACS Email calls, ACS SMS calls, NHTSA calls
 - Availability tests: `/health` endpoint pinged every 5 minutes from two Azure regions
 
 **Health endpoint:**
@@ -605,7 +605,7 @@ Search input validation: reject any `Keyword` containing `<`, `>`, `;`, `'`, `"`
 
 ### 9.3 Secrets and Credential Management
 
-**SEC-SECRETS-01** — Azure OpenAI endpoint key, SendGrid API key, and SFTP private keys MUST be stored in Azure Key Vault. They MUST NOT appear in `appsettings.json`, environment variables, or version control.
+**SEC-SECRETS-01** — Azure OpenAI endpoint key and SFTP private keys MUST be stored in Azure Key Vault. They MUST NOT appear in `appsettings.json`, environment variables, or version control. Azure Communication Services (email + SMS) authenticates via managed identity — no API key required.
 
 **SEC-SECRETS-02** — All Azure services (Cosmos DB, Blob Storage, Key Vault, OpenAI) MUST authenticate via `DefaultAzureCredential` (Managed Identity in production; local dev uses Azure CLI credential). No connection string passwords in config.
 
@@ -706,15 +706,18 @@ Search input validation: reject any `Keyword` containing `<`, `>`, `;`, `'`, `"`
 | Failure behavior | Proceed with customer-supplied asset info; log `VinDecodeTimeout` event |
 | Rate limiting | Not documented by NHTSA; avoid concurrent bursts; no caching required in MVP |
 
-### 10.6 SendGrid (Email Notifications)
+### 10.6 Azure Communication Services (Email + SMS Notifications)
 
 | Requirement | Spec |
 |---|---|
-| Injection | Via `INotificationService` — swappable provider |
-| API key | Stored in Key Vault, never in config |
-| Templates | Intake confirmation, status update (in-progress, completed) |
+| Injection | Via `INotificationService` (email) and `ISmsNotificationService` (SMS) — swappable providers |
+| Authentication | Azure Managed Identity via `DefaultAzureCredential` — no API keys |
+| Email templates | Intake confirmation, status update (in-progress, completed) — code-managed HTML |
+| SMS templates | Intake confirmation, magic-link delivery, status update |
 | Delivery | Fire-and-forget; failure MUST NOT fail the intake transaction |
-| From address | `noreply@rvserviceflow.com` |
+| From address (email) | `noreply@notifications.rvserviceflow.com` |
+| From number (SMS) | Shared toll-free number (configured in `AzureCommunicationServices:Sms:FromPhoneNumber`) |
+| Customer preference | `email` (default), `sms`, or `both` — "and/or" opt-in during intake |
 
 ### 10.7 DMS Export (SFTP)
 
@@ -891,7 +894,7 @@ The following are explicitly deferred and MUST NOT be implemented without a new 
 |---|---|---|---|
 | OQ-01 | ~~What is the Auth0 plan tier at commercialization?~~ **Resolved:** Using Auth0 Free plan with `app_metadata` tenant scoping. No Organizations. | Business | Resolved |
 | OQ-02 | Should the magic-link token be stored hashed or plaintext in Cosmos? (Security hardening) | Engineering | Before MVP launch |
-| OQ-03 | What email template tool for SendGrid templates — managed in code or SendGrid Dynamic Templates UI? | Engineering | Phase 1 |
+| OQ-03 | ~~What email template tool for SendGrid templates — managed in code or SendGrid Dynamic Templates UI?~~ **Resolved:** SendGrid replaced by ACS Email. Templates are code-managed HTML in the `AcsEmailNotificationService` implementation. Styled templates are a Phase 2+ enhancement. | Engineering | Resolved |
 | OQ-04 | When is Azure SignalR Service required vs. single-instance App Service sticky sessions sufficient? | Engineering | Before first multi-instance deploy |
 | OQ-05 | Confirm NHTSA vPIC rate limit behavior under burst intake — implement client-side throttle if needed | Engineering | Phase 1 load test |
 

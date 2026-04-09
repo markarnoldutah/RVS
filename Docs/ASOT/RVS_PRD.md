@@ -180,9 +180,12 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - Tenant provisioning bootstraps an Auth0 Organization (or `app_metadata` entry in MVP), a Cosmos `TenantConfig`, a `Dealership`, and a default `Location`.
 
 - **FR-016: Notifications** (Priority: Medium)
-  - On service request submission, the customer receives a confirmation email containing: summary of the submitted request, magic-link status URL, and dealership contact info.
-  - On status change (`InProgress`, `Completed`), the customer receives a status update notification via email.
-  - Notification dispatch is abstracted behind `INotificationService`. The MVP implementation uses a simple transactional email provider (e.g., SendGrid or similar). SMS is a future enhancement.
+  - On service request submission, the customer receives a confirmation via their preferred channel(s): email and/or SMS.
+  - The confirmation contains: summary of the submitted request, magic-link status URL, and dealership contact info.
+  - On status change (`InProgress`, `Completed`), the customer receives a status update notification via their preferred channel(s).
+  - Notification dispatch is abstracted behind `INotificationService` (email) and `ISmsNotificationService` (SMS), orchestrated by `INotificationOrchestrator`. The production implementation uses **Azure Communication Services (ACS)** for both email and SMS — a single Azure-native provider with managed identity authentication.
+  - Customers choose their notification preference during intake: **email only** (default), **SMS only**, or **both** ("and/or" opt-in). SMS opt-in is explicit and timestamped for TCPA compliance.
+  - No marketing, reminder, or re-engagement messages are supported — all notifications are transactional only.
 
 - **FR-017: Rate limiting** (Priority: High)
   - Anonymous intake and status endpoints are rate-limited per IP address.

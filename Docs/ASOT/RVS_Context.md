@@ -301,7 +301,7 @@ Used by every controller and service method to enforce tenant isolation, role ch
 | **Cache** | Azure Cosmos DB Integrated Cache | TTL on high-read containers |
 | **Identity** | Auth0 | JWT Bearer, Organizations (future) |
 | **AI** | Azure OpenAI (`gpt-4o-mini`); Azure AI Speech (STT) | **Wave 1 (active):** VIN extraction from photo, speech transcript cleanup, AI category suggestion. **Wave 2+:** Diagnostic questions, technician summaries, LLM-backed categorization |
-| **Notifications** | SendGrid (future) | Confirmation emails, status updates |
+| **Notifications** | Azure Communication Services (ACS) | Transactional email + SMS, unified provider |
 
 ### 9.2 Frontend
 

@@ -60,7 +60,7 @@ These are the billable and observable dimensions for RVS. All metrics should car
 | `attachment_storage_bytes` | Total blob bytes per tenant | Tier-based lifecycle policy enforcement |
 | `api_request_count` | API calls per tenant per minute | Noisy neighbor detection, rate limit enforcement |
 | `sftp_export_success` / `sftp_export_failure` | SFTP export outcomes per tenant | SLA monitoring |
-| `magic_link_sends` | Email notification sends per tenant | Notification cost attribution |
+| `magic_link_sends` | Email + SMS notification sends per tenant | Notification cost attribution |
 | `cosmos_ru_consumed` | RU consumption attributed to tenant | Internal cost allocation |
 
 ### 2.3 Application Insights Custom Events
