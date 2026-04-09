@@ -157,7 +157,13 @@ else
 
     private void HandleSubmitted()
     {
-        Navigation.NavigateTo($"/confirmation?slug={Uri.EscapeDataString(Slug)}");
+        var url = $"/confirmation?slug={Uri.EscapeDataString(Slug)}";
+        if (_state.FailedUploadCount > 0)
+        {
+            url += $"&uploadFailures={_state.FailedUploadCount}";
+        }
+
+        Navigation.NavigateTo(url);
     }
 
     public void Dispose()

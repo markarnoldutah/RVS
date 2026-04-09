@@ -510,6 +510,7 @@ public class IntakeWizardStateTests
         state.IssueCategory = "Electrical";
         state.IssueDescription = "Test";
         state.IsSubmitted = true;
+        state.FailedUploadCount = 3;
         await state.GoToStepAsync(5);
 
         await state.ClearAsync();
@@ -521,6 +522,7 @@ public class IntakeWizardStateTests
         state.Email.Should().BeEmpty();
         state.Vin.Should().BeEmpty();
         state.IsSubmitted.Should().BeFalse();
+        state.FailedUploadCount.Should().Be(0);
     }
 
     [Fact]

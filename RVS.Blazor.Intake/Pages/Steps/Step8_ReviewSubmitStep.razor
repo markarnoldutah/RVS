@@ -163,9 +163,12 @@
                     <MudStack Spacing="1">
                         @foreach (var attachment in State.Attachments)
                         {
-                            <MudText Typo="Typo.body1">
-                                📎 @attachment.FileName (@FormatFileSize(attachment.SizeBytes))
-                            </MudText>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Default" />
+                                <MudText Typo="Typo.body1">
+                                    @attachment.FileName (@FormatFileSize(attachment.SizeBytes))
+                                </MudText>
+                            </MudStack>
                         }
                     </MudStack>
                 </MudStack>
@@ -181,11 +184,19 @@
         }
 
         @* Upload progress *@
-        @if (_uploadStatus is not null)
+        @if (_uploadProgress is not null)
         {
-            <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" />
-                <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">@_uploadStatus</MudText>
+            <MudStack Spacing="1">
+                <MudProgressLinear Color="Color.Primary"
+                                   Value="@_uploadProgress.Value"
+                                   Max="100"
+                                   Rounded="true"
+                                   Size="Size.Large"
+                                   Class="my-2" />
+                <MudText Typo="Typo.body2" Align="Align.Center"
+                         Style="color: var(--mud-palette-text-secondary);">
+                    @_uploadStatus
+                </MudText>
             </MudStack>
         }
 
@@ -214,6 +225,7 @@
     private bool _isSubmitting;
     private string? _submitError;
     private string? _uploadStatus;
+    private double? _uploadProgress;
 
     private async Task EditStep(int step)
     {
@@ -225,6 +237,7 @@
         _isSubmitting = true;
         _submitError = null;
         _uploadStatus = null;
+        _uploadProgress = null;
         StateHasChanged();
 
         try
@@ -242,13 +255,17 @@
 
             if (pendingFiles.Count > 0)
             {
+                _uploadProgress = 0;
                 _uploadStatus = $"Uploading attachments (0/{pendingFiles.Count})…";
                 StateHasChanged();
+
+                var failedUploadCount = 0;
 
                 for (var i = 0; i < pendingFiles.Count; i++)
                 {
                     var file = pendingFiles[i];
                     _uploadStatus = $"Uploading attachments ({i + 1}/{pendingFiles.Count})…";
+                    _uploadProgress = (double)i / pendingFiles.Count * 100;
                     StateHasChanged();
 
                     try
@@ -282,10 +299,16 @@
                     catch (Exception ex)
                     {
                         file.ErrorMessage = $"Upload failed: {ex.Message}";
+                        failedUploadCount++;
                     }
                 }
 
+                _uploadProgress = 100;
+                StateHasChanged();
+
+                State.FailedUploadCount = failedUploadCount;
                 _uploadStatus = null;
+                _uploadProgress = null;
             }
 
             await OnSubmitted.InvokeAsync();
