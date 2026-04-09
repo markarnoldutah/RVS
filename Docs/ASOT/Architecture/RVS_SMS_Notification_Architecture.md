@@ -3,7 +3,7 @@
 **Authoritative Source of Truth (ASOT) — April 9, 2026**
 **Status:** Planning — No Code Changes Yet
 
-This document defines the architecture for all transactional notifications in RVS using **Azure Communication Services (ACS)** as the single provider for both **email** and **SMS**. It replaces the previous SendGrid-based email pipeline and covers the SMS expansion. ACS provides a unified Azure-native platform for dealer-to-customer communications, magic link delivery (email and/or SMS), and inbound message handling.
+This document defines the architecture for all transactional notifications in RVS using **Azure Communication Services (ACS)** as the single provider for both **email** and **SMS**. It replaces the previous SendGrid-based email pipeline and covers the SMS expansion. ACS provides a unified Azure-native platform for dealer-to-customer communications, magic link delivery (email or SMS), and inbound message handling.
 
 > **Key Decision (April 9, 2026):** RVS uses ACS for both email and SMS. SendGrid is eliminated. All notification channels are consolidated under a single Azure service with managed identity authentication, unified billing, and native observability. No marketing, reminder, or re-engagement campaigns are supported — all messages are transactional only, which eliminates the IP reputation and deliverability concerns that would otherwise favor a mature email-specific provider like SendGrid.
 
@@ -17,30 +17,29 @@ The PRD (`RVS_PRD.md` FR-016) defines notifications as a core capability coverin
 - **Production:** `AcsEmailNotificationService` — transactional email via ACS Email REST API
 - **Development:** `NoOpNotificationService` — logs only, no external calls
 - **SMS:** `AcsSmsNotificationService` — transactional SMS via ACS SMS SDK (same ACS resource)
-- **Orchestration:** `INotificationOrchestrator` routes to email, SMS, or both based on customer opt-in preference
+- **Orchestration:** `INotificationOrchestrator` routes to email or SMS based on customer either/or preference
 - **Trigger:** `IntakeOrchestrationService` fires notifications as fire-and-forget in Step 7
 
 > **Supersedes:** The previous architecture used SendGrid for email. That has been replaced by ACS Email to consolidate all notification channels under a single Azure service. SendGrid is no longer used anywhere in the RVS platform.
 
 ### Use Cases for Notifications
 
-1. **Service request confirmation** — Email and/or text confirmation when an intake is submitted
-2. **Magic link delivery** — Customer opts to receive their status page link via email and/or SMS
+1. **Service request confirmation** — Email or text confirmation when an intake is submitted
+2. **Magic link delivery** — Customer opts to receive their status page link via email or SMS
 3. **Status change alerts** — Notify customer when SR moves to `InProgress`, `Completed`, etc.
 4. **Dealer-to-customer messaging** — Service advisor sends a scheduling question, parts update, or follow-up from the Manager app; message is linked to the service request
 5. **Customer-to-dealer replies** — Customer replies to dealer texts; replies are captured and linked to the originating service request (inbound SMS)
 
 ### Notification Preference: "And/Or" Opt-In
 
-Customers choose their preferred notification channel(s) during intake:
+Customers choose their preferred notification channel during intake:
 
 | Preference | Email | SMS | When to Use |
 |---|---|---|---|
 | `email` | ✅ | ❌ | Default — customer provides email only |
-| `sms` | ❌ | ✅ | Customer provides phone and opts in to SMS only |
-| `both` | ✅ | ✅ | Customer provides email + phone and opts in to both |
+| `sms` | ❌ | ✅ | Customer provides phone and opts in to SMS |
 
-The opt-in is explicit and timestamped for TCPA compliance. The intake wizard contact step presents the choice clearly.
+The choice is either/or. The opt-in is explicit and timestamped for TCPA compliance. The intake wizard contact step presents the choice clearly.
 
 ---
 
@@ -213,7 +212,7 @@ ISmsNotificationService (SMS — Azure Communication Services SMS)
 +-- NoOpSmsNotificationService (development)
 
 INotificationOrchestrator (channel routing)
-+-- Decides email vs SMS vs both based on customer preference and tenant config
++-- Decides email or SMS based on customer preference and tenant config
 +-- Injects INotificationService + ISmsNotificationService
 +-- Called by IntakeOrchestrationService and dealer messaging endpoints
 ```
@@ -222,7 +221,7 @@ INotificationOrchestrator (channel routing)
 
 - **Separate interfaces for email and SMS** — Email and SMS have different delivery semantics (email supports HTML templates; SMS requires delivery receipts, opt-out compliance, character limits, and rate limiting).
 - **Single ACS resource** — Both `AcsEmailNotificationService` and `AcsSmsNotificationService` authenticate to the same ACS resource via managed identity. One resource, one billing line, one set of diagnostic logs.
-- **`INotificationOrchestrator`** is the single entry point for all notification dispatch. It reads the customer's notification preference (`email`, `sms`, `both`) and routes accordingly.
+- **`INotificationOrchestrator`** is the single entry point for all notification dispatch. It reads the customer's notification preference (`email`, `sms`) and routes accordingly.
 - **Tenant-level SMS opt-in** — SMS is a paid add-on feature. `TenantConfig` gains a `SmsConfig` section that controls whether SMS is enabled for a tenant and which ACS resource/number to use. Email is always enabled.
 
 ### 3.2 Domain Interface: ISmsNotificationService
@@ -369,7 +368,7 @@ Add a `notificationPreference` field to `CustomerProfile` and `GlobalCustomerAcc
 
 ```json
 {
-  "notificationPreference": "both",
+  "notificationPreference": "sms",
   "phoneNumber": "+18015551234",
   "smsOptInAtUtc": "2026-04-08T12:00:00Z",
   "smsOptOutAtUtc": null
@@ -380,9 +379,8 @@ Add a `notificationPreference` field to `CustomerProfile` and `GlobalCustomerAcc
 |---|---|
 | `email` | Email only (default, current behavior) |
 | `sms` | SMS only |
-| `both` | Email and SMS |
 
-**Intake wizard change:** Add an optional toggle on the contact information step: "Also send me text updates about this service request" with a phone number field. Opt-in is explicit and timestamped for TCPA compliance.
+**Intake wizard change:** On the contact information step, the customer selects either email or SMS as their single notification channel. Selecting SMS reveals a phone number field; the opt-in is explicit and timestamped for TCPA compliance.
 
 ---
 
@@ -683,11 +681,11 @@ Per `RVS_Stamp_Scaleout.md`, when RVS scales to multiple deployment stamps:
 - [ ] Add `SmsConfig` to `TenantConfig` entity
 - [ ] Unit tests for both email and SMS service layers (mock `EmailClient` and `SmsClient`)
 
-### Phase 2: Customer-Facing Notifications with "And/Or" Opt-In (Estimated: 1 sprint)
+### Phase 2: Customer-Facing Notifications with Either/Or Channel Choice (Estimated: 1 sprint)
 
-- [ ] Add notification preference (`email`, `sms`, `both`) to `CustomerProfile` and `GlobalCustomerAcct`
-- [ ] Add phone number + opt-in checkbox to Intake wizard contact step with clear "and/or" choice
-- [ ] Create `INotificationOrchestrator` to route email/SMS/both based on customer preference
+- [ ] Add notification preference (`email`, `sms`) to `CustomerProfile` and `GlobalCustomerAcct`
+- [ ] Add phone number + either/or channel selector to Intake wizard contact step (email is default; selecting SMS shows phone field)
+- [ ] Create `INotificationOrchestrator` to route to email or SMS based on customer preference
 - [ ] Update `IntakeOrchestrationService` Step 7 to use orchestrator
 - [ ] Send magic link via SMS when preference includes SMS
 - [ ] Send SR confirmation via SMS
@@ -739,7 +737,7 @@ Per `RVS_Stamp_Scaleout.md`, when RVS scales to multiple deployment stamps:
 
 - `INotificationService` implementation replaced: `SendGridNotificationService` → `AcsEmailNotificationService`
 - New `ISmsNotificationService` interface for SMS channel
-- `INotificationOrchestrator` routes to email, SMS, or both based on customer "and/or" opt-in preference
+- `INotificationOrchestrator` routes to email or SMS based on customer either/or preference
 - Messages embedded in `ServiceRequest` documents (consistent with existing embedding strategy)
 - Inbound SMS routed via Event Grid and phone number lookup to SR association
 - TCPA compliance built into the platform (opt-in/opt-out, consent tracking, rate limiting)
@@ -757,7 +755,7 @@ Per `RVS_Stamp_Scaleout.md`, when RVS scales to multiple deployment stamps:
 **Status:** Planning — Authoritative Source of Truth (ASOT)
 **Cross-References:**
 
-- `RVS_PRD.md` FR-016 (Notifications — email and/or SMS with customer opt-in)
+- `RVS_PRD.md` FR-016 (Notifications — email or SMS with customer either/or choice)
 - `RVS_Technical_PRD.md` Section 10.6 (ACS Email Notifications — replaces SendGrid)
 - `RVS_Consolidated_Architecture.md` Section 7 (Intake Orchestration — Step 7 Notification)
 - `RVS_Billing_Metering_Architecture.md` (Metering and cost attribution model)

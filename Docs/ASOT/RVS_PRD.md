@@ -180,11 +180,11 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - Tenant provisioning bootstraps an Auth0 Organization (or `app_metadata` entry in MVP), a Cosmos `TenantConfig`, a `Dealership`, and a default `Location`.
 
 - **FR-016: Notifications** (Priority: Medium)
-  - On service request submission, the customer receives a confirmation via their preferred channel(s): email and/or SMS.
+  - On service request submission, the customer receives a confirmation via their preferred channel: email or SMS.
   - The confirmation contains: summary of the submitted request, magic-link status URL, and dealership contact info.
-  - On status change (`InProgress`, `Completed`), the customer receives a status update notification via their preferred channel(s).
+  - On status change (`InProgress`, `Completed`), the customer receives a status update notification via their preferred channel.
   - Notification dispatch is abstracted behind `INotificationService` (email) and `ISmsNotificationService` (SMS), orchestrated by `INotificationOrchestrator`. The production implementation uses **Azure Communication Services (ACS)** for both email and SMS — a single Azure-native provider with managed identity authentication.
-  - Customers choose their notification preference during intake: **email only** (default), **SMS only**, or **both** ("and/or" opt-in). SMS opt-in is explicit and timestamped for TCPA compliance.
+  - Customers choose their notification preference during intake: **email** (default) or **SMS** — an either/or choice. SMS opt-in is explicit and timestamped for TCPA compliance.
   - No marketing, reminder, or re-engagement messages are supported — all notifications are transactional only.
 
 - **FR-017: Rate limiting** (Priority: High)
@@ -290,7 +290,7 @@ Maria, the service advisor, opens her dealer dashboard the next morning to find 
 - **Azure Cosmos DB:** Nine containers covering service requests, customer profiles, global customer identities, asset ledger, dealerships, locations, tenant configs, lookup sets, and slug lookup. Autoscale RU mode for high-throughput containers; manual 400 RU for low-volume config containers.
 - **Azure Blob Storage:** Tenant-scoped, location-scoped path hierarchy for all photo and video attachments. SAS URL generation for time-limited read access.
 - **Azure Table Storage:** Lightweight append-only store for analytics counters and audit log caching.
-- **Notifications (email + SMS):** Azure Communication Services (ACS) provides both transactional email and SMS behind `INotificationService` (email) and `ISmsNotificationService` (SMS). Managed identity authentication — no API keys. Customer "and/or" opt-in determines channel routing via `INotificationOrchestrator`.
+- **Notifications (email + SMS):** Azure Communication Services (ACS) provides both transactional email and SMS behind `INotificationService` (email) and `ISmsNotificationService` (SMS). Managed identity authentication — no API keys. Customer either/or choice determines channel routing via `INotificationOrchestrator`.
 - **SFTP / DMS export:** ASP.NET Core background service or Azure Function triggered on schedule or on demand. Uses `SSH.NET` (or equivalent) for SFTP push. Per-tenant SFTP configuration stored in `TenantConfig`.
 - **AI categorization:** `ICategorizationService` abstraction. MVP: keyword-matching rule engine. AI upgrade path: Azure OpenAI or Azure AI Language API behind the same interface. Used both for pre-submit category suggestion (`POST /api/intake/{locationSlug}/ai/suggest-category`) and final submit-time categorization.
 - **VIN decoding:** NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`) for VIN decode (free, public). No API key required. VIN camera scanning uses the browser's `BarcodeDetector` API or a lightweight JavaScript barcode library (e.g., `zxing-js`) for client-side decode before sending to the API.
