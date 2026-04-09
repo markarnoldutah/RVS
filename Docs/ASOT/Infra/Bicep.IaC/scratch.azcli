@@ -9,3 +9,14 @@ az cognitiveservices account deployment list --name oai-rvs-ai-dev-wus3-s01-001 
 
 # az deployment group create --resource-group rg-rvs-dev-westus3 --template-file main.bicep --parameters parameters/dev.bicepparam
 az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/dev.bicepparam
+
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/dev.bicepparam --name "rvs-dev-$(Get-Date -Format 'yyyyMMddHHmm')"
+
+# 1. Find your signed-in identity
+az ad signed-in-user show --query id -o tsv
+
+# 2. Get your storage account resource ID
+az storage account show --name strvsdevwus3001 --resource-group  --query id -o tsv
+
+# 3. Assign Storage Blob Data Contributor
+az role assignment create --assignee $(az ad signed-in-user show --query id -o tsv) --role "Storage Blob Data Contributor" --scope $(az storage account show --name strvsdevwus3001 --resource-group rg-rvs-dev-westus3 --query id -o tsv)

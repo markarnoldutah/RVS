@@ -21,7 +21,16 @@ public sealed class BlobStorageHealthCheck : IHealthCheck
     {
         try
         {
-            await _blobServiceClient.GetPropertiesAsync(cancellationToken);
+            // Use a data-plane list call — works with Storage Blob Data Reader (and above)
+            // without requiring ARM-level Storage Account Contributor.
+            await foreach (var _ in _blobServiceClient
+                .GetBlobContainersAsync(cancellationToken: cancellationToken)
+                .AsPages(pageSizeHint: 1)
+                .WithCancellation(cancellationToken))
+            {
+                break;
+            }
+
             return HealthCheckResult.Healthy("Blob Storage reachable.");
         }
         catch (Exception ex)

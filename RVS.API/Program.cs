@@ -1,4 +1,6 @@
 using Azure.Data.Tables;
+using Azure.Core;
+using Azure.Identity;
 using Azure.Storage.Blobs;
 using RVS.API.HealthChecks;
 using RVS.API.Integrations;
@@ -177,13 +179,19 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
     return new CosmosClient(endpoint, key);
 });
 
-// Blob Storage client
+// Blob Storage client — BlobStorage:Endpoint + DefaultAzureCredential (Managed Identity / user delegation SAS)
+// In development, use AzureCliCredential directly to avoid the ~15 s timeout while
+// DefaultAzureCredential probes ManagedIdentityCredential before falling through.
 builder.Services.AddSingleton<BlobServiceClient>(sp =>
 {
-    var connectionString = builder.Configuration["BlobStorage:ConnectionString"]
-        ?? throw new InvalidOperationException("BlobStorage:ConnectionString configuration is missing.");
+    var endpoint = builder.Configuration["BlobStorage:Endpoint"]
+        ?? throw new InvalidOperationException("BlobStorage:Endpoint configuration is missing.");
 
-    return new BlobServiceClient(connectionString);
+    TokenCredential credential = builder.Environment.IsDevelopment()
+        ? new AzureCliCredential()
+        : new DefaultAzureCredential();
+
+    return new BlobServiceClient(new Uri(endpoint), credential);
 });
 
 // Azure Tables client
@@ -443,8 +451,9 @@ else
         })
         .AddStandardResilienceHandler(options =>
         {
-            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
-            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(15);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
+            options.Retry.MaxRetryAttempts = 2;
         });
     }
     else

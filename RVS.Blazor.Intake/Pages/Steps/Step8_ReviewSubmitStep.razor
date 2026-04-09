@@ -220,8 +220,6 @@
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private HttpClient Http { get; set; } = default!;
 
-    private const long MaxUploadSizeBytes = 25 * 1024 * 1024;
-
     private bool _isSubmitting;
     private string? _submitError;
     private string? _uploadStatus;
@@ -250,7 +248,7 @@
             await State.PersistAsync();
 
             var pendingFiles = State.Attachments
-                .Where(a => a.BrowserFile is not null && !a.IsUploaded)
+                .Where(a => a.FileData is not null && !a.IsUploaded)
                 .ToList();
 
             if (pendingFiles.Count > 0)
@@ -275,8 +273,7 @@
 
                         file.BlobName = sasResponse.BlobName;
 
-                        await using var stream = file.BrowserFile!.OpenReadStream(maxAllowedSize: MaxUploadSizeBytes);
-                        using var content = new StreamContent(stream);
+                        using var content = new ByteArrayContent(file.FileData!);
                         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
 
                         using var sasRequest = new HttpRequestMessage(HttpMethod.Put, sasResponse.SasUrl);

@@ -555,6 +555,15 @@ public sealed class AttachmentFileInfo
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public Microsoft.AspNetCore.Components.Forms.IBrowserFile? BrowserFile { get; set; }
+
+    /// <summary>
+    /// In-memory copy of the file bytes, buffered before leaving the attachment step.
+    /// Survives component disposal (the <see cref="BrowserFile"/> JS interop reference
+    /// becomes invalid once the <c>InputFile</c> element is removed from the DOM).
+    /// Not serializable — only available during the current browser session.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public byte[]? FileData { get; set; }
 }
 
 /// <summary>

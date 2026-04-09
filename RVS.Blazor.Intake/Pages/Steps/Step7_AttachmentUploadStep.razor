@@ -33,7 +33,7 @@
             <InputFile OnChange="HandleFilesSelected"
                        multiple
                        accept="@AcceptedTypes"
-                       style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0;" />
+                       style="opacity: 0.001; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0; z-index: 1;" />
         </MudPaper>
 
         @* Camera capture button for mobile devices *@
@@ -48,7 +48,7 @@
             <InputFile OnChange="HandleFilesSelected"
                        accept="image/*"
                        capture="environment"
-                       style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0;" />
+                       style="opacity: 0.001; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0; z-index: 1;" />
         </MudPaper>
 
         @if (State.Attachments.Count > 0)
@@ -116,7 +116,7 @@
                    OnClick="HandleNext"
                    Style="text-transform: none;"
                    Class="mt-6">
-            @(State.Attachments.Count > 0 ? "Upload" : "Continue")
+            Continue
         </MudButton>
     </MudStack>
 </MudPaper>
@@ -141,7 +141,7 @@
     private int MaxAttachments => State.Config?.MaxAttachments ?? 10;
     private int MaxFileSizeMb => State.Config?.MaxFileSizeMb ?? 25;
 
-    private void HandleFilesSelected(InputFileChangeEventArgs e)
+    private async Task HandleFilesSelected(InputFileChangeEventArgs e)
     {
         _fileErrors = [];
 
@@ -168,13 +168,30 @@
                 continue;
             }
 
-            State.Attachments.Add(new AttachmentFileInfo
+            var attachment = new AttachmentFileInfo
             {
                 FileName = file.Name,
                 ContentType = file.ContentType,
                 SizeBytes = file.Size,
                 BrowserFile = file
-            });
+            };
+
+            // Buffer file bytes immediately so the data survives if the user selects
+            // another file on the same InputFile element (which invalidates older
+            // IBrowserFile JS interop references).
+            try
+            {
+                await using var stream = file.OpenReadStream(maxAllowedSize: MaxFileSizeMb * 1024L * 1024L);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                attachment.FileData = ms.ToArray();
+            }
+            catch (Exception ex)
+            {
+                attachment.ErrorMessage = $"Failed to read file: {ex.Message}";
+            }
+
+            State.Attachments.Add(attachment);
         }
 
         if (files.Count > remainingSlots)

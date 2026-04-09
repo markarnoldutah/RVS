@@ -85,7 +85,7 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
                 return result.Trim();
             }
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or TimeoutException)
         {
             _logger.LogWarning(ex, "Azure OpenAI categorization failed; falling back to rule-based engine");
         }

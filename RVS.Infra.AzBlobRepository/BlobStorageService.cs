@@ -10,6 +10,7 @@ namespace RVS.Infra.AzBlobRepository;
 /// Azure Blob Storage implementation of <see cref="IBlobStorageService"/>.
 /// Generates SAS URLs for upload (15 min, Write/Create) and read (1 hr, Read) with tenant-scoped blob paths.
 /// Blob path format: {tenantId}/{locationId}/{srId}/{attId}_{filename}
+/// Assumes containers already exist — they are provisioned as part of infrastructure deployment.
 /// </summary>
 public sealed class BlobStorageService : IBlobStorageService
 {
@@ -32,14 +33,9 @@ public sealed class BlobStorageService : IBlobStorageService
         ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
 
         var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
-        await containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
-
         var blobClient = containerClient.GetBlobClient(blobName);
 
-        var userDelegationKey = await _blobServiceClient.GetUserDelegationKeyAsync(
-            DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow.Add(UploadSasDuration),
-            cancellationToken);
+        var userDelegationKey = await GetUserDelegationKeyAsync(cancellationToken);
 
         var sasBuilder = new BlobSasBuilder
         {
@@ -68,14 +64,9 @@ public sealed class BlobStorageService : IBlobStorageService
         ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
 
         var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
-        await containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
-
         var blobClient = containerClient.GetBlobClient(blobName);
 
-        var userDelegationKey = await _blobServiceClient.GetUserDelegationKeyAsync(
-            DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow.Add(ReadSasDuration),
-            cancellationToken);
+        var userDelegationKey = await GetUserDelegationKeyAsync(cancellationToken);
 
         var sasBuilder = new BlobSasBuilder
         {
@@ -106,8 +97,6 @@ public sealed class BlobStorageService : IBlobStorageService
         ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
 
         var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
-        await containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
-
         var blobClient = containerClient.GetBlobClient(blobName);
         await blobClient.UploadAsync(content, new BlobHttpHeaders { ContentType = contentType }, cancellationToken: cancellationToken);
 
@@ -138,6 +127,19 @@ public sealed class BlobStorageService : IBlobStorageService
         var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
         var blobClient = containerClient.GetBlobClient(blobName);
         var response = await blobClient.ExistsAsync(cancellationToken);
+
+        return response.Value;
+    }
+
+    /// <summary>
+    /// Requests a short-lived user delegation key from the storage account.
+    /// The key is used to sign SAS tokens without requiring a storage account key.
+    /// </summary>
+    private async Task<UserDelegationKey> GetUserDelegationKeyAsync(CancellationToken ct)
+    {
+        var expiry = DateTimeOffset.UtcNow.Add(UploadSasDuration);
+        var response = await _blobServiceClient.GetUserDelegationKeyAsync(
+            DateTimeOffset.UtcNow, expiry, ct);
 
         return response.Value;
     }

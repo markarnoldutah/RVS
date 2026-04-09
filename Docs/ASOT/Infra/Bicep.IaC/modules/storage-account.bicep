@@ -30,6 +30,19 @@ param sku string = 'Standard_LRS'
 @description('Tags to apply to the storage account.')
 param tags object = {}
 
+@description('Principal ID (object ID) of the managed identity that needs blob access. Leave empty to skip role assignments.')
+param blobAccessPrincipalId string = ''
+
+@description('Allowed CORS origins for browser-based SAS uploads (e.g. the Blazor WASM host URL). Pass an empty array to skip CORS configuration.')
+param corsAllowedOrigins string[] = []
+
+// ── Variables ──────────────────────────────────────────────────
+
+// Built-in role definition IDs
+// https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage
+var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var storageBlobDelegatorRoleId = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d2'
+
 // ── Resources ─────────────────────────────────────────────────
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -63,6 +76,55 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
       }
       keySource: 'Microsoft.Storage'
     }
+  }
+}
+
+// ── Blob Service (CORS for browser-based SAS uploads) ──────────
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storageAccount
+  name: 'default'
+  properties: {
+    cors: {
+      corsRules: !empty(corsAllowedOrigins)
+        ? [
+            {
+              allowedOrigins: corsAllowedOrigins
+              allowedMethods: ['PUT']
+              allowedHeaders: ['Content-Type', 'x-ms-blob-type']
+              exposedHeaders: ['ETag']
+              maxAgeInSeconds: 3600
+            }
+          ]
+        : []
+    }
+  }
+}
+
+// ── Role Assignments ───────────────────────────────────────────
+
+// Storage Blob Data Contributor — read/write blobs, create containers
+resource blobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(blobAccessPrincipalId)) {
+  name: guid(storageAccount.id, blobAccessPrincipalId, storageBlobDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      storageBlobDataContributorRoleId
+    )
+    principalId: blobAccessPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Storage Blob Delegator — required for GetUserDelegationKeyAsync (user delegation SAS)
+resource blobDelegatorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(blobAccessPrincipalId)) {
+  name: guid(storageAccount.id, blobAccessPrincipalId, storageBlobDelegatorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegatorRoleId)
+    principalId: blobAccessPrincipalId
+    principalType: 'ServicePrincipal'
   }
 }
 
