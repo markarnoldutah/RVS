@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────
-// Main Orchestration – RVS Azure OpenAI Infrastructure
+// Main Orchestration – RVS Azure Infrastructure
 // ──────────────────────────────────────────────────────────────
 // Deploys at subscription scope to manage two resource groups:
-//   • rg-rvs-{env}-westus3   — GPT-4o OpenAI + Key Vault (existing)
+//   • rg-rvs-{env}-westus3   — GPT-4o OpenAI, ACS, Storage, Key Vault
 //   • rg-rvs-{env}-ncus      — Whisper OpenAI (northcentralus)
 // ──────────────────────────────────────────────────────────────
 targetScope = 'subscription'
@@ -55,6 +55,12 @@ param storageBlobAccessPrincipalId string = ''
 
 @description('Override CORS origins for browser-based SAS uploads to Blob Storage. Leave empty to use environment defaults (dev = localhost ports, prod = portal.rvserviceflow.com).')
 param storageCorsAllowedOrigins string[] = []
+
+@description('When true, deploys an Azure Communication Services resource with Email and SMS capabilities into the primary resource group.')
+param deployAcs bool = false
+
+@description('ACS data residency location. Must be a valid ACS data location.')
+param acsDataLocation string = 'United States'
 
 // ── Variables ─────────────────────────────────────────────────
 
@@ -189,6 +195,41 @@ module storage 'modules/storage-account.bicep' = if (deployStorageAccount) {
   }
 }
 
+// -- Azure Communication Services (Email + SMS, global resource) --
+
+module acsNaming 'modules/naming-tags.bicep' = if (deployAcs) {
+  name: 'deploy-acs-naming-${environmentName}'
+  scope: rgPrimary
+  params: {
+    resourceTypePrefix: 'acs'
+    appName: 'rvs'
+    workload: 'notify'
+    environmentName: environmentName
+    location: location
+  }
+}
+
+module communicationServices 'modules/communication-services.bicep' = if (deployAcs) {
+  name: 'deploy-acs-${environmentName}'
+  scope: rgPrimary
+  params: {
+    resourceName: deployAcs ? acsNaming.outputs.resourceName : 'unused'
+    tags: deployAcs ? acsNaming.outputs.tags : {}
+    dataLocation: acsDataLocation
+  }
+}
+
+// -- ACS Key Vault secrets (optional, same RG as KV) --
+
+module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs && !empty(keyVaultName)) {
+  name: 'deploy-acs-kv-secrets-${environmentName}'
+  scope: rgPrimary
+  params: {
+    keyVaultName: keyVaultName
+    acsName: deployAcs ? communicationServices.outputs.name : 'unused'
+  }
+}
+
 // ── Outputs ───────────────────────────────────────────────────
 
 @description('The primary resource group name (GPT-4o + Key Vault).')
@@ -216,3 +257,15 @@ output storageAccountName string = deployStorageAccount ? resolvedStorageAccount
 output storageBlobEndpoint string = deployStorageAccount
   ? 'https://${resolvedStorageAccountName}.blob.${environment().suffixes.storage}/'
   : ''
+
+@description('The ACS resource endpoint URL, if deployed.')
+output acsEndpoint string = deployAcs ? communicationServices.outputs.endpoint : ''
+
+@description('The ACS resource name, if deployed.')
+output acsName string = deployAcs ? communicationServices.outputs.name : ''
+
+@description('The ACS Email Service name, if deployed.')
+output acsEmailServiceName string = deployAcs ? communicationServices.outputs.emailServiceName : ''
+
+@description('The Azure-managed MailFrom sender domain, if deployed.')
+output acsMailFromDomain string = deployAcs ? communicationServices.outputs.azureManagedMailFrom : ''
