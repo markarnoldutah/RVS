@@ -29,6 +29,34 @@ public class CustomerProfile : EntityBase
     public string? Phone { get; set; }
 
     /// <summary>
+    /// When <c>true</c>, the customer has opted out of SMS notifications.
+    /// Default is <c>false</c> (both email and SMS are sent).
+    /// </summary>
+    [JsonProperty("smsOptOut")]
+    public bool SmsOptOut { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, the customer has opted out of email notifications.
+    /// Default is <c>false</c> (both email and SMS are sent).
+    /// </summary>
+    [JsonProperty("emailOptOut")]
+    public bool EmailOptOut { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the customer explicitly opted in to SMS notifications.
+    /// Null if the customer has never opted in to SMS. Required for TCPA compliance.
+    /// </summary>
+    [JsonProperty("smsOptInAtUtc")]
+    public DateTime? SmsOptInAtUtc { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the customer opted out of SMS notifications (replied STOP).
+    /// Null if the customer has not opted out. When set, no outbound SMS is allowed.
+    /// </summary>
+    [JsonProperty("smsOptOutAtUtc")]
+    public DateTime? SmsOptOutAtUtc { get; set; }
+
+    /// <summary>
     /// FK to the global customer account record.
     /// All profiles for the same email point to the same account.
     /// </summary>

@@ -462,24 +462,33 @@ else
     }
 }
 
-// Notifications
+// Notifications (Email via ACS, SMS via ACS, Orchestrator)
 if (useMockIntegrations)
 {
     builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
+    builder.Services.AddSingleton<ISmsNotificationService, NoOpSmsNotificationService>();
 }
 else
 {
-    builder.Services.AddHttpClient<INotificationService, SendGridNotificationService>(client =>
+    var acsEndpoint = builder.Configuration["AzureCommunicationServices:Endpoint"];
+    if (!string.IsNullOrWhiteSpace(acsEndpoint))
     {
-        client.BaseAddress = new Uri("https://api.sendgrid.com/");
-        var apiKey = builder.Configuration["SendGrid:ApiKey"];
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-        }
-    })
-    .AddStandardResilienceHandler();
+        var credential = new DefaultAzureCredential();
+        var acsUri = new Uri(acsEndpoint);
+
+        builder.Services.AddSingleton(new Azure.Communication.Email.EmailClient(acsUri, credential));
+        builder.Services.AddScoped<INotificationService, AcsEmailNotificationService>();
+
+        builder.Services.AddSingleton(new Azure.Communication.Sms.SmsClient(acsUri, credential));
+        builder.Services.AddScoped<ISmsNotificationService, AcsSmsNotificationService>();
+    }
+    else
+    {
+        builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
+        builder.Services.AddSingleton<ISmsNotificationService, NoOpSmsNotificationService>();
+    }
 }
+builder.Services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
 
 // Blob Storage
 if (useMockIntegrations)

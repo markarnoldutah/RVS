@@ -20,7 +20,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     private readonly ILocationRepository _locationRepository;
     private readonly ILookupRepository _lookupRepository;
     private readonly ICategorizationService _categorizationService;
-    private readonly INotificationService _notificationService;
+    private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly ILogger<IntakeOrchestrationService> _logger;
 
     /// <summary>
@@ -35,7 +35,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         ILocationRepository locationRepository,
         ILookupRepository lookupRepository,
         ICategorizationService categorizationService,
-        INotificationService notificationService,
+        INotificationOrchestrator notificationOrchestrator,
         ILogger<IntakeOrchestrationService> logger)
     {
         _slugLookupRepository = slugLookupRepository;
@@ -46,7 +46,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _locationRepository = locationRepository;
         _lookupRepository = lookupRepository;
         _categorizationService = categorizationService;
-        _notificationService = notificationService;
+        _notificationOrchestrator = notificationOrchestrator;
         _logger = logger;
     }
 
@@ -78,6 +78,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 FirstName = request.Customer.FirstName.Trim(),
                 LastName = request.Customer.LastName.Trim(),
                 Phone = request.Customer.Phone?.Trim(),
+                SmsOptOut = request.SmsOptOut,
+                EmailOptOut = request.EmailOptOut,
                 CreatedByUserId = "intake",
             };
             globalAcct = await _globalCustomerAcctRepository.CreateAsync(globalAcct, cancellationToken);
@@ -87,6 +89,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         else
         {
             globalAcct.Phone = request.Customer.Phone?.Trim();
+            globalAcct.SmsOptOut = request.SmsOptOut;
+            globalAcct.EmailOptOut = request.EmailOptOut;
             _logger.LogInformation("Intake Step 2: Resolved existing GlobalCustomerAcct {AcctId} for {Email}",
                 globalAcct.Id, normalizedEmail);
         }
@@ -105,6 +109,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 Phone = request.Customer.Phone?.Trim(),
                 Name = $"{request.Customer.FirstName.Trim()} {request.Customer.LastName.Trim()}",
                 GlobalCustomerAcctId = globalAcct.Id,
+                SmsOptOut = request.SmsOptOut,
+                EmailOptOut = request.EmailOptOut,
                 CreatedByUserId = "intake",
             };
             profile = await _customerProfileRepository.CreateAsync(profile, cancellationToken);
@@ -114,6 +120,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         else
         {
             profile.Phone = request.Customer.Phone?.Trim();
+            profile.SmsOptOut = request.SmsOptOut;
+            profile.EmailOptOut = request.EmailOptOut;
             _logger.LogInformation("Intake Step 3: Resolved existing CustomerProfile {ProfileId} in tenant {TenantId}",
                 profile.Id, tenantId);
         }
@@ -274,7 +282,13 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             globalAcct.Id);
 
         // ── Step 7: Fire-and-forget notification ─────────────────────────────
-        _ = FireAndForgetNotificationAsync(request.Customer.Email.Trim(), serviceRequest.Id);
+        _ = FireAndForgetNotificationAsync(
+            request.SmsOptOut,
+            request.EmailOptOut,
+            request.Customer.Email.Trim(),
+            request.Customer.Phone?.Trim(),
+            serviceRequest.Id,
+            slugLookup.DealershipName);
 
         return (serviceRequest, globalAcct.MagicLinkToken);
     }
@@ -302,16 +316,22 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     }
 
     /// <summary>
-    /// Sends a confirmation notification without blocking the caller.
+    /// Sends a confirmation notification via the orchestrator without blocking the caller.
     /// Exceptions are caught and logged as warnings.
     /// </summary>
-    private async Task FireAndForgetNotificationAsync(string email, string serviceRequestId)
+    private async Task FireAndForgetNotificationAsync(
+        bool smsOptOut, bool emailOptOut,
+        string email, string? phone, string serviceRequestId, string dealershipName)
     {
         try
         {
-            await _notificationService.SendServiceRequestConfirmationAsync(
+            await _notificationOrchestrator.SendServiceRequestConfirmationAsync(
+                smsOptOut,
+                emailOptOut,
                 email,
+                phone,
                 serviceRequestId,
+                dealershipName,
                 CancellationToken.None);
         }
         catch (Exception ex)

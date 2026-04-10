@@ -28,6 +28,10 @@
                         {
                             <tr><td><strong>Phone</strong></td><td>@State.Phone</td></tr>
                         }
+                        <tr>
+                            <td><strong>Notifications</strong></td>
+                            <td>@GetNotificationSummary()</td>
+                        </tr>
                     </tbody>
                 </MudSimpleTable>
             </MudStack>
@@ -340,4 +344,12 @@
         < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
         _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
     };
+
+    private string GetNotificationSummary()
+    {
+        var channels = new List<string>();
+        if (!State.EmailOptOut) channels.Add("Email");
+        if (!State.SmsOptOut) channels.Add("Text");
+        return channels.Count > 0 ? string.Join(" & ", channels) : "None (opted out of all)";
+    }
 }

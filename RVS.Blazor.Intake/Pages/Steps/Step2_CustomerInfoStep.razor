@@ -68,6 +68,23 @@
                 </MudStack>
             </MudPaper>
 
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Notification Preferences</MudText>
+                    <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+                        We send updates via both email and text by default. Opt out of either below.
+                    </MudText>
+                    <MudCheckBox @bind-Value="State.SmsOptOut"
+                                 T="bool"
+                                 Label="Do not send text messages"
+                                 Color="Color.Primary" />
+                    <MudCheckBox @bind-Value="State.EmailOptOut"
+                                 T="bool"
+                                 Label="Do not send email"
+                                 Color="Color.Primary" />
+                </MudStack>
+            </MudPaper>
+
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        FullWidth="true"
