@@ -7,10 +7,10 @@ az cognitiveservices account keys list --name oai-rvs-ai-dev-wus3-s01-001 --reso
 az cognitiveservices account deployment list --name oai-rvs-ai-dev-wus3-s01-001 --resource-group rg-rvs-dev-westus3 --query "[].{Name:name, Model:properties.model.name}" -o table
 
 
-# az deployment group create --resource-group rg-rvs-dev-westus3 --template-file main.bicep --parameters parameters/dev.bicepparam
-az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/dev.bicepparam
-
 az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/dev.bicepparam --name "rvs-dev-$(Get-Date -Format 'yyyyMMddHHmm')"
+
+
+
 
 # 1. Find your signed-in identity
 az ad signed-in-user show --query id -o tsv

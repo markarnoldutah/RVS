@@ -28,7 +28,8 @@ param dataLocation string = 'United States'
 var emailServiceName = '${resourceName}-email'
 
 // ── Azure Communication Services Account ──────────────────────
-
+// 2025-05-01 does not exist; 2025-09-01 fails domain validation at deploy time.
+#disable-next-line use-recent-api-versions
 resource acsAccount 'Microsoft.Communication/communicationServices@2023-04-01' = {
   name: resourceName
   location: 'global'
@@ -42,7 +43,8 @@ resource acsAccount 'Microsoft.Communication/communicationServices@2023-04-01' =
 }
 
 // ── ACS Email Service ─────────────────────────────────────────
-
+// See note on acsAccount above.
+#disable-next-line use-recent-api-versions
 resource emailService 'Microsoft.Communication/emailServices@2023-04-01' = {
   name: emailServiceName
   location: 'global'
@@ -57,13 +59,14 @@ resource emailService 'Microsoft.Communication/emailServices@2023-04-01' = {
 // for dev/staging. Production should use a custom verified domain
 // (e.g. notifications.rvserviceflow.com) configured separately.
 
+#disable-next-line use-recent-api-versions
 resource azureManagedDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' = {
   parent: emailService
   name: 'AzureManagedDomain'
   location: 'global'
   tags: tags
   properties: {
-    domainManagement: 'AzureManagedDomain'
+    domainManagement: 'AzureManaged'
     userEngagementTracking: 'Disabled'
   }
 }

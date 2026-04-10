@@ -36,6 +36,9 @@ param blobAccessPrincipalId string = ''
 @description('Allowed CORS origins for browser-based SAS uploads (e.g. the Blazor WASM host URL). Pass an empty array to skip CORS configuration.')
 param corsAllowedOrigins string[] = []
 
+@description('Allow shared key (storage account key) access. Set to false for production to enforce Entra ID-only authentication.')
+param allowSharedKeyAccess bool = true
+
 // ── Variables ──────────────────────────────────────────────────
 
 // Built-in role definition IDs
@@ -45,7 +48,7 @@ var storageBlobDelegatorRoleId = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d2'
 
 // ── Resources ─────────────────────────────────────────────────
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+resource storageAccount 'Microsoft.Storage/storageAccounts@2025-01-01' = {
   name: storageAccountName
   location: location
   sku: {
@@ -57,7 +60,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     accessTier: 'Hot'
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: true
+    allowSharedKeyAccess: allowSharedKeyAccess
     supportsHttpsTrafficOnly: true
     networkAcls: {
       defaultAction: 'Allow'
@@ -81,7 +84,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 
 // ── Blob Service (CORS for browser-based SAS uploads) ──────────
 
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2025-01-01' = {
   parent: storageAccount
   name: 'default'
   properties: {

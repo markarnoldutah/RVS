@@ -213,7 +213,9 @@ module communicationServices 'modules/communication-services.bicep' = if (deploy
   name: 'deploy-acs-${environmentName}'
   scope: rgPrimary
   params: {
+    #disable-next-line BCP318
     resourceName: deployAcs ? acsNaming.outputs.resourceName : 'unused'
+    #disable-next-line BCP318
     tags: deployAcs ? acsNaming.outputs.tags : {}
     dataLocation: acsDataLocation
   }
@@ -226,6 +228,7 @@ module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs &
   scope: rgPrimary
   params: {
     keyVaultName: keyVaultName
+    #disable-next-line BCP318
     acsName: deployAcs ? communicationServices.outputs.name : 'unused'
   }
 }
@@ -251,21 +254,25 @@ output whisperEndpoint string = whisper.outputs.endpoint
 output whisperDeploymentName string = whisper.outputs.whisperDeploymentName
 
 @description('The name of the storage account, if deployed.')
-output storageAccountName string = deployStorageAccount ? resolvedStorageAccountName : ''
+#disable-next-line BCP318
+output storageAccountName string = deployStorageAccount ? storage.outputs.name : ''
 
 @description('The primary blob endpoint of the storage account, if deployed.')
-output storageBlobEndpoint string = deployStorageAccount
-  ? 'https://${resolvedStorageAccountName}.blob.${environment().suffixes.storage}/'
-  : ''
+#disable-next-line BCP318
+output storageBlobEndpoint string = deployStorageAccount ? storage.outputs.blobEndpoint : ''
 
 @description('The ACS resource endpoint URL, if deployed.')
+#disable-next-line BCP318
 output acsEndpoint string = deployAcs ? communicationServices.outputs.endpoint : ''
 
 @description('The ACS resource name, if deployed.')
+#disable-next-line BCP318
 output acsName string = deployAcs ? communicationServices.outputs.name : ''
 
 @description('The ACS Email Service name, if deployed.')
+#disable-next-line BCP318
 output acsEmailServiceName string = deployAcs ? communicationServices.outputs.emailServiceName : ''
 
 @description('The Azure-managed MailFrom sender domain, if deployed.')
+#disable-next-line BCP318
 output acsMailFromDomain string = deployAcs ? communicationServices.outputs.azureManagedMailFrom : ''

@@ -33,7 +33,7 @@ var isProduction = environmentName != 'dev'
 
 // ── Azure OpenAI Account ──────────────────────────────────────
 
-resource openAiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+resource openAiAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: resourceName
   location: location
   kind: 'OpenAI'
@@ -55,7 +55,7 @@ resource openAiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
 
 // ── GPT-4o Vision Model Deployment ────────────────────────────
 
-resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
   parent: openAiAccount
   name: deploymentName
   sku: {

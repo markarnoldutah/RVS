@@ -4,16 +4,10 @@
    Minimum viewport: 375px (iPhone SE)
    ============================================================ */
 
-/* Tetons background — fixed so the photo stays put as content scrolls.
-   A 30 % black gradient scrim is layered on top for text readability. */
+/* Page background — plain white fallback; MudBlazor theme controls
+   surface colours for light / dark / high-contrast modes. */
 html {
-    background-image:
-        linear-gradient(rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0.30)),
-        url('_content/RVS.UI.Shared/images/tetons.jpg');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
+    background-color: var(--mud-palette-background, #fff);
 }
 
 html, body {
@@ -21,12 +15,6 @@ html, body {
     padding: 0;
     overflow-x: hidden;
     -webkit-text-size-adjust: 100%;
-}
-
-/* MudBlazor layout containers must be transparent to expose the background */
-body,
-.mud-layout {
-    background: transparent !important;
 }
 
 h1:focus {
@@ -60,20 +48,38 @@ h1:focus {
 }
 
 /* --------------------------------------------------------
-   Wizard Step Card — 75 % opaque surface so the background
-   photo shows through while content remains readable.
+   Wizard Step Card & Inner Papers — flat, no elevation,
+   transparent so the page background shows through.
    -------------------------------------------------------- */
-.wizard-step-card {
-    background: color-mix(in srgb, var(--mud-palette-surface) 100%, transparent) !important;
+.wizard-step-card,
+.wizard-step-card .mud-paper:not(.mud-paper-outlined):not(.mud-card) {
+    background: transparent !important;
+    box-shadow: none !important;
 }
 
 /* --------------------------------------------------------
-   Input Borders — thicker outline for readability against
-   the translucent card backgrounds.  Colour is left to
-   MudBlazor so hover / focus / theme states work correctly.
+   Step Titles — bolder headings for visual hierarchy
+   -------------------------------------------------------- */
+.wizard-step-card .mud-typography-h5 {
+    font-weight: 700 !important;
+}
+
+/* --------------------------------------------------------
+   Input Borders
+   Colour is left to MudBlazor so hover / focus / theme
+   states work correctly.
    -------------------------------------------------------- */
 .mud-input-outlined-border {
     border-width: 3px !important;
+}
+
+/* --------------------------------------------------------
+   Input Fields — light gray fill inside outlined borders.
+   Uses the theme variable so it adapts to dark mode.
+   -------------------------------------------------------- */
+.mud-input.mud-input-outlined {
+    background-color: var(--mud-palette-background-gray);
+    border-radius: var(--mud-default-borderradius);
 }
 
 /* --------------------------------------------------------
@@ -125,13 +131,8 @@ h1:focus {
     }
 
 /* --------------------------------------------------------
-   AppBar offset — explicit pixel values ensure layout is
-   correct regardless of MudBlazor JS initialization timing.
-   Top AppBar: 64px (standard MudAppBar default)
-   Bottom AppBar: 48px (Dense MudAppBar default)
+   AppBar offset — pushes content below the fixed MudAppBar.
    -------------------------------------------------------- */
 .mud-main-content {
-    background: transparent !important;
     padding-top: 64px !important;
-    padding-bottom: 48px !important;
 }

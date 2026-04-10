@@ -41,54 +41,56 @@
                 var question = State.DiagnosticQuestions[i];
                 var questionIndex = i;
 
-                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-                    <MudStack Spacing="3">
-                        <MudText Typo="Typo.subtitle1" Style="font-weight: 500; color: var(--mud-palette-text-primary);">
-                            @question.QuestionText
-                        </MudText>
-
-                        @if (!string.IsNullOrWhiteSpace(question.HelpText))
-                        {
-                            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
-                                @question.HelpText
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 500; color: var(--mud-palette-text-primary);">
+                                @question.QuestionText
                             </MudText>
-                        }
 
-                        @if (question.Options.Count > 0)
-                        {
-                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
-                                @foreach (var option in question.Options)
-                                {
-                                    var opt = option;
-                                    var isSelected = GetResponse(questionIndex)?.SelectedOptions.Contains(opt) == true;
-                                    <MudButton Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
-                                               Color="@(isSelected ? Color.Primary : Color.Default)"
-                                               Size="Size.Small"
-                                               OnClick="() => ToggleOption(questionIndex, opt)"
-                                               Style="text-transform: none;">
-                                        @if (isSelected)
-                                        {
-                                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small"
-                                                     Class="mr-1" />
-                                        }
-                                        @opt
-                                    </MudButton>
-                                }
-                            </MudStack>
-                        }
+                            @if (!string.IsNullOrWhiteSpace(question.HelpText))
+                            {
+                                <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
+                                    @question.HelpText
+                                </MudText>
+                            }
 
-                        @if (question.AllowFreeText)
-                        {
-                            <MudTextField Value="@(GetResponse(questionIndex)?.FreeTextResponse ?? "")"
-                                          ValueChanged="(string value) => SetFreeText(questionIndex, value)"
-                                          T="string"
-                                          Placeholder="Additional details..."
-                                          Lines="2"
-                                          Variant="Variant.Outlined"
-                                          Margin="Margin.Dense" />
-                        }
-                    </MudStack>
-                </MudPaper>
+                            @if (question.Options.Count > 0)
+                            {
+                                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                                    @foreach (var option in question.Options)
+                                    {
+                                        var opt = option;
+                                        var isSelected = GetResponse(questionIndex)?.SelectedOptions.Contains(opt) == true;
+                                        <MudButton Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                                                   Color="@(isSelected ? Color.Primary : Color.Default)"
+                                                   Size="Size.Small"
+                                                   OnClick="() => ToggleOption(questionIndex, opt)"
+                                                   Style="text-transform: none;">
+                                            @if (isSelected)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small"
+                                                         Class="mr-1" />
+                                            }
+                                            @opt
+                                        </MudButton>
+                                    }
+                                </MudStack>
+                            }
+
+                            @if (question.AllowFreeText)
+                            {
+                                <MudTextField Value="@(GetResponse(questionIndex)?.FreeTextResponse ?? "")"
+                                              ValueChanged="(string value) => SetFreeText(questionIndex, value)"
+                                              T="string"
+                                              Placeholder="Additional details..."
+                                              Lines="2"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense" />
+                            }
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
             }
         }
 

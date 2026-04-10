@@ -19,10 +19,12 @@ param acsName string
 
 // ── Existing Resource References ──────────────────────────────
 
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
   name: keyVaultName
 }
 
+// 2025-05-01 does not exist; 2025-09-01 fails domain validation at deploy time.
+#disable-next-line use-recent-api-versions
 resource acsAccount 'Microsoft.Communication/communicationServices@2023-04-01' existing = {
   name: acsName
 }
@@ -30,7 +32,7 @@ resource acsAccount 'Microsoft.Communication/communicationServices@2023-04-01' e
 // ── Key Vault Secrets ─────────────────────────────────────────
 
 @description('ACS endpoint URL — used by the API with managed identity authentication.')
-resource acsEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource acsEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'AzureCommunicationServices--Endpoint'
   properties: {
@@ -40,7 +42,7 @@ resource acsEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
 }
 
 @description('ACS connection string — convenience for local development. Production should use managed identity.')
-resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'AzureCommunicationServices--ConnectionString'
   properties: {

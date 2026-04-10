@@ -37,7 +37,7 @@ var isProduction = environmentName != 'dev'
 
 // ── Azure OpenAI Account (Whisper region) ─────────────────────
 
-resource whisperAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+resource whisperAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: resourceName
   location: location
   kind: 'OpenAI'
@@ -59,7 +59,7 @@ resource whisperAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
 
 // ── Whisper Speech-to-Text Model Deployment ───────────────────
 
-resource whisperDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+resource whisperDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
   parent: whisperAccount
   name: whisperDeploymentName
   sku: {

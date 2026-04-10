@@ -31,17 +31,17 @@ param openAiWhisperDeploymentName string = 'whisper'
 
 // ── Existing Resource References ──────────────────────────────
 
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
   name: keyVaultName
 }
 
 // GPT-4o account — same resource group as this module deployment (primary RG)
-resource openAiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+resource openAiAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
   name: openAiName
 }
 
 // Whisper account — different resource group (ncus RG)
-resource whisperAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+resource whisperAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
   name: whisperOpenAiName
   scope: resourceGroup(whisperOpenAiResourceGroup)
 }
@@ -50,7 +50,7 @@ resource whisperAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existi
 
 // -- Primary OpenAI (GPT-4o, westus3) --
 
-resource endpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource endpointSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'AzureOpenAi--Endpoint'
   properties: {
@@ -59,7 +59,7 @@ resource endpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
-resource apiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource apiKeySecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'AzureOpenAi--ApiKey'
   properties: {
@@ -68,7 +68,7 @@ resource apiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
-resource deploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource deploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'AzureOpenAi--VisionDeploymentName'
   properties: {
@@ -77,7 +77,7 @@ resource deploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
-resource textDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource textDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'AzureOpenAi--TextDeploymentName'
   properties: {
@@ -88,7 +88,7 @@ resource textDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01'
 
 // -- Whisper (dedicated region: northcentralus) --
 
-resource whisperEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource whisperEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'AzureOpenAi--WhisperEndpoint'
   properties: {
@@ -97,7 +97,7 @@ resource whisperEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
   }
 }
 
-resource whisperApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource whisperApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'AzureOpenAi--WhisperApiKey'
   properties: {
@@ -106,7 +106,7 @@ resource whisperApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
-resource whisperDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource whisperDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'AzureOpenAi--WhisperDeploymentName'
   properties: {
