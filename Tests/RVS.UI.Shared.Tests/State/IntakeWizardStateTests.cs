@@ -27,6 +27,7 @@ public class IntakeWizardStateTests
         state.Vin.Should().BeEmpty();
         state.VinLookupSucceeded.Should().BeFalse();
         state.IsSubmitted.Should().BeFalse();
+        state.SubmissionMagicLinkToken.Should().BeNull();
     }
 
     [Fact]
@@ -499,6 +500,24 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
+    public void SubmissionMagicLinkToken_ShouldDefaultToNull()
+    {
+        var state = CreateState();
+
+        state.SubmissionMagicLinkToken.Should().BeNull();
+    }
+
+    [Fact]
+    public void SubmissionMagicLinkToken_ShouldBeSettable()
+    {
+        var state = CreateState();
+
+        state.SubmissionMagicLinkToken = "abc123:xyz789";
+
+        state.SubmissionMagicLinkToken.Should().Be("abc123:xyz789");
+    }
+
+    [Fact]
     public async Task ClearAsync_ShouldResetAllFields()
     {
         var state = CreateState();
@@ -510,6 +529,7 @@ public class IntakeWizardStateTests
         state.IssueCategory = "Electrical";
         state.IssueDescription = "Test";
         state.IsSubmitted = true;
+        state.SubmissionMagicLinkToken = "abc123:xyz789";
         state.FailedUploadCount = 3;
         await state.GoToStepAsync(5);
 
@@ -522,6 +542,7 @@ public class IntakeWizardStateTests
         state.Email.Should().BeEmpty();
         state.Vin.Should().BeEmpty();
         state.IsSubmitted.Should().BeFalse();
+        state.SubmissionMagicLinkToken.Should().BeNull();
         state.FailedUploadCount.Should().Be(0);
     }
 
