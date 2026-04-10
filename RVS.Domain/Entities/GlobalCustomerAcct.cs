@@ -28,6 +28,26 @@ public class GlobalCustomerAcct : EntityBase
     public string? Phone { get; set; }
 
     /// <summary>
+    /// Customer's preferred notification channel: "email" (default) or "sms".
+    /// </summary>
+    [JsonProperty("notificationPreference")]
+    public string NotificationPreference { get; set; } = "email";
+
+    /// <summary>
+    /// UTC timestamp when the customer explicitly opted in to SMS notifications.
+    /// Null if the customer has never opted in to SMS. Required for TCPA compliance.
+    /// </summary>
+    [JsonProperty("smsOptInAtUtc")]
+    public DateTime? SmsOptInAtUtc { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the customer opted out of SMS notifications (replied STOP).
+    /// Null if the customer has not opted out. When set, no outbound SMS is allowed.
+    /// </summary>
+    [JsonProperty("smsOptOutAtUtc")]
+    public DateTime? SmsOptOutAtUtc { get; set; }
+
+    /// <summary>
     /// All dealership-scoped profiles linked to this identity.
     /// Enables "show me all my service history across all dealerships."
     /// </summary>

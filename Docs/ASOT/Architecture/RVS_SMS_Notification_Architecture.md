@@ -1,7 +1,7 @@
 # RVS Unified Notification Architecture — Azure Communication Services (Email + SMS)
 
 **Authoritative Source of Truth (ASOT) — April 9, 2026**
-**Status:** Planning — No Code Changes Yet
+**Status:** Phase 1 Foundation Implemented — ACS Email + SMS services, orchestrator, domain interfaces, message embedding
 
 This document defines the architecture for all transactional notifications in RVS using **Azure Communication Services (ACS)** as the single provider for both **email** and **SMS**. It replaces the previous SendGrid-based email pipeline and covers the SMS expansion. ACS provides a unified Azure-native platform for dealer-to-customer communications, magic link delivery (email or SMS), and inbound message handling.
 

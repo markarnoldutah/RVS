@@ -20,7 +20,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     private readonly ILocationRepository _locationRepository;
     private readonly ILookupRepository _lookupRepository;
     private readonly ICategorizationService _categorizationService;
-    private readonly INotificationService _notificationService;
+    private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly ILogger<IntakeOrchestrationService> _logger;
 
     /// <summary>
@@ -35,7 +35,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         ILocationRepository locationRepository,
         ILookupRepository lookupRepository,
         ICategorizationService categorizationService,
-        INotificationService notificationService,
+        INotificationOrchestrator notificationOrchestrator,
         ILogger<IntakeOrchestrationService> logger)
     {
         _slugLookupRepository = slugLookupRepository;
@@ -46,7 +46,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _locationRepository = locationRepository;
         _lookupRepository = lookupRepository;
         _categorizationService = categorizationService;
-        _notificationService = notificationService;
+        _notificationOrchestrator = notificationOrchestrator;
         _logger = logger;
     }
 
@@ -272,7 +272,11 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             globalAcct.Id);
 
         // ── Step 7: Fire-and-forget notification ─────────────────────────────
-        _ = FireAndForgetNotificationAsync(request.Customer.Email.Trim(), serviceRequest.Id);
+        _ = FireAndForgetNotificationAsync(
+            request.Customer.Email.Trim(),
+            request.Customer.Phone?.Trim(),
+            serviceRequest.Id,
+            slugLookup.DealershipName);
 
         return serviceRequest;
     }
@@ -300,16 +304,23 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     }
 
     /// <summary>
-    /// Sends a confirmation notification without blocking the caller.
+    /// Sends a confirmation notification via the orchestrator without blocking the caller.
     /// Exceptions are caught and logged as warnings.
     /// </summary>
-    private async Task FireAndForgetNotificationAsync(string email, string serviceRequestId)
+    private async Task FireAndForgetNotificationAsync(
+        string email, string? phone, string serviceRequestId, string dealershipName)
     {
         try
         {
-            await _notificationService.SendServiceRequestConfirmationAsync(
+            // Default to email preference for intake — future: read from customer profile
+            var preference = !string.IsNullOrWhiteSpace(phone) ? "email" : "email";
+
+            await _notificationOrchestrator.SendServiceRequestConfirmationAsync(
+                preference,
                 email,
+                phone,
                 serviceRequestId,
+                dealershipName,
                 CancellationToken.None);
         }
         catch (Exception ex)

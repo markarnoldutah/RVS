@@ -132,6 +132,13 @@ public class ServiceRequest : EntityBase
     /// </summary>
     [JsonProperty("aiEnrichment")]
     public AiEnrichmentMetadataEmbedded? AiEnrichment { get; set; }
+
+    /// <summary>
+    /// Dealer-to-customer and customer-to-dealer messages linked to this service request.
+    /// Embedded in the SR document for single-read performance. Capped at 50 messages.
+    /// </summary>
+    [JsonProperty("messages")]
+    public List<MessageEmbedded> Messages { get; set; } = [];
 }
 
 // ---------------------------------------------------------------------------
@@ -339,4 +346,99 @@ public class AiEnrichmentMetadataEmbedded
     /// </summary>
     [JsonProperty("enrichedAtUtc")]
     public DateTime? EnrichedAtUtc { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: MessageEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// A single message in the dealer ↔ customer conversation thread,
+/// embedded within a <see cref="ServiceRequest"/> document.
+/// </summary>
+public class MessageEmbedded
+{
+    /// <summary>
+    /// Unique identifier for this message.
+    /// </summary>
+    [JsonProperty("id")]
+    public string Id { get; init; } = Guid.NewGuid().ToString();
+
+    /// <summary>
+    /// Direction of the message: "outbound" (dealer → customer) or "inbound" (customer → dealer).
+    /// </summary>
+    [JsonProperty("direction")]
+    public string Direction { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Channel used to deliver the message: "sms" or "email".
+    /// </summary>
+    [JsonProperty("channel")]
+    public string Channel { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Who sent the message: "dealer" or "customer".
+    /// </summary>
+    [JsonProperty("senderType")]
+    public string SenderType { get; set; } = string.Empty;
+
+    /// <summary>
+    /// User ID of the dealer staff member who sent the message. Null for customer-sent messages.
+    /// </summary>
+    [JsonProperty("senderUserId")]
+    public string? SenderUserId { get; set; }
+
+    /// <summary>
+    /// Display name of the sender (e.g., "Sarah (Service Advisor)"). Null for customer-sent messages.
+    /// </summary>
+    [JsonProperty("senderDisplayName")]
+    public string? SenderDisplayName { get; set; }
+
+    /// <summary>
+    /// Phone number of the sender for inbound SMS messages.
+    /// </summary>
+    [JsonProperty("senderPhone")]
+    public string? SenderPhone { get; set; }
+
+    /// <summary>
+    /// Phone number of the recipient for outbound SMS messages.
+    /// </summary>
+    [JsonProperty("recipientPhone")]
+    public string? RecipientPhone { get; set; }
+
+    /// <summary>
+    /// Email address of the recipient for outbound email messages.
+    /// </summary>
+    [JsonProperty("recipientEmail")]
+    public string? RecipientEmail { get; set; }
+
+    /// <summary>
+    /// Message body text.
+    /// </summary>
+    [JsonProperty("body")]
+    public string Body { get; set; } = string.Empty;
+
+    /// <summary>
+    /// UTC timestamp when the message was sent (outbound messages).
+    /// </summary>
+    [JsonProperty("sentAtUtc")]
+    public DateTime? SentAtUtc { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the message was received (inbound messages).
+    /// </summary>
+    [JsonProperty("receivedAtUtc")]
+    public DateTime? ReceivedAtUtc { get; set; }
+
+    /// <summary>
+    /// Delivery status for outbound messages (e.g., "queued", "sent", "delivered", "failed").
+    /// </summary>
+    [JsonProperty("deliveryStatus")]
+    public string? DeliveryStatus { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the delivery status was last updated.
+    /// </summary>
+    [JsonProperty("deliveryStatusUpdatedAtUtc")]
+    public DateTime? DeliveryStatusUpdatedAtUtc { get; set; }
 }

@@ -1,7 +1,7 @@
 namespace RVS.Domain.Integrations;
 
 /// <summary>
-/// Sends transactional notifications (email) via SendGrid in production,
+/// Sends transactional email notifications via Azure Communication Services in production,
 /// with a no-op implementation for local development.
 /// </summary>
 public interface INotificationService

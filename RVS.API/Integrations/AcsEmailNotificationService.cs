@@ -1,25 +1,31 @@
+using Azure.Communication.Email;
 using RVS.Domain.Integrations;
 
 namespace RVS.API.Integrations;
 
 /// <summary>
-/// Sends transactional emails via the SendGrid API.
+/// Sends transactional emails via Azure Communication Services Email.
 /// Uses fire-and-forget semantics — errors are logged but never thrown to the caller.
+/// Replaces the previous SendGrid-based implementation.
 /// </summary>
-public sealed class SendGridNotificationService : INotificationService
+public sealed class AcsEmailNotificationService : INotificationService
 {
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<SendGridNotificationService> _logger;
-    private readonly string _fromEmail;
+    private readonly EmailClient _emailClient;
+    private readonly ILogger<AcsEmailNotificationService> _logger;
+    private readonly string _fromAddress;
+    private readonly string _senderDisplayName;
 
-    public SendGridNotificationService(
-        HttpClient httpClient,
-        ILogger<SendGridNotificationService> logger,
+    public AcsEmailNotificationService(
+        EmailClient emailClient,
+        ILogger<AcsEmailNotificationService> logger,
         IConfiguration configuration)
     {
-        _httpClient = httpClient;
+        _emailClient = emailClient;
         _logger = logger;
-        _fromEmail = configuration["SendGrid:FromEmail"] ?? "noreply@rvserviceflow.com";
+        _fromAddress = configuration["AzureCommunicationServices:Email:FromAddress"]
+            ?? "noreply@notifications.rvserviceflow.com";
+        _senderDisplayName = configuration["AzureCommunicationServices:Email:SenderDisplayName"]
+            ?? "RV Service Flow";
     }
 
     /// <inheritdoc />
@@ -50,29 +56,23 @@ public sealed class SendGridNotificationService : INotificationService
     {
         try
         {
-            var payload = new
-            {
-                personalizations = new[]
+            var emailMessage = new EmailMessage(
+                senderAddress: _fromAddress,
+                recipientAddress: toEmail,
+                content: new EmailContent(subject)
                 {
-                    new { to = new[] { new { email = toEmail } } }
-                },
-                from = new { email = _fromEmail },
-                subject,
-                content = new[]
-                {
-                    new { type = "text/html", value = htmlBody }
-                }
-            };
+                    Html = htmlBody
+                });
 
-            var response = await _httpClient.PostAsJsonAsync("v3/mail/send", payload);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("SendGrid returned {StatusCode} when sending email to {Recipient}", response.StatusCode, toEmail);
-            }
+            var operation = await _emailClient.SendAsync(Azure.WaitUntil.Started, emailMessage);
+
+            _logger.LogInformation(
+                "ACS Email send initiated to {Recipient} with operation {OperationId}",
+                toEmail, operation.Id);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send email via SendGrid to {Recipient}", toEmail);
+            _logger.LogError(ex, "Failed to send email via ACS to {Recipient}", toEmail);
         }
     }
 }

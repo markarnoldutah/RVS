@@ -19,7 +19,7 @@ public class IntakeOrchestrationServiceTests
     private readonly Mock<ILocationRepository> _locationRepoMock = new();
     private readonly Mock<ILookupRepository> _lookupRepoMock = new();
     private readonly Mock<ICategorizationService> _categorizationMock = new();
-    private readonly Mock<INotificationService> _notificationMock = new();
+    private readonly Mock<INotificationOrchestrator> _notificationOrchestratorMock = new();
     private readonly IntakeOrchestrationService _sut;
 
     public IntakeOrchestrationServiceTests()
@@ -33,7 +33,7 @@ public class IntakeOrchestrationServiceTests
             _locationRepoMock.Object,
             _lookupRepoMock.Object,
             _categorizationMock.Object,
-            _notificationMock.Object,
+            _notificationOrchestratorMock.Object,
             Mock.Of<ILogger<IntakeOrchestrationService>>());
     }
 
