@@ -1,36 +1,35 @@
 @page "/"
 
 <PageTitle>RV Service Flow — Customer Intake</PageTitle>
-<MudPaper Elevation="1" Class="pa-4" Style="background: rgba(255, 255, 255, 0.85);">
-    <MudStack AlignItems="AlignItems.Center" Spacing="6" Class="mt-8">
-        <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary" Size="Size.Large"
-                 Style="font-size: 4rem;" />
+<MudStack AlignItems="AlignItems.Center" Class="mt-8">
+    <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 480px;">
+        <MudStack AlignItems="AlignItems.Center" Spacing="6">
+            <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary" Size="Size.Large"
+                     Style="font-size: 4rem;" />
 
+            <MudText Typo="Typo.h4" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
+                RV Service Flow
+            </MudText>
 
-        <MudText Typo="Typo.h4" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
-            RV Service Flow
-        </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Size="Size.Large"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Href="/intake/blue-compass-slc"
+                       FullWidth="true"
+                       Style="text-transform: none; min-width: 250px;">
+                New Service Request
+            </MudButton>
 
-
-
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   Size="Size.Large"
-                   StartIcon="@Icons.Material.Filled.Add"
-                   Href="/intake/blue-compass-slc"
-                   FullWidth="true"
-                   Style="text-transform: none; min-width: 250px;">
-            New Service Request
-        </MudButton>
-
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Primary"
-                   Size="Size.Large"
-                   StartIcon="@Icons.Material.Filled.Search"
-                   Href="/status"
-                   FullWidth="true"
-                   Style="text-transform: none; min-width: 250px;">
-            Check Request Status
-        </MudButton>
-    </MudStack>
-</MudPaper>
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       Size="Size.Large"
+                       StartIcon="@Icons.Material.Filled.Search"
+                       Href="/status"
+                       FullWidth="true"
+                       Style="text-transform: none; min-width: 250px;">
+                Check Request Status
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudStack>
