@@ -34,7 +34,7 @@
                            Color="Color.Primary"
                            FullWidth="true"
                            StartIcon="@Icons.Material.Filled.Search"
-                           Href="/status"
+                           Href="@StatusHref"
                            Style="text-transform: none;">
                     Check Request Status
                 </MudButton>
@@ -54,4 +54,16 @@
 @code {
     [SupplyParameterFromQuery(Name = "uploadFailures")]
     public int UploadFailures { get; set; }
+
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
+
+    /// <summary>
+    /// Navigates directly to the status page when a magic-link token is available,
+    /// otherwise falls back to the manual lookup page.
+    /// </summary>
+    private string StatusHref =>
+        string.IsNullOrWhiteSpace(Token)
+            ? "/status"
+            : $"/status/{Uri.EscapeDataString(Token)}";
 }

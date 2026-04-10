@@ -51,7 +51,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     }
 
     /// <inheritdoc />
-    public async Task<ServiceRequest> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<(ServiceRequest ServiceRequest, string? MagicLinkToken)> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
         ArgumentNullException.ThrowIfNull(request);
@@ -274,7 +274,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         // ── Step 7: Fire-and-forget notification ─────────────────────────────
         _ = FireAndForgetNotificationAsync(request.Customer.Email.Trim(), serviceRequest.Id);
 
-        return serviceRequest;
+        return (serviceRequest, globalAcct.MagicLinkToken);
     }
 
     /// <summary>

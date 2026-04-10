@@ -244,7 +244,8 @@
             var result = await IntakeApi.SubmitServiceRequestAsync(State.Slug, request);
 
             State.IsSubmitted = true;
-            State.CreatedServiceRequestId = result.Id;
+            State.CreatedServiceRequestId = result.ServiceRequest.Id;
+            State.SubmissionMagicLinkToken = result.MagicLinkToken;
             await State.PersistAsync();
 
             var pendingFiles = State.Attachments
@@ -269,7 +270,7 @@
                     try
                     {
                         var sasResponse = await IntakeApi.GetUploadSasAsync(
-                            State.Slug, result.Id, file.FileName, file.ContentType);
+                            State.Slug, result.ServiceRequest.Id, file.FileName, file.ContentType);
 
                         file.BlobName = sasResponse.BlobName;
 
@@ -283,7 +284,7 @@
                         var sasResult = await Http.SendAsync(sasRequest);
                         sasResult.EnsureSuccessStatusCode();
 
-                        await IntakeApi.ConfirmUploadAsync(State.Slug, result.Id, new AttachmentConfirmRequestDto
+                        await IntakeApi.ConfirmUploadAsync(State.Slug, result.ServiceRequest.Id, new AttachmentConfirmRequestDto
                         {
                             BlobName = sasResponse.BlobName,
                             FileName = file.FileName,
