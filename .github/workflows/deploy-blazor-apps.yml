@@ -17,6 +17,10 @@ on:
       - 'RVS.Domain/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 env:
   DOTNET_VERSION: '10.0.x'
 
@@ -89,11 +93,24 @@ jobs:
 
       - name: Inject Dev appsettings
         run: |
-          cat > ./publish/appsettings.Production.json << 'EOF'
+          if [ "${{ matrix.app }}" = "manager" ]; then
+            cat > ./publish/appsettings.Production.json << 'EOF'
+          {
+            "Auth0": {
+              "Authority": "https://dev-2jhzz8xmjggh26pm.us.auth0.com/",
+              "ClientId": "CBdytt7GQhJSejyVwSrCZZRYUkLMXdiY",
+              "Audience": "https://api-dev.rvserviceflow.com"
+            },
+            "ApiBaseUrl": "https://api-dev.rvserviceflow.com"
+          }
+          EOF
+          else
+            cat > ./publish/appsettings.Production.json << 'EOF'
           {
             "ApiBaseUrl": "https://api-dev.rvserviceflow.com"
           }
           EOF
+          fi
 
       - name: Deploy to SWA
         uses: Azure/static-web-apps-deploy@v1
@@ -130,7 +147,9 @@ jobs:
 
       - name: Inject Staging appsettings
         run: |
-          cat > ./publish/appsettings.Production.json << 'EOF'
+          if [ "${{ matrix.app }}" = "manager" ]; then
+            # TODO: Replace STAGING_CLIENT_ID with actual Auth0 staging client ID
+            cat > ./publish/appsettings.Production.json << 'EOF'
           {
             "Auth0": {
               "Authority": "https://rvs-staging.us.auth0.com/",
@@ -140,6 +159,13 @@ jobs:
             "ApiBaseUrl": "https://api-staging.rvserviceflow.com"
           }
           EOF
+          else
+            cat > ./publish/appsettings.Production.json << 'EOF'
+          {
+            "ApiBaseUrl": "https://api-staging.rvserviceflow.com"
+          }
+          EOF
+          fi
 
       - name: Deploy to SWA
         uses: Azure/static-web-apps-deploy@v1
@@ -176,7 +202,9 @@ jobs:
 
       - name: Inject Production appsettings
         run: |
-          cat > ./publish/appsettings.Production.json << 'EOF'
+          if [ "${{ matrix.app }}" = "manager" ]; then
+            # TODO: Replace PROD_CLIENT_ID with actual Auth0 production client ID
+            cat > ./publish/appsettings.Production.json << 'EOF'
           {
             "Auth0": {
               "Authority": "https://rvs.us.auth0.com/",
@@ -186,6 +214,13 @@ jobs:
             "ApiBaseUrl": "https://api.rvserviceflow.com"
           }
           EOF
+          else
+            cat > ./publish/appsettings.Production.json << 'EOF'
+          {
+            "ApiBaseUrl": "https://api.rvserviceflow.com"
+          }
+          EOF
+          fi
 
       - name: Deploy to SWA
         uses: Azure/static-web-apps-deploy@v1
