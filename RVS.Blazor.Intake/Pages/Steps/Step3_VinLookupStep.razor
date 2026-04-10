@@ -12,7 +12,8 @@
                 </MudText>
             </MudStack>
 
-            <MudRadioGroup T="string" Value="@State.Vin" ValueChanged="HandleKnownAssetSelected">
+            <MudRadioGroup T="string" Value="@State.Vin" ValueChanged="HandleKnownAssetSelected"
+                           InputStyle="display: flex; flex-direction: column; align-items: flex-start;">
                 @foreach (var asset in State.KnownAssets)
                 {
                     var label = FormatAssetLabel(asset);
@@ -53,6 +54,16 @@
                    capture="environment"
                    OnChange="HandleCameraCapture"
                    style="display: none;" />
+
+        @if (_isExtracting && _capturedImageUrl is null)
+        {
+            <MudPaper Elevation="1" Class="pa-3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                    <MudText Typo="Typo.body2">Processing image…</MudText>
+                </MudStack>
+            </MudPaper>
+        }
 
         @if (_capturedImageUrl is not null)
         {
@@ -218,14 +229,14 @@
         if (file is null) return;
 
         _extractionMessage = null;
+        _isExtracting = true;
+        StateHasChanged();
 
         var buffer = new byte[file.Size];
         await using var stream = file.OpenReadStream(maxAllowedSize: MaxCameraCaptureSizeBytes);
         _ = await stream.ReadAsync(buffer);
         var base64 = Convert.ToBase64String(buffer);
         _capturedImageUrl = $"data:{file.ContentType};base64,{base64}";
-
-        _isExtracting = true;
         StateHasChanged();
 
         try

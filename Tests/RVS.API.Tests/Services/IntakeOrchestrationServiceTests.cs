@@ -109,6 +109,138 @@ public class IntakeOrchestrationServiceTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // ── Step 2: Opt-out Timestamp Stamping (GlobalCustomerAcct) ─────────────
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNewGlobalAcct_WithSmsOptOut_ShouldStampSmsOptOutAtUtc()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
+
+        _globalAcctRepoMock.Verify(r => r.CreateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.SmsOptOut && a.SmsOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNewGlobalAcct_WithEmailOptOut_ShouldStampEmailOptOutAtUtc()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: true));
+
+        _globalAcctRepoMock.Verify(r => r.CreateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.EmailOptOut && a.EmailOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNewGlobalAcct_WithNoOptOut_ShouldNotSetOptOutTimestamps()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: false, emailOptOut: false));
+
+        _globalAcctRepoMock.Verify(r => r.CreateAsync(
+            It.Is<GlobalCustomerAcct>(a => !a.SmsOptOutAtUtc.HasValue && !a.EmailOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenSmsOptOutFirstSet_ShouldStampSmsOptOutAtUtc()
+    {
+        SetupFullHappyPath(globalAcctExists: true);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
+
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.SmsOptOut && a.SmsOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenSmsOptOutAlreadySet_ShouldPreserveExistingTimestamp()
+    {
+        var existingTimestamp = DateTime.UtcNow.AddDays(-30);
+        SetupFullHappyPath(globalAcctExists: true);
+        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlobalCustomerAcct
+            {
+                Id = "gca_test",
+                Email = "jane@example.com",
+                FirstName = "Jane",
+                LastName = "Doe",
+                CreatedByUserId = "intake",
+                SmsOptOut = true,
+                SmsOptOutAtUtc = existingTimestamp,
+            });
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
+
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.SmsOptOutAtUtc == existingTimestamp),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenSmsOptOutCleared_ShouldClearSmsOptOutAtUtc()
+    {
+        SetupFullHappyPath(globalAcctExists: true);
+        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlobalCustomerAcct
+            {
+                Id = "gca_test",
+                Email = "jane@example.com",
+                FirstName = "Jane",
+                LastName = "Doe",
+                CreatedByUserId = "intake",
+                SmsOptOut = true,
+                SmsOptOutAtUtc = DateTime.UtcNow.AddDays(-30),
+            });
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: false));
+
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => !a.SmsOptOut && !a.SmsOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenEmailOptOutFirstSet_ShouldStampEmailOptOutAtUtc()
+    {
+        SetupFullHappyPath(globalAcctExists: true);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: true));
+
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.EmailOptOut && a.EmailOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenEmailOptOutCleared_ShouldClearEmailOptOutAtUtc()
+    {
+        SetupFullHappyPath(globalAcctExists: true);
+        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlobalCustomerAcct
+            {
+                Id = "gca_test",
+                Email = "jane@example.com",
+                FirstName = "Jane",
+                LastName = "Doe",
+                CreatedByUserId = "intake",
+                EmailOptOut = true,
+                EmailOptOutAtUtc = DateTime.UtcNow.AddDays(-10),
+            });
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: false));
+
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => !a.EmailOptOut && !a.EmailOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ── Step 3: CustomerProfile Resolution + Asset Ownership ─────────────────
 
     [Fact]
@@ -133,6 +265,92 @@ public class IntakeOrchestrationServiceTests
         _profileRepoMock.Verify(r => r.CreateAsync(
             It.IsAny<CustomerProfile>(),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── Step 3: Opt-out Timestamp Stamping (CustomerProfile) ─────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNewProfile_WithSmsOptOut_ShouldStampSmsOptOutAtUtc()
+    {
+        SetupFullHappyPath(profileExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
+
+        _profileRepoMock.Verify(r => r.CreateAsync(
+            It.Is<CustomerProfile>(p => p.SmsOptOut && p.SmsOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNewProfile_WithEmailOptOut_ShouldStampEmailOptOutAtUtc()
+    {
+        SetupFullHappyPath(profileExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: true));
+
+        _profileRepoMock.Verify(r => r.CreateAsync(
+            It.Is<CustomerProfile>(p => p.EmailOptOut && p.EmailOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingProfile_WhenSmsOptOutFirstSet_ShouldStampSmsOptOutAtUtc()
+    {
+        SetupFullHappyPath(profileExists: true);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.SmsOptOut && p.SmsOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingProfile_WhenSmsOptOutCleared_ShouldClearSmsOptOutAtUtc()
+    {
+        var existingProfile = BuildProfile();
+        existingProfile.SmsOptOut = true;
+        existingProfile.SmsOptOutAtUtc = DateTime.UtcNow.AddDays(-5);
+
+        SetupFullHappyPath(profileExists: true);
+        _profileRepoMock.Setup(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingProfile);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: false));
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => !p.SmsOptOut && !p.SmsOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingProfile_WhenEmailOptOutFirstSet_ShouldStampEmailOptOutAtUtc()
+    {
+        SetupFullHappyPath(profileExists: true);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: true));
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.EmailOptOut && p.EmailOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenExistingProfile_WhenEmailOptOutCleared_ShouldClearEmailOptOutAtUtc()
+    {
+        var existingProfile = BuildProfile();
+        existingProfile.EmailOptOut = true;
+        existingProfile.EmailOptOutAtUtc = DateTime.UtcNow.AddDays(-5);
+
+        SetupFullHappyPath(profileExists: true);
+        _profileRepoMock.Setup(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingProfile);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: false));
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => !p.EmailOptOut && !p.EmailOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
     [Fact]
@@ -576,7 +794,10 @@ public class IntakeOrchestrationServiceTests
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static ServiceRequestCreateRequestDto BuildValidRequest(bool includeDiagnostics = false)
+    private static ServiceRequestCreateRequestDto BuildValidRequest(
+        bool includeDiagnostics = false,
+        bool smsOptOut = false,
+        bool emailOptOut = false)
     {
         return new ServiceRequestCreateRequestDto
         {
@@ -598,6 +819,8 @@ public class IntakeOrchestrationServiceTests
             IssueDescription = "Slide won't retract",
             Urgency = "This week",
             RvUsage = "Full-time",
+            SmsOptOut = smsOptOut,
+            EmailOptOut = emailOptOut,
             DiagnosticResponses = includeDiagnostics
                 ?
                 [

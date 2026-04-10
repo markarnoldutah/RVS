@@ -56,6 +56,13 @@ public class GlobalCustomerAcct : EntityBase
     public DateTime? SmsOptOutAtUtc { get; set; }
 
     /// <summary>
+    /// UTC timestamp when the customer opted out of email notifications.
+    /// Null if the customer has not opted out. When set, no outbound email is sent.
+    /// </summary>
+    [JsonProperty("emailOptOutAtUtc")]
+    public DateTime? EmailOptOutAtUtc { get; set; }
+
+    /// <summary>
     /// All dealership-scoped profiles linked to this identity.
     /// Enables "show me all my service history across all dealerships."
     /// </summary>

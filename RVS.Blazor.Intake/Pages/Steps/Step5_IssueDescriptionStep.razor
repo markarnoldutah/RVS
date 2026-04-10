@@ -1,209 +1,218 @@
 <MudPaper Elevation="2" Class="pa-6 rounded-lg wizard-step-card">
     <MudForm @ref="_form">
-    <MudStack Spacing="4">
-        <MudStack Spacing="1">
-            <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Issue</MudText>
-            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                Describe the problem you're experiencing with your RV.
-            </MudText>
-        </MudStack>
-
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+        <MudStack Spacing="4">
             <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Description</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Tap the mic to describe the issue, or type it below</MudText>
-
-                @* Microphone capture button *@
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-                    <MudButton Variant="Variant.Outlined"
-                               Color="@(_isRecording ? Color.Error : Color.Primary)"
-                               StartIcon="@(_isRecording ? Icons.Material.Filled.Stop : Icons.Material.Filled.Mic)"
-                               OnClick="ToggleRecording"
-                               Disabled="@(_isTranscribing || _isRefining)"
-                               Style="text-transform: none;">
-                        @(_isRecording ? "Stop Recording" : "Tap to Speak")
-                    </MudButton>
-                    @if (_isTranscribing)
-                    {
-                        <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
-                        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Transcribing...</MudText>
-                    }
-                    else if (_isRefining)
-                    {
-                        <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
-                        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Cleaning up transcript...</MudText>
-                    }
-                </MudStack>
-
-                @if (!string.IsNullOrWhiteSpace(_transcriptionError))
-                {
-                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
-                        @_transcriptionError You can still type your description below.
-                    </MudAlert>
-                }
-
-                <MudTextField @bind-Value="State.IssueDescription"
-                              T="string"
-                              Validation="@(new Func<string?, string?>(ValidateDescription))"
-                              Lines="5"
-                              MaxLength="2000"
-                              Counter="2000"
-                              Variant="Variant.Outlined"
-                              Margin="Margin.Dense"
-                              Placeholder="Describe the issue in detail..." />
+                <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Issue</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                    Describe the problem you're experiencing with your RV.
+                </MudText>
             </MudStack>
-        </MudPaper>
 
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-            <MudStack Spacing="1">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue Category</MudText>
-                    @if (State.IsCategorySuggestedByAi)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
-                            Suggested
-                        </MudChip>
-                    }
-                    @if (_isSuggestingCategory)
-                    {
-                        <MudProgressCircular Size="Size.Small" Color="Color.Info" Indeterminate="true" />
-                    }
-                </MudStack>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Select the area that best describes the issue</MudText>
-                @if (_categories.Count > 0)
-                {
-                    <MudSelect T="string"
-                               Value="State.IssueCategory"
-                               ValueChanged="OnCategoryChanged"
-                               Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               AnchorOrigin="Origin.BottomCenter"
-                               TransformOrigin="Origin.TopCenter"
-                               RelativeWidth="DropdownWidth.Adaptive">
-                        @foreach (var category in _categories)
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Description</MudText>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Tap the mic to describe the issue, or type it below</MudText>
+
+                    @* Microphone capture button *@
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="@(_isRecording ? Color.Error : Color.Primary)"
+                                   StartIcon="@(_isRecording ? Icons.Material.Filled.Stop : Icons.Material.Filled.Mic)"
+                                   OnClick="ToggleRecording"
+                                   Disabled="@(_isTranscribing || _isRefining)"
+                                   Style="text-transform: none;">
+                            @(_isRecording ? "Stop Recording" : "Tap to Speak")
+                        </MudButton>
+                        @if (_isTranscribing)
                         {
-                            <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
+                            <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Transcribing...</MudText>
                         }
-                    </MudSelect>
-                }
-                else
-                {
+                        else if (_isRefining)
+                        {
+                            <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Cleaning up transcript...</MudText>
+                        }
+                    </MudStack>
+
+                    @if (!string.IsNullOrWhiteSpace(_transcriptionError))
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                            @_transcriptionError You can still type your description below.
+                        </MudAlert>
+                    }
+
+                    <MudTextField @bind-Value="State.IssueDescription"
+                                  T="string"
+                                  Validation="@(new Func<string?, string?>(ValidateDescription))"
+                                  Lines="5"
+                                  MaxLength="2000"
+                                  Counter="2000"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Placeholder="Describe the issue in detail..." />
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue Category</MudText>
+                        @if (State.IsCategorySuggestedByAi)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                Suggested
+                            </MudChip>
+                        }
+                        @if (_isSuggestingCategory)
+                        {
+                            <MudProgressCircular Size="Size.Small" Color="Color.Info" Indeterminate="true" />
+                        }
+                    </MudStack>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Select the area that best describes the issue</MudText>
+                    @if (_categories.Count > 0)
+                    {
+                        <MudSelect T="string"
+                                   Value="State.IssueCategory"
+                                   ValueChanged="OnCategoryChanged"
+                                   Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   AnchorOrigin="Origin.BottomCenter"
+                                   TransformOrigin="Origin.TopCenter"
+                                   RelativeWidth="DropdownWidth.Adaptive">
+                            @foreach (var category in _categories)
+                            {
+                                <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                    else
+                    {
+                        <MudSelect T="string"
+                                   Value="State.IssueCategory"
+                                   ValueChanged="OnCategoryChanged"
+                                   Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   AnchorOrigin="Origin.BottomCenter"
+                                   TransformOrigin="Origin.TopCenter"
+                                   RelativeWidth="DropdownWidth.Adaptive">
+                            <MudSelectItem T="string" Value="@("Electrical")">Electrical</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Plumbing")">Plumbing</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("HVAC")">HVAC / Climate Control</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Appliance")">Appliance</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Structural")">Structural / Body</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Slide-Out")">Slide-Out</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Awning")">Awning</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Other")">Other</MudSelectItem>
+                        </MudSelect>
+                    }
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Urgency</MudText>
+                        @if (State.IsUrgencySuggestedByAi)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                Suggested
+                            </MudChip>
+                        }
+                        @if (_isSuggestingInsights)
+                        {
+                            <MudProgressCircular Size="Size.Small" Color="Color.Info" Indeterminate="true" />
+                        }
+                    </MudStack>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How urgent is this service need?</MudText>
                     <MudSelect T="string"
-                               Value="State.IssueCategory"
-                               ValueChanged="OnCategoryChanged"
-                               Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
+                               Value="State.Urgency"
+                               ValueChanged="OnUrgencyChanged"
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
                                AnchorOrigin="Origin.BottomCenter"
                                TransformOrigin="Origin.TopCenter"
                                RelativeWidth="DropdownWidth.Adaptive">
-                        <MudSelectItem T="string" Value="@("Electrical")">Electrical</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Plumbing")">Plumbing</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("HVAC")">HVAC / Climate Control</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Appliance")">Appliance</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Structural")">Structural / Body</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Slide-Out")">Slide-Out</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Awning")">Awning</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Other")">Other</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
                     </MudSelect>
-                }
-            </MudStack>
-        </MudPaper>
-
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-            <MudStack Spacing="1">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Urgency</MudText>
-                    @if (State.IsUrgencySuggestedByAi)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
-                            Suggested
-                        </MudChip>
-                    }
-                    @if (_isSuggestingInsights)
-                    {
-                        <MudProgressCircular Size="Size.Small" Color="Color.Info" Indeterminate="true" />
-                    }
                 </MudStack>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How urgent is this service need?</MudText>
-                <MudSelect T="string"
-                           Value="State.Urgency"
-                           ValueChanged="OnUrgencyChanged"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense"
-                           AnchorOrigin="Origin.BottomCenter"
-                           TransformOrigin="Origin.TopCenter"
-                           RelativeWidth="DropdownWidth.Adaptive">
-                    <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
-                </MudSelect>
-            </MudStack>
-        </MudPaper>
+            </MudPaper>
 
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-            <MudStack Spacing="1">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">RV Usage</MudText>
-                    @if (State.IsRvUsageSuggestedByAi)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
-                            Suggested
-                        </MudChip>
-                    }
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">RV Usage</MudText>
+                        @if (State.IsRvUsageSuggestedByAi)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                Suggested
+                            </MudChip>
+                        }
+                    </MudStack>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How often do you use your RV?</MudText>
+                    <MudSelect T="string"
+                               Value="State.RvUsage"
+                               ValueChanged="OnRvUsageChanged"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               AnchorOrigin="Origin.BottomCenter"
+                               TransformOrigin="Origin.TopCenter"
+                               RelativeWidth="DropdownWidth.Adaptive">
+                        <MudSelectItem T="string" Value="@("Full-Time")">Full-Time</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Part-Time")">Part-Time</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Seasonal")">Seasonal</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Occasional")">Occasional</MudSelectItem>
+                    </MudSelect>
                 </MudStack>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How often do you use your RV?</MudText>
-                <MudSelect T="string"
-                           Value="State.RvUsage"
-                           ValueChanged="OnRvUsageChanged"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense"
-                           AnchorOrigin="Origin.BottomCenter"
-                           TransformOrigin="Origin.TopCenter"
-                           RelativeWidth="DropdownWidth.Adaptive">
-                    <MudSelectItem T="string" Value="@("Full-Time")">Full-Time</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Part-Time")">Part-Time</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Seasonal")">Seasonal</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Occasional")">Occasional</MudSelectItem>
-                </MudSelect>
-            </MudStack>
-        </MudPaper>
+            </MudPaper>
 
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-            <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Extended Warranty</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Do you have an extended warranty on your RV?</MudText>
-                <MudRadioGroup T="string" Value="State.HasExtendedWarranty" ValueChanged="OnExtendedWarrantyChanged">
-                    <MudRadio T="string" Value="@("Yes")" Color="Color.Primary">Yes</MudRadio>
-                    <MudRadio T="string" Value="@("No")" Color="Color.Primary">No</MudRadio>
-                    <MudRadio T="string" Value="@("Not Sure")" Color="Color.Primary">Not Sure</MudRadio>
-                </MudRadioGroup>
-            </MudStack>
-        </MudPaper>
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Extended Warranty</MudText>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Do you have an extended warranty on your RV?</MudText>
+                    <MudRadioGroup T="string" Value="State.HasExtendedWarranty" ValueChanged="OnExtendedWarrantyChanged"
+                                   Validation="@(new Func<string?, string?>(ValidateExtendedWarranty))">
+                        <MudRadio T="string" Value="@("Yes")" Color="Color.Primary">Yes</MudRadio>
+                        <MudRadio T="string" Value="@("No")" Color="Color.Primary">No</MudRadio>
+                        <MudRadio T="string" Value="@("Not Sure")" Color="Color.Primary">Not Sure</MudRadio>
+                    </MudRadioGroup>
+                </MudStack>
+            </MudPaper>
 
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-            <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Approx. Purchase Date</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">When did you purchase your RV? (e.g., "March 2023", "2022")</MudText>
-                <MudTextField @bind-Value="State.ApproxPurchaseDate"
-                              T="string"
-                              Variant="Variant.Outlined"
-                              Margin="Margin.Dense"
-                              Placeholder="e.g., March 2023" />
-            </MudStack>
-        </MudPaper>
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Approx. Purchase Date</MudText>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">When did you purchase your RV? (MM/YYYY)</MudText>
+                    <MudDatePicker Date="_approxPurchaseDate"
+                                   DateChanged="HandlePurchaseDateChanged"
+                                   Validation="@(new Func<DateTime?, string?>(ValidateApproxPurchaseDate))"
+                                   DateFormat="MM/yyyy"
+                                   FixDay="1"
+                                   OpenTo="OpenTo.Month"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Editable="true"
+                                   Placeholder="MM/YYYY"
+                                   MaxDate="@DateTime.Today"
+                                   MinDate="_minPurchaseDate"
+                                   AutoClose="true" />
+                </MudStack>
+            </MudPaper>
 
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   FullWidth="true"
-                   OnClick="HandleNext"
-                   Style="text-transform: none;"
-                   Class="mt-6">
-            Continue
-        </MudButton>
-    </MudStack>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       OnClick="HandleNext"
+                       Style="text-transform: none;"
+                       Class="mt-6">
+                Continue
+            </MudButton>
+        </MudStack>
     </MudForm>
 </MudPaper>
 
@@ -216,6 +225,7 @@
     private MudForm _form = default!;
     private bool _submitted;
     private List<LookupItemDto> _categories = [];
+    private DateTime? _approxPurchaseDate;
     private bool _isRecording;
     private bool _isTranscribing;
     private bool _isRefining;
@@ -224,12 +234,21 @@
     private string? _transcriptionError;
     private CancellationTokenSource? _suggestCategoryCts;
     private CancellationTokenSource? _suggestInsightsCts;
+    private readonly DateTime _minPurchaseDate = new(1960, 1, 1);
 
     protected override void OnInitialized()
     {
         if (State.Config?.IssueCategories is { Count: > 0 } categories)
         {
             _categories = categories.Where(c => c.IsSelectable).ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(State.ApproxPurchaseDate) &&
+            DateTime.TryParseExact(State.ApproxPurchaseDate, "MM/yyyy",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var parsedDate))
+        {
+            _approxPurchaseDate = parsedDate;
         }
     }
 
@@ -438,6 +457,22 @@
             StateHasChanged();
         }
     }
+
+    private void HandlePurchaseDateChanged(DateTime? date)
+    {
+        _approxPurchaseDate = date;
+        State.ApproxPurchaseDate = date?.ToString("MM/yyyy");
+    }
+
+    private string? ValidateApproxPurchaseDate(DateTime? date)
+    {
+        if (!_submitted) return null;
+        if (date is null) return "Approximate purchase date is required";
+        return date > DateTime.Today ? "Purchase date cannot be in the future" : null;
+    }
+
+    private string? ValidateExtendedWarranty(string? value) =>
+        _submitted && string.IsNullOrWhiteSpace(value) ? "Extended warranty selection is required" : null;
 
     private string? ValidateIssueCategory(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "Issue category is required" : null;

@@ -79,7 +79,9 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 LastName = request.Customer.LastName.Trim(),
                 Phone = request.Customer.Phone?.Trim(),
                 SmsOptOut = request.SmsOptOut,
+                SmsOptOutAtUtc = request.SmsOptOut ? DateTime.UtcNow : null,
                 EmailOptOut = request.EmailOptOut,
+                EmailOptOutAtUtc = request.EmailOptOut ? DateTime.UtcNow : null,
                 CreatedByUserId = "intake",
             };
             globalAcct = await _globalCustomerAcctRepository.CreateAsync(globalAcct, cancellationToken);
@@ -90,7 +92,15 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         {
             globalAcct.Phone = request.Customer.Phone?.Trim();
             globalAcct.SmsOptOut = request.SmsOptOut;
+            if (request.SmsOptOut && globalAcct.SmsOptOutAtUtc is null)
+                globalAcct.SmsOptOutAtUtc = DateTime.UtcNow;
+            else if (!request.SmsOptOut)
+                globalAcct.SmsOptOutAtUtc = null;
             globalAcct.EmailOptOut = request.EmailOptOut;
+            if (request.EmailOptOut && globalAcct.EmailOptOutAtUtc is null)
+                globalAcct.EmailOptOutAtUtc = DateTime.UtcNow;
+            else if (!request.EmailOptOut)
+                globalAcct.EmailOptOutAtUtc = null;
             _logger.LogInformation("Intake Step 2: Resolved existing GlobalCustomerAcct {AcctId} for {Email}",
                 globalAcct.Id, normalizedEmail);
         }
@@ -110,7 +120,9 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 Name = $"{request.Customer.FirstName.Trim()} {request.Customer.LastName.Trim()}",
                 GlobalCustomerAcctId = globalAcct.Id,
                 SmsOptOut = request.SmsOptOut,
+                SmsOptOutAtUtc = request.SmsOptOut ? DateTime.UtcNow : null,
                 EmailOptOut = request.EmailOptOut,
+                EmailOptOutAtUtc = request.EmailOptOut ? DateTime.UtcNow : null,
                 CreatedByUserId = "intake",
             };
             profile = await _customerProfileRepository.CreateAsync(profile, cancellationToken);
@@ -121,7 +133,15 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         {
             profile.Phone = request.Customer.Phone?.Trim();
             profile.SmsOptOut = request.SmsOptOut;
+            if (request.SmsOptOut && profile.SmsOptOutAtUtc is null)
+                profile.SmsOptOutAtUtc = DateTime.UtcNow;
+            else if (!request.SmsOptOut)
+                profile.SmsOptOutAtUtc = null;
             profile.EmailOptOut = request.EmailOptOut;
+            if (request.EmailOptOut && profile.EmailOptOutAtUtc is null)
+                profile.EmailOptOutAtUtc = DateTime.UtcNow;
+            else if (!request.EmailOptOut)
+                profile.EmailOptOutAtUtc = null;
             _logger.LogInformation("Intake Step 3: Resolved existing CustomerProfile {ProfileId} in tenant {TenantId}",
                 profile.Id, tenantId);
         }

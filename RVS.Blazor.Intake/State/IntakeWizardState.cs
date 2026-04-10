@@ -284,7 +284,7 @@ public sealed class IntakeWizardState
             Urgency = string.IsNullOrWhiteSpace(Urgency) ? null : Urgency.Trim(),
             RvUsage = string.IsNullOrWhiteSpace(RvUsage) ? null : RvUsage.Trim(),
             SmsOptOut = SmsOptOut,
-            EmailOptOut = EmailOptOut
+            EmailOptOut = EmailOptOut,
             HasExtendedWarranty = string.IsNullOrWhiteSpace(HasExtendedWarranty) ? null : HasExtendedWarranty.Trim(),
             ApproxPurchaseDate = string.IsNullOrWhiteSpace(ApproxPurchaseDate) ? null : ApproxPurchaseDate.Trim(),
             DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null
@@ -534,6 +534,18 @@ public sealed class IntakeWizardState
             var msg = $"Issue description must not exceed {MaxDescriptionLength} characters.";
             errors.Add(msg);
             FieldErrors["IssueDescription"] = msg;
+        }
+
+        if (string.IsNullOrWhiteSpace(HasExtendedWarranty))
+        {
+            errors.Add("Extended warranty selection is required.");
+            FieldErrors["HasExtendedWarranty"] = "Extended warranty selection is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(ApproxPurchaseDate))
+        {
+            errors.Add("Approximate purchase date is required.");
+            FieldErrors["ApproxPurchaseDate"] = "Approximate purchase date is required.";
         }
 
         return errors;
