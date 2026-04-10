@@ -30,16 +30,18 @@ The PRD (`RVS_PRD.md` FR-016) defines notifications as a core capability coverin
 4. **Dealer-to-customer messaging** — Service advisor sends a scheduling question, parts update, or follow-up from the Manager app; message is linked to the service request
 5. **Customer-to-dealer replies** — Customer replies to dealer texts; replies are captured and linked to the originating service request (inbound SMS)
 
-### Notification Preference: "And/Or" Opt-In
+### Notification Preference: Opt-Out Model
 
-Customers choose their preferred notification channel during intake:
+By default both email and SMS notifications are sent. Customers can opt out of either channel during intake:
 
-| Preference | Email | SMS | When to Use |
-|---|---|---|---|
-| `email` | ✅ | ❌ | Default — customer provides email only |
-| `sms` | ❌ | ✅ | Customer provides phone and opts in to SMS |
+| SmsOptOut | EmailOptOut | Email | SMS | When |
+|---|---|---|---|---|
+| `false` | `false` | ✅ | ✅ | Default — both channels active |
+| `true` | `false` | ✅ | ❌ | Customer opted out of text messages |
+| `false` | `true` | ❌ | ✅ | Customer opted out of email |
+| `true` | `true` | ❌ | ❌ | Customer opted out of all notifications |
 
-The choice is either/or. The opt-in is explicit and timestamped for TCPA compliance. The intake wizard contact step presents the choice clearly.
+The opt-out choices are saved on both `CustomerProfile` and `GlobalCustomerAcct` entities. The intake wizard contact step (Step 2) presents two checkboxes: "Do not send text messages" and "Do not send email".
 
 ---
 

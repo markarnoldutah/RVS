@@ -12,4 +12,16 @@ public sealed record ServiceRequestCreateRequestDto
     public string? Urgency { get; init; }
     public string? RvUsage { get; init; }
     public List<DiagnosticResponseDto>? DiagnosticResponses { get; init; }
+
+    /// <summary>
+    /// When <c>true</c>, the customer has opted out of SMS notifications.
+    /// Default is <c>false</c> (both channels active).
+    /// </summary>
+    public bool SmsOptOut { get; init; }
+
+    /// <summary>
+    /// When <c>true</c>, the customer has opted out of email notifications.
+    /// Default is <c>false</c> (both channels active).
+    /// </summary>
+    public bool EmailOptOut { get; init; }
 }

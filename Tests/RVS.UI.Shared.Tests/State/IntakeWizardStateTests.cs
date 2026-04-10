@@ -23,6 +23,8 @@ public class IntakeWizardStateTests
         state.LastName.Should().BeEmpty();
         state.Email.Should().BeEmpty();
         state.Phone.Should().BeNull();
+        state.SmsOptOut.Should().BeFalse();
+        state.EmailOptOut.Should().BeFalse();
         state.IsPrefilled.Should().BeFalse();
         state.Vin.Should().BeEmpty();
         state.VinLookupSucceeded.Should().BeFalse();
@@ -447,6 +449,59 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
+    public void BuildCreateRequest_DefaultOptOuts_ShouldBeFalse()
+    {
+        var state = CreateState();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Vin = "1HGBH41JXMN109186";
+        state.IssueCategory = "Electrical";
+        state.IssueDescription = "Test";
+
+        var request = state.BuildCreateRequest();
+
+        request.SmsOptOut.Should().BeFalse();
+        request.EmailOptOut.Should().BeFalse();
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WithSmsOptOut_ShouldIncludeOptOut()
+    {
+        var state = CreateState();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Vin = "1HGBH41JXMN109186";
+        state.IssueCategory = "Electrical";
+        state.IssueDescription = "Test";
+        state.SmsOptOut = true;
+
+        var request = state.BuildCreateRequest();
+
+        request.SmsOptOut.Should().BeTrue();
+        request.EmailOptOut.Should().BeFalse();
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WithEmailOptOut_ShouldIncludeOptOut()
+    {
+        var state = CreateState();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Vin = "1HGBH41JXMN109186";
+        state.IssueCategory = "Electrical";
+        state.IssueDescription = "Test";
+        state.EmailOptOut = true;
+
+        var request = state.BuildCreateRequest();
+
+        request.SmsOptOut.Should().BeFalse();
+        request.EmailOptOut.Should().BeTrue();
+    }
+
+    [Fact]
     public void BuildCreateRequest_WithDiagnosticResponses_ShouldIncludeThem()
     {
         var state = CreateState();
@@ -511,6 +566,8 @@ public class IntakeWizardStateTests
         state.IssueDescription = "Test";
         state.IsSubmitted = true;
         state.FailedUploadCount = 3;
+        state.SmsOptOut = true;
+        state.EmailOptOut = true;
         await state.GoToStepAsync(5);
 
         await state.ClearAsync();
@@ -523,6 +580,8 @@ public class IntakeWizardStateTests
         state.Vin.Should().BeEmpty();
         state.IsSubmitted.Should().BeFalse();
         state.FailedUploadCount.Should().Be(0);
+        state.SmsOptOut.Should().BeFalse();
+        state.EmailOptOut.Should().BeFalse();
     }
 
     [Fact]

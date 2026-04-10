@@ -56,6 +56,12 @@ public sealed class IntakeWizardState
     /// <summary>Customer phone number — optional (Step 2).</summary>
     public string? Phone { get; set; }
 
+    /// <summary>When <c>true</c>, customer has opted out of SMS notifications (Step 2).</summary>
+    public bool SmsOptOut { get; set; }
+
+    /// <summary>When <c>true</c>, customer has opted out of email notifications (Step 2).</summary>
+    public bool EmailOptOut { get; set; }
+
     /// <summary>Whether the customer info was prefilled from a magic-link token.</summary>
     public bool IsPrefilled { get; set; }
 
@@ -268,7 +274,9 @@ public sealed class IntakeWizardState
             IssueDescription = IssueDescription.Trim(),
             Urgency = string.IsNullOrWhiteSpace(Urgency) ? null : Urgency.Trim(),
             RvUsage = string.IsNullOrWhiteSpace(RvUsage) ? null : RvUsage.Trim(),
-            DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null
+            DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null,
+            SmsOptOut = SmsOptOut,
+            EmailOptOut = EmailOptOut
         };
     }
 
@@ -285,6 +293,8 @@ public sealed class IntakeWizardState
             LastName = LastName,
             Email = Email,
             Phone = Phone,
+            SmsOptOut = SmsOptOut,
+            EmailOptOut = EmailOptOut,
             IsPrefilled = IsPrefilled,
             KnownAssets = KnownAssets,
             Vin = Vin,
@@ -325,6 +335,8 @@ public sealed class IntakeWizardState
             LastName = data.LastName;
             Email = data.Email;
             Phone = data.Phone;
+            SmsOptOut = data.SmsOptOut;
+            EmailOptOut = data.EmailOptOut;
             IsPrefilled = data.IsPrefilled;
             KnownAssets = data.KnownAssets;
             Vin = data.Vin;
@@ -362,6 +374,8 @@ public sealed class IntakeWizardState
         LastName = string.Empty;
         Email = string.Empty;
         Phone = null;
+        SmsOptOut = false;
+        EmailOptOut = false;
         IsPrefilled = false;
         KnownAssets = [];
         Vin = string.Empty;
@@ -578,6 +592,8 @@ internal sealed class IntakeWizardStateData
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
+    public bool SmsOptOut { get; set; }
+    public bool EmailOptOut { get; set; }
     public bool IsPrefilled { get; set; }
     public List<AssetInfoDto> KnownAssets { get; set; } = [];
     public string Vin { get; set; } = string.Empty;

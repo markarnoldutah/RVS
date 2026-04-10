@@ -23,38 +23,24 @@ public class NotificationOrchestratorTests
     // ── SendServiceRequestConfirmationAsync ──────────────────────────────
 
     [Fact]
-    public async Task SendServiceRequestConfirmationAsync_WhenPreferenceIsEmail_ShouldRouteToEmailService()
+    public async Task SendServiceRequestConfirmationAsync_DefaultOptOuts_ShouldSendBothChannels()
     {
         await _sut.SendServiceRequestConfirmationAsync(
-            "email", "user@example.com", "+18015551234", "sr_001", "Blue Compass RV");
+            false, false, "user@example.com", "+18015551234", "sr_001", "Blue Compass RV");
 
         _emailMock.Verify(
             e => e.SendServiceRequestConfirmationAsync("user@example.com", "sr_001", It.IsAny<CancellationToken>()),
             Times.Once);
-        _smsMock.Verify(
-            s => s.SendServiceRequestConfirmationSmsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task SendServiceRequestConfirmationAsync_WhenPreferenceIsSms_ShouldRouteToSmsService()
-    {
-        await _sut.SendServiceRequestConfirmationAsync(
-            "sms", "user@example.com", "+18015551234", "sr_001", "Blue Compass RV");
-
         _smsMock.Verify(
             s => s.SendServiceRequestConfirmationSmsAsync("+18015551234", "sr_001", "Blue Compass RV", It.IsAny<CancellationToken>()),
             Times.Once);
-        _emailMock.Verify(
-            e => e.SendServiceRequestConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     [Fact]
-    public async Task SendServiceRequestConfirmationAsync_WhenPreferenceIsSmsButPhoneIsNull_ShouldFallBackToEmail()
+    public async Task SendServiceRequestConfirmationAsync_SmsOptOut_ShouldSendEmailOnly()
     {
         await _sut.SendServiceRequestConfirmationAsync(
-            "sms", "user@example.com", null, "sr_001", "Blue Compass RV");
+            true, false, "user@example.com", "+18015551234", "sr_001", "Blue Compass RV");
 
         _emailMock.Verify(
             e => e.SendServiceRequestConfirmationAsync("user@example.com", "sr_001", It.IsAny<CancellationToken>()),
@@ -65,13 +51,58 @@ public class NotificationOrchestratorTests
     }
 
     [Fact]
-    public async Task SendServiceRequestConfirmationAsync_WhenPreferenceIsUnknown_ShouldDefaultToEmail()
+    public async Task SendServiceRequestConfirmationAsync_EmailOptOut_ShouldSendSmsOnly()
     {
         await _sut.SendServiceRequestConfirmationAsync(
-            "unknown", "user@example.com", "+18015551234", "sr_001", "Blue Compass RV");
+            false, true, "user@example.com", "+18015551234", "sr_001", "Blue Compass RV");
+
+        _emailMock.Verify(
+            e => e.SendServiceRequestConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _smsMock.Verify(
+            s => s.SendServiceRequestConfirmationSmsAsync("+18015551234", "sr_001", "Blue Compass RV", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SendServiceRequestConfirmationAsync_BothOptedOut_ShouldNotCallAnyService()
+    {
+        await _sut.SendServiceRequestConfirmationAsync(
+            true, true, "user@example.com", "+18015551234", "sr_001", "Blue Compass RV");
+
+        _emailMock.Verify(
+            e => e.SendServiceRequestConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _smsMock.Verify(
+            s => s.SendServiceRequestConfirmationSmsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SendServiceRequestConfirmationAsync_NoPhone_ShouldSkipSmsEvenIfNotOptedOut()
+    {
+        await _sut.SendServiceRequestConfirmationAsync(
+            false, false, "user@example.com", null, "sr_001", "Blue Compass RV");
 
         _emailMock.Verify(
             e => e.SendServiceRequestConfirmationAsync("user@example.com", "sr_001", It.IsAny<CancellationToken>()),
+            Times.Once);
+        _smsMock.Verify(
+            s => s.SendServiceRequestConfirmationSmsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SendServiceRequestConfirmationAsync_NoEmail_ShouldSkipEmailEvenIfNotOptedOut()
+    {
+        await _sut.SendServiceRequestConfirmationAsync(
+            false, false, null, "+18015551234", "sr_001", "Blue Compass RV");
+
+        _emailMock.Verify(
+            e => e.SendServiceRequestConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _smsMock.Verify(
+            s => s.SendServiceRequestConfirmationSmsAsync("+18015551234", "sr_001", "Blue Compass RV", It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -82,7 +113,7 @@ public class NotificationOrchestratorTests
     public async Task SendServiceRequestConfirmationAsync_WhenServiceRequestIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? srId)
     {
         var act = () => _sut.SendServiceRequestConfirmationAsync(
-            "email", "user@example.com", null, srId!, "Blue Compass RV");
+            false, false, "user@example.com", null, srId!, "Blue Compass RV");
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -94,7 +125,7 @@ public class NotificationOrchestratorTests
     public async Task SendServiceRequestConfirmationAsync_WhenDealershipNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? dealer)
     {
         var act = () => _sut.SendServiceRequestConfirmationAsync(
-            "email", "user@example.com", null, "sr_001", dealer!);
+            false, false, "user@example.com", null, "sr_001", dealer!);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -102,10 +133,24 @@ public class NotificationOrchestratorTests
     // ── SendStatusChangeAsync ────────────────────────────────────────────
 
     [Fact]
-    public async Task SendStatusChangeAsync_WhenPreferenceIsEmail_ShouldRouteToEmailService()
+    public async Task SendStatusChangeAsync_DefaultOptOuts_ShouldSendBothChannels()
     {
         await _sut.SendStatusChangeAsync(
-            "email", "user@example.com", "+18015551234", "sr_001", "InProgress", "Blue Compass RV");
+            false, false, "user@example.com", "+18015551234", "sr_001", "InProgress", "Blue Compass RV");
+
+        _emailMock.Verify(
+            e => e.SendEmailAsync("user@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _smsMock.Verify(
+            s => s.SendStatusChangeSmsAsync("+18015551234", "sr_001", "InProgress", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SendStatusChangeAsync_SmsOptOut_ShouldSendEmailOnly()
+    {
+        await _sut.SendStatusChangeAsync(
+            true, false, "user@example.com", "+18015551234", "sr_001", "InProgress", "Blue Compass RV");
 
         _emailMock.Verify(
             e => e.SendEmailAsync("user@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -116,17 +161,17 @@ public class NotificationOrchestratorTests
     }
 
     [Fact]
-    public async Task SendStatusChangeAsync_WhenPreferenceIsSms_ShouldRouteToSmsService()
+    public async Task SendStatusChangeAsync_EmailOptOut_ShouldSendSmsOnly()
     {
         await _sut.SendStatusChangeAsync(
-            "sms", "user@example.com", "+18015551234", "sr_001", "InProgress", "Blue Compass RV");
+            false, true, "user@example.com", "+18015551234", "sr_001", "InProgress", "Blue Compass RV");
 
-        _smsMock.Verify(
-            s => s.SendStatusChangeSmsAsync("+18015551234", "sr_001", "InProgress", It.IsAny<CancellationToken>()),
-            Times.Once);
         _emailMock.Verify(
             e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
+        _smsMock.Verify(
+            s => s.SendStatusChangeSmsAsync("+18015551234", "sr_001", "InProgress", It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Theory]
@@ -136,7 +181,7 @@ public class NotificationOrchestratorTests
     public async Task SendStatusChangeAsync_WhenServiceRequestIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? srId)
     {
         var act = () => _sut.SendStatusChangeAsync(
-            "email", "user@example.com", null, srId!, "InProgress", "Blue Compass RV");
+            false, false, "user@example.com", null, srId!, "InProgress", "Blue Compass RV");
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -144,10 +189,24 @@ public class NotificationOrchestratorTests
     // ── SendMagicLinkAsync ───────────────────────────────────────────────
 
     [Fact]
-    public async Task SendMagicLinkAsync_WhenPreferenceIsEmail_ShouldRouteToEmailService()
+    public async Task SendMagicLinkAsync_DefaultOptOuts_ShouldSendBothChannels()
     {
         await _sut.SendMagicLinkAsync(
-            "email", "user@example.com", "+18015551234", "https://app.rvserviceflow.com/status/abc");
+            false, false, "user@example.com", "+18015551234", "https://app.rvserviceflow.com/status/abc");
+
+        _emailMock.Verify(
+            e => e.SendEmailAsync("user@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _smsMock.Verify(
+            s => s.SendMagicLinkSmsAsync("+18015551234", "https://app.rvserviceflow.com/status/abc", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SendMagicLinkAsync_SmsOptOut_ShouldSendEmailOnly()
+    {
+        await _sut.SendMagicLinkAsync(
+            true, false, "user@example.com", "+18015551234", "https://app.rvserviceflow.com/status/abc");
 
         _emailMock.Verify(
             e => e.SendEmailAsync("user@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -158,17 +217,17 @@ public class NotificationOrchestratorTests
     }
 
     [Fact]
-    public async Task SendMagicLinkAsync_WhenPreferenceIsSms_ShouldRouteToSmsService()
+    public async Task SendMagicLinkAsync_EmailOptOut_ShouldSendSmsOnly()
     {
         await _sut.SendMagicLinkAsync(
-            "sms", "user@example.com", "+18015551234", "https://app.rvserviceflow.com/status/abc");
+            false, true, "user@example.com", "+18015551234", "https://app.rvserviceflow.com/status/abc");
 
-        _smsMock.Verify(
-            s => s.SendMagicLinkSmsAsync("+18015551234", "https://app.rvserviceflow.com/status/abc", It.IsAny<CancellationToken>()),
-            Times.Once);
         _emailMock.Verify(
             e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
+        _smsMock.Verify(
+            s => s.SendMagicLinkSmsAsync("+18015551234", "https://app.rvserviceflow.com/status/abc", It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Theory]
@@ -178,29 +237,9 @@ public class NotificationOrchestratorTests
     public async Task SendMagicLinkAsync_WhenMagicLinkUrlIsNullOrWhiteSpace_ShouldThrowArgumentException(string? url)
     {
         var act = () => _sut.SendMagicLinkAsync(
-            "email", "user@example.com", null, url!);
+            false, false, "user@example.com", null, url!);
 
         await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    // ── NormalizePreference ──────────────────────────────────────────────
-
-    [Theory]
-    [InlineData("email", "email")]
-    [InlineData("EMAIL", "email")]
-    [InlineData("Email", "email")]
-    [InlineData("sms", "sms")]
-    [InlineData("SMS", "sms")]
-    [InlineData("Sms", "sms")]
-    [InlineData(" sms ", "sms")]
-    [InlineData("invalid", "email")]
-    [InlineData("both", "email")]
-    [InlineData(null, "email")]
-    [InlineData("", "email")]
-    public void NormalizePreference_ShouldReturnExpectedChannel(string? input, string expected)
-    {
-        var result = NotificationOrchestrator.NormalizePreference(input);
-        result.Should().Be(expected);
     }
 
     // ── Edge case: both contacts missing ─────────────────────────────────
@@ -209,7 +248,7 @@ public class NotificationOrchestratorTests
     public async Task SendServiceRequestConfirmationAsync_WhenBothContactsMissing_ShouldNotThrowAndNotCallAnyService()
     {
         await _sut.SendServiceRequestConfirmationAsync(
-            "email", null, null, "sr_001", "Blue Compass RV");
+            false, false, null, null, "sr_001", "Blue Compass RV");
 
         _emailMock.Verify(
             e => e.SendServiceRequestConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),

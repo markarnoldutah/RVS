@@ -78,6 +78,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 FirstName = request.Customer.FirstName.Trim(),
                 LastName = request.Customer.LastName.Trim(),
                 Phone = request.Customer.Phone?.Trim(),
+                SmsOptOut = request.SmsOptOut,
+                EmailOptOut = request.EmailOptOut,
                 CreatedByUserId = "intake",
             };
             globalAcct = await _globalCustomerAcctRepository.CreateAsync(globalAcct, cancellationToken);
@@ -87,6 +89,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         else
         {
             globalAcct.Phone = request.Customer.Phone?.Trim();
+            globalAcct.SmsOptOut = request.SmsOptOut;
+            globalAcct.EmailOptOut = request.EmailOptOut;
             _logger.LogInformation("Intake Step 2: Resolved existing GlobalCustomerAcct {AcctId} for {Email}",
                 globalAcct.Id, normalizedEmail);
         }
@@ -105,6 +109,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 Phone = request.Customer.Phone?.Trim(),
                 Name = $"{request.Customer.FirstName.Trim()} {request.Customer.LastName.Trim()}",
                 GlobalCustomerAcctId = globalAcct.Id,
+                SmsOptOut = request.SmsOptOut,
+                EmailOptOut = request.EmailOptOut,
                 CreatedByUserId = "intake",
             };
             profile = await _customerProfileRepository.CreateAsync(profile, cancellationToken);
@@ -114,6 +120,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         else
         {
             profile.Phone = request.Customer.Phone?.Trim();
+            profile.SmsOptOut = request.SmsOptOut;
+            profile.EmailOptOut = request.EmailOptOut;
             _logger.LogInformation("Intake Step 3: Resolved existing CustomerProfile {ProfileId} in tenant {TenantId}",
                 profile.Id, tenantId);
         }
@@ -273,6 +281,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         // ── Step 7: Fire-and-forget notification ─────────────────────────────
         _ = FireAndForgetNotificationAsync(
+            request.SmsOptOut,
+            request.EmailOptOut,
             request.Customer.Email.Trim(),
             request.Customer.Phone?.Trim(),
             serviceRequest.Id,
@@ -308,15 +318,14 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     /// Exceptions are caught and logged as warnings.
     /// </summary>
     private async Task FireAndForgetNotificationAsync(
+        bool smsOptOut, bool emailOptOut,
         string email, string? phone, string serviceRequestId, string dealershipName)
     {
         try
         {
-            // Default to email preference for intake — future: read from customer profile
-            var preference = !string.IsNullOrWhiteSpace(phone) ? "email" : "email";
-
             await _notificationOrchestrator.SendServiceRequestConfirmationAsync(
-                preference,
+                smsOptOut,
+                emailOptOut,
                 email,
                 phone,
                 serviceRequestId,

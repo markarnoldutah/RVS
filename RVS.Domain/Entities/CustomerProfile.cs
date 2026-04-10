@@ -29,10 +29,18 @@ public class CustomerProfile : EntityBase
     public string? Phone { get; set; }
 
     /// <summary>
-    /// Customer's preferred notification channel: "email" (default) or "sms".
+    /// When <c>true</c>, the customer has opted out of SMS notifications.
+    /// Default is <c>false</c> (both email and SMS are sent).
     /// </summary>
-    [JsonProperty("notificationPreference")]
-    public string NotificationPreference { get; set; } = "email";
+    [JsonProperty("smsOptOut")]
+    public bool SmsOptOut { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, the customer has opted out of email notifications.
+    /// Default is <c>false</c> (both email and SMS are sent).
+    /// </summary>
+    [JsonProperty("emailOptOut")]
+    public bool EmailOptOut { get; set; }
 
     /// <summary>
     /// UTC timestamp when the customer explicitly opted in to SMS notifications.
