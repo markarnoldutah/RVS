@@ -29,6 +29,7 @@ public class IntakeWizardStateTests
         state.Vin.Should().BeEmpty();
         state.VinLookupSucceeded.Should().BeFalse();
         state.IsSubmitted.Should().BeFalse();
+        state.SubmissionMagicLinkToken.Should().BeNull();
     }
 
     [Fact]
@@ -544,6 +545,63 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
+    public void BuildCreateRequest_WithWarrantyFields_ShouldIncludeThem()
+    {
+        var state = CreateState();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Vin = "1HGBH41JXMN109186";
+        state.IssueCategory = "Electrical";
+        state.IssueDescription = "Test";
+        state.HasExtendedWarranty = "Yes";
+        state.ApproxPurchaseDate = "March 2023";
+
+        var request = state.BuildCreateRequest();
+
+        request.HasExtendedWarranty.Should().Be("Yes");
+        request.ApproxPurchaseDate.Should().Be("March 2023");
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WithEmptyWarrantyFields_ShouldSetNull()
+    {
+        var state = CreateState();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Vin = "1HGBH41JXMN109186";
+        state.IssueCategory = "Electrical";
+        state.IssueDescription = "Test";
+        state.HasExtendedWarranty = "  ";
+        state.ApproxPurchaseDate = "";
+
+        var request = state.BuildCreateRequest();
+
+        request.HasExtendedWarranty.Should().BeNull();
+        request.ApproxPurchaseDate.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WithWarrantyFields_ShouldTrimValues()
+    {
+        var state = CreateState();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Vin = "1HGBH41JXMN109186";
+        state.IssueCategory = "Electrical";
+        state.IssueDescription = "Test";
+        state.HasExtendedWarranty = "  Not Sure  ";
+        state.ApproxPurchaseDate = "  2022  ";
+
+        var request = state.BuildCreateRequest();
+
+        request.HasExtendedWarranty.Should().Be("Not Sure");
+        request.ApproxPurchaseDate.Should().Be("2022");
+    }
+
+    [Fact]
     public void Token_ShouldBeSettable()
     {
         var state = CreateState();
@@ -551,6 +609,24 @@ public class IntakeWizardStateTests
         state.Token = "dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ";
 
         state.Token.Should().Be("dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ");
+    }
+
+    [Fact]
+    public void SubmissionMagicLinkToken_ShouldDefaultToNull()
+    {
+        var state = CreateState();
+
+        state.SubmissionMagicLinkToken.Should().BeNull();
+    }
+
+    [Fact]
+    public void SubmissionMagicLinkToken_ShouldBeSettable()
+    {
+        var state = CreateState();
+
+        state.SubmissionMagicLinkToken = "abc123:xyz789";
+
+        state.SubmissionMagicLinkToken.Should().Be("abc123:xyz789");
     }
 
     [Fact]
@@ -564,7 +640,10 @@ public class IntakeWizardStateTests
         state.Vin = "1HGBH41JXMN109186";
         state.IssueCategory = "Electrical";
         state.IssueDescription = "Test";
+        state.HasExtendedWarranty = "Yes";
+        state.ApproxPurchaseDate = "March 2023";
         state.IsSubmitted = true;
+        state.SubmissionMagicLinkToken = "abc123:xyz789";
         state.FailedUploadCount = 3;
         state.SmsOptOut = true;
         state.EmailOptOut = true;
@@ -578,7 +657,10 @@ public class IntakeWizardStateTests
         state.LastName.Should().BeEmpty();
         state.Email.Should().BeEmpty();
         state.Vin.Should().BeEmpty();
+        state.HasExtendedWarranty.Should().BeNull();
+        state.ApproxPurchaseDate.Should().BeNull();
         state.IsSubmitted.Should().BeFalse();
+        state.SubmissionMagicLinkToken.Should().BeNull();
         state.FailedUploadCount.Should().Be(0);
         state.SmsOptOut.Should().BeFalse();
         state.EmailOptOut.Should().BeFalse();

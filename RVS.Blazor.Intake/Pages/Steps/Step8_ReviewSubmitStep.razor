@@ -11,7 +11,7 @@
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="2">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Contact Information</strong></MudText>
+                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Contact Information</MudText>
                     <MudSpacer />
                     <MudButton Variant="Variant.Outlined"
                                Color="Color.Primary"
@@ -41,7 +41,7 @@
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="2">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Vehicle Information</strong></MudText>
+                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Vehicle Information</MudText>
                     <MudSpacer />
                     <MudButton Variant="Variant.Outlined"
                                Color="Color.Primary"
@@ -74,7 +74,7 @@
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="2">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Issue Details</strong></MudText>
+                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Issue Details</MudText>
                     <MudSpacer />
                     <MudButton Variant="Variant.Outlined"
                                Color="Color.Primary"
@@ -95,6 +95,14 @@
                         {
                             <tr><td><strong>RV Usage</strong></td><td>@State.RvUsage</td></tr>
                         }
+                        @if (!string.IsNullOrWhiteSpace(State.HasExtendedWarranty))
+                        {
+                            <tr><td><strong>Extended Warranty</strong></td><td>@State.HasExtendedWarranty</td></tr>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(State.ApproxPurchaseDate))
+                        {
+                            <tr><td><strong>Approx. Purchase Date</strong></td><td>@State.ApproxPurchaseDate</td></tr>
+                        }
                     </tbody>
                 </MudSimpleTable>
             </MudStack>
@@ -106,7 +114,7 @@
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);"><strong>Diagnostic Responses</strong></MudText>
+                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Diagnostic Responses</MudText>
                         <MudSpacer />
                         <MudButton Variant="Variant.Outlined"
                                    Color="Color.Primary"
@@ -153,8 +161,8 @@
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary);">
-                            <strong>Attachments (@State.Attachments.Count)</strong>
+                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">
+                            Attachments (@State.Attachments.Count)
                         </MudText>
                         <MudSpacer />
                         <MudButton Variant="Variant.Outlined"
@@ -248,7 +256,8 @@
             var result = await IntakeApi.SubmitServiceRequestAsync(State.Slug, request);
 
             State.IsSubmitted = true;
-            State.CreatedServiceRequestId = result.Id;
+            State.CreatedServiceRequestId = result.ServiceRequest.Id;
+            State.SubmissionMagicLinkToken = result.MagicLinkToken;
             await State.PersistAsync();
 
             var pendingFiles = State.Attachments
@@ -273,7 +282,7 @@
                     try
                     {
                         var sasResponse = await IntakeApi.GetUploadSasAsync(
-                            State.Slug, result.Id, file.FileName, file.ContentType);
+                            State.Slug, result.ServiceRequest.Id, file.FileName, file.ContentType);
 
                         file.BlobName = sasResponse.BlobName;
 
@@ -287,7 +296,7 @@
                         var sasResult = await Http.SendAsync(sasRequest);
                         sasResult.EnsureSuccessStatusCode();
 
-                        await IntakeApi.ConfirmUploadAsync(State.Slug, result.Id, new AttachmentConfirmRequestDto
+                        await IntakeApi.ConfirmUploadAsync(State.Slug, result.ServiceRequest.Id, new AttachmentConfirmRequestDto
                         {
                             BlobName = sasResponse.BlobName,
                             FileName = file.FileName,

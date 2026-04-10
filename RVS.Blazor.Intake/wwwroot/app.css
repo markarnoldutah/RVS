@@ -86,8 +86,16 @@ h1:focus {
    Review Tables — match cell font-size to body1 (1rem) so
    review-page text matches the input fields on other steps.
    -------------------------------------------------------- */
+.review-table {
+    background: transparent !important;
+}
+
 .review-table td {
     font-size: 1rem !important;
+}
+
+.review-table tbody tr:last-child td {
+    border-bottom: none !important;
 }
 
 /* --------------------------------------------------------

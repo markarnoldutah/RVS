@@ -126,6 +126,18 @@ public class ServiceRequest : EntityBase
     public string? RvUsage { get; set; }
 
     /// <summary>
+    /// Whether the customer has an extended warranty — "Yes", "No", or "Not Sure".
+    /// </summary>
+    [JsonProperty("hasExtendedWarranty")]
+    public string? HasExtendedWarranty { get; set; }
+
+    /// <summary>
+    /// Approximate purchase date of the RV, entered as free text (e.g., "March 2023", "2022").
+    /// </summary>
+    [JsonProperty("approxPurchaseDate")]
+    public string? ApproxPurchaseDate { get; set; }
+
+    /// <summary>
     /// AI enrichment provenance metadata. Records which AI capabilities were
     /// used during intake, their providers, and confidence scores.
     /// Null when no AI enrichment was applied.

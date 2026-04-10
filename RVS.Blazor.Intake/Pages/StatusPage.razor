@@ -97,16 +97,15 @@ else if (_errorState == ErrorState.Unexpected)
 else if (_statusResponse is not null)
 {
     <MudStack Spacing="6" Class="mt-4">
-        <MudPaper Elevation="2" Class="pa-6 rounded-lg">
-            <MudStack Spacing="1">
-                <MudText Typo="Typo.h5">
-                    Hi @_statusResponse.FirstName
-                </MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                    Here are your active service requests.
-                </MudText>
-            </MudStack>
-        </MudPaper>
+        <MudStack AlignItems="AlignItems.Center" Spacing="1">
+            <MudText Typo="Typo.h5" Align="Align.Center">
+                Service Request Status
+            </MudText>
+            <MudText Typo="Typo.body1" Align="Align.Center"
+                     Style="color: var(--mud-palette-text-secondary);">
+                Here are your active service requests.
+            </MudText>
+        </MudStack>
 
         @if (_statusResponse.ServiceRequests.Count == 0)
         {

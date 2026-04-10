@@ -502,12 +502,18 @@ public class IntakeController : ControllerBase
     /// <param name="request">Service request creation data from the intake form.</param>
     /// <param name="ct">Cancellation token.</param>
     [HttpPost("service-requests")]
-    public async Task<ActionResult<ServiceRequestDetailResponseDto>> SubmitServiceRequest(
+    public async Task<ActionResult<IntakeSubmissionResponseDto>> SubmitServiceRequest(
         string locationSlug, [FromBody] ServiceRequestCreateRequestDto request, CancellationToken ct = default)
     {
-        var serviceRequest = await _intakeService.ExecuteAsync(locationSlug, request, ct);
+        var (serviceRequest, magicLinkToken) = await _intakeService.ExecuteAsync(locationSlug, request, ct);
 
-        return CreatedAtAction(nameof(GetConfig), new { locationSlug }, serviceRequest.ToDetailDto());
+        var response = new IntakeSubmissionResponseDto
+        {
+            ServiceRequest = serviceRequest.ToDetailDto(),
+            MagicLinkToken = magicLinkToken
+        };
+
+        return CreatedAtAction(nameof(GetConfig), new { locationSlug }, response);
     }
 
     /// <summary>

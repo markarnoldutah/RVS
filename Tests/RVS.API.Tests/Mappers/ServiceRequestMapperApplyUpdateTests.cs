@@ -41,6 +41,8 @@ public class ServiceRequestMapperApplyUpdateTests
             Priority = "  Low  ",
             Urgency = "  This week  ",
             RvUsage = "  Full-time  ",
+            HasExtendedWarranty = "  Yes  ",
+            ApproxPurchaseDate = "  March 2023  ",
             AssignedTechnicianId = "  tech_1  ",
             AssignedBayId = "  bay_2  ",
             ScheduledDateUtc = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc),
@@ -65,6 +67,8 @@ public class ServiceRequestMapperApplyUpdateTests
         entity.Priority.Should().Be("Low");
         entity.Urgency.Should().Be("This week");
         entity.RvUsage.Should().Be("Full-time");
+        entity.HasExtendedWarranty.Should().Be("Yes");
+        entity.ApproxPurchaseDate.Should().Be("March 2023");
         entity.AssignedTechnicianId.Should().Be("tech_1");
         entity.AssignedBayId.Should().Be("bay_2");
         entity.ScheduledDateUtc.Should().Be(new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc));

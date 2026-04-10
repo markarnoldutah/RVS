@@ -68,25 +68,6 @@
                                 </MudText>
                             </MudStack>
 
-                            @if (!string.IsNullOrWhiteSpace(file.ErrorMessage))
-                            {
-                                <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Text">
-                                    Error
-                                </MudChip>
-                            }
-                            else if (file.IsUploaded)
-                            {
-                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">
-                                    Ready
-                                </MudChip>
-                            }
-                            else
-                            {
-                                <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Text">
-                                    Pending
-                                </MudChip>
-                            }
-
                             <MudIconButton Icon="@Icons.Material.Filled.Close"
                                            Size="Size.Small"
                                            Color="Color.Error"

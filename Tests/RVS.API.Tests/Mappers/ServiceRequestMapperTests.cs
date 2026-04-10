@@ -35,6 +35,8 @@ public class ServiceRequestMapperTests
             TechnicianSummary = "Check fuel line",
             Urgency = "Today",
             RvUsage = "Full-time",
+            HasExtendedWarranty = "Yes",
+            ApproxPurchaseDate = "March 2023",
             Priority = "High",
             AssignedTechnicianId = "tech_1",
             AssignedBayId = "bay_2",
@@ -55,6 +57,8 @@ public class ServiceRequestMapperTests
         dto.TechnicianSummary.Should().Be("Check fuel line");
         dto.Urgency.Should().Be("Today");
         dto.RvUsage.Should().Be("Full-time");
+        dto.HasExtendedWarranty.Should().Be("Yes");
+        dto.ApproxPurchaseDate.Should().Be("March 2023");
         dto.Priority.Should().Be("High");
         dto.AssignedTechnicianId.Should().Be("tech_1");
         dto.AssignedBayId.Should().Be("bay_2");
@@ -374,6 +378,8 @@ public class ServiceRequestMapperTests
         entity.IssueDescription.Should().Be("Slide won't retract");
         entity.Urgency.Should().Be("Today");
         entity.RvUsage.Should().Be("Full-time");
+        entity.HasExtendedWarranty.Should().Be("Yes");
+        entity.ApproxPurchaseDate.Should().Be("March 2023");
     }
 
     [Fact]
@@ -410,7 +416,9 @@ public class ServiceRequestMapperTests
             Customer = new CustomerInfoDto { FirstName = "  Jane  ", LastName = " Doe ", Email = " jane@example.com " },
             Asset = new AssetInfoDto { AssetId = " 1HGBH41JXMN109186 " },
             IssueCategory = "  Slide System  ",
-            IssueDescription = "  Slide won't retract  "
+            IssueDescription = "  Slide won't retract  ",
+            HasExtendedWarranty = "  Yes  ",
+            ApproxPurchaseDate = "  March 2023  "
         };
 
         var entity = dto.ToEntity("ten_1", "usr_1");
@@ -421,6 +429,8 @@ public class ServiceRequestMapperTests
         entity.CustomerSnapshot.LastName.Should().Be("Doe");
         entity.CustomerSnapshot.Email.Should().Be("jane@example.com");
         entity.AssetInfo.AssetId.Should().Be("1HGBH41JXMN109186");
+        entity.HasExtendedWarranty.Should().Be("Yes");
+        entity.ApproxPurchaseDate.Should().Be("March 2023");
     }
 
     [Fact]
@@ -552,6 +562,8 @@ public class ServiceRequestMapperTests
             IssueCategory = "Slide System",
             IssueDescription = "Slide won't retract",
             Urgency = "Today",
-            RvUsage = "Full-time"
+            RvUsage = "Full-time",
+            HasExtendedWarranty = "Yes",
+            ApproxPurchaseDate = "March 2023"
         };
 }

@@ -51,7 +51,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     }
 
     /// <inheritdoc />
-    public async Task<ServiceRequest> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<(ServiceRequest ServiceRequest, string? MagicLinkToken)> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
         ArgumentNullException.ThrowIfNull(request);
@@ -170,6 +170,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             TechnicianSummary = technicianSummary,
             Urgency = request.Urgency?.Trim(),
             RvUsage = request.RvUsage?.Trim(),
+            HasExtendedWarranty = request.HasExtendedWarranty?.Trim(),
+            ApproxPurchaseDate = request.ApproxPurchaseDate?.Trim(),
             CustomerSnapshot = new CustomerSnapshotEmbedded
             {
                 FirstName = request.Customer.FirstName.Trim(),
@@ -288,7 +290,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             serviceRequest.Id,
             slugLookup.DealershipName);
 
-        return serviceRequest;
+        return (serviceRequest, globalAcct.MagicLinkToken);
     }
 
     /// <summary>

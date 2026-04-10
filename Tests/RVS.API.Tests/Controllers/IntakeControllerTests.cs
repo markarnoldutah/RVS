@@ -132,7 +132,7 @@ public class IntakeControllerTests
     {
         var sr = BuildServiceRequest();
         _intakeServiceMock.Setup(s => s.ExecuteAsync("test-slug", It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(sr);
+            .ReturnsAsync((sr, "test-magic-token"));
 
         var request = new ServiceRequestCreateRequestDto
         {
@@ -145,8 +145,9 @@ public class IntakeControllerTests
         var result = await _sut.SubmitServiceRequest("test-slug", request);
 
         var createdResult = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
-        var dto = createdResult.Value.Should().BeOfType<ServiceRequestDetailResponseDto>().Subject;
-        dto.Id.Should().Be(sr.Id);
+        var dto = createdResult.Value.Should().BeOfType<IntakeSubmissionResponseDto>().Subject;
+        dto.ServiceRequest.Id.Should().Be(sr.Id);
+        dto.MagicLinkToken.Should().Be("test-magic-token");
     }
 
     private static ServiceRequest BuildServiceRequest() => new()
