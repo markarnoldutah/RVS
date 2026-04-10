@@ -116,6 +116,9 @@ public sealed class IntakeWizardState
     /// <summary>The created service request ID after submission.</summary>
     public string? CreatedServiceRequestId { get; set; }
 
+    /// <summary>Magic-link token returned from the submission API, used for navigating to the status page.</summary>
+    public string? SubmissionMagicLinkToken { get; set; }
+
     /// <summary>Number of file uploads that failed during submission (runtime-only, not persisted).</summary>
     public int FailedUploadCount { get; set; }
 
@@ -299,7 +302,8 @@ public sealed class IntakeWizardState
             DiagnosticResponses = DiagnosticResponses,
             SmartSuggestion = SmartSuggestion,
             IsSubmitted = IsSubmitted,
-            CreatedServiceRequestId = CreatedServiceRequestId
+            CreatedServiceRequestId = CreatedServiceRequestId,
+            SubmissionMagicLinkToken = SubmissionMagicLinkToken
         };
 
         var json = JsonSerializer.Serialize(data);
@@ -340,6 +344,7 @@ public sealed class IntakeWizardState
             SmartSuggestion = data.SmartSuggestion;
             IsSubmitted = data.IsSubmitted;
             CreatedServiceRequestId = data.CreatedServiceRequestId;
+            SubmissionMagicLinkToken = data.SubmissionMagicLinkToken;
 
             NotifyStateChanged();
         }
@@ -381,6 +386,7 @@ public sealed class IntakeWizardState
         Attachments = [];
         IsSubmitted = false;
         CreatedServiceRequestId = null;
+        SubmissionMagicLinkToken = null;
         FailedUploadCount = 0;
         FieldErrors = [];
 
@@ -593,4 +599,5 @@ internal sealed class IntakeWizardStateData
     public string? SmartSuggestion { get; set; }
     public bool IsSubmitted { get; set; }
     public string? CreatedServiceRequestId { get; set; }
+    public string? SubmissionMagicLinkToken { get; set; }
 }

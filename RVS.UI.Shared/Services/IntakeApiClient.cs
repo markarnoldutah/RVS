@@ -97,8 +97,9 @@ public sealed class IntakeApiClient
 
     /// <summary>
     /// Submits a new service request through the intake flow.
+    /// Returns the created service request details and a magic-link token for checking status.
     /// </summary>
-    public async Task<ServiceRequestDetailResponseDto> SubmitServiceRequestAsync(
+    public async Task<IntakeSubmissionResponseDto> SubmitServiceRequestAsync(
         string locationSlug,
         ServiceRequestCreateRequestDto request,
         CancellationToken cancellationToken = default)
@@ -112,9 +113,9 @@ public sealed class IntakeApiClient
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadFromJsonAsync<ServiceRequestDetailResponseDto>(
+        return await response.Content.ReadFromJsonAsync<IntakeSubmissionResponseDto>(
             cancellationToken: cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize service request response.");
+            ?? throw new InvalidOperationException("Failed to deserialize intake submission response.");
     }
 
     /// <summary>

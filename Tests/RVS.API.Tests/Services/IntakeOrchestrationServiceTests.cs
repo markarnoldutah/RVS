@@ -79,8 +79,8 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.TenantId.Should().Be("ten_test");
-        result.LocationId.Should().Be("loc_test");
+        result.ServiceRequest.TenantId.Should().Be("ten_test");
+        result.ServiceRequest.LocationId.Should().Be("loc_test");
     }
 
     // ── Step 2: GlobalCustomerAcct Resolution ────────────────────────────────
@@ -208,10 +208,10 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.CustomerSnapshot.FirstName.Should().Be("Jane");
-        result.CustomerSnapshot.LastName.Should().Be("Doe");
-        result.CustomerSnapshot.Email.Should().Be("jane@example.com");
-        result.CustomerSnapshot.Phone.Should().Be("801-555-1234");
+        result.ServiceRequest.CustomerSnapshot.FirstName.Should().Be("Jane");
+        result.ServiceRequest.CustomerSnapshot.LastName.Should().Be("Doe");
+        result.ServiceRequest.CustomerSnapshot.Email.Should().Be("jane@example.com");
+        result.ServiceRequest.CustomerSnapshot.Phone.Should().Be("801-555-1234");
     }
 
     [Fact]
@@ -271,7 +271,7 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.IssueCategory.Should().Be("AI Category");
+        result.ServiceRequest.IssueCategory.Should().Be("AI Category");
     }
 
     [Fact]
@@ -283,7 +283,7 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.IssueCategory.Should().Be("Slide System");
+        result.ServiceRequest.IssueCategory.Should().Be("Slide System");
     }
 
     [Fact]
@@ -293,7 +293,7 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.TechnicianSummary.Should().Contain("Slide won't retract");
+        result.ServiceRequest.TechnicianSummary.Should().Contain("Slide won't retract");
     }
 
     [Fact]
@@ -304,8 +304,8 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", request);
 
-        result.DiagnosticResponses.Should().HaveCount(1);
-        result.DiagnosticResponses[0].QuestionText.Should().Be("How long has this been happening?");
+        result.ServiceRequest.DiagnosticResponses.Should().HaveCount(1);
+        result.ServiceRequest.DiagnosticResponses[0].QuestionText.Should().Be("How long has this been happening?");
     }
 
     [Fact]
@@ -320,8 +320,8 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.CustomerSnapshot.IsReturningCustomer.Should().BeTrue();
-        result.CustomerSnapshot.PriorRequestCount.Should().Be(3);
+        result.ServiceRequest.CustomerSnapshot.IsReturningCustomer.Should().BeTrue();
+        result.ServiceRequest.CustomerSnapshot.PriorRequestCount.Should().Be(3);
     }
 
     [Fact]
@@ -331,8 +331,8 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.CustomerSnapshot.IsReturningCustomer.Should().BeFalse();
-        result.CustomerSnapshot.PriorRequestCount.Should().Be(0);
+        result.ServiceRequest.CustomerSnapshot.IsReturningCustomer.Should().BeFalse();
+        result.ServiceRequest.CustomerSnapshot.PriorRequestCount.Should().Be(0);
     }
 
     // ── Step 5: AssetLedgerEntry (non-blocking) ──────────────────────────────
@@ -372,8 +372,8 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.Should().NotBeNull();
-        result.TenantId.Should().Be("ten_test");
+        result.ServiceRequest.Should().NotBeNull();
+        result.ServiceRequest.TenantId.Should().Be("ten_test");
     }
 
     // ── Step 6: Update Linkages ──────────────────────────────────────────────
@@ -529,16 +529,18 @@ public class IntakeOrchestrationServiceTests
         var result = await _sut.ExecuteAsync("test-slug", request);
 
         result.Should().NotBeNull();
-        result.TenantId.Should().Be("ten_test");
-        result.LocationId.Should().Be("loc_test");
-        result.Status.Should().Be("New");
-        result.IssueCategory.Should().Be("AI: Slide System");
-        result.IssueDescription.Should().Be("Slide won't retract");
-        result.CustomerSnapshot.FirstName.Should().Be("Jane");
-        result.CustomerSnapshot.LastName.Should().Be("Doe");
-        result.AssetInfo.AssetId.Should().Be("RV:1HGBH41JXMN109186");
-        result.TechnicianSummary.Should().NotBeNullOrWhiteSpace();
-        result.DiagnosticResponses.Should().HaveCount(1);
+        result.ServiceRequest.Should().NotBeNull();
+        result.ServiceRequest.TenantId.Should().Be("ten_test");
+        result.ServiceRequest.LocationId.Should().Be("loc_test");
+        result.ServiceRequest.Status.Should().Be("New");
+        result.ServiceRequest.IssueCategory.Should().Be("AI: Slide System");
+        result.ServiceRequest.IssueDescription.Should().Be("Slide won't retract");
+        result.ServiceRequest.CustomerSnapshot.FirstName.Should().Be("Jane");
+        result.ServiceRequest.CustomerSnapshot.LastName.Should().Be("Doe");
+        result.ServiceRequest.AssetInfo.AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.ServiceRequest.TechnicianSummary.Should().NotBeNullOrWhiteSpace();
+        result.ServiceRequest.DiagnosticResponses.Should().HaveCount(1);
+        result.MagicLinkToken.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]

@@ -158,6 +158,10 @@ else
     private void HandleSubmitted()
     {
         var url = $"/confirmation?slug={Uri.EscapeDataString(Slug)}";
+        if (!string.IsNullOrWhiteSpace(_state.SubmissionMagicLinkToken))
+        {
+            url += $"&token={Uri.EscapeDataString(_state.SubmissionMagicLinkToken)}";
+        }
         if (_state.FailedUploadCount > 0)
         {
             url += $"&uploadFailures={_state.FailedUploadCount}";
