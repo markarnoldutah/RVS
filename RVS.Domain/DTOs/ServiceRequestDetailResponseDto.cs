@@ -17,6 +17,8 @@ public sealed record ServiceRequestDetailResponseDto
     public string? TechnicianSummary { get; init; }
     public string? Urgency { get; init; }
     public string? RvUsage { get; init; }
+    public string? HasExtendedWarranty { get; init; }
+    public string? ApproxPurchaseDate { get; init; }
     public string? Priority { get; init; }
     public string? AssignedTechnicianId { get; init; }
     public string? AssignedBayId { get; init; }

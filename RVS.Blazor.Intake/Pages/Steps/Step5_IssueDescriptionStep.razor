@@ -171,6 +171,30 @@
             </MudStack>
         </MudPaper>
 
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Extended Warranty</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Do you have an extended warranty on your RV?</MudText>
+                <MudRadioGroup T="string" Value="State.HasExtendedWarranty" ValueChanged="OnExtendedWarrantyChanged">
+                    <MudRadio T="string" Value="@("Yes")" Color="Color.Primary">Yes</MudRadio>
+                    <MudRadio T="string" Value="@("No")" Color="Color.Primary">No</MudRadio>
+                    <MudRadio T="string" Value="@("Not Sure")" Color="Color.Primary">Not Sure</MudRadio>
+                </MudRadioGroup>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Approx. Purchase Date</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">When did you purchase your RV? (e.g., "March 2023", "2022")</MudText>
+                <MudTextField @bind-Value="State.ApproxPurchaseDate"
+                              T="string"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Placeholder="e.g., March 2023" />
+            </MudStack>
+        </MudPaper>
+
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
                    FullWidth="true"
@@ -360,6 +384,11 @@
     {
         State.RvUsage = value;
         State.IsRvUsageSuggestedByAi = false;
+    }
+
+    private void OnExtendedWarrantyChanged(string? value)
+    {
+        State.HasExtendedWarranty = value;
     }
 
     private async Task RequestInsightsSuggestion(string rawTranscript)

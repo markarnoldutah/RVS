@@ -98,6 +98,12 @@ public sealed class IntakeWizardState
     /// <summary>RV usage type — e.g., "Full-Time" or "Part-Time" (Step 5).</summary>
     public string? RvUsage { get; set; }
 
+    /// <summary>Whether the customer has an extended warranty — "Yes", "No", or "Not Sure" (Step 5).</summary>
+    public string? HasExtendedWarranty { get; set; }
+
+    /// <summary>Approximate RV purchase date, free-text entry (Step 5).</summary>
+    public string? ApproxPurchaseDate { get; set; }
+
     /// <summary>AI-generated diagnostic questions (Step 6).</summary>
     public List<DiagnosticQuestionDto> DiagnosticQuestions { get; set; } = [];
 
@@ -271,6 +277,8 @@ public sealed class IntakeWizardState
             IssueDescription = IssueDescription.Trim(),
             Urgency = string.IsNullOrWhiteSpace(Urgency) ? null : Urgency.Trim(),
             RvUsage = string.IsNullOrWhiteSpace(RvUsage) ? null : RvUsage.Trim(),
+            HasExtendedWarranty = string.IsNullOrWhiteSpace(HasExtendedWarranty) ? null : HasExtendedWarranty.Trim(),
+            ApproxPurchaseDate = string.IsNullOrWhiteSpace(ApproxPurchaseDate) ? null : ApproxPurchaseDate.Trim(),
             DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null
         };
     }
@@ -299,6 +307,8 @@ public sealed class IntakeWizardState
             IssueDescription = IssueDescription,
             Urgency = Urgency,
             RvUsage = RvUsage,
+            HasExtendedWarranty = HasExtendedWarranty,
+            ApproxPurchaseDate = ApproxPurchaseDate,
             DiagnosticResponses = DiagnosticResponses,
             SmartSuggestion = SmartSuggestion,
             IsSubmitted = IsSubmitted,
@@ -340,6 +350,8 @@ public sealed class IntakeWizardState
             IssueDescription = data.IssueDescription;
             Urgency = data.Urgency;
             RvUsage = data.RvUsage;
+            HasExtendedWarranty = data.HasExtendedWarranty;
+            ApproxPurchaseDate = data.ApproxPurchaseDate;
             DiagnosticResponses = data.DiagnosticResponses;
             SmartSuggestion = data.SmartSuggestion;
             IsSubmitted = data.IsSubmitted;
@@ -380,6 +392,8 @@ public sealed class IntakeWizardState
         IssueDescription = string.Empty;
         Urgency = null;
         RvUsage = null;
+        HasExtendedWarranty = null;
+        ApproxPurchaseDate = null;
         DiagnosticQuestions = [];
         DiagnosticResponses = [];
         SmartSuggestion = null;
@@ -595,6 +609,8 @@ internal sealed class IntakeWizardStateData
     public string IssueDescription { get; set; } = string.Empty;
     public string? Urgency { get; set; }
     public string? RvUsage { get; set; }
+    public string? HasExtendedWarranty { get; set; }
+    public string? ApproxPurchaseDate { get; set; }
     public List<DiagnosticResponseDto> DiagnosticResponses { get; set; } = [];
     public string? SmartSuggestion { get; set; }
     public bool IsSubmitted { get; set; }

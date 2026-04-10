@@ -11,5 +11,7 @@ public sealed record ServiceRequestCreateRequestDto
     public required string IssueDescription { get; init; }
     public string? Urgency { get; init; }
     public string? RvUsage { get; init; }
+    public string? HasExtendedWarranty { get; init; }
+    public string? ApproxPurchaseDate { get; init; }
     public List<DiagnosticResponseDto>? DiagnosticResponses { get; init; }
 }

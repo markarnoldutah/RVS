@@ -32,6 +32,8 @@ public static class ServiceRequestMapper
             TechnicianSummary = entity.TechnicianSummary,
             Urgency = entity.Urgency,
             RvUsage = entity.RvUsage,
+            HasExtendedWarranty = entity.HasExtendedWarranty,
+            ApproxPurchaseDate = entity.ApproxPurchaseDate,
             Priority = entity.Priority,
             AssignedTechnicianId = entity.AssignedTechnicianId,
             AssignedBayId = entity.AssignedBayId,
@@ -101,6 +103,8 @@ public static class ServiceRequestMapper
             IssueDescription = dto.IssueDescription.Trim(),
             Urgency = dto.Urgency?.Trim(),
             RvUsage = dto.RvUsage?.Trim(),
+            HasExtendedWarranty = dto.HasExtendedWarranty?.Trim(),
+            ApproxPurchaseDate = dto.ApproxPurchaseDate?.Trim(),
             CustomerSnapshot = new CustomerSnapshotEmbedded
             {
                 FirstName = dto.Customer.FirstName.Trim(),
@@ -145,6 +149,8 @@ public static class ServiceRequestMapper
         entity.Priority = dto.Priority.Trim();
         entity.Urgency = dto.Urgency?.Trim();
         entity.RvUsage = dto.RvUsage?.Trim();
+        entity.HasExtendedWarranty = dto.HasExtendedWarranty?.Trim();
+        entity.ApproxPurchaseDate = dto.ApproxPurchaseDate?.Trim();
         entity.AssignedTechnicianId = dto.AssignedTechnicianId?.Trim();
         entity.AssignedBayId = dto.AssignedBayId?.Trim();
         entity.ScheduledDateUtc = dto.ScheduledDateUtc;
