@@ -8,3 +8,6 @@ param whisperResourceGroupName = 'rg-rvs-dev-ncus'
 param openAiCapacity = 1
 param deployStorageAccount = true
 param deployAcs = true
+param deploySwa = true
+param swaLocation = 'westus2'
+param swaSkuName = 'Free'

@@ -1,11 +1,11 @@
 using '../main.bicep'
 
-param environmentName = 'prod'
+param environmentName = 'staging'
 param location = 'westus3'
 param whisperLocation = 'northcentralus'
-param primaryResourceGroupName = 'rg-rvs-prod-westus3'
-param whisperResourceGroupName = 'rg-rvs-prod-ncus'
-param openAiCapacity = 30
+param primaryResourceGroupName = 'rg-rvs-staging-westus3'
+param whisperResourceGroupName = 'rg-rvs-staging-ncus'
+param openAiCapacity = 10
 param deployAcs = true
 param deploySwa = true
 param swaLocation = 'westus2'

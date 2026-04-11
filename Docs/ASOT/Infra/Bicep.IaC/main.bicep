@@ -62,6 +62,19 @@ param deployAcs bool = false
 @description('ACS data residency location. Must be a valid ACS data location.')
 param acsDataLocation string = 'United States'
 
+@description('When true, deploys Azure Static Web App resources for RVS.Blazor.Intake and RVS.Blazor.Manager.')
+param deploySwa bool = false
+
+@description('Azure region for Static Web Apps. Must be an SWA-supported region: westus2, eastus2, centralus, westeurope, or eastasia.')
+param swaLocation string = 'westus2'
+
+@description('SWA SKU tier. Free for dev/test; Standard for staging/production.')
+@allowed([
+  'Free'
+  'Standard'
+])
+param swaSkuName string = 'Free'
+
 // ── Variables ─────────────────────────────────────────────────
 
 // Storage account names must be 3-24 lowercase alphanumeric characters with no hyphens.
@@ -83,6 +96,17 @@ var defaultCorsOrigins = environmentName == 'prod'
     ]
 
 var resolvedCorsOrigins = !empty(storageCorsAllowedOrigins) ? storageCorsAllowedOrigins : defaultCorsOrigins
+
+// SWA resource names follow the pattern from PR #280: stapp-rvs-{app}-{env}
+var swaIntakeName = 'stapp-rvs-intake-${environmentName}'
+var swaManagerName = 'stapp-rvs-manager-${environmentName}'
+
+// Shared tags for SWA resources.
+var swaTags = {
+  Application: 'rvs'
+  Environment: environmentName
+  ManagedBy: 'Bicep'
+}
 
 // ── Resource Groups
 
@@ -233,6 +257,30 @@ module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs &
   }
 }
 
+// -- Static Web Apps (Intake + Manager, all environments share primary RG) --
+
+module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
+  name: 'deploy-swa-intake-${environmentName}'
+  scope: rgPrimary
+  params: {
+    location: swaLocation
+    resourceName: swaIntakeName
+    skuName: swaSkuName
+    tags: swaTags
+  }
+}
+
+module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
+  name: 'deploy-swa-manager-${environmentName}'
+  scope: rgPrimary
+  params: {
+    location: swaLocation
+    resourceName: swaManagerName
+    skuName: swaSkuName
+    tags: swaTags
+  }
+}
+
 // ── Outputs ───────────────────────────────────────────────────
 
 @description('The primary resource group name (GPT-4o + Key Vault).')
@@ -276,3 +324,21 @@ output acsEmailServiceName string = deployAcs ? communicationServices.outputs.em
 @description('The Azure-managed MailFrom sender domain, if deployed.')
 #disable-next-line BCP318
 output acsMailFromDomain string = deployAcs ? communicationServices.outputs.azureManagedMailFrom : ''
+
+@description('Default hostname for the Intake Static Web App (CNAME target at DNS provider). Empty when deploySwa = false.')
+#disable-next-line BCP318
+output swaIntakeHostname string = deploySwa ? swaIntake.outputs.defaultHostname : ''
+
+@description('Default hostname for the Manager Static Web App (CNAME target at DNS provider). Empty when deploySwa = false.')
+#disable-next-line BCP318
+output swaManagerHostname string = deploySwa ? swaManager.outputs.defaultHostname : ''
+
+@secure()
+@description('Deployment token for RVS.Blazor.Intake SWA. Store as GitHub Secret SWA_TOKEN_INTAKE_<ENV>. Empty when deploySwa = false.')
+#disable-next-line BCP318
+output swaIntakeDeploymentToken string = deploySwa ? swaIntake.outputs.deploymentToken : ''
+
+@secure()
+@description('Deployment token for RVS.Blazor.Manager SWA. Store as GitHub Secret SWA_TOKEN_MANAGER_<ENV>. Empty when deploySwa = false.')
+#disable-next-line BCP318
+output swaManagerDeploymentToken string = deploySwa ? swaManager.outputs.deploymentToken : ''

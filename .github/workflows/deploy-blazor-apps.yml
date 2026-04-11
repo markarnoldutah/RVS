@@ -134,23 +134,13 @@ jobs:
           skip_app_build: true
           app_location: './publish'
 
-  # ─── Stage 3: Approve promotion to Staging ────────────
-  # Pauses here until a required reviewer approves in the GitHub UI.
-  # Configure required reviewers on the 'staging-gate' environment
-  # under Settings → Environments → staging-gate.
-  approve-staging:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: deploy-dev
-    runs-on: ubuntu-latest
-    environment: staging-gate
-    steps:
-      - name: Staging promotion approved
-        run: echo "Approved — proceeding to staging deployment."
-
-  # ─── Stage 4: Deploy to Staging ───────────────────────
+  # ─── Stage 3: Deploy to Staging (requires approval) ──────────────────────
+  # Pauses for required reviewers before running.
+  # Configure required reviewers on the 'staging' environment
+  # under Settings → Environments → staging.
   deploy-staging:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: approve-staging
+    needs: deploy-dev
     runs-on: ubuntu-latest
     environment: staging
     strategy:
@@ -202,7 +192,10 @@ jobs:
           skip_app_build: true
           app_location: './publish'
 
-  # ─── Stage 5: Deploy to Production (manual approval) ──
+  # ─── Stage 4: Deploy to Production (requires approval) ───────────────────
+  # Pauses for required reviewers before running.
+  # Configure required reviewers on the 'production' environment
+  # under Settings → Environments → production.
   deploy-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: deploy-staging
