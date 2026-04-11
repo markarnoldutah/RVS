@@ -80,9 +80,9 @@ jobs:
           name: manager-publish
           path: ./manager-publish/wwwroot
 
-  # ─── Stage 2: Deploy to Dev (auto on push to main) ───
+  # ─── Stage 2: Deploy to Dev (auto on push to main, or manual trigger) ───
   deploy-dev:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment: dev
@@ -139,7 +139,7 @@ jobs:
   # Configure required reviewers on the 'staging' environment
   # under Settings → Environments → staging.
   deploy-staging:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ !cancelled() && needs.deploy-dev.result == 'success' }}
     needs: deploy-dev
     runs-on: ubuntu-latest
     environment: staging
@@ -197,7 +197,7 @@ jobs:
   # Configure required reviewers on the 'production' environment
   # under Settings → Environments → production.
   deploy-production:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ !cancelled() && needs.deploy-staging.result == 'success' }}
     needs: deploy-staging
     runs-on: ubuntu-latest
     environment: production

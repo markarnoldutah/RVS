@@ -6,9 +6,11 @@ az cognitiveservices account show --name oai-rvs-ai-dev-wus3-s01-001 --resource-
 az cognitiveservices account keys list --name oai-rvs-ai-dev-wus3-s01-001 --resource-group rg-rvs-dev-westus3 --query "key1" -o tsv
 az cognitiveservices account deployment list --name oai-rvs-ai-dev-wus3-s01-001 --resource-group rg-rvs-dev-westus3 --query "[].{Name:name, Model:properties.model.name}" -o table
 
-
+# MAIN SCRIPT
 az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/dev.bicepparam --name "rvs-dev-$(Get-Date -Format 'yyyyMMddHHmm')"
 
+# ── RG Scaffold – create all 9 resource groups (3 envs × 3 regions) in one shot ──
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/rg-scaffold.bicep --name "rvs-rg-scaffold-$(Get-Date -Format 'yyyyMMddHHmm')" --query "properties.outputs.resourceGroupNames.value" -o json
 
 
 
@@ -20,3 +22,70 @@ az storage account show --name strvsdevwus3001 --resource-group  --query id -o t
 
 # 3. Assign Storage Blob Data Contributor
 az role assignment create --assignee $(az ad signed-in-user show --query id -o tsv) --role "Storage Blob Data Contributor" --scope $(az storage account show --name strvsdevwus3001 --resource-group rg-rvs-dev-westus3 --query id -o tsv)
+
+
+# ── Deploy SWAs (subscription-scoped; use --template-file because --parameters alone requires a template) ──
+
+# dev  (SWAs land in rg-rvs-dev-westus2; other resources land in rg-rvs-dev-westus3/ncus)
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/dev.bicepparam --name "rvs-swa-dev-$(Get-Date -Format 'yyyyMMddHHmm')" --query "properties.outputs.{intakeHost:swaIntakeHostname.value,managerHost:swaManagerHostname.value}" -o json
+
+# staging
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --name "rvs-swa-staging-$(Get-Date -Format 'yyyyMMddHHmm')" --query "properties.outputs.{intakeHost:swaIntakeHostname.value,managerHost:swaManagerHostname.value}" -o json
+
+# prod
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam --name "rvs-swa-prod-$(Get-Date -Format 'yyyyMMddHHmm')" --query "properties.outputs.{intakeHost:swaIntakeHostname.value,managerHost:swaManagerHostname.value}" -o json
+
+# ── Retrieve deployment tokens AFTER deploy (secure outputs are always redacted in deployment responses) ──
+# Run once per env. Copy each value straight into `gh secret set`.
+
+# # dev
+# az staticwebapp secrets list --name stapp-rvs-intake-dev  --resource-group rg-rvs-dev-westus2 --query "properties.apiKey" -o tsv
+# az staticwebapp secrets list --name stapp-rvs-manager-dev --resource-group rg-rvs-dev-westus2 --query "properties.apiKey" -o tsv
+
+# # staging
+# az staticwebapp secrets list --name stapp-rvs-intake-staging  --resource-group rg-rvs-staging-westus2 --query "properties.apiKey" -o tsv
+# az staticwebapp secrets list --name stapp-rvs-manager-staging --resource-group rg-rvs-staging-westus2 --query "properties.apiKey" -o tsv
+
+# # prod
+# az staticwebapp secrets list --name stapp-rvs-intake-prod  --resource-group rg-rvs-prod-westus2 --query "properties.apiKey" -o tsv
+# az staticwebapp secrets list --name stapp-rvs-manager-prod --resource-group rg-rvs-prod-westus2 --query "properties.apiKey" -o tsv
+
+# ── Store tokens as GitHub Secrets ──
+gh secret set SWA_TOKEN_INTAKE_DEV      --body "$(az staticwebapp secrets list --name stapp-rvs-intake-dev  --resource-group rg-rvs-dev-westus2 --query "properties.apiKey" -o tsv)" --repo markarnoldutah/RVS
+gh secret set SWA_TOKEN_MANAGER_DEV     --body "$(az staticwebapp secrets list --name stapp-rvs-manager-dev --resource-group rg-rvs-dev-westus2 --query "properties.apiKey" -o tsv)" --repo markarnoldutah/RVS
+gh secret set SWA_TOKEN_INTAKE_STAGING  --body "$(az staticwebapp secrets list --name stapp-rvs-intake-staging  --resource-group rg-rvs-staging-westus2 --query "properties.apiKey" -o tsv)" --repo markarnoldutah/RVS
+gh secret set SWA_TOKEN_MANAGER_STAGING --body "$(az staticwebapp secrets list --name stapp-rvs-manager-staging --resource-group rg-rvs-staging-westus2 --query "properties.apiKey" -o tsv)" --repo markarnoldutah/RVS
+
+# Prod (TODO)
+gh secret set SWA_TOKEN_INTAKE_PROD     --body "$(az staticwebapp secrets list --name stapp-rvs-intake-prod  --resource-group rg-rvs-prod-westus2 --query "properties.apiKey" -o tsv)" --repo markarnoldutah/RVS
+gh secret set SWA_TOKEN_MANAGER_PROD    --body "$(az staticwebapp secrets list --name stapp-rvs-manager-prod --resource-group rg-rvs-prod-westus2 --query "properties.apiKey" -o tsv)" --repo markarnoldutah/RVS
+
+
+# Create environments (GitHub CLI doesn't set reviewers via CLI; use the UI for approval rules)
+gh api --method PUT repos/markarnoldutah/RVS/environments/dev
+gh api --method PUT repos/markarnoldutah/RVS/environments/staging
+gh api --method PUT repos/markarnoldutah/RVS/environments/staging-gate
+gh api --method PUT repos/markarnoldutah/RVS/environments/production
+
+# DNS
+az network dns zone create --name rvserviceflow.com --resource-group rg-rvs-prod-westus3
+
+az network dns zone show --name rvserviceflow.com --resource-group rg-rvs-prod-westus3 --query "nameServers" -o table
+ns1-09.azure-dns.com.
+ns2-09.azure-dns.net.
+ns3-09.azure-dns.org.
+ns4-09.azure-dns.info.
+
+# Example: MX record for email (adjust priority/exchange for your mail provider)
+az network dns record-set mx add-record --resource-group rg-rvs-prod-westus3 --zone-name rvserviceflow.com --record-set-name "@" --exchange "mail.yourmailprovider.com" --preference 10
+
+# Example: existing root A record (if any)
+az network dns record-set a add-record --resource-group rg-rvs-prod-westus3 --zone-name rvserviceflow.com --record-set-name "@" --ipv4-address "1.2.3.4"
+
+TODO
+Step 5 – Replace Auth0 placeholder client IDs
+In deploy-blazor-apps.yml:
+
+Line with STAGING_CLIENT_ID → replace with the Manager app's client_id from rvs-staging.us.auth0.com
+Line with PROD_CLIENT_ID → replace with the Manager app's client_id from rvs.us.auth0.com
+Both values are public OIDC client IDs (safe to commit; required for PKCE flow). Do this after Auth0 tenant provisioning when you have the client IDs.

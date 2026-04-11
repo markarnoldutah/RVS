@@ -10,4 +10,6 @@ param deployStorageAccount = true
 param deployAcs = true
 param deploySwa = true
 param swaLocation = 'westus2'
+param swaResourceGroupName = 'rg-rvs-dev-westus2'
 param swaSkuName = 'Free'
+param deployDns = true

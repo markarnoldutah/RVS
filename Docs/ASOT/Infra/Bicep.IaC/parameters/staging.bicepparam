@@ -9,4 +9,6 @@ param openAiCapacity = 10
 param deployAcs = true
 param deploySwa = true
 param swaLocation = 'westus2'
+param swaResourceGroupName = 'rg-rvs-staging-westus2'
 param swaSkuName = 'Standard'
+param deployDns = true

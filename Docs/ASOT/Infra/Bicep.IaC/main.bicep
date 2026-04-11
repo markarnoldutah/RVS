@@ -68,12 +68,30 @@ param deploySwa bool = false
 @description('Azure region for Static Web Apps. Must be an SWA-supported region: westus2, eastus2, centralus, westeurope, or eastasia.')
 param swaLocation string = 'westus2'
 
+@description('Name of the dedicated resource group for Static Web App resources.')
+param swaResourceGroupName string = 'rg-rvs-${environmentName}-westus2'
+
 @description('SWA SKU tier. Free for dev/test; Standard for staging/production.')
 @allowed([
   'Free'
   'Standard'
 ])
 param swaSkuName string = 'Free'
+
+@description('When true, provisions the Azure DNS zone and SWA CNAME records in the DNS resource group. Requires deploySwa = true.')
+param deployDns bool = false
+
+@description('Public DNS zone apex domain.')
+param domainName string = 'rvserviceflow.com'
+
+@description('Resource group that owns the DNS zone. The apex zone is shared across environments — only the subdomain prefix changes per env. Defaults to the prod primary resource group.')
+param dnsResourceGroupName string = 'rg-rvs-prod-westus3'
+
+@description('Subdomain prefix for the Intake SWA CNAME record. Defaults to "intake" for prod and "intake-<env>" for all other environments.')
+param intakeDnsPrefix string = environmentName == 'prod' ? 'intake' : 'intake-${environmentName}'
+
+@description('Subdomain prefix for the Manager SWA CNAME record. Defaults to "manager" for prod and "manager-<env>" for all other environments.')
+param managerDnsPrefix string = environmentName == 'prod' ? 'manager' : 'manager-${environmentName}'
 
 // ── Variables ─────────────────────────────────────────────────
 
@@ -123,6 +141,16 @@ resource rgPrimary 'Microsoft.Resources/resourceGroups@2024-07-01' = {
 resource rgWhisper 'Microsoft.Resources/resourceGroups@2024-07-01' = {
   name: whisperResourceGroupName
   location: whisperLocation
+  tags: {
+    Application: 'rvs'
+    Environment: environmentName
+    ManagedBy: 'Bicep'
+  }
+}
+
+resource rgSwa 'Microsoft.Resources/resourceGroups@2024-07-01' = if (deploySwa) {
+  name: swaResourceGroupName
+  location: swaLocation
   tags: {
     Application: 'rvs'
     Environment: environmentName
@@ -257,11 +285,11 @@ module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs &
   }
 }
 
-// -- Static Web Apps (Intake + Manager, all environments share primary RG) --
+// -- Static Web Apps (Intake + Manager, dedicated rg-rvs-{env}-westus2) --
 
 module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
   name: 'deploy-swa-intake-${environmentName}'
-  scope: rgPrimary
+  scope: rgSwa
   params: {
     location: swaLocation
     resourceName: swaIntakeName
@@ -272,12 +300,28 @@ module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
 
 module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
   name: 'deploy-swa-manager-${environmentName}'
-  scope: rgPrimary
+  scope: rgSwa
   params: {
     location: swaLocation
     resourceName: swaManagerName
     skuName: swaSkuName
     tags: swaTags
+  }
+}
+
+// -- DNS Zone + SWA CNAME records (scoped to prod primary RG; shared apex zone, env-specific prefixes) --
+
+module dns 'modules/dns.bicep' = if (deploySwa && deployDns) {
+  name: 'deploy-dns-${environmentName}'
+  scope: resourceGroup(dnsResourceGroupName)
+  params: {
+    zoneName: domainName
+    intakePrefix: intakeDnsPrefix
+    managerPrefix: managerDnsPrefix
+    #disable-next-line BCP318
+    intakeSwaHostname: deploySwa ? swaIntake.outputs.defaultHostname : ''
+    #disable-next-line BCP318
+    managerSwaHostname: deploySwa ? swaManager.outputs.defaultHostname : ''
   }
 }
 
@@ -288,6 +332,10 @@ output primaryResourceGroup string = rgPrimary.name
 
 @description('The Whisper resource group name.')
 output whisperResourceGroup string = rgWhisper.name
+
+@description('The dedicated Static Web Apps resource group name. Empty when deploySwa = false.')
+#disable-next-line BCP318
+output swaResourceGroup string = deploySwa ? rgSwa.name : ''
 
 @description('The Azure OpenAI resource endpoint URL (GPT-4o).')
 output openAiEndpoint string = openAi.outputs.endpoint
@@ -342,3 +390,15 @@ output swaIntakeDeploymentToken string = deploySwa ? swaIntake.outputs.deploymen
 @description('Deployment token for RVS.Blazor.Manager SWA. Store as GitHub Secret SWA_TOKEN_MANAGER_<ENV>. Empty when deploySwa = false.')
 #disable-next-line BCP318
 output swaManagerDeploymentToken string = deploySwa ? swaManager.outputs.deploymentToken : ''
+
+@description('Azure-assigned nameservers for the DNS zone. Point your registrar NS records at these. Empty when deployDns = false.')
+#disable-next-line BCP318
+output dnsNameServers array = (deploySwa && deployDns) ? dns.outputs.nameServers : []
+
+@description('FQDN for the Intake SWA custom domain (e.g. intake.rvserviceflow.com). Empty when deployDns = false.')
+#disable-next-line BCP318
+output intakeFqdn string = (deploySwa && deployDns) ? dns.outputs.intakeFqdn : ''
+
+@description('FQDN for the Manager SWA custom domain (e.g. manager.rvserviceflow.com). Empty when deployDns = false.')
+#disable-next-line BCP318
+output managerFqdn string = (deploySwa && deployDns) ? dns.outputs.managerFqdn : ''
