@@ -1,0 +1,247 @@
+name: Deploy Blazor WASM Apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'RVS.Blazor.Intake/**'
+      - 'RVS.Blazor.Manager/**'
+      - 'RVS.UI.Shared/**'
+      - 'RVS.Domain/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'RVS.Blazor.Intake/**'
+      - 'RVS.Blazor.Manager/**'
+      - 'RVS.UI.Shared/**'
+      - 'RVS.Domain/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  DOTNET_VERSION: '10.0.x'
+
+jobs:
+  # ─── Stage 1: Build & Test ────────────────────────────
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Test
+        run: |
+          dotnet test Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj --configuration Release --no-build
+          dotnet test Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj --configuration Release --no-build
+
+      # Publish Intake
+      - name: Publish Intake
+        run: dotnet publish RVS.Blazor.Intake/RVS.Blazor.Intake.csproj -c Release -o ./intake-publish
+
+      # Publish Manager
+      - name: Publish Manager
+        run: dotnet publish RVS.Blazor.Manager/RVS.Blazor.Manager.csproj -c Release -o ./manager-publish
+
+      - name: Upload Intake artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: intake-publish
+          path: ./intake-publish/wwwroot
+
+      - name: Upload Manager artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-publish
+          path: ./manager-publish/wwwroot
+
+  # ─── Stage 2: Deploy to Dev (auto on push to main) ───
+  deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: dev
+    strategy:
+      matrix:
+        include:
+          - app: intake
+            artifact: intake-publish
+            token_secret: SWA_TOKEN_INTAKE_DEV
+          - app: manager
+            artifact: manager-publish
+            token_secret: SWA_TOKEN_MANAGER_DEV
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ./publish
+
+      - name: Inject Dev appsettings
+        run: |
+          if [ "${{ matrix.app }}" = "manager" ]; then
+            cat > ./publish/appsettings.Production.json << 'EOF'
+          {
+            "Auth0": {
+              "Authority": "https://dev-2jhzz8xmjggh26pm.us.auth0.com/",
+              "ClientId": "CBdytt7GQhJSejyVwSrCZZRYUkLMXdiY",
+              "Audience": "https://api-dev.rvserviceflow.com"
+            },
+            "ApiBaseUrl": "https://api-dev.rvserviceflow.com"
+          }
+          EOF
+          else
+            cat > ./publish/appsettings.Production.json << 'EOF'
+          {
+            "ApiBaseUrl": "https://api-dev.rvserviceflow.com"
+          }
+          EOF
+          fi
+
+      - name: Deploy to SWA
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets[matrix.token_secret] }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          skip_app_build: true
+          app_location: './publish'
+
+  # ─── Stage 3: Deploy to Staging ───────────────────────
+  deploy-staging:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    strategy:
+      matrix:
+        include:
+          - app: intake
+            artifact: intake-publish
+            token_secret: SWA_TOKEN_INTAKE_STAGING
+          - app: manager
+            artifact: manager-publish
+            token_secret: SWA_TOKEN_MANAGER_STAGING
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ./publish
+
+      - name: Inject Staging appsettings
+        run: |
+          if [ "${{ matrix.app }}" = "manager" ]; then
+            # TODO: Replace STAGING_CLIENT_ID with actual Auth0 staging client ID
+            cat > ./publish/appsettings.Production.json << 'EOF'
+          {
+            "Auth0": {
+              "Authority": "https://rvs-staging.us.auth0.com/",
+              "ClientId": "STAGING_CLIENT_ID",
+              "Audience": "https://api-staging.rvserviceflow.com"
+            },
+            "ApiBaseUrl": "https://api-staging.rvserviceflow.com"
+          }
+          EOF
+          else
+            cat > ./publish/appsettings.Production.json << 'EOF'
+          {
+            "ApiBaseUrl": "https://api-staging.rvserviceflow.com"
+          }
+          EOF
+          fi
+
+      - name: Deploy to SWA
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets[matrix.token_secret] }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          skip_app_build: true
+          app_location: './publish'
+
+  # ─── Stage 4: Deploy to Production (manual approval) ──
+  deploy-production:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      matrix:
+        include:
+          - app: intake
+            artifact: intake-publish
+            token_secret: SWA_TOKEN_INTAKE_PROD
+          - app: manager
+            artifact: manager-publish
+            token_secret: SWA_TOKEN_MANAGER_PROD
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ./publish
+
+      - name: Inject Production appsettings
+        run: |
+          if [ "${{ matrix.app }}" = "manager" ]; then
+            # TODO: Replace PROD_CLIENT_ID with actual Auth0 production client ID
+            cat > ./publish/appsettings.Production.json << 'EOF'
+          {
+            "Auth0": {
+              "Authority": "https://rvs.us.auth0.com/",
+              "ClientId": "PROD_CLIENT_ID",
+              "Audience": "https://api.rvserviceflow.com"
+            },
+            "ApiBaseUrl": "https://api.rvserviceflow.com"
+          }
+          EOF
+          else
+            cat > ./publish/appsettings.Production.json << 'EOF'
+          {
+            "ApiBaseUrl": "https://api.rvserviceflow.com"
+          }
+          EOF
+          fi
+
+      - name: Deploy to SWA
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets[matrix.token_secret] }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          skip_app_build: true
+          app_location: './publish'
+
+  # ─── PR Preview Environments ──────────────────────────
+  close-pr-previews:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - token_secret: SWA_TOKEN_INTAKE_DEV
+          - token_secret: SWA_TOKEN_MANAGER_DEV
+    steps:
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets[matrix.token_secret] }}
+          action: 'close'
