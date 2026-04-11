@@ -39,7 +39,10 @@ jobs:
       - name: Cache WASM workload
         uses: actions/cache@v4
         with:
-          path: ~/.dotnet/workloads
+          path: |
+            ${{ env.DOTNET_ROOT }}/sdk-manifests
+            ${{ env.DOTNET_ROOT }}/metadata/workloads
+            ${{ env.DOTNET_ROOT }}/packs
           key: wasm-tools-${{ runner.os }}-${{ env.DOTNET_VERSION }}
           restore-keys: wasm-tools-${{ runner.os }}-
 
