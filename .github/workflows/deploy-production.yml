@@ -18,13 +18,47 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 env:
-  DOTNET_VERSION: "10.0.x"
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Resolve the staging run that produced the artifacts to promote
+  # ---------------------------------------------------------------------------
+  resolve-staging-run:
+    name: Resolve Staging Run
+    if: inputs.deploy_intake || inputs.deploy_manager
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      run_id: ${{ steps.find.outputs.run_id }}
+      head_sha: ${{ steps.find.outputs.head_sha }}
+    steps:
+      - name: Find latest successful deploy-staging run
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN=$(gh api \
+            "/repos/${{ github.repository }}/actions/workflows/deploy-staging.yml/runs?branch=main&status=success&per_page=1" \
+            --jq '.workflow_runs[0] | {id, head_sha}')
+
+          RUN_ID=$(echo "$RUN" | jq -r '.id')
+          HEAD_SHA=$(echo "$RUN" | jq -r '.head_sha')
+
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "::error::No successful deploy-staging run found on the main branch."
+            exit 1
+          fi
+
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "Resolved staging run ID: $RUN_ID (SHA: $HEAD_SHA)"
+
   # ---------------------------------------------------------------------------
   # Swap API staging slot to production
   # ---------------------------------------------------------------------------
@@ -65,28 +99,24 @@ jobs:
   deploy-intake:
     name: Deploy Intake SWA to Production
     if: inputs.deploy_intake
+    needs: resolve-staging-run
     runs-on: ubuntu-latest
     environment: production
     permissions:
       contents: read
       id-token: write
+      actions: read
     concurrency:
       group: deploy-production-intake
       cancel-in-progress: false
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
+      - name: Download Intake artifact from staging run
+        uses: actions/download-artifact@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Publish Blazor Intake
-        run: >-
-          dotnet publish RVS.Blazor.Intake/RVS.Blazor.Intake.csproj
-          --configuration Release
-          --output ./publish/intake
+          name: intake-wwwroot-${{ needs.resolve-staging-run.outputs.head_sha }}
+          path: ./publish/intake/wwwroot
+          run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Login to Azure via OIDC
         uses: azure/login@v2
@@ -124,28 +154,24 @@ jobs:
   deploy-manager:
     name: Deploy Manager SWA to Production
     if: inputs.deploy_manager
+    needs: resolve-staging-run
     runs-on: ubuntu-latest
     environment: production
     permissions:
       contents: read
       id-token: write
+      actions: read
     concurrency:
       group: deploy-production-manager
       cancel-in-progress: false
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
+      - name: Download Manager artifact from staging run
+        uses: actions/download-artifact@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Publish Blazor Manager
-        run: >-
-          dotnet publish RVS.Blazor.Manager/RVS.Blazor.Manager.csproj
-          --configuration Release
-          --output ./publish/manager
+          name: manager-wwwroot-${{ needs.resolve-staging-run.outputs.head_sha }}
+          path: ./publish/manager/wwwroot
+          run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Login to Azure via OIDC
         uses: azure/login@v2

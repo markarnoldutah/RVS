@@ -107,18 +107,6 @@ jobs:
           dotnet publish RVS.API/RVS.API.csproj
           --configuration Release --no-build --output ./publish/api
 
-      - name: Publish Blazor Intake
-        if: needs.detect-changes.outputs.intake == 'true'
-        run: >-
-          dotnet publish RVS.Blazor.Intake/RVS.Blazor.Intake.csproj
-          --configuration Release --no-build --output ./publish/intake
-
-      - name: Publish Blazor Manager
-        if: needs.detect-changes.outputs.manager == 'true'
-        run: >-
-          dotnet publish RVS.Blazor.Manager/RVS.Blazor.Manager.csproj
-          --configuration Release --no-build --output ./publish/manager
-
       - name: Upload API artifact
         if: needs.detect-changes.outputs.api == 'true'
         uses: actions/upload-artifact@v4
@@ -127,21 +115,35 @@ jobs:
           path: ./publish/api
           retention-days: 7
 
+      - name: Publish Blazor Intake
+        if: needs.detect-changes.outputs.intake == 'true'
+        run: >-
+          dotnet publish RVS.Blazor.Intake/RVS.Blazor.Intake.csproj
+          --configuration Release --no-build --output ./publish/intake
+
       - name: Upload Intake artifact
         if: needs.detect-changes.outputs.intake == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: intake-publish
-          path: ./publish/intake
-          retention-days: 7
+          name: intake-wwwroot-${{ github.sha }}
+          path: ./publish/intake/wwwroot
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish Blazor Manager
+        if: needs.detect-changes.outputs.manager == 'true'
+        run: >-
+          dotnet publish RVS.Blazor.Manager/RVS.Blazor.Manager.csproj
+          --configuration Release --no-build --output ./publish/manager
 
       - name: Upload Manager artifact
         if: needs.detect-changes.outputs.manager == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: manager-publish
-          path: ./publish/manager
-          retention-days: 7
+          name: manager-wwwroot-${{ github.sha }}
+          path: ./publish/manager/wwwroot
+          retention-days: 30
+          if-no-files-found: error
 
   # ---------------------------------------------------------------------------
   # Deploy API to staging slot (only if API changed)
@@ -196,7 +198,7 @@ jobs:
       - name: Download Intake artifact
         uses: actions/download-artifact@v4
         with:
-          name: intake-publish
+          name: intake-wwwroot-${{ github.sha }}
           path: ./intake
 
       - name: Login to Azure via OIDC
@@ -222,7 +224,7 @@ jobs:
           azure_static_web_apps_api_token: ${{ steps.swa-token.outputs.token }}
           repo_token: ${{ github.token }}
           action: upload
-          app_location: ./intake/wwwroot
+          app_location: ./intake
           skip_app_build: true
           deployment_environment: staging
 
@@ -246,7 +248,7 @@ jobs:
       - name: Download Manager artifact
         uses: actions/download-artifact@v4
         with:
-          name: manager-publish
+          name: manager-wwwroot-${{ github.sha }}
           path: ./manager
 
       - name: Login to Azure via OIDC
@@ -272,7 +274,7 @@ jobs:
           azure_static_web_apps_api_token: ${{ steps.swa-token.outputs.token }}
           repo_token: ${{ github.token }}
           action: upload
-          app_location: ./manager/wwwroot
+          app_location: ./manager
           skip_app_build: true
           deployment_environment: staging
 
