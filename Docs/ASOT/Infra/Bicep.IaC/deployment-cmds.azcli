@@ -8,6 +8,10 @@ az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bice
 # ── Deploy Staging ────────────────────────────────────────────
 az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --name "rvs-staging-$(date +%Y%m%d%H%M)"
 
+# Powershell Compatible
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --name "rvs-staging-$ts"
+
 # ── Deploy Production (only when ready) ──────────────────────
 az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam --name "rvs-prod-$(date +%Y%m%d%H%M)"
 

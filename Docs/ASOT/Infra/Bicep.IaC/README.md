@@ -88,34 +88,76 @@ Docs/ASOT/Infra/Bicep.IaC/
 
 ### Deploy Staging
 
+> **Note (PowerShell on Windows):** Use the PowerShell block below.
+> Inline `$(date +%Y%m%d%H%M)` in a double-quoted string is not evaluated by PowerShell;
+> the literal `%` format specifiers are passed to Azure and cause an `InvalidDoubleEncodedRequestUri` error.
+
+**PowerShell**
+```powershell
+az login
+az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
+
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create `
+  --location westus3 `
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam `
+  --name "rvs-staging-$ts"
+```
+
+**bash / zsh**
 ```bash
 az login
 az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
 
+TS=$(date +%Y%m%d%H%M)
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
   --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam \
-  --name "rvs-staging-$(date +%Y%m%d%H%M)"
+  --name "rvs-staging-${TS}"
 ```
 
 ### Deploy Production (only when ready)
 
+**PowerShell**
+```powershell
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create `
+  --location westus3 `
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam `
+  --name "rvs-prod-$ts"
+```
+
+**bash / zsh**
 ```bash
+TS=$(date +%Y%m%d%H%M)
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
   --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
-  --name "rvs-prod-$(date +%Y%m%d%H%M)"
+  --name "rvs-prod-${TS}"
 ```
 
 ### Pre-Provision Resource Groups (all environments)
 
+**PowerShell**
+```powershell
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create `
+  --location westus3 `
+  --template-file Docs/ASOT/Infra/Bicep.IaC/rg-scaffold.bicep `
+  --name "rvs-rg-scaffold-$ts"
+```
+
+**bash / zsh**
 ```bash
+TS=$(date +%Y%m%d%H%M)
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/rg-scaffold.bicep \
-  --name "rvs-rg-scaffold-$(date +%Y%m%d%H%M)"
+  --name "rvs-rg-scaffold-${TS}"
 ```
 
 ---
@@ -128,13 +170,26 @@ All upgrades are performed by changing a single parameter value and redeploying.
 
 Change `appServiceSkuName` from `'B1'` to `'S1'`:
 
+**PowerShell**
+```powershell
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create `
+  --location westus3 `
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam `
+  --parameters appServiceSkuName='S1' `
+  --name "rvs-staging-sku-upgrade-$ts"
+```
+
+**bash / zsh**
 ```bash
+TS=$(date +%Y%m%d%H%M)
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
   --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam \
   --parameters appServiceSkuName='S1' \
-  --name "rvs-staging-sku-upgrade-$(date +%Y%m%d%H%M)"
+  --name "rvs-staging-sku-upgrade-${TS}"
 ```
 
 **What changes:** Always On enabled, deployment slots available, autoscale possible.
@@ -145,13 +200,26 @@ az deployment sub create \
 
 Change `cosmosCapacityMode` from `'Serverless'` to `'Provisioned'` and optionally set `cosmosAutoscaleMaxThroughput`:
 
+**PowerShell**
+```powershell
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create `
+  --location westus3 `
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam `
+  --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 `
+  --name "rvs-prod-cosmos-upgrade-$ts"
+```
+
+**bash / zsh**
 ```bash
+TS=$(date +%Y%m%d%H%M)
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
   --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
   --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 \
-  --name "rvs-prod-cosmos-upgrade-$(date +%Y%m%d%H%M)"
+  --name "rvs-prod-cosmos-upgrade-${TS}"
 ```
 
 **What changes:** Autoscale throughput (400–4000 RU/s default), provisioned billing.
@@ -160,13 +228,26 @@ az deployment sub create \
 
 Change `swaSkuName` from `'Free'` to `'Standard'`:
 
+**PowerShell**
+```powershell
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create `
+  --location westus3 `
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam `
+  --parameters swaSkuName='Standard' `
+  --name "rvs-staging-swa-upgrade-$ts"
+```
+
+**bash / zsh**
 ```bash
+TS=$(date +%Y%m%d%H%M)
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
   --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam \
   --parameters swaSkuName='Standard' \
-  --name "rvs-staging-swa-upgrade-$(date +%Y%m%d%H%M)"
+  --name "rvs-staging-swa-upgrade-${TS}"
 ```
 
 ---
