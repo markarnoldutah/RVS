@@ -82,7 +82,7 @@ jobs:
         run: dotnet restore RVS.slnx
 
       - name: Build solution
-        run: dotnet build RVS.slnx --configuration Release --no-restore
+        run: dotnet build RVS.slnx --configuration Release
 
       - name: Run Domain tests
         run: >-
