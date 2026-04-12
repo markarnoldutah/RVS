@@ -10,13 +10,13 @@ targetScope = 'resourceGroup'
 @description('Azure region for the Static Web App management endpoint. Must be an SWA-supported region: westus2, eastus2, centralus, westeurope, or eastasia.')
 param location string
 
-@description('Resource name for the Static Web App (e.g. stapp-rvs-intake-dev).')
+@description('Resource name for the Static Web App (e.g. stapp-rvs-intake-staging).')
 param resourceName string
 
 @description('Resource tags to apply.')
 param tags object
 
-@description('SKU tier. Use Free for dev/test and Standard for staging/production (required for SLA and higher bandwidth).')
+@description('SKU tier. Use Free for test and Standard for staging/production (required for SLA and higher bandwidth).')
 @allowed([
   'Free'
   'Standard'

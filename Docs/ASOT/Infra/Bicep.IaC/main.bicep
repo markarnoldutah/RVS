@@ -22,13 +22,12 @@ param location string = 'westus3'
 @description('The Azure region for Whisper STT. Whisper 001 Standard is not available in all regions.')
 param whisperLocation string = 'northcentralus'
 
-@description('The target environment (dev, staging, or prod).')
+@description('The target environment (staging or prod).')
 @allowed([
-  'dev'
   'staging'
   'prod'
 ])
-param environmentName string = 'dev'
+param environmentName string = 'staging'
 
 @description('Name of the primary resource group.')
 param primaryResourceGroupName string = 'rg-rvs-${environmentName}-westus3'
@@ -36,7 +35,7 @@ param primaryResourceGroupName string = 'rg-rvs-${environmentName}-westus3'
 @description('Name of the Whisper resource group (northcentralus).')
 param whisperResourceGroupName string = 'rg-rvs-${environmentName}-ncus'
 
-@description('GPT-4o deployment capacity in thousands of tokens per minute (K TPM). Dev = 1, Staging = 10, Prod = 30+.')
+@description('GPT-4o deployment capacity in thousands of tokens per minute (K TPM). Staging = 10, Prod = 30+.')
 @minValue(1)
 param openAiCapacity int = 1
 
@@ -56,7 +55,7 @@ param deployStorageAccount bool = false
 @maxLength(24)
 param storageAccountNameOverride string = ''
 
-@description('Override CORS origins for browser-based SAS uploads to Blob Storage. Leave empty to use environment defaults (dev = localhost ports, prod = intake.rvserviceflow.com).')
+@description('Override CORS origins for browser-based SAS uploads to Blob Storage. Leave empty to use environment defaults (staging = staging subdomain, prod = intake.rvserviceflow.com).')
 param storageCorsAllowedOrigins string[] = []
 
 // ── ACS Parameters ────────────────────────────────────────────
@@ -78,7 +77,7 @@ param swaLocation string = 'westus2'
 @description('Name of the dedicated resource group for Static Web App resources.')
 param swaResourceGroupName string = 'rg-rvs-${environmentName}-westus2'
 
-@description('SWA SKU tier. Free for dev/test; Standard for staging/production (required for custom auth and custom domains).')
+@description('SWA SKU tier. Free for test; Standard for staging/production (required for custom auth and custom domains).')
 @allowed([
   'Free'
   'Standard'
