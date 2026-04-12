@@ -16,7 +16,6 @@ param workload string
 
 @description('Deployment environment.')
 @allowed([
-  'dev'
   'staging'
   'prod'
 ])
@@ -47,7 +46,6 @@ param tenantModel string = 'shared'
 // ── Variables ─────────────────────────────────────────────────
 
 var environmentDisplayName = {
-  dev: 'Development'
   staging: 'Staging'
   prod: 'Production'
 }

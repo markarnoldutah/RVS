@@ -14,7 +14,6 @@ param location string
 
 @description('The environment name used for resource naming and network policy.')
 @allowed([
-  'dev'
   'staging'
   'prod'
 ])
@@ -33,7 +32,7 @@ param whisperCapacity int = 1
 // ── Variables ─────────────────────────────────────────────────
 
 var whisperDeploymentName = 'whisper'
-var isProduction = environmentName != 'dev'
+var isProduction = environmentName == 'prod'
 
 // ── Azure OpenAI Account (Whisper region) ─────────────────────
 

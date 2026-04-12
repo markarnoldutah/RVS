@@ -1,12 +1,12 @@
 // ──────────────────────────────────────────────────────────────
 // RG Scaffold – RVS Azure Resource Group Pre-provisioning
 // ──────────────────────────────────────────────────────────────
-// Creates all 9 resource groups (3 environments × 3 regions)
+// Creates all 6 resource groups (2 environments × 3 regions)
 // in a single subscription-scoped deployment so that subsequent
 // environment-specific deployments find their target RGs ready.
 //
 //   Regions  : westus2, westus3, northcentralus (ncus)
-//   Environments : dev, staging, prod
+//   Environments : staging, prod
 //
 // Usage:
 //   az deployment sub create --location westus3 \
@@ -26,16 +26,12 @@ param costCenter string = 'Engineering'
 // ── Variables ─────────────────────────────────────────────────
 
 var environmentDisplayName = {
-  dev:     'Development'
   staging: 'Staging'
   prod:    'Production'
 }
 
-// All 9 resource groups: 3 environments × 3 regions
+// All 6 resource groups: 2 environments × 3 regions
 var rgDefs = [
-  { name: 'rg-rvs-dev-westus2',     location: 'westus2',        regionCode: 'wus2', env: 'dev'     }
-  { name: 'rg-rvs-dev-westus3',     location: 'westus3',        regionCode: 'wus3', env: 'dev'     }
-  { name: 'rg-rvs-dev-ncus',        location: 'northcentralus', regionCode: 'ncus', env: 'dev'     }
   { name: 'rg-rvs-staging-westus2', location: 'westus2',        regionCode: 'wus2', env: 'staging' }
   { name: 'rg-rvs-staging-westus3', location: 'westus3',        regionCode: 'wus3', env: 'staging' }
   { name: 'rg-rvs-staging-ncus',    location: 'northcentralus', regionCode: 'ncus', env: 'staging' }

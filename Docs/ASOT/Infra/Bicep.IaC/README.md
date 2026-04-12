@@ -8,7 +8,6 @@ Infrastructure as Code for the RVS Azure platform. Supports **independent deploy
 |---|---|---|
 | **Staging** | Pre-production validation | Full cloud resources |
 | **Production** | Live service | Deployed only when explicitly triggered |
-| **Dev** | Local development | Cosmos DB Emulator + Azurite; minimal cloud resources (OpenAI, SWA) |
 
 ---
 
@@ -78,7 +77,6 @@ Docs/ASOT/Infra/Bicep.IaC/
 │   ├── static-web-app.bicep                # Azure Static Web App
 │   └── dns.bicep                           # DNS zone + CNAME records
 ├── parameters/
-│   ├── dev.bicepparam                      # Dev parameter values (minimal cloud)
 │   ├── staging.bicepparam                  # Staging parameter values (full)
 │   └── prod.bicepparam                     # Production parameter values (full)
 └── README.md                               # This file
@@ -166,9 +164,9 @@ Change `swaSkuName` from `'Free'` to `'Standard'`:
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/dev.bicepparam \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam \
   --parameters swaSkuName='Standard' \
-  --name "rvs-dev-swa-upgrade-$(date +%Y%m%d%H%M)"
+  --name "rvs-staging-swa-upgrade-$(date +%Y%m%d%H%M)"
 ```
 
 ---
