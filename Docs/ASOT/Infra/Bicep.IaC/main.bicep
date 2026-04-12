@@ -139,6 +139,24 @@ param deployKeyVault bool = false
 @maxLength(24)
 param keyVaultNameOverride string = ''
 
+// ── Auth0 Parameters (external identity provider) ─────────────
+
+@secure()
+@description('Auth0 tenant domain URL (e.g. https://rvs-dev.us.auth0.com/). Required when deployKeyVault = true.')
+param auth0Domain string = ''
+
+@secure()
+@description('Auth0 API audience identifier (e.g. https://api.rvserviceflow.com). Required when deployKeyVault = true.')
+param auth0Audience string = ''
+
+@secure()
+@description('Auth0 application client ID. Required when deployKeyVault = true.')
+param auth0ClientId string = ''
+
+@secure()
+@description('Auth0 application client secret. Required when deployKeyVault = true.')
+param auth0ClientSecret string = ''
+
 // ── Observability Parameters ──────────────────────────────────
 
 @description('When true, deploys a Log Analytics workspace and Application Insights resource.')
@@ -424,6 +442,51 @@ module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs &
     keyVaultName: deployKeyVault ? keyVault.outputs.name : 'unused'
     #disable-next-line BCP318
     acsName: deployAcs ? communicationServices.outputs.name : 'unused'
+  }
+}
+
+// ── Key Vault Secrets (Cosmos DB) ─────────────────────────────
+
+module cosmosKeyVaultSecrets 'modules/cosmos-keyvault-secrets.bicep' = if (deployCosmosDb && deployKeyVault) {
+  name: 'deploy-cosmos-kv-secrets-${environmentName}'
+  scope: rgPrimary
+  params: {
+    #disable-next-line BCP318
+    keyVaultName: deployKeyVault ? keyVault.outputs.name : 'unused'
+    #disable-next-line BCP318
+    cosmosAccountName: deployCosmosDb ? cosmosDb.outputs.name : 'unused'
+    #disable-next-line BCP318
+    databaseName: deployCosmosDb ? cosmosDb.outputs.databaseName : 'rvs-db'
+  }
+}
+
+// ── Key Vault Secrets (Storage — Blob + Tables) ───────────────
+
+module storageKeyVaultSecrets 'modules/storage-keyvault-secrets.bicep' = if (deployStorageAccount && deployKeyVault) {
+  name: 'deploy-storage-kv-secrets-${environmentName}'
+  scope: rgPrimary
+  params: {
+    #disable-next-line BCP318
+    keyVaultName: deployKeyVault ? keyVault.outputs.name : 'unused'
+    #disable-next-line BCP318
+    storageAccountName: deployStorageAccount ? storage.outputs.name : 'unused'
+  }
+}
+
+// ── Key Vault Secrets (Auth0) ─────────────────────────────────
+
+module auth0KeyVaultSecrets 'modules/auth0-keyvault-secrets.bicep' = if (deployKeyVault && !empty(auth0Domain)) {
+  name: 'deploy-auth0-kv-secrets-${environmentName}'
+  scope: rgPrimary
+  params: {
+    #disable-next-line BCP318
+    keyVaultName: deployKeyVault ? keyVault.outputs.name : 'unused'
+    auth0Domain: auth0Domain
+    auth0Audience: auth0Audience
+    auth0ClientId: auth0ClientId
+    auth0ClientSecret: auth0ClientSecret
+    auth0TokenUrl: '${auth0Domain}oauth/token'
+    auth0AuthorizationUrl: '${auth0Domain}authorize'
   }
 }
 

@@ -10,6 +10,9 @@
 *.userosscache
 *.sln.docstates
 
+# Local development settings (may contain secrets — use dotnet user-secrets for sensitive values)
+**/appsettings.Development.json
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

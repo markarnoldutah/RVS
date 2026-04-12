@@ -2,6 +2,7 @@ using Azure.Data.Tables;
 using Azure.Core;
 using Azure.Identity;
 using Azure.Storage.Blobs;
+using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using RVS.API.HealthChecks;
 using RVS.API.Integrations;
 using RVS.API.Middleware;
@@ -23,6 +24,17 @@ using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Azure Key Vault configuration provider — loads secrets from Key Vault in staging/production.
+// The KeyVault:VaultUri app setting is injected by Bicep (app-service-config.bicep → KeyVault__VaultUri).
+// In Development, this is skipped — secrets come from appsettings.Development.json or dotnet user-secrets.
+var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
+if (!string.IsNullOrEmpty(keyVaultUri))
+{
+    builder.Configuration.AddAzureKeyVault(
+        new Uri(keyVaultUri),
+        new DefaultAzureCredential());
+}
+
 // Configure CORS — AllowBlazorClient for Blazor.Intake WASM + Blazor.Manager WASM
 if (builder.Environment.IsProduction())
 {
@@ -32,6 +44,20 @@ if (builder.Environment.IsProduction())
         {
             corsBuilder
                 .WithOrigins("https://intake.rvserviceflow.com", "https://manager.rvserviceflow.com")
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        });
+    });
+}
+else if (builder.Environment.IsEnvironment("Staging"))
+{
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("AllowBlazorClient", corsBuilder =>
+        {
+            corsBuilder
+                .WithOrigins("https://intake-staging.rvserviceflow.com", "https://manager-staging.rvserviceflow.com")
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
