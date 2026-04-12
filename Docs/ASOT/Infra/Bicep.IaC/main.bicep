@@ -53,7 +53,7 @@ param storageAccountNameOverride string = ''
 @description('Principal ID (object ID) of the App Service / Container App managed identity that needs blob access. Leave empty to skip role assignments.')
 param storageBlobAccessPrincipalId string = ''
 
-@description('Override CORS origins for browser-based SAS uploads to Blob Storage. Leave empty to use environment defaults (dev = localhost ports, prod = portal.rvserviceflow.com).')
+@description('Override CORS origins for browser-based SAS uploads to Blob Storage. Leave empty to use environment defaults (dev = localhost ports, prod = intake.rvserviceflow.com).')
 param storageCorsAllowedOrigins string[] = []
 
 @description('When true, deploys an Azure Communication Services resource with Email and SMS capabilities into the primary resource group.')
@@ -103,15 +103,24 @@ var resolvedStorageAccountName = empty(storageAccountNameOverride)
   : storageAccountNameOverride
 
 // Environment-aware default CORS origins for browser-based SAS uploads.
-// Dev/staging use local Blazor WASM ports; prod uses the live portal URL.
+// Staging uses staging-prefixed subdomains; prod uses the live URLs.
+// Local dev uses Blazor WASM ports.
 var defaultCorsOrigins = environmentName == 'prod'
-  ? ['https://portal.rvserviceflow.com']
-  : [
-      'https://localhost:7008'
-      'https://localhost:7116'
-      'https://localhost:7200'
-      'https://localhost:7300'
+  ? [
+      'https://intake.rvserviceflow.com'
+      'https://manager.rvserviceflow.com'
     ]
+  : environmentName == 'staging'
+    ? [
+        'https://intake-staging.rvserviceflow.com'
+        'https://manager-staging.rvserviceflow.com'
+      ]
+    : [
+        'https://localhost:7008'
+        'https://localhost:7116'
+        'https://localhost:7200'
+        'https://localhost:7300'
+      ]
 
 var resolvedCorsOrigins = !empty(storageCorsAllowedOrigins) ? storageCorsAllowedOrigins : defaultCorsOrigins
 

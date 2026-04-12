@@ -31,7 +31,7 @@ if (builder.Environment.IsProduction())
         options.AddPolicy("AllowBlazorClient", corsBuilder =>
         {
             corsBuilder
-                .WithOrigins("https://portal.rvserviceflow.com")
+                .WithOrigins("https://intake.rvserviceflow.com", "https://manager.rvserviceflow.com")
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
