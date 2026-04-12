@@ -146,7 +146,7 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  # Deploy API to staging slot (only if API changed)
+  # Deploy API to staging slot (westus3)
   # ---------------------------------------------------------------------------
   deploy-api:
     name: Deploy API to Staging Slot
@@ -183,7 +183,7 @@ jobs:
         run: az logout
 
   # ---------------------------------------------------------------------------
-  # Deploy Intake SWA to staging (only if Intake changed)
+  # Deploy Intake SWA to staging (westus2)
   # ---------------------------------------------------------------------------
   deploy-intake:
     name: Deploy Intake SWA to Staging
@@ -191,9 +191,6 @@ jobs:
     if: needs.detect-changes.outputs.intake == 'true'
     runs-on: ubuntu-latest
     environment: staging
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - name: Download Intake artifact
         uses: actions/download-artifact@v4
@@ -201,39 +198,18 @@ jobs:
           name: intake-wwwroot-${{ github.sha }}
           path: ./intake
 
-      - name: Login to Azure via OIDC
-        uses: azure/login@v2
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Get SWA deployment token
-        id: swa-token
-        run: |
-          TOKEN=$(az staticwebapp secrets list \
-            --name "${{ vars.INTAKE_SWA_NAME }}" \
-            --query "properties.apiKey" \
-            --output tsv)
-          echo "::add-mask::$TOKEN"
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
       - name: Deploy Intake to staging
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ steps.swa-token.outputs.token }}
+          azure_static_web_apps_api_token: ${{ secrets.INTAKE_SWA_TOKEN_STAGING }}
           repo_token: ${{ github.token }}
           action: upload
           app_location: ./intake
           skip_app_build: true
           deployment_environment: staging
 
-      - name: Azure logout
-        if: always()
-        run: az logout
-
   # ---------------------------------------------------------------------------
-  # Deploy Manager SWA to staging (only if Manager changed)
+  # Deploy Manager SWA to staging (westus2)
   # ---------------------------------------------------------------------------
   deploy-manager:
     name: Deploy Manager SWA to Staging
@@ -241,9 +217,6 @@ jobs:
     if: needs.detect-changes.outputs.manager == 'true'
     runs-on: ubuntu-latest
     environment: staging
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - name: Download Manager artifact
         uses: actions/download-artifact@v4
@@ -251,33 +224,12 @@ jobs:
           name: manager-wwwroot-${{ github.sha }}
           path: ./manager
 
-      - name: Login to Azure via OIDC
-        uses: azure/login@v2
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Get SWA deployment token
-        id: swa-token
-        run: |
-          TOKEN=$(az staticwebapp secrets list \
-            --name "${{ vars.MANAGER_SWA_NAME }}" \
-            --query "properties.apiKey" \
-            --output tsv)
-          echo "::add-mask::$TOKEN"
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
       - name: Deploy Manager to staging
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ steps.swa-token.outputs.token }}
+          azure_static_web_apps_api_token: ${{ secrets.MANAGER_SWA_TOKEN_STAGING }}
           repo_token: ${{ github.token }}
           action: upload
           app_location: ./manager
           skip_app_build: true
           deployment_environment: staging
-
-      - name: Azure logout
-        if: always()
-        run: az logout

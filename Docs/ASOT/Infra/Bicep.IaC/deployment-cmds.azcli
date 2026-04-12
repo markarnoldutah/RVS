@@ -68,3 +68,31 @@ az communication show --name acs-rvs-notify-staging-wus3-s01-001 --resource-grou
 
 # ── DNS Verification ──────────────────────────────────────────
 az network dns zone show --name rvserviceflow.com --resource-group rg-rvs-prod-westus3 --query "nameServers" -o table
+
+
+# PowerShell Compatible — write JSON to temp file (avoids PowerShell quote-stripping)
+$tmpFile = New-TemporaryFile
+[ordered]@{ name="github-actions-staging"; issuer="https://token.actions.githubusercontent.com"; subject="repo:$GITHUB_ORG/$GITHUB_REPO`:environment:staging"; audiences=@("api://AzureADTokenExchange") } | ConvertTo-Json -Compress | Set-Content -Path $tmpFile -Encoding UTF8
+az ad app federated-credential create --id $APP_ID --parameters $tmpFile
+Remove-Item $tmpFile
+
+$tmpFile = New-TemporaryFile
+[ordered]@{ name="github-actions-production"; issuer="https://token.actions.githubusercontent.com"; subject="repo:$GITHUB_ORG/$GITHUB_REPO`:environment:production"; audiences=@("api://AzureADTokenExchange") } | ConvertTo-Json -Compress | Set-Content -Path $tmpFile -Encoding UTF8
+az ad app federated-credential create --id $APP_ID --parameters $tmpFile
+Remove-Item $tmpFile
+
+az role assignment create --assignee $APP_ID --role "Contributor" --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
+
+az role assignment list --assignee "$APP_ID" --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" -o table
+
+# CLEANUP
+# You still need Azure CLI to retrieve the tokens once
+az login
+
+# Staging tokens
+az staticwebapp secrets list --name "stapp-rvs-intake-staging" --resource-group "rg-rvs-staging-westus2" --query "properties.apiKey" --output tsv
+az staticwebapp secrets list --name "stapp-rvs-manager-staging" --resource-group "rg-rvs-staging-westus2" --query "properties.apiKey" --output tsv
+
+# Production tokens
+az staticwebapp secrets list --name "<intake-swa-name>" --resource-group "rg-rvs-production-westus2" --query "properties.apiKey" --output tsv
+az staticwebapp secrets list --name "<manager-swa-name>" --resource-group "rg-rvs-production-westus2" --query "properties.apiKey" --output tsv
