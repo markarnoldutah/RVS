@@ -568,7 +568,7 @@ public async Task<IActionResult> HandleInboundSms(
       "FromPhoneNumber": "+18005551234",
       "MaxMessagesPerTenantPerHour": 100
     },
-    "MagicLinkBaseUrl": "https://app.rvserviceflow.com/status/"
+    "MagicLinkBaseUrl": "https://intake.rvserviceflow.com/status/"
   }
 }
 ```

@@ -383,10 +383,10 @@ Authorization policies referenced below are defined in **RVS_Auth0_Identity_Vers
 | Environment | Origins |
 |---|---|
 | Development | `https://localhost:7xxx` |
-| Staging | `https://staging.dashboard.rvserviceflow.com`, `https://staging.app.rvserviceflow.com` |
-| Production | `https://dashboard.rvserviceflow.com`, `https://app.rvserviceflow.com` |
+| Staging | `https://intake-staging.rvserviceflow.com`, `https://manager-staging.rvserviceflow.com` |
+| Production | `https://manager.rvserviceflow.com`, `https://intake.rvserviceflow.com` |
 
-The intake form (`app.rvserviceflow.com`) and dealer dashboard (`dashboard.rvserviceflow.com`) are different subdomains and must both be listed.
+The intake form (`intake.rvserviceflow.com`) and service manager (`manager.rvserviceflow.com`) are different subdomains and must both be listed.
 
 ### TenantAccessGateMiddleware Scale Considerations
 
