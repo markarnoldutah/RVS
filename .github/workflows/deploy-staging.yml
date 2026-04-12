@@ -1,0 +1,281 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Detect which apps have changes and need deployment
+  # ---------------------------------------------------------------------------
+  detect-changes:
+    name: Detect Changed Apps
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      intake: ${{ steps.filter.outputs.intake }}
+      manager: ${{ steps.filter.outputs.manager }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Determine changed paths
+        id: filter
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "--- Changed files ---"
+          echo "$CHANGED"
+          echo "---------------------"
+
+          # API: RVS.API + Domain + all Infra projects
+          API_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.API/|RVS\.Domain/|RVS\.Infra\.)' && echo true || echo false)
+
+          # Intake: Blazor.Intake + UI.Shared + Domain (shared dependency)
+          INTAKE_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.Blazor\.Intake/|RVS\.UI\.Shared/|RVS\.Domain/)' && echo true || echo false)
+
+          # Manager: Blazor.Manager + UI.Shared + Domain (shared dependency)
+          MANAGER_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.Blazor\.Manager/|RVS\.UI\.Shared/|RVS\.Domain/)' && echo true || echo false)
+
+          echo "api=$API_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "intake=$INTAKE_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "manager=$MANAGER_CHANGED" >> "$GITHUB_OUTPUT"
+
+          echo "API changed: $API_CHANGED"
+          echo "Intake changed: $INTAKE_CHANGED"
+          echo "Manager changed: $MANAGER_CHANGED"
+
+  # ---------------------------------------------------------------------------
+  # Build & Test (full solution — always runs to validate nothing is broken)
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build & Test
+    needs: detect-changes
+    if: >-
+      needs.detect-changes.outputs.api == 'true'
+      || needs.detect-changes.outputs.intake == 'true'
+      || needs.detect-changes.outputs.manager == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore RVS.slnx
+
+      - name: Build solution
+        run: dotnet build RVS.slnx --configuration Release --no-restore
+
+      - name: Run Domain tests
+        run: >-
+          dotnet test Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj
+          --configuration Release --no-build
+
+      - name: Run API tests
+        run: >-
+          dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj
+          --configuration Release --no-build
+
+      - name: Run UI Shared tests
+        run: >-
+          dotnet test Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj
+          --configuration Release --no-build
+
+      # --- Publish only the changed apps ---
+
+      - name: Publish API
+        if: needs.detect-changes.outputs.api == 'true'
+        run: >-
+          dotnet publish RVS.API/RVS.API.csproj
+          --configuration Release --no-build --output ./publish/api
+
+      - name: Publish Blazor Intake
+        if: needs.detect-changes.outputs.intake == 'true'
+        run: >-
+          dotnet publish RVS.Blazor.Intake/RVS.Blazor.Intake.csproj
+          --configuration Release --no-build --output ./publish/intake
+
+      - name: Publish Blazor Manager
+        if: needs.detect-changes.outputs.manager == 'true'
+        run: >-
+          dotnet publish RVS.Blazor.Manager/RVS.Blazor.Manager.csproj
+          --configuration Release --no-build --output ./publish/manager
+
+      - name: Upload API artifact
+        if: needs.detect-changes.outputs.api == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-publish
+          path: ./publish/api
+          retention-days: 7
+
+      - name: Upload Intake artifact
+        if: needs.detect-changes.outputs.intake == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: intake-publish
+          path: ./publish/intake
+          retention-days: 7
+
+      - name: Upload Manager artifact
+        if: needs.detect-changes.outputs.manager == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-publish
+          path: ./publish/manager
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Deploy API to staging slot (only if API changed)
+  # ---------------------------------------------------------------------------
+  deploy-api:
+    name: Deploy API to Staging Slot
+    needs: [detect-changes, build-and-test]
+    if: needs.detect-changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download API artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: api-publish
+          path: ./api
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy API to staging slot
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.API_APP_SERVICE_NAME }}
+          slot-name: staging
+          package: ./api
+
+      - name: Azure logout
+        if: always()
+        run: az logout
+
+  # ---------------------------------------------------------------------------
+  # Deploy Intake SWA to staging (only if Intake changed)
+  # ---------------------------------------------------------------------------
+  deploy-intake:
+    name: Deploy Intake SWA to Staging
+    needs: [detect-changes, build-and-test]
+    if: needs.detect-changes.outputs.intake == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download Intake artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: intake-publish
+          path: ./intake
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get SWA deployment token
+        id: swa-token
+        run: |
+          TOKEN=$(az staticwebapp secrets list \
+            --name "${{ vars.INTAKE_SWA_NAME }}" \
+            --query "properties.apiKey" \
+            --output tsv)
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Intake to staging
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa-token.outputs.token }}
+          repo_token: ${{ github.token }}
+          action: upload
+          app_location: ./intake/wwwroot
+          skip_app_build: true
+          deployment_environment: staging
+
+      - name: Azure logout
+        if: always()
+        run: az logout
+
+  # ---------------------------------------------------------------------------
+  # Deploy Manager SWA to staging (only if Manager changed)
+  # ---------------------------------------------------------------------------
+  deploy-manager:
+    name: Deploy Manager SWA to Staging
+    needs: [detect-changes, build-and-test]
+    if: needs.detect-changes.outputs.manager == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download Manager artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: manager-publish
+          path: ./manager
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get SWA deployment token
+        id: swa-token
+        run: |
+          TOKEN=$(az staticwebapp secrets list \
+            --name "${{ vars.MANAGER_SWA_NAME }}" \
+            --query "properties.apiKey" \
+            --output tsv)
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Manager to staging
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa-token.outputs.token }}
+          repo_token: ${{ github.token }}
+          action: upload
+          app_location: ./manager/wwwroot
+          skip_app_build: true
+          deployment_environment: staging
+
+      - name: Azure logout
+        if: always()
+        run: az logout
