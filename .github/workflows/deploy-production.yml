@@ -1,0 +1,178 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_api:
+        description: "Deploy API (swap staging slot to production)"
+        type: boolean
+        default: true
+      deploy_intake:
+        description: "Deploy Intake SWA to production"
+        type: boolean
+        default: true
+      deploy_manager:
+        description: "Deploy Manager SWA to production"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Swap API staging slot to production
+  # ---------------------------------------------------------------------------
+  deploy-api:
+    name: Swap API Staging → Production
+    if: inputs.deploy_api
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-production-api
+      cancel-in-progress: false
+    steps:
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Swap staging slot to production
+        run: |
+          az webapp deployment slot swap \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.API_APP_SERVICE_NAME }}" \
+            --slot staging \
+            --target-slot production
+
+      - name: Azure logout
+        if: always()
+        run: az logout
+
+  # ---------------------------------------------------------------------------
+  # Deploy Intake SWA to production
+  # ---------------------------------------------------------------------------
+  deploy-intake:
+    name: Deploy Intake SWA to Production
+    if: inputs.deploy_intake
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-production-intake
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish Blazor Intake
+        run: >-
+          dotnet publish RVS.Blazor.Intake/RVS.Blazor.Intake.csproj
+          --configuration Release
+          --output ./publish/intake
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get SWA deployment token
+        id: swa-token
+        run: |
+          TOKEN=$(az staticwebapp secrets list \
+            --name "${{ vars.INTAKE_SWA_NAME }}" \
+            --query "properties.apiKey" \
+            --output tsv)
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Intake to production
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa-token.outputs.token }}
+          repo_token: ${{ github.token }}
+          action: upload
+          app_location: ./publish/intake/wwwroot
+          skip_app_build: true
+
+      - name: Azure logout
+        if: always()
+        run: az logout
+
+  # ---------------------------------------------------------------------------
+  # Deploy Manager SWA to production
+  # ---------------------------------------------------------------------------
+  deploy-manager:
+    name: Deploy Manager SWA to Production
+    if: inputs.deploy_manager
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-production-manager
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish Blazor Manager
+        run: >-
+          dotnet publish RVS.Blazor.Manager/RVS.Blazor.Manager.csproj
+          --configuration Release
+          --output ./publish/manager
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get SWA deployment token
+        id: swa-token
+        run: |
+          TOKEN=$(az staticwebapp secrets list \
+            --name "${{ vars.MANAGER_SWA_NAME }}" \
+            --query "properties.apiKey" \
+            --output tsv)
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Manager to production
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa-token.outputs.token }}
+          repo_token: ${{ github.token }}
+          action: upload
+          app_location: ./publish/manager/wwwroot
+          skip_app_build: true
+
+      - name: Azure logout
+        if: always()
+        run: az logout

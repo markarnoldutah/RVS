@@ -1,5 +1,8 @@
 name: "Copilot Setup Steps"
 
+# Copilot agent environment setup — kept separate from CI/CD workflows.
+# See build-test.yml, deploy-staging.yml, deploy-production.yml, build-mobile.yml
+# for the CI/CD pipeline definitions.
 on:
   workflow_dispatch:
   push:

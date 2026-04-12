@@ -1,0 +1,84 @@
+name: Build & Test
+
+on:
+  push:
+    branches:
+      - "**"
+    tags-ignore:
+      - "**"
+  pull_request:
+    branches:
+      - "**"
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: build-test-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore RVS.slnx
+
+      - name: Build solution
+        run: dotnet build RVS.slnx --configuration Release --no-restore
+
+      - name: Run Domain tests with coverage
+        run: >-
+          dotnet test Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=domain-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+
+      - name: Run API tests with coverage
+        run: >-
+          dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=api-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+
+      - name: Run UI Shared tests with coverage
+        run: >-
+          dotnet test Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=ui-shared-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./TestResults/**/*.trx
+          retention-days: 14
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: ./TestResults/**/coverage.cobertura.xml
+          retention-days: 14
