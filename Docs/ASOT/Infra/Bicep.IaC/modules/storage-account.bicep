@@ -104,6 +104,17 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2025-01-01'
   }
 }
 
+// ── Blob Containers ────────────────────────────────────────────
+
+@description('Application blob container for service request file attachments. Public access is always disabled.')
+resource attachmentsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2025-01-01' = {
+  parent: blobService
+  name: 'rvs-attachments'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 // ── Role Assignments ───────────────────────────────────────────
 
 // Storage Blob Data Contributor — read/write blobs, create containers
