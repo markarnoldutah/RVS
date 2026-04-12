@@ -56,9 +56,6 @@ param deployStorageAccount bool = false
 @maxLength(24)
 param storageAccountNameOverride string = ''
 
-@description('Principal ID (object ID) of the App Service / Container App managed identity that needs blob access. Leave empty to skip role assignments.')
-param storageBlobAccessPrincipalId string = ''
-
 @description('Override CORS origins for browser-based SAS uploads to Blob Storage. Leave empty to use environment defaults (dev = localhost ports, prod = intake.rvserviceflow.com).')
 param storageCorsAllowedOrigins string[] = []
 
