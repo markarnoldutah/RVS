@@ -44,7 +44,7 @@ param allowSharedKeyAccess bool = true
 // Built-in role definition IDs
 // https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
-var storageBlobDelegatorRoleId = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d2'
+var storageBlobDelegatorRoleId = 'db58b8e5-c6ad-4a2a-8342-4190687cbf4a'
 
 // ── Resources ─────────────────────────────────────────────────
 
