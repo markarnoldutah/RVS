@@ -45,7 +45,7 @@ public interface ICustomerProfileRepository
     /// Returns <c>null</c> when no profile actively owns the asset in this tenant.
     /// </summary>
     /// <param name="tenantId">Tenant partition key.</param>
-    /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
+    /// <param name="assetId">Asset identifier (e.g. <c>1FTFW1ET5EKE12345</c>).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<CustomerProfile?> GetByActiveAssetIdAsync(string tenantId, string assetId, CancellationToken cancellationToken = default);
 }

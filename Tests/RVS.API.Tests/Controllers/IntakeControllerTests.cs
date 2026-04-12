@@ -137,7 +137,7 @@ public class IntakeControllerTests
         var request = new ServiceRequestCreateRequestDto
         {
             Customer = new CustomerInfoDto { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
-            Asset = new AssetInfoDto { AssetId = "RV:1FTFW1ET5EKE12345" },
+            Asset = new AssetInfoDto { AssetId = "1FTFW1ET5EKE12345" },
             IssueCategory = "Electrical",
             IssueDescription = "Battery not charging"
         };
@@ -167,7 +167,7 @@ public class IntakeControllerTests
         },
         AssetInfo = new AssetInfoEmbedded
         {
-            AssetId = "RV:1FTFW1ET5EKE12345",
+            AssetId = "1FTFW1ET5EKE12345",
             Manufacturer = "Thor",
             Model = "Ace",
             Year = 2023

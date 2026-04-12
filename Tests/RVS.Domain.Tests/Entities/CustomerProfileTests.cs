@@ -31,25 +31,25 @@ public class CustomerProfileTests
         {
             AssetsOwned =
             [
-                new AssetOwnershipEmbedded { AssetId = "RV:VIN-1", Status = AssetOwnershipStatus.Active },
-                new AssetOwnershipEmbedded { AssetId = "RV:VIN-2", Status = AssetOwnershipStatus.Inactive },
-                new AssetOwnershipEmbedded { AssetId = "RV:VIN-3", Status = AssetOwnershipStatus.Active }
+                new AssetOwnershipEmbedded { AssetId = "VIN-1", Status = AssetOwnershipStatus.Active },
+                new AssetOwnershipEmbedded { AssetId = "VIN-2", Status = AssetOwnershipStatus.Inactive },
+                new AssetOwnershipEmbedded { AssetId = "VIN-3", Status = AssetOwnershipStatus.Active }
             ]
         };
 
-        profile.ActiveAssetIds.Should().BeEquivalentTo(["RV:VIN-1", "RV:VIN-3"]);
+        profile.ActiveAssetIds.Should().BeEquivalentTo(["VIN-1", "VIN-3"]);
     }
 
     [Fact]
     public void GetActiveInteraction_ShouldReturnActiveAssetForAssetId()
     {
-        var active = new AssetOwnershipEmbedded { AssetId = "RV:VIN-1", Status = AssetOwnershipStatus.Active };
+        var active = new AssetOwnershipEmbedded { AssetId = "VIN-1", Status = AssetOwnershipStatus.Active };
         var profile = new CustomerProfile
         {
             AssetsOwned = [active]
         };
 
-        profile.GetActiveInteraction("RV:VIN-1").Should().BeSameAs(active);
+        profile.GetActiveInteraction("VIN-1").Should().BeSameAs(active);
     }
 
     [Fact]
@@ -59,11 +59,11 @@ public class CustomerProfileTests
         {
             AssetsOwned =
             [
-                new AssetOwnershipEmbedded { AssetId = "RV:VIN-1", Status = AssetOwnershipStatus.Inactive }
+                new AssetOwnershipEmbedded { AssetId = "VIN-1", Status = AssetOwnershipStatus.Inactive }
             ]
         };
 
-        profile.GetActiveInteraction("RV:VIN-1").Should().BeNull();
+        profile.GetActiveInteraction("VIN-1").Should().BeNull();
     }
 
     // ── DeactivateAsset ──────────────────────────────────────────────────────
@@ -75,11 +75,11 @@ public class CustomerProfileTests
         {
             AssetsOwned =
             [
-                new AssetOwnershipEmbedded { AssetId = "RV:VIN-1", Status = AssetOwnershipStatus.Active, RequestCount = 3 }
+                new AssetOwnershipEmbedded { AssetId = "VIN-1", Status = AssetOwnershipStatus.Active, RequestCount = 3 }
             ]
         };
 
-        profile.DeactivateAsset("RV:VIN-1");
+        profile.DeactivateAsset("VIN-1");
 
         var asset = profile.AssetsOwned.First();
         asset.Status.Should().Be(AssetOwnershipStatus.Inactive);
@@ -94,11 +94,11 @@ public class CustomerProfileTests
         {
             AssetsOwned =
             [
-                new AssetOwnershipEmbedded { AssetId = "RV:VIN-1", Status = AssetOwnershipStatus.Inactive }
+                new AssetOwnershipEmbedded { AssetId = "VIN-1", Status = AssetOwnershipStatus.Inactive }
             ]
         };
 
-        profile.DeactivateAsset("RV:VIN-1");
+        profile.DeactivateAsset("VIN-1");
 
         profile.AssetsOwned.First().Status.Should().Be(AssetOwnershipStatus.Inactive);
     }
@@ -108,7 +108,7 @@ public class CustomerProfileTests
     {
         var profile = new CustomerProfile();
 
-        profile.DeactivateAsset("RV:VIN-UNKNOWN");
+        profile.DeactivateAsset("VIN-UNKNOWN");
 
         profile.AssetsOwned.Should().BeEmpty();
     }
@@ -120,11 +120,11 @@ public class CustomerProfileTests
     {
         var profile = new CustomerProfile();
 
-        profile.ActivateOrRefreshAsset("RV:VIN-1");
+        profile.ActivateOrRefreshAsset("VIN-1");
 
         profile.AssetsOwned.Should().ContainSingle();
         var asset = profile.AssetsOwned.First();
-        asset.AssetId.Should().Be("RV:VIN-1");
+        asset.AssetId.Should().Be("VIN-1");
         asset.Status.Should().Be(AssetOwnershipStatus.Active);
         asset.RequestCount.Should().Be(1);
         asset.FirstSeenAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
@@ -136,11 +136,11 @@ public class CustomerProfileTests
     {
         var profile = new CustomerProfile();
 
-        profile.ActivateOrRefreshAsset("RV:VIN-1", "Grand Design", "Momentum 395G", 2023);
+        profile.ActivateOrRefreshAsset("VIN-1", "Grand Design", "Momentum 395G", 2023);
 
         profile.AssetsOwned.Should().ContainSingle();
         var asset = profile.AssetsOwned.First();
-        asset.AssetId.Should().Be("RV:VIN-1");
+        asset.AssetId.Should().Be("VIN-1");
         asset.Manufacturer.Should().Be("Grand Design");
         asset.Model.Should().Be("Momentum 395G");
         asset.Year.Should().Be(2023);
@@ -153,7 +153,7 @@ public class CustomerProfileTests
     {
         var profile = new CustomerProfile();
 
-        profile.ActivateOrRefreshAsset("RV:VIN-1");
+        profile.ActivateOrRefreshAsset("VIN-1");
 
         var asset = profile.AssetsOwned.First();
         asset.Manufacturer.Should().BeNull();
@@ -171,7 +171,7 @@ public class CustomerProfileTests
             [
                 new AssetOwnershipEmbedded
                 {
-                    AssetId = "RV:VIN-1",
+                    AssetId = "VIN-1",
                     Status = AssetOwnershipStatus.Active,
                     RequestCount = 2,
                     FirstSeenAtUtc = DateTime.UtcNow.AddDays(-30),
@@ -180,7 +180,7 @@ public class CustomerProfileTests
             ]
         };
 
-        profile.ActivateOrRefreshAsset("RV:VIN-1");
+        profile.ActivateOrRefreshAsset("VIN-1");
 
         var asset = profile.AssetsOwned.First();
         asset.RequestCount.Should().Be(3);
@@ -197,7 +197,7 @@ public class CustomerProfileTests
             [
                 new AssetOwnershipEmbedded
                 {
-                    AssetId = "RV:VIN-1",
+                    AssetId = "VIN-1",
                     Status = AssetOwnershipStatus.Active,
                     RequestCount = 2,
                     Manufacturer = null,
@@ -207,7 +207,7 @@ public class CustomerProfileTests
             ]
         };
 
-        profile.ActivateOrRefreshAsset("RV:VIN-1", "Winnebago", "View 24D", 2023);
+        profile.ActivateOrRefreshAsset("VIN-1", "Winnebago", "View 24D", 2023);
 
         var asset = profile.AssetsOwned.First();
         asset.Manufacturer.Should().Be("Winnebago");
@@ -225,7 +225,7 @@ public class CustomerProfileTests
             [
                 new AssetOwnershipEmbedded
                 {
-                    AssetId = "RV:VIN-1",
+                    AssetId = "VIN-1",
                     Status = AssetOwnershipStatus.Active,
                     RequestCount = 2,
                     Manufacturer = "Winnebago",
@@ -235,7 +235,7 @@ public class CustomerProfileTests
             ]
         };
 
-        profile.ActivateOrRefreshAsset("RV:VIN-1");
+        profile.ActivateOrRefreshAsset("VIN-1");
 
         var asset = profile.AssetsOwned.First();
         asset.Manufacturer.Should().Be("Winnebago");
@@ -252,14 +252,14 @@ public class CustomerProfileTests
             [
                 new AssetOwnershipEmbedded
                 {
-                    AssetId = "RV:VIN-1",
+                    AssetId = "VIN-1",
                     Status = AssetOwnershipStatus.Inactive,
                     RequestCount = 5,
                 }
             ]
         };
 
-        profile.ActivateOrRefreshAsset("RV:VIN-1");
+        profile.ActivateOrRefreshAsset("VIN-1");
 
         profile.AssetsOwned.Should().HaveCount(2);
         profile.AssetsOwned.Should().ContainSingle(a => a.Status == AssetOwnershipStatus.Active);

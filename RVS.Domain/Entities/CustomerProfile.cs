@@ -130,7 +130,7 @@ public class CustomerProfile : EntityBase
     /// <see cref="AssetOwnershipEmbedded.LastSeenAtUtc"/>.
     /// When asset metadata is provided, it is stored on the entry (new or existing).
     /// </summary>
-    /// <param name="assetId">Compound asset identifier (e.g. <c>RV:1FTFW1ET5EKE12345</c>).</param>
+    /// <param name="assetId">Asset identifier (e.g. <c>1FTFW1ET5EKE12345</c>).</param>
     /// <param name="manufacturer">Optional manufacturer name.</param>
     /// <param name="model">Optional model name.</param>
     /// <param name="year">Optional model year.</param>

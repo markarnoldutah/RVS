@@ -123,7 +123,7 @@ public class ServiceRequestsControllerTests
         },
         AssetInfo = new AssetInfoEmbedded
         {
-            AssetId = "RV:1FTFW1ET5EKE12345",
+            AssetId = "1FTFW1ET5EKE12345",
             Manufacturer = "Thor",
             Model = "Ace",
             Year = 2023

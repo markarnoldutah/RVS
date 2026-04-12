@@ -96,7 +96,7 @@ public class ServiceRequestMapperTests
         {
             AssetInfo = new AssetInfoEmbedded
             {
-                AssetId = "RV:1HGBH41JXMN109186",
+                AssetId = "1HGBH41JXMN109186",
                 Manufacturer = "Grand Design",
                 Model = "Momentum 395G",
                 Year = 2023
@@ -105,7 +105,7 @@ public class ServiceRequestMapperTests
 
         var dto = entity.ToDetailDto();
 
-        dto.Asset.AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        dto.Asset.AssetId.Should().Be("1HGBH41JXMN109186");
         dto.Asset.Manufacturer.Should().Be("Grand Design");
         dto.Asset.Model.Should().Be("Momentum 395G");
         dto.Asset.Year.Should().Be(2023);
@@ -269,7 +269,7 @@ public class ServiceRequestMapperTests
     {
         var entity = new ServiceRequest
         {
-            AssetInfo = new AssetInfoEmbedded { AssetId = "RV:1HGBH41JXMN109186" }
+            AssetInfo = new AssetInfoEmbedded { AssetId = "1HGBH41JXMN109186" }
         };
 
         var dto = entity.ToSummaryDto();

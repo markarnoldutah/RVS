@@ -245,7 +245,7 @@ public class CustomerProfileServiceTests
     [InlineData("  ")]
     public async Task ResolveAndTrackAssetAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
     {
-        var act = () => _sut.ResolveAndTrackAssetAsync(tenantId!, "mike@test.com", "RV:VIN123");
+        var act = () => _sut.ResolveAndTrackAssetAsync(tenantId!, "mike@test.com", "VIN123");
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -256,7 +256,7 @@ public class CustomerProfileServiceTests
     [InlineData("  ")]
     public async Task ResolveAndTrackAssetAsync_WhenEmailIsNullOrWhiteSpace_ShouldThrowArgumentException(string? email)
     {
-        var act = () => _sut.ResolveAndTrackAssetAsync("ten_1", email!, "RV:VIN123");
+        var act = () => _sut.ResolveAndTrackAssetAsync("ten_1", email!, "VIN123");
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -278,14 +278,14 @@ public class CustomerProfileServiceTests
         var profile = BuildProfile();
         _repoMock.Setup(r => r.GetByEmailAsync("ten_1", "mike@test.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(profile);
-        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "RV:VIN123", It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "VIN123", It.IsAny<CancellationToken>()))
             .ReturnsAsync((CustomerProfile?)null);
         _repoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((CustomerProfile e, CancellationToken _) => e);
 
-        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "RV:VIN123");
+        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "VIN123");
 
-        result.AssetsOwned.Should().ContainSingle(a => a.AssetId == "RV:VIN123" && a.Status == AssetOwnershipStatus.Active);
+        result.AssetsOwned.Should().ContainSingle(a => a.AssetId == "VIN123" && a.Status == AssetOwnershipStatus.Active);
         result.AssetsOwned.First().RequestCount.Should().Be(1);
     }
 
@@ -295,14 +295,14 @@ public class CustomerProfileServiceTests
         var profile = BuildProfile();
         _repoMock.Setup(r => r.GetByEmailAsync("ten_1", "mike@test.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(profile);
-        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "RV:VIN123", It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "VIN123", It.IsAny<CancellationToken>()))
             .ReturnsAsync((CustomerProfile?)null);
         _repoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((CustomerProfile e, CancellationToken _) => e);
 
-        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "RV:VIN123", "Winnebago", "View 24D", 2023);
+        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "VIN123", "Winnebago", "View 24D", 2023);
 
-        var asset = result.AssetsOwned.First(a => a.AssetId == "RV:VIN123" && a.Status == AssetOwnershipStatus.Active);
+        var asset = result.AssetsOwned.First(a => a.AssetId == "VIN123" && a.Status == AssetOwnershipStatus.Active);
         asset.Manufacturer.Should().Be("Winnebago");
         asset.Model.Should().Be("View 24D");
         asset.Year.Should().Be(2023);
@@ -314,7 +314,7 @@ public class CustomerProfileServiceTests
         var profile = BuildProfile();
         profile.AssetsOwned.Add(new AssetOwnershipEmbedded
         {
-            AssetId = "RV:VIN123",
+            AssetId = "VIN123",
             Status = AssetOwnershipStatus.Active,
             FirstSeenAtUtc = DateTime.UtcNow.AddDays(-10),
             LastSeenAtUtc = DateTime.UtcNow.AddDays(-1),
@@ -323,14 +323,14 @@ public class CustomerProfileServiceTests
 
         _repoMock.Setup(r => r.GetByEmailAsync("ten_1", "mike@test.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(profile);
-        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "RV:VIN123", It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "VIN123", It.IsAny<CancellationToken>()))
             .ReturnsAsync(profile);
         _repoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((CustomerProfile e, CancellationToken _) => e);
 
-        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "RV:VIN123");
+        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "VIN123");
 
-        var asset = result.AssetsOwned.First(a => a.AssetId == "RV:VIN123" && a.Status == AssetOwnershipStatus.Active);
+        var asset = result.AssetsOwned.First(a => a.AssetId == "VIN123" && a.Status == AssetOwnershipStatus.Active);
         asset.RequestCount.Should().Be(4);
         asset.LastSeenAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
@@ -347,7 +347,7 @@ public class CustomerProfileServiceTests
             [
                 new AssetOwnershipEmbedded
                 {
-                    AssetId = "RV:VIN123",
+                    AssetId = "VIN123",
                     Status = AssetOwnershipStatus.Active,
                     RequestCount = 5,
                 }
@@ -357,12 +357,12 @@ public class CustomerProfileServiceTests
         var newProfile = BuildProfile();
         _repoMock.Setup(r => r.GetByEmailAsync("ten_1", "mike@test.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(newProfile);
-        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "RV:VIN123", It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "VIN123", It.IsAny<CancellationToken>()))
             .ReturnsAsync(currentOwner);
         _repoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((CustomerProfile e, CancellationToken _) => e);
 
-        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "RV:VIN123");
+        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "VIN123");
 
         // Old owner should have the asset deactivated
         currentOwner.AssetsOwned.First().Status.Should().Be(AssetOwnershipStatus.Inactive);
@@ -370,8 +370,8 @@ public class CustomerProfileServiceTests
         currentOwner.AssetsOwned.First().DeactivationReason.Should().Be("OwnershipTransfer");
 
         // New profile should have the asset activated
-        result.AssetsOwned.Should().ContainSingle(a => a.AssetId == "RV:VIN123" && a.Status == AssetOwnershipStatus.Active);
-        result.AssetsOwned.First(a => a.AssetId == "RV:VIN123" && a.Status == AssetOwnershipStatus.Active).RequestCount.Should().Be(1);
+        result.AssetsOwned.Should().ContainSingle(a => a.AssetId == "VIN123" && a.Status == AssetOwnershipStatus.Active);
+        result.AssetsOwned.First(a => a.AssetId == "VIN123" && a.Status == AssetOwnershipStatus.Active).RequestCount.Should().Be(1);
 
         // Both profiles should have been updated
         _repoMock.Verify(r => r.UpdateAsync(currentOwner, It.IsAny<CancellationToken>()), Times.Once);
@@ -385,16 +385,16 @@ public class CustomerProfileServiceTests
             .ReturnsAsync((CustomerProfile?)null);
         _repoMock.Setup(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((CustomerProfile e, CancellationToken _) => e);
-        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "RV:VIN123", It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_1", "VIN123", It.IsAny<CancellationToken>()))
             .ReturnsAsync((CustomerProfile?)null);
         _repoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((CustomerProfile e, CancellationToken _) => e);
 
-        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "RV:VIN123");
+        var result = await _sut.ResolveAndTrackAssetAsync("ten_1", "Mike@Test.com", "VIN123");
 
         result.TenantId.Should().Be("ten_1");
         result.Email.Should().Be("mike@test.com");
-        result.AssetsOwned.Should().ContainSingle(a => a.AssetId == "RV:VIN123" && a.Status == AssetOwnershipStatus.Active);
+        result.AssetsOwned.Should().ContainSingle(a => a.AssetId == "VIN123" && a.Status == AssetOwnershipStatus.Active);
 
         _repoMock.Verify(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()), Times.Once);
     }

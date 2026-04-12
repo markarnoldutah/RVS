@@ -294,6 +294,18 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenNewProfile_WithNoOptOut_ShouldNotSetOptOutTimestamps()
+    {
+        SetupFullHappyPath(profileExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: false, emailOptOut: false));
+
+        _profileRepoMock.Verify(r => r.CreateAsync(
+            It.Is<CustomerProfile>(p => !p.SmsOptOutAtUtc.HasValue && !p.EmailOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenExistingProfile_WhenSmsOptOutFirstSet_ShouldStampSmsOptOutAtUtc()
     {
         SetupFullHappyPath(profileExists: true);
@@ -359,7 +371,7 @@ public class IntakeOrchestrationServiceTests
         var existingOwner = BuildProfile("cp_other");
         existingOwner.AssetsOwned.Add(new AssetOwnershipEmbedded
         {
-            AssetId = "RV:1HGBH41JXMN109186",
+            AssetId = "1HGBH41JXMN109186",
             Status = AssetOwnershipStatus.Active,
             RequestCount = 2,
         });
@@ -381,14 +393,14 @@ public class IntakeOrchestrationServiceTests
         var profile = BuildProfile();
         profile.AssetsOwned.Add(new AssetOwnershipEmbedded
         {
-            AssetId = "RV:1HGBH41JXMN109186",
+            AssetId = "1HGBH41JXMN109186",
             Status = AssetOwnershipStatus.Active,
             RequestCount = 1,
         });
 
         _profileRepoMock.Setup(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(profile);
-        _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+        _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
             .ReturnsAsync(profile);
 
         await _sut.ExecuteAsync("test-slug", BuildValidRequest());
@@ -411,7 +423,7 @@ public class IntakeOrchestrationServiceTests
         await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         capturedProfile.Should().NotBeNull();
-        var asset = capturedProfile!.AssetsOwned.First(a => a.AssetId == "RV:1HGBH41JXMN109186" && a.Status == AssetOwnershipStatus.Active);
+        var asset = capturedProfile!.AssetsOwned.First(a => a.AssetId == "1HGBH41JXMN109186" && a.Status == AssetOwnershipStatus.Active);
         asset.Manufacturer.Should().Be("Grand Design");
         asset.Model.Should().Be("Momentum 395G");
         asset.Year.Should().Be(2023);
@@ -564,7 +576,7 @@ public class IntakeOrchestrationServiceTests
 
         _ledgerRepoMock.Verify(r => r.AppendAsync(
             It.Is<AssetLedgerEntry>(e =>
-                e.AssetId == "RV:1HGBH41JXMN109186" &&
+                e.AssetId == "1HGBH41JXMN109186" &&
                 e.TenantId == "ten_test"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -706,7 +718,7 @@ public class IntakeOrchestrationServiceTests
         await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("RV:1HGBH41JXMN109186")),
+            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("1HGBH41JXMN109186")),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -755,7 +767,7 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.IssueDescription.Should().Be("Slide won't retract");
         result.ServiceRequest.CustomerSnapshot.FirstName.Should().Be("Jane");
         result.ServiceRequest.CustomerSnapshot.LastName.Should().Be("Doe");
-        result.ServiceRequest.AssetInfo.AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.ServiceRequest.AssetInfo.AssetId.Should().Be("1HGBH41JXMN109186");
         result.ServiceRequest.TechnicianSummary.Should().NotBeNullOrWhiteSpace();
         result.ServiceRequest.DiagnosticResponses.Should().HaveCount(1);
         result.MagicLinkToken.Should().NotBeNullOrWhiteSpace();
@@ -916,12 +928,12 @@ public class IntakeOrchestrationServiceTests
 
         if (assetOwner is not null)
         {
-            _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+            _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(assetOwner);
         }
         else
         {
-            _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+            _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
                 .ReturnsAsync((CustomerProfile?)null);
         }
 
@@ -982,7 +994,7 @@ public class IntakeOrchestrationServiceTests
     public async Task GetIntakeConfigAsync_WhenTokenExpired_ShouldReturnNullPrefills()
     {
         SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: true, assetIds: ["RV:1HGBH41JXMN109186"]);
+        var acct = BuildGlobalAcctWithMagicLink(expired: true, assetIds: ["1HGBH41JXMN109186"]);
         _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("expired-token", It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
@@ -1013,7 +1025,7 @@ public class IntakeOrchestrationServiceTests
     public async Task GetIntakeConfigAsync_WhenTokenValidWithAssetHistory_ShouldReturnPrefillAsset()
     {
         SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["RV:OLD_VIN", "RV:1HGBH41JXMN109186"]);
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186"]);
         _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
@@ -1021,14 +1033,14 @@ public class IntakeOrchestrationServiceTests
         {
             new()
             {
-                AssetId = "RV:OLD_VIN",
+                AssetId = "OLD_VIN",
                 Manufacturer = "Thor",
                 Model = "Aria 4000",
                 Year = 2019,
                 GlobalCustomerAcctId = acct.Id,
             }
         };
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:OLD_VIN", It.IsAny<CancellationToken>()))
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
             .ReturnsAsync(oldLedgerEntries);
 
         // The most recently added asset ID is the last in the list
@@ -1036,20 +1048,20 @@ public class IntakeOrchestrationServiceTests
         {
             new()
             {
-                AssetId = "RV:1HGBH41JXMN109186",
+                AssetId = "1HGBH41JXMN109186",
                 Manufacturer = "Grand Design",
                 Model = "Momentum 395G",
                 Year = 2023,
                 GlobalCustomerAcctId = acct.Id,
             }
         };
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
             .ReturnsAsync(ledgerEntries);
 
         var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
 
         result.PrefillAsset.Should().NotBeNull();
-        result.PrefillAsset!.AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
         result.PrefillAsset.Manufacturer.Should().Be("Grand Design");
         result.PrefillAsset.Model.Should().Be("Momentum 395G");
         result.PrefillAsset.Year.Should().Be(2023);
@@ -1059,41 +1071,41 @@ public class IntakeOrchestrationServiceTests
     public async Task GetIntakeConfigAsync_WhenTokenValidWithMultipleAssets_ShouldReturnAllKnownAssets()
     {
         SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["RV:OLD_VIN", "RV:1HGBH41JXMN109186"]);
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186"]);
         _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:OLD_VIN", It.IsAny<CancellationToken>()))
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<AssetLedgerEntry>
             {
-                new() { AssetId = "RV:OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
+                new() { AssetId = "OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
             });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<AssetLedgerEntry>
             {
-                new() { AssetId = "RV:1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
+                new() { AssetId = "1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
             });
 
         var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
 
         result.KnownAssets.Should().HaveCount(2);
-        result.KnownAssets[0].AssetId.Should().Be("RV:OLD_VIN");
+        result.KnownAssets[0].AssetId.Should().Be("OLD_VIN");
         result.KnownAssets[0].Manufacturer.Should().Be("Thor");
-        result.KnownAssets[1].AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.KnownAssets[1].AssetId.Should().Be("1HGBH41JXMN109186");
         result.KnownAssets[1].Manufacturer.Should().Be("Grand Design");
         result.PrefillAsset.Should().NotBeNull();
-        result.PrefillAsset!.AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
     }
 
     [Fact]
     public async Task GetIntakeConfigAsync_WhenAssetLedgerEmpty_ShouldReturnNullPrefillAssetButIncludeKnownAsset()
     {
         SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["RV:1HGBH41JXMN109186"]);
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["1HGBH41JXMN109186"]);
         _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<AssetLedgerEntry>());
 
         var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
@@ -1101,7 +1113,7 @@ public class IntakeOrchestrationServiceTests
         result.PrefillCustomer.Should().NotBeNull();
         result.PrefillAsset.Should().BeNull();
         result.KnownAssets.Should().HaveCount(1);
-        result.KnownAssets[0].AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.KnownAssets[0].AssetId.Should().Be("1HGBH41JXMN109186");
         result.KnownAssets[0].Manufacturer.Should().BeNull();
     }
 
@@ -1109,34 +1121,34 @@ public class IntakeOrchestrationServiceTests
     public async Task GetIntakeConfigAsync_WhenSomeAssetsHaveNoLedgerEntries_ShouldIncludeAllKnownAssets()
     {
         SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["RV:OLD_VIN", "RV:1HGBH41JXMN109186", "RV:NO_LEDGER"]);
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186", "NO_LEDGER"]);
         _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:OLD_VIN", It.IsAny<CancellationToken>()))
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<AssetLedgerEntry>
             {
-                new() { AssetId = "RV:OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
+                new() { AssetId = "OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
             });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<AssetLedgerEntry>
             {
-                new() { AssetId = "RV:1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
+                new() { AssetId = "1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
             });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("RV:NO_LEDGER", It.IsAny<CancellationToken>()))
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("NO_LEDGER", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<AssetLedgerEntry>());
 
         var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
 
         result.KnownAssets.Should().HaveCount(3);
-        result.KnownAssets[0].AssetId.Should().Be("RV:OLD_VIN");
+        result.KnownAssets[0].AssetId.Should().Be("OLD_VIN");
         result.KnownAssets[0].Manufacturer.Should().Be("Thor");
-        result.KnownAssets[1].AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.KnownAssets[1].AssetId.Should().Be("1HGBH41JXMN109186");
         result.KnownAssets[1].Manufacturer.Should().Be("Grand Design");
-        result.KnownAssets[2].AssetId.Should().Be("RV:NO_LEDGER");
+        result.KnownAssets[2].AssetId.Should().Be("NO_LEDGER");
         result.KnownAssets[2].Manufacturer.Should().BeNull();
         result.PrefillAsset.Should().NotBeNull();
-        result.PrefillAsset!.AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
     }
 
     [Fact]

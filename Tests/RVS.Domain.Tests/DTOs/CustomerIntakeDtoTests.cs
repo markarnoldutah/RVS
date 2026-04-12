@@ -25,9 +25,9 @@ public class CustomerIntakeDtoTests
     [Fact]
     public void AssetInfoDto_OptionalFieldsDefaultToNull()
     {
-        var dto = new AssetInfoDto { AssetId = "RV:1HGBH41JXMN109186" };
+        var dto = new AssetInfoDto { AssetId = "1HGBH41JXMN109186" };
 
-        dto.AssetId.Should().Be("RV:1HGBH41JXMN109186");
+        dto.AssetId.Should().Be("1HGBH41JXMN109186");
         dto.Manufacturer.Should().BeNull();
         dto.Model.Should().BeNull();
         dto.Year.Should().BeNull();

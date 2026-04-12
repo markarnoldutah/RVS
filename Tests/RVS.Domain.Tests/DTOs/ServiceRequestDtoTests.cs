@@ -89,7 +89,7 @@ public class ServiceRequestDtoTests
     public void ServiceRequestDetailResponseDto_WithExpression()
     {
         var customer = new CustomerInfoDto { FirstName = "Jane", LastName = "Doe", Email = "jane@test.com" };
-        var asset = new AssetInfoDto { AssetId = "RV:ABC123" };
+        var asset = new AssetInfoDto { AssetId = "ABC123" };
 
         var dto = new ServiceRequestDetailResponseDto
         {
