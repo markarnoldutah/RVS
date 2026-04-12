@@ -39,6 +39,22 @@ param corsAllowedOrigins string[] = []
 @description('Allow shared key (storage account key) access. Set to false for production to enforce Entra ID-only authentication.')
 param allowSharedKeyAccess bool = true
 
+@description('Name of the blob container for customer attachments (photos, videos).')
+param attachmentsContainerName string = 'rvs-attachments'
+
+@description('Enable blob versioning for accidental delete protection.')
+param enableBlobVersioning bool = true
+
+@description('Soft delete retention in days for blobs.')
+@minValue(1)
+@maxValue(365)
+param blobSoftDeleteDays int = 7
+
+@description('Soft delete retention in days for containers.')
+@minValue(1)
+@maxValue(365)
+param containerSoftDeleteDays int = 7
+
 // ── Variables ──────────────────────────────────────────────────
 
 // Built-in role definition IDs
@@ -100,6 +116,62 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2025-01-01'
             }
           ]
         : []
+    }
+    isVersioningEnabled: enableBlobVersioning
+    deleteRetentionPolicy: {
+      enabled: true
+      days: blobSoftDeleteDays
+    }
+    containerDeleteRetentionPolicy: {
+      enabled: true
+      days: containerSoftDeleteDays
+    }
+  }
+}
+
+// ── Attachments Container ──────────────────────────────────────
+
+resource attachmentsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2025-01-01' = {
+  parent: blobService
+  name: attachmentsContainerName
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// ── Lifecycle Management Policy ────────────────────────────────
+
+resource lifecyclePolicy 'Microsoft.Storage/storageAccounts/managementPolicies@2025-01-01' = {
+  parent: storageAccount
+  name: 'default'
+  properties: {
+    policy: {
+      rules: [
+        {
+          name: 'TierAttachmentsByAge'
+          enabled: true
+          type: 'Lifecycle'
+          definition: {
+            filters: {
+              blobTypes: ['blockBlob']
+              prefixMatch: ['${attachmentsContainerName}/']
+            }
+            actions: {
+              baseBlob: {
+                tierToCool: {
+                  daysAfterModificationGreaterThan: 90
+                }
+                tierToArchive: {
+                  daysAfterModificationGreaterThan: 365
+                }
+                delete: {
+                  daysAfterModificationGreaterThan: 2555
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
