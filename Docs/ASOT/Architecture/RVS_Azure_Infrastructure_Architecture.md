@@ -39,10 +39,10 @@ Each environment uses a dedicated resource group for logical isolation and RBAC 
 │ Azure Subscription: RVS Production                          │
 │                                                             │
 │  ┌────────────────────────────────────────────────────┐   │
-│  │ Resource Group: rg-rvs-dev-westus3                  │   │
+│  │ Resource Group: rg-rvs-staging-westus3               │   │
 │  │  • App Service Plan (B1)                            │   │
 │  │  • App Service (API)                                │   │
-│  │  • Cosmos DB Account (dev-shared, manual 400 RU)    │   │
+│  │  • Cosmos DB Account (staging-shared, Serverless)   │   │
 │  │  • Storage Account (LRS)                            │   │
 │  │  • Key Vault                                        │   │
 │  │  • Application Insights                             │   │
@@ -840,7 +840,6 @@ resource cosmosThrottleAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
 │   ├── application-insights.bicep  # App Insights + Log Analytics
 │   └── tenant-provisioning.bicep   # New tenant seed data
 ├── environments/
-│   ├── dev.bicepparam              # Dev parameters
 │   ├── staging.bicepparam          # Staging parameters
 │   └── prod.bicepparam             # Prod parameters
 ├── main.bicep                      # Root orchestration

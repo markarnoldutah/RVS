@@ -56,7 +56,7 @@ resource emailService 'Microsoft.Communication/emailServices@2023-04-01' = {
 
 // ── Azure-Managed Email Domain ────────────────────────────────
 // Uses the built-in Azure-managed domain (AzureManagedDomain)
-// for dev/staging. Production should use a custom verified domain
+// for staging. Production should use a custom verified domain
 // (e.g. notifications.rvserviceflow.com) configured separately.
 
 #disable-next-line use-recent-api-versions
@@ -79,7 +79,7 @@ output resourceId string = acsAccount.id
 @description('The name of the ACS account.')
 output name string = acsAccount.name
 
-@description('The hostname of the ACS resource (e.g. acs-rvs-notify-dev-wus3-s01-001.communication.azure.com).')
+@description('The hostname of the ACS resource (e.g. acs-rvs-notify-staging-wus3-s01-001.communication.azure.com).')
 output hostname string = acsAccount.properties.hostName
 
 @description('The full endpoint URL of the ACS resource.')
