@@ -140,7 +140,7 @@ jobs:
         if: needs.detect-changes.outputs.intake == 'true'
         run: >-
           dotnet publish RVS.Blazor.Intake/RVS.Blazor.Intake.csproj
-          --configuration Release --no-build --output ./publish/intake
+          --configuration Release --output ./publish/intake
 
       - name: Upload Intake artifact
         if: needs.detect-changes.outputs.intake == 'true'
@@ -155,7 +155,7 @@ jobs:
         if: needs.detect-changes.outputs.manager == 'true'
         run: >-
           dotnet publish RVS.Blazor.Manager/RVS.Blazor.Manager.csproj
-          --configuration Release --no-build --output ./publish/manager
+          --configuration Release --output ./publish/manager
 
       - name: Upload Manager artifact
         if: needs.detect-changes.outputs.manager == 'true'
