@@ -100,3 +100,6 @@ az staticwebapp secrets list --name "<manager-swa-name>" --resource-group "rg-rv
 
 $ts = Get-Date -Format "yyyyMMddHHmm"
 az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --name "rvs-staging-$ts"
+
+
+az webapp config set --resource-group rg-rvs-staging-westus3 --name app-rvs-api-staging-wus3 --dotnet-version "v10.0"
