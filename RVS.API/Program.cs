@@ -561,8 +561,8 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// 2. HTTPS redirection (production only)
-if (app.Environment.IsProduction())
+// 2. HTTPS redirection (all Azure-hosted environments — Azure terminates SSL at the load balancer)
+if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
