@@ -78,6 +78,27 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Cache wasm-tools workload
+        id: cache-wasm
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/share/dotnet/metadata
+            /usr/share/dotnet/packs
+            /usr/share/dotnet/library-packs
+          key: wasm-tools-${{ runner.os }}-${{ env.DOTNET_VERSION }}
+
+      - name: Install wasm-tools workload
+        if: steps.cache-wasm.outputs.cache-hit != 'true'
+        run: dotnet workload install wasm-tools
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.slnx') }}
+          restore-keys: nuget-${{ runner.os }}-
+
       - name: Restore dependencies
         run: dotnet restore RVS.slnx
 
@@ -146,10 +167,10 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  # Deploy API to staging slot (westus3)
+  # Deploy API to staging App Service (westus3)
   # ---------------------------------------------------------------------------
   deploy-api:
-    name: Deploy API to Staging Slot
+    name: Deploy API to Staging
     needs: [detect-changes, build-and-test]
     if: needs.detect-changes.outputs.api == 'true'
     runs-on: ubuntu-latest
@@ -171,11 +192,10 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy API to staging slot
+      - name: Deploy API to staging
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ vars.API_APP_SERVICE_NAME }}
-          slot-name: staging
           package: ./api
 
       - name: Azure logout

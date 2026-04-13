@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_api:
-        description: "Deploy API (swap staging slot to production)"
+        description: "Deploy API to production (promotes staging artifact)"
         type: boolean
         default: true
       deploy_intake:
@@ -26,7 +26,7 @@ jobs:
   # ---------------------------------------------------------------------------
   resolve-staging-run:
     name: Resolve Staging Run
-    if: inputs.deploy_intake || inputs.deploy_manager
+    if: inputs.deploy_api || inputs.deploy_intake || inputs.deploy_manager
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -56,20 +56,30 @@ jobs:
           echo "Resolved staging run ID: $RUN_ID (SHA: $HEAD_SHA)"
 
   # ---------------------------------------------------------------------------
-  # Swap API staging slot to production
+  # Deploy API to production (artifact promotion — never rebuilds)
   # ---------------------------------------------------------------------------
   deploy-api:
-    name: Swap API Staging → Production
+    name: Deploy API to Production
     if: inputs.deploy_api
+    needs: resolve-staging-run
     runs-on: ubuntu-latest
     environment: production
     permissions:
       contents: read
       id-token: write
+      actions: read
     concurrency:
       group: deploy-production-api
       cancel-in-progress: false
     steps:
+      - name: Download API artifact from staging run
+        uses: actions/download-artifact@v4
+        with:
+          name: api-publish
+          path: ./api
+          run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
+          github-token: ${{ github.token }}
+
       - name: Login to Azure via OIDC
         uses: azure/login@v2
         with:
@@ -77,13 +87,11 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Swap staging slot to production
-        run: |
-          az webapp deployment slot swap \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --name "${{ vars.API_APP_SERVICE_NAME }}" \
-            --slot staging \
-            --target-slot production
+      - name: Deploy API to production
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.API_APP_SERVICE_NAME }}
+          package: ./api
 
       - name: Azure logout
         if: always()

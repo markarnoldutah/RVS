@@ -23,6 +23,9 @@ param tags object = {}
 @description('Principal ID (object ID) of the API App Service managed identity to grant Key Vault Secrets User role. Leave empty to skip role assignment.')
 param apiPrincipalId string = ''
 
+@description('Principal ID of the staging slot managed identity. Leave empty to skip role assignment.')
+param stagingSlotPrincipalId string = ''
+
 @description('Enable soft delete. Recommended for production.')
 param enableSoftDelete bool = true
 
@@ -75,9 +78,18 @@ resource apiSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
-// ── Outputs ───────────────────────────────────────────────────
+// Grant staging slot managed identity Key Vault Secrets User (get + list)
+resource stagingSlotSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(stagingSlotPrincipalId)) {
+  name: guid(keyVault.id, stagingSlotPrincipalId, keyVaultSecretsUserRoleId)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: stagingSlotPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
 
-@description('Resource ID of the Key Vault.')
+// ── Outputs ───────────────────────────────────────────────────
 output resourceId string = keyVault.id
 
 @description('Name of the Key Vault.')

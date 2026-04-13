@@ -1,14 +1,13 @@
 // ──────────────────────────────────────────────────────────────
 // Module: Azure App Service (API)
 // ──────────────────────────────────────────────────────────────
-// Deploys an App Service Plan and Web App for the RVS API with
-// system-assigned managed identity. SKU is parameterised for
-// easy upgrade from Basic B1 to Standard S1.
+// Deploys an App Service Plan, Web App, and optional staging
+// deployment slot for the RVS API with system-assigned managed
+// identity. SKU is parameterised for easy upgrade.
 //
-// B1 limitations accepted for MVP:
-//   • No Always On (cold starts expected)
-//   • No deployment slots
-//   • No autoscale
+// F1 (Free):    $0/mo, 60 CPU-min/day, no Always On / slots / health checks
+// B1 (Basic):   ~$12/mo, no Always On, no deployment slots, no autoscale
+// S1 (Standard): ~$58/mo, Always On, deployment slots, autoscale ready
 // ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
@@ -26,22 +25,33 @@ param appName string
 @description('Tags to apply to all resources created by this module.')
 param tags object = {}
 
-@description('App Service Plan SKU name. B1 = Basic (MVP), S1 = Standard (upgrade path).')
+@description('App Service Plan SKU name. F1 = Free (staging), B1 = Basic (MVP prod), S1 = Standard (upgrade path).')
 @allowed([
+  'F1'
   'B1'
   'S1'
 ])
-param skuName string = 'B1'
+param skuName string = 'F1'
 
 @description('The .NET runtime stack version.')
 param dotnetVersion string = 'v10.0'
 
+@description('When true, creates a staging deployment slot with its own managed identity. Requires Standard tier (S1) or higher.')
+param deployStagingSlot bool = false
+
 // ── Variables ─────────────────────────────────────────────────
 
-var skuTier = skuName == 'B1' ? 'Basic' : 'Standard'
+var skuTier = skuName == 'F1' ? 'Free' : skuName == 'B1' ? 'Basic' : 'Standard'
 
-// Always On is not supported on Basic B1 — only enable for Standard and above
-var alwaysOn = skuName != 'B1'
+// Always On requires Standard (S1) or higher — Free and Basic do not support it
+var alwaysOn = skuName == 'S1'
+
+// Deployment slots require Standard (S1) tier or higher
+var slotSupported = skuName == 'S1'
+var createSlot = deployStagingSlot && slotSupported
+
+// Health checks are not supported on the Free (F1) tier
+var enableHealthCheck = skuName != 'F1'
 
 // ── Resources ─────────────────────────────────────────────────
 
@@ -76,8 +86,44 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
       minTlsVersion: '1.2'
       ftpsState: 'Disabled'
       http20Enabled: true
+      healthCheckPath: enableHealthCheck ? '/health' : ''
+    }
+  }
+}
+
+// ── Staging Deployment Slot
+
+resource stagingSlot 'Microsoft.Web/sites/slots@2024-11-01' = if (createSlot) {
+  parent: webApp
+  name: 'staging'
+  location: location
+  tags: tags
+  kind: 'app,linux'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    serverFarmId: appServicePlan.id
+    httpsOnly: true
+    siteConfig: {
+      linuxFxVersion: 'DOTNETCORE|${dotnetVersion}'
+      alwaysOn: alwaysOn
+      minTlsVersion: '1.2'
+      ftpsState: 'Disabled'
+      http20Enabled: true
       healthCheckPath: '/health'
     }
+  }
+}
+
+// Mark ASPNETCORE_ENVIRONMENT as slot-sticky so it does NOT swap with code
+resource slotConfigNames 'Microsoft.Web/sites/config@2024-11-01' = if (createSlot) {
+  parent: webApp
+  name: 'slotConfigNames'
+  properties: {
+    appSettingNames: [
+      'ASPNETCORE_ENVIRONMENT'
+    ]
   }
 }
 
@@ -97,3 +143,11 @@ output principalId string = webApp.identity.principalId
 
 @description('App Service Plan resource ID.')
 output appServicePlanId string = appServicePlan.id
+
+@description('Principal ID of the staging slot managed identity. Empty when no slot is created.')
+#disable-next-line BCP318
+output stagingSlotPrincipalId string = createSlot ? stagingSlot.identity.principalId : ''
+
+@description('Default hostname of the staging slot (e.g. app-rvs-api-prod-wus3-staging.azurewebsites.net). Empty when no slot.')
+#disable-next-line BCP318
+output stagingSlotHostname string = createSlot ? stagingSlot.properties.defaultHostName : ''

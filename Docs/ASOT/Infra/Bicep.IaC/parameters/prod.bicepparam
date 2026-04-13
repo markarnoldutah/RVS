@@ -7,9 +7,9 @@ param primaryResourceGroupName = 'rg-rvs-prod-westus3'
 param whisperResourceGroupName = 'rg-rvs-prod-ncus'
 param openAiCapacity = 30
 
-// App Service (API) — Basic B1, upgrade to S1 via: appServiceSkuName = 'S1'
+// App Service (API) — Standard S1: Always On, deployment slots (staging), autoscale ready
 param deployAppService = true
-param appServiceSkuName = 'B1'
+param appServiceSkuName = 'S1'
 
 // Cosmos DB — Serverless, upgrade to Provisioned via: cosmosCapacityMode = 'Provisioned'
 param deployCosmosDb = true

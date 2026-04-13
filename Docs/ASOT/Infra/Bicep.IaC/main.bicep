@@ -106,12 +106,13 @@ param managerDnsPrefix string = environmentName == 'prod' ? 'manager' : 'manager
 @description('When true, deploys an App Service Plan and Web App for the RVS API with Managed Identity.')
 param deployAppService bool = false
 
-@description('App Service Plan SKU. B1 = Basic (MVP, no Always On). S1 = Standard (upgrade path: Always On, deployment slots).')
+@description('App Service Plan SKU. F1 = Free (staging, 60 CPU-min/day). B1 = Basic (MVP prod). S1 = Standard (upgrade: Always On, slots).')
 @allowed([
+  'F1'
   'B1'
   'S1'
 ])
-param appServiceSkuName string = 'B1'
+param appServiceSkuName string = 'F1'
 
 // ── Cosmos DB Parameters ──────────────────────────────────────
 
@@ -209,6 +210,9 @@ var appInsightsName = 'appi-rvs-api-${environmentName}-wus3'
 // Health check URL (computed from known app name; avoids circular dependency)
 var healthCheckUrl = 'https://${appServiceName}.azurewebsites.net/health'
 
+// Staging slot: automatically created when SKU supports deployment slots (Standard+)
+var deployStagingSlot = appServiceSkuName == 'S1'
+
 // Shared tags
 var sharedTags = {
   Application: 'rvs'
@@ -251,6 +255,7 @@ module appService 'modules/app-service.bicep' = if (deployAppService) {
     appName: appServiceName
     tags: sharedTags
     skuName: appServiceSkuName
+    deployStagingSlot: deployStagingSlot
   }
 }
 
@@ -291,6 +296,10 @@ module keyVault 'modules/key-vault.bicep' = if (deployKeyVault) {
     tags: sharedTags
     #disable-next-line BCP318
     apiPrincipalId: (deployKeyVault && deployAppService) ? appService.outputs.principalId : ''
+    #disable-next-line BCP318
+    stagingSlotPrincipalId: (deployKeyVault && deployAppService && deployStagingSlot)
+      ? appService.outputs.stagingSlotPrincipalId
+      : ''
   }
 }
 
@@ -306,6 +315,7 @@ module appServiceConfig 'modules/app-service-config.bicep' = if (deployAppServic
     appInsightsConnectionString: (deployAppService && deployObservability) ? appInsights.outputs.connectionString : ''
     #disable-next-line BCP318
     keyVaultUri: (deployAppService && deployKeyVault) ? keyVault.outputs.vaultUri : ''
+    configureStagingSlot: deployStagingSlot
   }
 }
 
@@ -334,6 +344,10 @@ module storage 'modules/storage-account.bicep' = if (deployStorageAccount) {
     sku: 'Standard_LRS'
     #disable-next-line BCP318
     blobAccessPrincipalId: (deployStorageAccount && deployAppService) ? appService.outputs.principalId : ''
+    #disable-next-line BCP318
+    stagingSlotBlobAccessPrincipalId: (deployStorageAccount && deployAppService && deployStagingSlot)
+      ? appService.outputs.stagingSlotPrincipalId
+      : ''
     corsAllowedOrigins: resolvedCorsOrigins
     tags: sharedTags
   }
@@ -567,6 +581,18 @@ output appServiceHostname string = deployAppService ? appService.outputs.default
 @description('Principal ID of the API managed identity. Empty when deployAppService = false.')
 #disable-next-line BCP318
 output appServicePrincipalId string = deployAppService ? appService.outputs.principalId : ''
+
+@description('Staging slot hostname. Empty when no staging slot is created.')
+#disable-next-line BCP318
+output appServiceStagingSlotHostname string = (deployAppService && deployStagingSlot)
+  ? appService.outputs.stagingSlotHostname
+  : ''
+
+@description('Staging slot managed identity principal ID. Empty when no staging slot.')
+#disable-next-line BCP318
+output appServiceStagingSlotPrincipalId string = (deployAppService && deployStagingSlot)
+  ? appService.outputs.stagingSlotPrincipalId
+  : ''
 
 // ── Cosmos DB ─────────────────────────────────────────────────
 

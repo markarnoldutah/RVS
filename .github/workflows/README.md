@@ -19,8 +19,8 @@ deploy-production.yml   Promote exact staging artifacts to production (never reb
   push to `main`, detects which apps changed, builds the full solution, runs all tests,
   then publishes and deploys only the changed apps.
 - **deploy-production.yml** never rebuilds from source. It promotes the exact binaries that
-  staging already validated — either via App Service slot swap (API) or by downloading
-  the staging run's uploaded artifacts (SWAs).
+  staging already validated — by downloading the staging run's uploaded artifacts (API + SWAs)
+  and deploying them directly to the production resources.
 
 ---
 
@@ -168,7 +168,6 @@ az staticwebapp secrets list \
    - `AZURE_TENANT_ID` = `$TENANT_ID`
    - `AZURE_SUBSCRIPTION_ID` = `$SUBSCRIPTION_ID`
    - `API_APP_SERVICE_NAME` = `$PROD_API_NAME`
-   - `AZURE_RESOURCE_GROUP` = `$PROD_API_RG`
 4. Add **Secrets**:
    - `INTAKE_SWA_TOKEN_PRODUCTION` = paste token from step 4
    - `MANAGER_SWA_TOKEN_PRODUCTION` = paste token from step 4

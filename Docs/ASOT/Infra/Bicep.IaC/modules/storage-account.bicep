@@ -33,6 +33,9 @@ param tags object = {}
 @description('Principal ID (object ID) of the managed identity that needs blob access. Leave empty to skip role assignments.')
 param blobAccessPrincipalId string = ''
 
+@description('Principal ID of the staging slot managed identity for blob access. Leave empty to skip role assignments.')
+param stagingSlotBlobAccessPrincipalId string = ''
+
 @description('Allowed CORS origins for browser-based SAS uploads (e.g. the Blazor WASM host URL). Pass an empty array to skip CORS configuration.')
 param corsAllowedOrigins string[] = []
 
@@ -142,9 +145,34 @@ resource blobDelegatorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   }
 }
 
-// ── Outputs ───────────────────────────────────────────────────
+// ── Staging Slot Role Assignments ──────────────────────────────
 
-@description('The resource ID of the created storage account.')
+// Storage Blob Data Contributor for staging slot managed identity
+resource stagingSlotBlobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(stagingSlotBlobAccessPrincipalId)) {
+  name: guid(storageAccount.id, stagingSlotBlobAccessPrincipalId, storageBlobDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      storageBlobDataContributorRoleId
+    )
+    principalId: stagingSlotBlobAccessPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Storage Blob Delegator for staging slot managed identity
+resource stagingSlotBlobDelegatorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(stagingSlotBlobAccessPrincipalId)) {
+  name: guid(storageAccount.id, stagingSlotBlobAccessPrincipalId, storageBlobDelegatorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegatorRoleId)
+    principalId: stagingSlotBlobAccessPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ── Outputs ───────────────────────────────────────────────────
 output resourceId string = storageAccount.id
 
 @description('The name of the created storage account.')

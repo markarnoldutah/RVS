@@ -15,7 +15,7 @@ Infrastructure as Code for the RVS Azure platform. Supports **independent deploy
 
 | Resource | Module | Staging | Production |
 |---|---|---|---|
-| App Service (API) | `app-service.bicep` | Basic B1 | Basic B1 |
+| App Service (API) | `app-service.bicep` | Free F1 ($0/mo) | Basic B1 (~$12/mo) or Standard S1 (~$58/mo) + staging slot |
 | Cosmos DB | `cosmos-db.bicep` | Serverless | Serverless |
 | Blob Storage | `storage-account.bicep` | Standard LRS | Standard LRS |
 | Key Vault | `key-vault.bicep` | RBAC model | RBAC model |
