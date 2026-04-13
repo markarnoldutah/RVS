@@ -7,9 +7,9 @@ param primaryResourceGroupName = 'rg-rvs-staging-westus3'
 param whisperResourceGroupName = 'rg-rvs-staging-ncus'
 param openAiCapacity = 10
 
-// App Service (API) — Free F1 ($0/mo, 60 CPU-min/day limit), upgrade path: B1 → S1
+// App Service (API) — Basic B1 ($13.14/mo), upgrade path: B1 → S1
 param deployAppService = true
-param appServiceSkuName = 'F1'
+param appServiceSkuName = 'B1'
 
 // Cosmos DB — Serverless, upgrade to Provisioned via: cosmosCapacityMode = 'Provisioned'
 param deployCosmosDb = true
