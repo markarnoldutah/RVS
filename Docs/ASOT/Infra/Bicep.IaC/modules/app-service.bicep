@@ -80,6 +80,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
+    clientAffinityEnabled: false
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|${dotnetVersion}'
       alwaysOn: alwaysOn
@@ -105,6 +106,7 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2024-11-01' = if (createSlot) {
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
+    clientAffinityEnabled: false
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|${dotnetVersion}'
       alwaysOn: alwaysOn

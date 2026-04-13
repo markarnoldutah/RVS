@@ -305,12 +305,13 @@ module keyVault 'modules/key-vault.bicep' = if (deployKeyVault) {
 
 // ── App Service Configuration (post-deploy settings) ──────────
 
-module appServiceConfig 'modules/app-service-config.bicep' = if (deployAppService && (deployObservability || deployKeyVault)) {
+module appServiceConfig 'modules/app-service-config.bicep' = if (deployAppService) {
   name: 'deploy-app-config-${environmentName}'
   scope: rgPrimary
   params: {
     #disable-next-line BCP318
     appName: deployAppService ? appService.outputs.name : ''
+    environmentName: environmentName
     #disable-next-line BCP318
     appInsightsConnectionString: (deployAppService && deployObservability) ? appInsights.outputs.connectionString : ''
     #disable-next-line BCP318

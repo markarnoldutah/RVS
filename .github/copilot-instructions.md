@@ -189,6 +189,7 @@ All Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`, `RVS.MA
 This project is the approved MudBlazor prototype for the full wizard flow. Use it as the reference implementation when migrating or building new pages in `RVS.Blazor.Intake`.
 
 ### Project Documentation
-- Treat Docs/ASOT/*.md as the authoritative source for PRD/architecture decisions.
-- When answering questions about product behavior, always check Docs/ASOT/ first.
-- Prefer the docs in Docs/ASOT/ over older notes elsewhere in the repo.
+- Treat `Docs/ASOT/*.md` as the authoritative source for PRD/architecture decisions.
+- When answering questions about product behavior, always check `Docs/ASOT/` first.
+- Prefer the docs in `Docs/ASOT/` over older notes elsewhere in the repo.
+- .Bicep files in `Docs/ASOT/Infra/Bicep.IaC/` are the source of truth for Azure resource configuration. Do not rely on hand-drawn diagrams or outdated documentation for infrastructure details.

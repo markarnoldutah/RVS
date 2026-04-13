@@ -15,11 +15,22 @@ param appName string
 @description('Application Insights connection string. Leave empty to skip.')
 param appInsightsConnectionString string = ''
 
+@description('Target environment name used to derive ASPNETCORE_ENVIRONMENT (staging = Staging, prod = Production).')
+@allowed([
+  'staging'
+  'prod'
+])
+param environmentName string
+
 @description('Key Vault URI for configuration provider. Leave empty to skip.')
 param keyVaultUri string = ''
 
 @description('When true, also applies settings to the staging deployment slot with ASPNETCORE_ENVIRONMENT=Staging.')
 param configureStagingSlot bool = false
+
+// ── Variables ──────────────────────────────────────────────────
+
+var aspNetCoreEnvironment = environmentName == 'prod' ? 'Production' : 'Staging'
 
 // ── Resources ─────────────────────────────────────────────────
 
@@ -31,11 +42,9 @@ resource appSettings 'Microsoft.Web/sites/config@2024-11-01' = {
   parent: webApp
   name: 'appsettings'
   properties: union(
-    configureStagingSlot
-      ? {
-          ASPNETCORE_ENVIRONMENT: 'Production'
-        }
-      : {},
+    {
+      ASPNETCORE_ENVIRONMENT: aspNetCoreEnvironment
+    },
     !empty(appInsightsConnectionString)
       ? {
           APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsConnectionString
