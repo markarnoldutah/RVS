@@ -33,8 +33,8 @@ param tags object = {}
 ])
 param skuName string = 'F1'
 
-@description('The .NET runtime stack version.')
-param dotnetVersion string = 'v10.0'
+@description('The .NET runtime version for linuxFxVersion (bare version number, e.g. 8.0, 9.0, 10.0 = no "v" prefix).')
+param dotnetVersion string = '10.0'
 
 @description('When true, creates a staging deployment slot with its own managed identity. Requires Standard tier (S1) or higher.')
 param deployStagingSlot bool = false
