@@ -15,6 +15,12 @@ builder.Services.AddMudServices();
 
 // Anonymous HttpClient pointing to RVS.API — no authentication required
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
+
+// Startup diagnostics — visible in the browser console (F12 → Console)
+Console.WriteLine($"[RVS.Intake] Environment : {builder.HostEnvironment.Environment}");
+Console.WriteLine($"[RVS.Intake] BaseAddress  : {builder.HostEnvironment.BaseAddress}");
+Console.WriteLine($"[RVS.Intake] ApiBaseUrl   : {apiBaseUrl}");
+
 builder.Services.AddHttpClient("RVS.API", client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
