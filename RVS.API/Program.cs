@@ -539,8 +539,8 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// 1. Dev-only endpoints (OpenAPI, Swagger UI)
-if (app.Environment.IsDevelopment())
+// 1. Dev & Staging endpoints (OpenAPI, Swagger UI) — never exposed in Production
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Staging"))
 {
     app.MapOpenApi();
 
