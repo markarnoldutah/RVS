@@ -1,10 +1,12 @@
-// Caution! Be sure you understand the caveats before publishing an application with
-// offline support. See https://aka.ms/blazor-offline-considerations
+// Service worker temporarily disabled — unregister self and clear caches
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+    await self.registration.unregister();
+});
 
-self.importScripts('./service-worker-assets.js');
-self.addEventListener('install', event => event.waitUntil(onInstall(event)));
-self.addEventListener('activate', event => event.waitUntil(onActivate(event)));
-self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
+/* --- Original service worker commented out ---
 
 const cacheNamePrefix = 'offline-cache-';
 const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;
@@ -60,3 +62,4 @@ async function onFetch(event) {
 
     return cachedResponse || fetch(event.request);
 }
+--- End of original service worker */
