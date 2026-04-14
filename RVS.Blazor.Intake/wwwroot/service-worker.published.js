@@ -21,6 +21,8 @@ async function onInstall(event) {
     console.info('Service worker: Install');
 
     const assetsRequests = self.assetsManifest.assets
+        .filter(asset => asset.hash && asset.hash !== 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=')
+        .filter(asset => !asset.url.endsWith('staticwebapp.config.json'))
         .filter(asset => offlineAssetsInclude.some(pattern => pattern.test(asset.url)))
         .filter(asset => !offlineAssetsExclude.some(pattern => pattern.test(asset.url)))
         .map(asset => new Request(asset.url, { integrity: asset.hash, cache: 'no-cache' }));

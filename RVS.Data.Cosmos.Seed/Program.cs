@@ -1,6 +1,13 @@
 // RVS.Data.Cosmos.Seed — Creates 9 Cosmos containers with partition keys,
 // unique key policies, and indexing policies, then seeds realistic test data.
 // Idempotent: safe to re-run (uses UpsertItemAsync and CreateContainerIfNotExistsAsync).
+//
+// Usage:
+//   dotnet run                          → seeds Local (emulator)
+//   dotnet run -- --environment Staging → seeds Staging
+//
+// Configuration layering:
+//   appsettings.json → appsettings.{environment}.json → user secrets → command-line args
 
 using System.Collections.ObjectModel;
 using System.Net;
@@ -9,11 +16,40 @@ using Microsoft.Extensions.Configuration;
 using RVS.Domain.Entities;
 using RVS.Domain.Shared;
 
-var configuration = new ConfigurationBuilder()
+var switchMappings = new Dictionary<string, string>
+{
+    { "-e", "environment" },
+    { "--env", "environment" },
+};
+
+var cmdConfig = new ConfigurationBuilder()
+    .AddCommandLine(args, switchMappings)
+    .Build();
+
+var environment = cmdConfig["environment"] ?? "Local";
+var validEnvironments = new[] { "Local", "Staging" };
+if (!validEnvironments.Contains(environment, StringComparer.OrdinalIgnoreCase))
+{
+    Console.WriteLine($"✗ Unknown environment '{environment}'. Valid values: {string.Join(", ", validEnvironments)}");
+    return;
+}
+
+Console.WriteLine($"🌍 Environment: {environment}");
+Console.WriteLine();
+
+var configBuilder = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
-    .AddUserSecrets<Program>(optional: false)
-    .Build();
+    .AddJsonFile($"appsettings.{environment.ToLowerInvariant()}.json", optional: false, reloadOnChange: false);
+
+// User secrets supply sensitive values (e.g. Cosmos key) for non-local environments.
+// Local emulator creds live in appsettings.local.json and are not secret.
+if (!string.Equals(environment, "Local", StringComparison.OrdinalIgnoreCase))
+    configBuilder.AddUserSecrets<Program>(optional: false);
+
+configBuilder.AddCommandLine(args, switchMappings);
+
+var configuration = configBuilder.Build();
 
 var endpointUri = configuration["CosmosDb:Endpoint"] ?? throw new InvalidOperationException("CosmosDb:Endpoint is not configured.");
 var key = configuration["CosmosDb:Key"] ?? throw new InvalidOperationException("CosmosDb:Key is not configured.");
@@ -21,6 +57,24 @@ var databaseId = configuration["CosmosDb:DatabaseId"] ?? throw new InvalidOperat
 
 // Container management — set to true to delete and recreate containers (WARNING: deletes all data!)
 const bool DeleteContainersBeforeCreating = true;
+
+if (!string.Equals(environment, "Local", StringComparison.OrdinalIgnoreCase))
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine($"⚠️  You are about to seed the {environment.ToUpperInvariant()} Cosmos database: {databaseId}");
+    Console.WriteLine($"   Endpoint: {endpointUri}");
+    if (DeleteContainersBeforeCreating)
+        Console.WriteLine("   DeleteContainersBeforeCreating = true — ALL DATA WILL BE DELETED!");
+    Console.ResetColor();
+    Console.Write("\nType 'yes' to continue: ");
+    var confirmation = Console.ReadLine();
+    if (!string.Equals(confirmation, "yes", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.WriteLine("Aborted.");
+        return;
+    }
+    Console.WriteLine();
+}
 
 Console.WriteLine("Starting Cosmos seed...\n");
 

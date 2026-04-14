@@ -230,7 +230,7 @@ builder.Services.AddSingleton<TableServiceClient>(sp =>
 });
 
 #region Repositories
-var cosmosDbId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvsdb";
+var cosmosDbId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvs-db";
 
 builder.Services.AddScoped<ILookupRepository>(sp =>
 {

@@ -2,7 +2,7 @@
 
 ## Design Philosophy & Approach
 
-The RVS platform uses a **multi-tenant, aggregate-oriented Cosmos DB NoSQL design** with 9 containers in a single database (`rvsdb`). The design follows three core principles:
+with 9 containers in a single database (`rvs-db`)
 
 1. **Tenant isolation via partition key**: Most containers use `/tenantId` as partition key, ensuring all queries from authenticated users are single-partition.
 2. **Aggregate root embedding**: ServiceRequest embeds customer snapshots, asset info, attachments, service events, and diagnostic responses — eliminating cross-container joins for the dominant access pattern (dealer dashboard).

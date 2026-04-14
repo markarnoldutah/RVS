@@ -120,6 +120,15 @@ jobs:
           run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
           github-token: ${{ github.token }}
 
+      - name: Set blazor-environment to Production
+        run: |
+          CONFIG="./publish/intake/wwwroot/staticwebapp.config.json"
+          echo "Before:"
+          grep blazor-environment "$CONFIG"
+          sed -i 's/"blazor-environment": "Staging"/"blazor-environment": "Production"/' "$CONFIG"
+          echo "After:"
+          grep blazor-environment "$CONFIG"
+
       - name: Deploy Intake to production
         uses: Azure/static-web-apps-deploy@v1
         with:
@@ -151,6 +160,15 @@ jobs:
           path: ./publish/manager/wwwroot
           run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
           github-token: ${{ github.token }}
+
+      - name: Set blazor-environment to Production
+        run: |
+          CONFIG="./publish/manager/wwwroot/staticwebapp.config.json"
+          echo "Before:"
+          grep blazor-environment "$CONFIG"
+          sed -i 's/"blazor-environment": "Staging"/"blazor-environment": "Production"/' "$CONFIG"
+          echo "After:"
+          grep blazor-environment "$CONFIG"
 
       - name: Deploy Manager to production
         uses: Azure/static-web-apps-deploy@v1

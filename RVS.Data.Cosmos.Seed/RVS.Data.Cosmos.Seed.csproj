@@ -10,8 +10,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.56.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
