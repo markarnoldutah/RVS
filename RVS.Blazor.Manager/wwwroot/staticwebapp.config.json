@@ -18,6 +18,12 @@
   },
   "routes": [
     {
+      "route": "/_framework/blazor.boot.json",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    },
+    {
       "route": "/_framework/*",
       "headers": {
         "Cache-Control": "public, max-age=31536000, immutable"

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.JSInterop;
 using MudBlazor.Services;
 using RVS.Blazor.Intake;
 using RVS.Blazor.Intake.Services;
@@ -16,10 +17,9 @@ builder.Services.AddMudServices();
 // Anonymous HttpClient pointing to RVS.API — no authentication required
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
 
-// Startup diagnostics — visible in the browser console (F12 → Console)
-Console.WriteLine($"[RVS.Intake] Environment : {builder.HostEnvironment.Environment}");
-Console.WriteLine($"[RVS.Intake] BaseAddress  : {builder.HostEnvironment.BaseAddress}");
-Console.WriteLine($"[RVS.Intake] ApiBaseUrl   : {apiBaseUrl}");
+// Trailing slash is required for correct relative URI resolution on HttpClient
+if (!apiBaseUrl.EndsWith('/'))
+    apiBaseUrl += '/';
 
 builder.Services.AddHttpClient("RVS.API", client =>
 {
@@ -41,4 +41,13 @@ builder.Services.AddScoped<IntakeWizardState>();
 // Theme switcher — scoped (one per browser tab lifetime)
 builder.Services.AddScoped<ThemeService>();
 
-await builder.Build().RunAsync();
+var app = builder.Build();
+
+// Startup diagnostics — console.warn is always visible in browser DevTools (F12 → Console)
+var js = app.Services.GetRequiredService<IJSRuntime>();
+await js.InvokeVoidAsync("console.warn", $"[RVS.Intake] Environment       : {builder.HostEnvironment.Environment}");
+await js.InvokeVoidAsync("console.warn", $"[RVS.Intake] BaseAddress       : {builder.HostEnvironment.BaseAddress}");
+await js.InvokeVoidAsync("console.warn", $"[RVS.Intake] ApiBaseUrl config : {apiBaseUrl ?? "(not set)"}");
+await js.InvokeVoidAsync("console.warn", $"[RVS.Intake] ApiBaseUrl resolved: {apiBaseUrl}");
+
+await app.RunAsync();
