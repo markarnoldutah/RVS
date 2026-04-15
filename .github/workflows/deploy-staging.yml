@@ -226,7 +226,6 @@ jobs:
           action: upload
           app_location: ./intake
           skip_app_build: true
-          deployment_environment: staging
 
   # ---------------------------------------------------------------------------
   # Deploy Manager SWA to staging (westus2)
@@ -252,4 +251,3 @@ jobs:
           action: upload
           app_location: ./manager
           skip_app_build: true
-          deployment_environment: staging
