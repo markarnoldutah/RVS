@@ -191,8 +191,7 @@
         var authState = await AuthStateTask;
         var user = authState.User;
 
-        return user.FindFirst("app_metadata/tenantId")?.Value
-            ?? user.FindFirst("tenantId")?.Value;
+        return user.FindFirst("https://rvserviceflow.com/tenantId")?.Value;
     }
 
     private async Task LoadBoardDataAsync()

@@ -53,14 +53,17 @@ public class ServiceRequestsController : ControllerBase
     /// <param name="ct">Cancellation token.</param>
     [HttpPost("search")]
     [Authorize(Policy = "CanSearchServiceRequests")]
-    public async Task<ActionResult<PagedResult<ServiceRequestSummaryResponseDto>>> Search(
+    public async Task<ActionResult<ServiceRequestSearchResultResponseDto>> Search(
         string dealershipId, [FromBody] ServiceRequestSearchRequestDto request, CancellationToken ct)
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
         var result = await _service.SearchAsync(tenantId, request, cancellationToken: ct);
 
-        return Ok(result.ToSummaryPagedResult());
+        return Ok(new ServiceRequestSearchResultResponseDto
+        {
+            Results = result.ToSummaryPagedResult()
+        });
     }
 
     /// <summary>

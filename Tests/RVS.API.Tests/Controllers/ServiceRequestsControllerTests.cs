@@ -57,8 +57,9 @@ public class ServiceRequestsControllerTests
         var result = await _sut.Search("dlr_1", request, CancellationToken.None);
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var dto = okResult.Value.Should().BeAssignableTo<PagedResult<ServiceRequestSummaryResponseDto>>().Subject;
-        dto.TotalCount.Should().Be(1);
+        var wrapper = okResult.Value.Should().BeOfType<ServiceRequestSearchResultResponseDto>().Subject;
+        wrapper.Results.TotalCount.Should().Be(1);
+        wrapper.Results.Items.Should().ContainSingle();
     }
 
     [Fact]
