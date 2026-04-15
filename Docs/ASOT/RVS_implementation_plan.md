@@ -714,10 +714,11 @@ Verify against Tech PRD §9:
 | App Insights | Link to API + frontends; configure availability test on `/health` |
 | Auth0 | Configure API audience; create dev Organization; seed test users with roles |
 
-**MAUI.Tech** distribution:
-- Android: internal testing track on Google Play or direct APK sideload for design partners
-- iOS: TestFlight for design partner technicians
-- No public app store listing required for MVP
+**MAUI.Tech** distribution (see [full side-loading investigation](FrontEnd/Techs/RVS_MAUI_Tech_SideLoading.md)):
+- Android: Google Play Internal Testing track for design partners (auto-updates via Play Store)
+- iOS: TestFlight for design partner technicians (auto-update notifications, up to 10,000 testers)
+- Post-MVP: Apple Business Manager Custom Apps (iOS) + Managed Google Play via MDM (Android)
+- No public app store listing required for MVP or post-MVP
 
 #### 9.2 GitHub Actions CI/CD
 
