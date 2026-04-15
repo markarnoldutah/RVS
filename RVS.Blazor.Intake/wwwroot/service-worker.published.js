@@ -40,22 +40,43 @@ async function onActivate(event) {
 
     // Take control of all open tabs immediately so cached assets
     // are served without requiring a second navigation.
-    // Mark: debug
-    //await self.clients.claim();
+    await self.clients.claim();
 }
 
 async function onFetch(event) {
-    let cachedResponse = null;
-
     if (event.request.method === 'GET') {
         // For navigation requests, serve the cached index.html (SPA routing)
         const shouldServeIndexHtml = event.request.mode === 'navigate';
         const request = shouldServeIndexHtml ? 'index.html' : event.request;
         const cache = await caches.open(cacheName);
-        cachedResponse = await cache.match(request);
+        const cachedResponse = await cache.match(request);
+        if (cachedResponse) return cachedResponse;
     }
 
-    return cachedResponse || fetch(event.request);
+    // For navigation requests, explicitly follow redirects. By spec the
+    // service worker receives navigation requests with redirect: "manual",
+    // so any server-side redirect (e.g. Azure SWA trailing-slash rules)
+    // returns an opaque-redirect response that cannot be passed back via
+    // respondWith(). Using redirect: "follow" lets fetch() resolve the
+    // redirect chain transparently.
+    const networkRequest = event.request.mode === 'navigate'
+        ? new Request(event.request.url, { redirect: 'follow' })
+        : event.request;
+
+    const response = await fetch(networkRequest);
+
+    // Strip the redirected flag so respondWith() never throws
+    // "a redirected response was used for a request whose redirect mode
+    // is not follow".
+    if (response.redirected) {
+        return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers
+        });
+    }
+
+    return response;
 }
 
 self.addEventListener('install', event => event.waitUntil(onInstall(event)));
