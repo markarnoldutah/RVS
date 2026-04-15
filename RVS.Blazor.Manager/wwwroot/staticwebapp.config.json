@@ -1,4 +1,5 @@
 {
+  "trailingSlash": "never",
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": ["/appsettings.json", "/appsettings.*.json", "/css/*", "/_framework/*", "/_content/*"]
@@ -6,23 +7,16 @@
   "mimeTypes": {
     ".json": "application/json",
     ".wasm": "application/wasm",
-    ".dll": "application/octet-stream",
-    ".dat": "application/octet-stream",
-    ".blat": "application/octet-stream"
+    ".dat": "application/octet-stream"
   },
   "globalHeaders": {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "blazor-environment": "Staging"
   },
   "routes": [
-    {
-      "route": "/_framework/blazor.boot.json",
-      "headers": {
-        "Cache-Control": "no-cache"
-      }
-    },
     {
       "route": "/_framework/*",
       "headers": {
