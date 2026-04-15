@@ -17,10 +17,6 @@ builder.Services.AddMudServices();
 // Anonymous HttpClient pointing to RVS.API — no authentication required
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
 
-// Trailing slash is required for correct relative URI resolution on HttpClient
-if (!apiBaseUrl.EndsWith('/'))
-    apiBaseUrl += '/';
-
 builder.Services.AddHttpClient("RVS.API", client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
