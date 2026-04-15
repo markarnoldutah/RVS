@@ -1,3 +1,6 @@
+// Import the build-generated asset manifest (self.assetsManifest).
+// .NET 10 SDK no longer prepends this automatically during publish.
+self.importScripts('./service-worker-assets.js');
 
 const cacheNamePrefix = 'offline-cache-';
 const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;
