@@ -13,21 +13,13 @@
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "blazor-environment": "Staging"
+    "Referrer-Policy": "strict-origin-when-cross-origin"
   },
   "routes": [
     {
-      "route": "/_framework/blazor.boot.json",
-      "headers": {
-        "Cache-Control": "no-cache"
-      }
-    },
-    {
       "route": "/_framework/*",
       "headers": {
-        "Cache-Control": "public, max-age=31536000, immutable",
-        "blazor-environment": "Staging"
+        "Cache-Control": "public, max-age=31536000, immutable"
       }
     },
     {

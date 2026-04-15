@@ -6,6 +6,7 @@
 - `<App>.Domain` — Entities, DTOs, Interfaces, Validation (zero infra dependencies)
 - `<App>.Infra.*` — Repository implementations (Cosmos, Blob, Tables)
 - Target: .NET 10, C# 14, nullable enabled, implicit usings enabled
+- Always check MS documentation for best practices and updates SPECIFICALLY WITH RESPECT TO LATEST UPDATES IN .NET 10
 
 ## Controllers
 
