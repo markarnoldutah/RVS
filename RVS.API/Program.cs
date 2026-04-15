@@ -57,7 +57,9 @@ else if (builder.Environment.IsEnvironment("Staging"))
         options.AddPolicy("AllowBlazorClient", corsBuilder =>
         {
             corsBuilder
-                .WithOrigins("https://intake-staging.rvserviceflow.com", "https://manager-staging.rvserviceflow.com")
+                .WithOrigins(
+                    "https://zealous-island-0ff7ab71e.6.azurestaticapps.net", // intake
+                    "https://mango-grass-08484a41e.1.azurestaticapps.net") // manager
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
