@@ -5,8 +5,9 @@
     <Authorized Context="authState">
         <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
                  aria-label="User menu">
-            <ActivatorContent>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="cursor: pointer;">
+            <ActivatorContent Context="menuContext">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
+                           Style="cursor: pointer;" @onclick="@(() => menuContext.ToggleAsync())">
                     <MudText Typo="Typo.body2" Style="color: inherit;">
                         @GetFirstName(authState)
                     </MudText>
