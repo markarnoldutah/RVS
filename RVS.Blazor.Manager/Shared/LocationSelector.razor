@@ -1,4 +1,5 @@
 @using System.Security.Claims
+@using System.Text.Json
 
 <AuthorizeView>
     <Authorized>
@@ -63,12 +64,23 @@
         //   const namespace = 'https://rvserviceflow.com/'
         //   api.idToken.setCustomClaim(namespace + 'locationIds', locationIds)
         const string locationIdsClaimType = "https://rvserviceflow.com/locationIds";
-        var locationClaims = user.FindAll(locationIdsClaimType);
-        foreach (var claim in locationClaims)
+        var locationClaim = user.FindFirst(locationIdsClaimType);
+        if (locationClaim is not null && !string.IsNullOrWhiteSpace(locationClaim.Value))
         {
-            if (!string.IsNullOrWhiteSpace(claim.Value))
+            // The claim value is a JSON array, e.g. '["loc_blue_compass_slc","loc_other"]'
+            // Parse it to extract individual location IDs (mirrors ClaimsService.GetLocationIdsOrThrow on the API)
+            try
             {
-                _locations.Add(claim.Value);
+                var parsed = JsonSerializer.Deserialize<List<string>>(locationClaim.Value);
+                if (parsed is not null)
+                {
+                    _locations.AddRange(parsed.Where(id => !string.IsNullOrWhiteSpace(id)));
+                }
+            }
+            catch (JsonException)
+            {
+                // Fallback: treat as a single plain location ID
+                _locations.Add(locationClaim.Value);
             }
         }
 
