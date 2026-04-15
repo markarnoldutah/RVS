@@ -180,3 +180,5 @@ output name string = storageAccount.name
 
 @description('The primary blob service endpoint URL.')
 output blobEndpoint string = storageAccount.properties.primaryEndpoints.blob
+
+// reading

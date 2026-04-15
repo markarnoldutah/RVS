@@ -17,6 +17,10 @@ param cosmosCapacityMode = 'Serverless'
 
 // Storage (rvs-attachments container + CORS for SAS uploads)
 param deployStorageAccount = true
+param storageCorsOrigins = [
+  'https://zealous-island-0ff7ab71e-staging.westus2.6.azurestaticapps.net' // Intake – staging
+  'https://mango-grass-08484a41e.1.azurestaticapps.net'                    // Manager – staging
+]
 
 // Key Vault (RBAC model, API managed identity get + list)
 param deployKeyVault = true

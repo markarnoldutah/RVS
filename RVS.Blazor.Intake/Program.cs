@@ -43,7 +43,6 @@ var app = builder.Build();
 var js = app.Services.GetRequiredService<IJSRuntime>();
 await js.InvokeVoidAsync("console.warn", $"[RVS.Intake] Environment       : {builder.HostEnvironment.Environment}");
 await js.InvokeVoidAsync("console.warn", $"[RVS.Intake] BaseAddress       : {builder.HostEnvironment.BaseAddress}");
-await js.InvokeVoidAsync("console.warn", $"[RVS.Intake] ApiBaseUrl config : {apiBaseUrl ?? "(not set)"}");
 await js.InvokeVoidAsync("console.warn", $"[RVS.Intake] ApiBaseUrl resolved: {apiBaseUrl}");
 
 await app.RunAsync();
