@@ -1,17 +1,8 @@
-// Service worker temporarily disabled — unregister self and clear caches
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys.map(k => caches.delete(k)));
-    await self.registration.unregister();
-});
-
-/* --- Original service worker commented out ---
 
 const cacheNamePrefix = 'offline-cache-';
 const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;
-const offlineAssetsInclude = [/\.dll$/, /\.pdb$/, /\.wasm/, /\.html/, /\.js$/, /\.json$/, /\.css$/, /\.woff$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.blat$/, /\.dat$/];
-const offlineAssetsExclude = [/^service-worker\.js$/, /^staticwebapp\.config\.json$/];
+const offlineAssetsInclude = [/\.dll$/, /\.pdb$/, /\.wasm/, /\.html/, /\.js$/, /\.css$/, /\.woff$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.blat$/, /\.dat$/];
+const offlineAssetsExclude = [/^service-worker\.js$/, /^staticwebapp\.config\.json$/, /^appsettings.*\.json$/];
 
 // Skip waiting so the new service worker activates immediately after install,
 // ensuring updated WASM files are served on the next navigation.
@@ -46,7 +37,8 @@ async function onActivate(event) {
 
     // Take control of all open tabs immediately so cached assets
     // are served without requiring a second navigation.
-    await self.clients.claim();
+    // Mark: debug
+    //await self.clients.claim();
 }
 
 async function onFetch(event) {
@@ -62,4 +54,4 @@ async function onFetch(event) {
 
     return cachedResponse || fetch(event.request);
 }
---- End of original service worker */
+
