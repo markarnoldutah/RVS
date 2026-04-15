@@ -65,7 +65,7 @@
         let env = 'Production';
         if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
             env = 'Development';
-        } else if (hostname.includes('staging')) {
+        } else if (hostname.includes('mango')) {
             env = 'Staging';
         }
         Blazor.start({ environment: env });
