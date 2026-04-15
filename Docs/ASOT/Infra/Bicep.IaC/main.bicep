@@ -55,8 +55,8 @@ param deployStorageAccount bool = false
 @maxLength(24)
 param storageAccountNameOverride string = ''
 
-@description('Override CORS origins for browser-based SAS uploads to Blob Storage. Leave empty to use environment defaults (staging = staging subdomain, prod = intake.rvserviceflow.com).')
-param storageCorsAllowedOrigins string[] = []
+@description('Allowed CORS origins for the Storage Account blob service (SAS direct-upload from SPAs).')
+param storageCorsOrigins string[] = []
 
 // ── ACS Parameters ────────────────────────────────────────────
 
@@ -186,7 +186,7 @@ var defaultCorsOrigins = environmentName == 'prod'
           'https://localhost:7300'
         ]
 
-var resolvedCorsOrigins = !empty(storageCorsAllowedOrigins) ? storageCorsAllowedOrigins : defaultCorsOrigins
+var resolvedCorsOrigins = !empty(storageCorsOrigins) ? storageCorsOrigins : defaultCorsOrigins
 
 // SWA resource names
 var swaIntakeName = 'stapp-rvs-intake-${environmentName}'

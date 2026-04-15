@@ -2,7 +2,7 @@
   "trailingSlash": "never",
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": [ "/appsettings.json", "/appsettings.*.json", "/css/*", "/_framework/*", "/_content/*" ]
+    "exclude": [ "/appsettings.json", "/appsettings.*.json", "/css/*", "/_framework/*", "/_content/*", "/service-worker.js", "/service-worker-assets.js" ]
   },
   "mimeTypes": {
     ".json": "application/json",

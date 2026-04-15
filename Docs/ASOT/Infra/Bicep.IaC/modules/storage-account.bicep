@@ -85,7 +85,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2025-01-01' = {
   }
 }
 
-// ── Blob Service (CORS for browser-based SAS uploads) ──────────
+// ── Blob Service (CORS for browser-based SAS uploads & downloads) ─
 
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2025-01-01' = {
   parent: storageAccount
@@ -96,9 +96,9 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2025-01-01'
         ? [
             {
               allowedOrigins: corsAllowedOrigins
-              allowedMethods: ['PUT']
-              allowedHeaders: ['Content-Type', 'x-ms-blob-type']
-              exposedHeaders: ['ETag']
+              allowedMethods: ['GET', 'HEAD', 'PUT']
+              allowedHeaders: ['Content-Type', 'x-ms-blob-type', 'Range']
+              exposedHeaders: ['ETag', 'Content-Length', 'Content-Range']
               maxAgeInSeconds: 3600
             }
           ]

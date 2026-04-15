@@ -55,3 +55,7 @@ async function onFetch(event) {
     return cachedResponse || fetch(event.request);
 }
 
+self.addEventListener('install', event => event.waitUntil(onInstall(event)));
+self.addEventListener('activate', event => event.waitUntil(onActivate(event)));
+self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
+
