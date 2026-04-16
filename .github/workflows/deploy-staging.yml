@@ -38,14 +38,14 @@ jobs:
           echo "$CHANGED"
           echo "---------------------"
 
-          # API: RVS.API + Domain + all Infra projects
-          API_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.API/|RVS\.Domain/|RVS\.Infra\.)' && echo true || echo false)
+          # API: RVS.API + Domain + all Infra projects + Bicep IaC
+          API_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.API/|RVS\.Domain/|RVS\.Infra\.|Docs/ASOT/Infra/Bicep\.IaC/)' && echo true || echo false)
 
-          # Intake: Blazor.Intake + UI.Shared + Domain (shared dependency)
-          INTAKE_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.Blazor\.Intake/|RVS\.UI\.Shared/|RVS\.Domain/)' && echo true || echo false)
+          # Intake: Blazor.Intake + UI.Shared + Domain + Bicep IaC
+          INTAKE_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.Blazor\.Intake/|RVS\.UI\.Shared/|RVS\.Domain/|Docs/ASOT/Infra/Bicep\.IaC/)' && echo true || echo false)
 
-          # Manager: Blazor.Manager + UI.Shared + Domain (shared dependency)
-          MANAGER_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.Blazor\.Manager/|RVS\.UI\.Shared/|RVS\.Domain/)' && echo true || echo false)
+          # Manager: Blazor.Manager + UI.Shared + Domain + Bicep IaC
+          MANAGER_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.Blazor\.Manager/|RVS\.UI\.Shared/|RVS\.Domain/|Docs/ASOT/Infra/Bicep\.IaC/)' && echo true || echo false)
 
           echo "api=$API_CHANGED" >> "$GITHUB_OUTPUT"
           echo "intake=$INTAKE_CHANGED" >> "$GITHUB_OUTPUT"
@@ -179,6 +179,9 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Checkout repository (for Bicep templates)
+        uses: actions/checkout@v4
+
       - name: Download API artifact
         uses: actions/download-artifact@v4
         with:
@@ -191,6 +194,15 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy API Bicep infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: subscription
+          region: ${{ vars.AZURE_LOCATION }}
+          template: ./Docs/ASOT/Infra/Bicep.IaC/main.bicep
+          parameters: deployTarget=api
+          failOnStdErr: false
 
       - name: Deploy API to staging
         uses: azure/webapps-deploy@v3
@@ -211,12 +223,34 @@ jobs:
     if: needs.detect-changes.outputs.intake == 'true'
     runs-on: ubuntu-latest
     environment: staging
+    permissions:
+      contents: read
+      id-token: write
     steps:
+      - name: Checkout repository (for Bicep templates)
+        uses: actions/checkout@v4
+
       - name: Download Intake artifact
         uses: actions/download-artifact@v4
         with:
           name: intake-wwwroot-${{ github.sha }}
           path: ./intake
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Intake Bicep infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: subscription
+          region: ${{ vars.AZURE_LOCATION }}
+          template: ./Docs/ASOT/Infra/Bicep.IaC/main.bicep
+          parameters: deployTarget=intake
+          failOnStdErr: false
 
       - name: Deploy Intake to staging
         uses: Azure/static-web-apps-deploy@v1
@@ -227,6 +261,10 @@ jobs:
           app_location: ./intake
           skip_app_build: true
 
+      - name: Azure logout
+        if: always()
+        run: az logout
+
   # ---------------------------------------------------------------------------
   # Deploy Manager SWA to staging (westus2)
   # ---------------------------------------------------------------------------
@@ -236,12 +274,34 @@ jobs:
     if: needs.detect-changes.outputs.manager == 'true'
     runs-on: ubuntu-latest
     environment: staging
+    permissions:
+      contents: read
+      id-token: write
     steps:
+      - name: Checkout repository (for Bicep templates)
+        uses: actions/checkout@v4
+
       - name: Download Manager artifact
         uses: actions/download-artifact@v4
         with:
           name: manager-wwwroot-${{ github.sha }}
           path: ./manager
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Manager Bicep infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: subscription
+          region: ${{ vars.AZURE_LOCATION }}
+          template: ./Docs/ASOT/Infra/Bicep.IaC/main.bicep
+          parameters: deployTarget=manager
+          failOnStdErr: false
 
       - name: Deploy Manager to staging
         uses: Azure/static-web-apps-deploy@v1
@@ -251,3 +311,7 @@ jobs:
           action: upload
           app_location: ./manager
           skip_app_build: true
+
+      - name: Azure logout
+        if: always()
+        run: az logout
