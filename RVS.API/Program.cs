@@ -616,8 +616,8 @@ internal sealed class BearerSecuritySchemeTransformer(IAuthenticationSchemeProvi
                     {
                         Implicit = new OpenApiOAuthFlow
                         {
-                            AuthorizationUrl = new Uri($"{context.ApplicationServices.GetRequiredService<IConfiguration>()["Auth0:Domain"]}/authorize"),
-                            TokenUrl = new Uri($"{context.ApplicationServices.GetRequiredService<IConfiguration>()["Auth0:Domain"]}oauth/token"),
+                            AuthorizationUrl = new Uri($"{context.ApplicationServices.GetRequiredService<IConfiguration>()["Auth0:Domain"]?.TrimEnd('/')}/authorize"),
+                            TokenUrl = new Uri($"{context.ApplicationServices.GetRequiredService<IConfiguration>()["Auth0:Domain"]?.TrimEnd('/')}/oauth/token"),
                             Scopes = new Dictionary<string, string>
                             {
                                 { "openid", "OpenID" },

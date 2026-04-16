@@ -49,7 +49,9 @@ resource auth0DomainSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
   name: 'Auth0--Domain'
   properties: {
-    value: auth0Domain
+    // Strip any trailing slash — endsWith guard ensures length >= 1, so BCP329 is a false positive
+    #disable-next-line BCP329
+    value: endsWith(auth0Domain, '/') ? substring(auth0Domain, 0, length(auth0Domain) - 1) : auth0Domain
     contentType: 'text/plain'
   }
 }
