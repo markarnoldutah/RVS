@@ -5,8 +5,8 @@
 ### 1.1 Document title and version
 
 - PRD: RV Service Flow (RVS) — MVP
-- Version: 1.1
-- Date: March 19, 2026
+- Version: 1.2
+- Date: April 16, 2026
 
 ### 1.2 Product summary
 
@@ -85,7 +85,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 ## 4. Functional requirements
 
 - **FR-001: Multi-tenant, multi-location data isolation** (Priority: Critical)
-  - Each dealer corporation is a separate tenant. The Auth0 Organization `org_id` serves as the `tenantId` partition key in Cosmos DB.
+  - Each dealer corporation is a separate tenant. The `tenantId` serves as the partition key in Cosmos DB.
   - A corporation may have one or many physical service locations. A single-location independent has exactly one location.
   - All data reads and writes are scoped by `tenantId`. Cross-tenant data access is impossible by design.
   - Location-scoped roles filter within the tenant partition; they do not cross tenant boundaries.
@@ -93,7 +93,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - **FR-002: Anonymous customer intake** (Priority: Critical)
   - The intake form is accessible at a location-specific URL: `https://intake.rvserviceflow.com/intake/{locationSlug}`.
   - No customer account or login is required to submit a service request.
-  - The form collects: first name, last name, email, phone, VIN (manual entry or camera scan), make, model, year, issue description (text or speech-to-text), photo/video attachments, urgency level (routine, urgent, emergency), and full-time or part-time RV use.
+  - The form collects: first name, last name, email, phone, VIN (manual entry or camera scan), make, model, year, issue description (text or speech-to-text), photo/video attachments, urgency level (routine, urgent, emergency), full-time or part-time RV use, extended warranty status, and approximate purchase date.
   - On submission, the API automatically creates or updates a tenant-scoped `CustomerProfile` and a cross-dealer `GlobalCustomerAcct` (resolved by email).
   - The customer receives a confirmation email containing their magic-link status URL.
   - After submission, the customer is prompted (not required) to create a full profile for easier future submissions.
@@ -102,7 +102,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - The intake form provides a VIN camera scanner that uses the device camera to capture and parse a VIN from a photo.
   - Captured VIN is decoded to pre-populate make, manufacturer, model year, and asset details.
   - Manual VIN entry is available as a fallback.
-  - The decoded VIN is stored in the structured `AssetInfoEmbedded.AssetId` field as `RV:{vin}`.
+  - The decoded VIN is stored in the structured `AssetInfoEmbedded.AssetId` field as the raw VIN value (no prefix).
 
 - **FR-004: AI-guided issue wizard** (Priority: High)
   - The intake flow supports description-first capture: after the customer enters or records issue description text, AI suggests a top-level issue category (e.g., Slide System, Electrical, Plumbing, HVAC).
@@ -119,10 +119,10 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - The customer reviews and edits the AI-cleaned description before submission.
 
 - **FR-006: AI issue categorization and technician summary** (Priority: High)
-  - On intake submission, the API runs rule-based issue categorization (MVP) against the issue description and AI wizard answers to assign an `IssueCategory` and `ComponentType`.
+  - On intake submission, the API runs AI-powered issue categorization (Azure OpenAI for MVP) against the issue description and AI wizard answers to assign an `IssueCategory` and `ComponentType`. A rule-based keyword-matching engine serves as a fallback if the AI service is unavailable.
   - The API generates a structured, technician-ready summary that includes: issue category, component, customer-reported symptoms, wizard-captured structured fields, and attachment count.
   - Both `IssueCategory` and `TechnicianSummary` are written to the `ServiceRequest` document and surfaced on the dealer dashboard.
-  - The categorization service interface (`ICategorizationService`) is AI-ready: the MVP implementation uses rule-based keyword matching; an LLM-backed implementation can be swapped in behind the same interface without changing the API.
+  - The categorization service interface (`ICategorizationService`) supports both an Azure OpenAI implementation (primary for MVP) and a rule-based fallback implementation behind the same interface.
 
 - **FR-007: Photo and video upload** (Priority: High)
   - The intake form accepts up to 10 file attachments per service request.
@@ -137,6 +137,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - The token is stored on the `GlobalCustomerAcct` with an expiry. Token format encodes an email-hash prefix so the lookup is a single-partition point read (no cross-partition scan).
   - The status page shows all active service requests for that customer across all dealerships where they have submitted.
   - Each request shows: location name, status, issue summary, last updated date.
+  - **TBD:** The status page may also include a chat dialog and any dealer notes added to the service request.
   - Expired or invalid tokens return a 404 with a "request a new link" prompt.
   - The status endpoint is `[AllowAnonymous]` and rate-limited per IP.
 
@@ -144,6 +145,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - Authenticated dealer staff access a dashboard scoped to their location (or all locations for corporate/owner roles).
   - The dashboard displays: service request queue with status, customer name, VIN/asset, issue category, technician summary, submission date, attachment count.
   - Supported actions: search and filter (by status, category, date range, location), view detail, update status (`New` → `InProgress` → `Completed` / `Cancelled`), add advisor notes, view/download photo and video attachments, delete a service request.
+  - **TBD:** The dashboard may also include the ability to manually initiate an SMS to the customer.
   - The detail view renders: all structured intake fields, embedded customer snapshot, AI-generated technician summary, structured service event fields, and attachment previews.
 
 - **FR-010: Section 10A structured service event fields** (Priority: High)
@@ -177,14 +179,14 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - **FR-015: Tenant provisioning and access gate** (Priority: Critical)
   - New tenants are provisioned via the platform admin. Each tenant has a `TenantConfig` document and a `TenantAccessGateEmbedded` flag.
   - The `TenantAccessGateMiddleware` checks the access gate on every authenticated request. Disabled tenants receive a structured 403 response.
-  - Tenant provisioning bootstraps an Auth0 Organization (or `app_metadata` entry in MVP), a Cosmos `TenantConfig`, a `Dealership`, and a default `Location`.
+  - Tenant provisioning bootstraps a Cosmos `TenantConfig`, a `Dealership`, a default `Location`, and an Auth0 `app_metadata` entry for the initial admin user.
 
 - **FR-016: Notifications** (Priority: Medium)
-  - On service request submission, the customer receives a confirmation via their preferred channel: email or SMS.
-  - The confirmation contains: summary of the submitted request, magic-link status URL, and dealership contact info.
-  - On status change (`InProgress`, `Completed`), the customer receives a status update notification via their preferred channel.
+  - On service request submission, the customer receives both an email and an SMS. The email contains the magic-link status URL plus any dealer-specific information. The SMS contains the magic-link status URL.
+  - After the initial submission notifications, all subsequent communications (status updates, advisor notes) are delivered via **SMS only** — no further emails are sent.
   - Notification dispatch is abstracted behind `INotificationService` (email) and `ISmsNotificationService` (SMS), orchestrated by `INotificationOrchestrator`. The production implementation uses **Azure Communication Services (ACS)** for both email and SMS — a single Azure-native provider with managed identity authentication.
-  - Customers choose their notification preference during intake: **email** (default) or **SMS** — an either/or choice. SMS opt-in is explicit and timestamped for TCPA compliance.
+  - Customers do not choose a notification preference — the platform determines the channel automatically as described above.
+  - SMS opt-in is explicit and timestamped for TCPA compliance.
   - No marketing, reminder, or re-engagement messages are supported — all notifications are transactional only.
 
 - **FR-017: Rate limiting** (Priority: High)
@@ -263,7 +265,6 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - VIN camera scan is the prominent default; manual entry is clearly accessible but secondary.
 - Speech-to-text is surfaced as a microphone icon on the issue description field — no instruction needed.
 - AI category suggestion appears inline as a subtle "AI suggested" indicator, and the category dropdown remains editable.
-- AI wizard follow-up questions load inline beneath the category selector, not on a new page or modal.
 - The dealer dashboard is a desktop-primary layout with a responsive fallback for tablet/mobile use.
 - Status badges on the dealer queue use consistent color coding: New (blue), In Progress (amber), Completed (green), Cancelled (grey).
 - Attachment previews render inline on the service request detail page; video attachments autoplay muted on hover.
@@ -286,18 +287,18 @@ Maria, the service advisor, opens her dealer dashboard the next morning to find 
 
 ### 7.1 Integration points
 
-- **Auth0:** Identity provider for all authenticated dealer staff. MVP uses `app_metadata` to inject `tenantId`, `locationIds`, and role claims via a Login Action. Migration path to Auth0 Organizations (multi-tenant B2B) is a configuration-only change — the ASP.NET Core `ClaimsService` reads the same custom claim namespace regardless of Auth0 plan tier.
-- **Azure Cosmos DB:** Nine containers covering service requests, customer profiles, global customer identities, asset ledger, dealerships, locations, tenant configs, lookup sets, and slug lookup. Autoscale RU mode for high-throughput containers; manual 400 RU for low-volume config containers.
+- **Auth0:** Identity provider for all authenticated dealer staff. Uses `app_metadata` to inject `tenantId`, `locationIds`, and role claims via a Login Action.
+- **Azure Cosmos DB:** Nine containers covering service requests, customer profiles, global customer identities, asset ledger, dealerships, locations, tenant configs, lookup sets, and slug lookup. MVP uses **serverless** capacity mode. Provisioned throughput settings (autoscale RU, manual 400 RU) referenced in other architecture documents may not reflect the current MVP configuration — refer to the Bicep IaC files in `Docs/ASOT/Infra/Bicep.IaC/` for the authoritative container settings.
 - **Azure Blob Storage:** Tenant-scoped, location-scoped path hierarchy for all photo and video attachments. SAS URL generation for time-limited read access.
 - **Azure Table Storage:** Lightweight append-only store for analytics counters and audit log caching.
-- **Notifications (email + SMS):** Azure Communication Services (ACS) provides both transactional email and SMS behind `INotificationService` (email) and `ISmsNotificationService` (SMS). Managed identity authentication — no API keys. Customer either/or choice determines channel routing via `INotificationOrchestrator`.
+- **Notifications (email + SMS):** Azure Communication Services (ACS) provides both transactional email and SMS behind `INotificationService` (email) and `ISmsNotificationService` (SMS). Managed identity authentication — no API keys. On submission, the customer receives both an email (with magic link and dealer-specific information) and an SMS (with magic link). All subsequent notifications (status updates, advisor notes) are delivered via **SMS only** — there is no customer channel choice.
 - **SFTP / DMS export:** ASP.NET Core background service or Azure Function triggered on schedule or on demand. Uses `SSH.NET` (or equivalent) for SFTP push. Per-tenant SFTP configuration stored in `TenantConfig`.
-- **AI categorization:** `ICategorizationService` abstraction. MVP: keyword-matching rule engine. AI upgrade path: Azure OpenAI or Azure AI Language API behind the same interface. Used both for pre-submit category suggestion (`POST /api/intake/{locationSlug}/ai/suggest-category`) and final submit-time categorization.
+- **AI categorization:** `ICategorizationService` abstraction. MVP uses **Azure OpenAI** (chat completions API) as the primary categorization engine. A rule-based keyword-matching fallback is available if the AI service is unavailable. Used both for pre-submit category suggestion (`POST /api/intake/{locationSlug}/ai/suggest-category`) and final submit-time categorization.
 - **VIN decoding:** NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`) for VIN decode (free, public). No API key required. VIN camera scanning uses the browser's `BarcodeDetector` API or a lightweight JavaScript barcode library (e.g., `zxing-js`) for client-side decode before sending to the API.
 
 ### 7.2 Data storage and privacy
 
-- All tenant data is partitioned by `tenantId` (Auth0 `org_id`). Cross-tenant queries are structurally impossible in the Cosmos DB access patterns used.
+- All tenant data is partitioned by `tenantId`. Cross-tenant queries are structurally impossible in the Cosmos DB access patterns used.
 - Customer email addresses are normalized (lowercased, trimmed) before storage and used as the partition key for `GlobalCustomerAcct`. No plaintext passwords are ever stored — customers use anonymous intake only in the MVP.
 - `GlobalCustomerAcct` cross-dealer records are partitioned by `/email`. Only the platform admin has cross-tenant read access to this container.
 - Magic-link tokens are cryptographically random, time-limited (configurable expiry, default 30 days), and stored hashed if the implementation requires additional security hardening.
@@ -318,7 +319,6 @@ Maria, the service advisor, opens her dealer dashboard the next morning to find 
 - **AI wizard content coverage:** The question trees for each issue category must be authored and maintained. Starting with the 8–10 most common RV issue categories (slide systems, electrical, plumbing, HVAC, generator, appliances, roof/seals, chassis) reduces the initial authoring burden.
 - **VIN scanner accuracy on phone cameras:** Low-light or worn VIN plates reduce barcode scan reliability. The form must always offer a clean manual entry fallback with a clear affordance.
 - **SFTP compatibility:** Dealer DMS SFTP configurations vary widely in authentication type (password vs. key), port, and directory structure. The initial implementation should support both key-based and password-based auth, with well-documented configuration.
-- **Auth0 Organization migration:** Moving from `app_metadata` (MVP) to Auth0 Organizations (commercial launch) requires re-configuring existing user accounts. A migration script and Auth0 Login Action update handles the transition with zero downtime.
 - **Magic-link token abuse:** Anonymous endpoints that validate tokens require IP rate limiting and token expiry enforcement to prevent enumeration attacks.
 
 ### 7.5 Front-end architecture
