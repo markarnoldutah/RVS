@@ -21,6 +21,10 @@ using Microsoft.Extensions.Http.Resilience;
 using Microsoft.OpenApi;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.ApplicationInsights.Extensibility;
+using RVS.API.Telemetry;
+using OpenTelemetry;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +38,22 @@ if (!string.IsNullOrEmpty(keyVaultUri))
         new Uri(keyVaultUri),
         new DefaultAzureCredential());
 }
+
+// Application Insights telemetry — reads APPLICATIONINSIGHTS_CONNECTION_STRING from config/env.
+// In Development this is a no-op (connection string is empty). In staging/production the connection
+// string is injected by Bicep (app-service-config.bicep → APPLICATIONINSIGHTS_CONNECTION_STRING).
+builder.Services.AddApplicationInsightsTelemetry();
+builder.Services.Configure<TelemetryConfiguration>(config =>
+{
+    config.ConfigureOpenTelemetryBuilder(otel =>
+    {
+        otel.WithTracing(tracing =>
+        {
+            tracing.AddProcessor<TenantActivityProcessor>();
+            tracing.AddProcessor<PiiFilterActivityProcessor>();
+        });
+    });
+});
 
 // Configure CORS — AllowBlazorClient for Blazor.Intake WASM + Blazor.Manager WASM
 if (builder.Environment.IsProduction())

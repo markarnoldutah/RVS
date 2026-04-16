@@ -62,6 +62,48 @@
     </div>
 
     <script src="js/interop.js"></script>
+
+    <!-- Application Insights JS SDK — connection string injected at deploy time via appsettings.json -->
+    <script>
+        !(function (cfg) {
+            function e(e, t) { var n = {}, a = {}; return a.traceFlags = 1, a.version = "00", t && (a.traceId = t),
+                { name: "Microsoft.ApplicationInsights." + e, time: new Date().toISOString(), iKey: "", tags: a, data: { baseType: e + "Data", baseData: n } }; }
+            var n, a, t, i, o, s, r;
+            cfg.url = cfg.url || "https://js.monitor.azure.com/scripts/b/ai.3.gbl.min.js";
+            (n = cfg.name || "appInsights"), (a = window), (t = document);
+            try {
+                if (a[n] !== undefined) return;
+            } catch (e) { return; }
+            a.appInsightsConfig = cfg;
+            i = t.createElement("script");
+            i.src = cfg.url;
+            i.async = true;
+            o = t.getElementsByTagName("script")[0];
+            o.parentNode.insertBefore(i, o);
+            s = "track,trackPage,trackEvent,trackException,trackMetric,startTrackPage,stopTrackPage,addTelemetryInitializer,setAuthenticatedUserContext,clearAuthenticatedUserContext,flush".split(",");
+            r = { config: cfg, initialize: true };
+            for (var c = 0; c < s.length; c++) (function (e) { r[e] = function () { var t = arguments; r.queue = r.queue || []; r.queue.push(function () { r[e].apply(r, t); }); }; })(s[c]);
+            a[n] = r;
+        })({
+            connectionString: window.__appInsightsConnectionString || ""
+        });
+    </script>
+    <script>
+        // Load App Insights connection string from Blazor appsettings.json at startup
+        (async function () {
+            try {
+                var resp = await fetch('appsettings.json');
+                if (resp.ok) {
+                    var cfg = await resp.json();
+                    var cs = (cfg.ApplicationInsights && cfg.ApplicationInsights.ConnectionString) || "";
+                    if (cs && window.appInsights && window.appInsights.config) {
+                        window.appInsights.config.connectionString = cs;
+                    }
+                }
+            } catch (e) { /* appsettings.json may not exist in dev */ }
+        })();
+    </script>
+
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="_framework/blazor.webassembly.js" autostart="false"></script>
     <script>
