@@ -505,6 +505,19 @@ module auth0KeyVaultSecrets 'modules/auth0-keyvault-secrets.bicep' = if (deployK
   }
 }
 
+// ── Key Vault Secrets (Application Insights) ──────────────────
+
+module appInsightsKeyVaultSecrets 'modules/appinsights-keyvault-secrets.bicep' = if (deployKeyVault && deployObservability) {
+  name: 'deploy-appi-kv-secrets-${environmentName}'
+  scope: rgPrimary
+  params: {
+    #disable-next-line BCP318
+    keyVaultName: deployKeyVault ? keyVault.outputs.name : 'unused'
+    #disable-next-line BCP318
+    appInsightsName: deployObservability ? appInsights.outputs.name : 'unused'
+  }
+}
+
 // ── Static Web Apps (Intake + Manager) ────────────────────────
 
 module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
