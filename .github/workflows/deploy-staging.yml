@@ -201,7 +201,9 @@ jobs:
           scope: subscription
           region: ${{ vars.AZURE_LOCATION }}
           template: ./Docs/ASOT/Infra/Bicep.IaC/main.bicep
-          parameters: deployTarget=api
+          parameters: >-
+            ./Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam
+            deployTarget=api
           failOnStdErr: false
 
       - name: Deploy API to staging
@@ -249,7 +251,9 @@ jobs:
           scope: subscription
           region: ${{ vars.AZURE_LOCATION }}
           template: ./Docs/ASOT/Infra/Bicep.IaC/main.bicep
-          parameters: deployTarget=intake
+          parameters: >-
+            ./Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam
+            deployTarget=intake
           failOnStdErr: false
 
       - name: Deploy Intake to staging
@@ -300,7 +304,9 @@ jobs:
           scope: subscription
           region: ${{ vars.AZURE_LOCATION }}
           template: ./Docs/ASOT/Infra/Bicep.IaC/main.bicep
-          parameters: deployTarget=manager
+          parameters: >-
+            ./Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam
+            deployTarget=manager
           failOnStdErr: false
 
       - name: Deploy Manager to staging
