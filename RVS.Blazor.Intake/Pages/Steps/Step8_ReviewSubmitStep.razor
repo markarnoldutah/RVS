@@ -264,6 +264,19 @@
                 .Where(a => a.FileData is not null && !a.IsUploaded)
                 .ToList();
 
+            var skippedFiles = State.Attachments
+                .Where(a => a.FileData is null && !a.IsUploaded)
+                .ToList();
+
+            if (skippedFiles.Count > 0)
+            {
+                State.FailedUploadCount += skippedFiles.Count;
+                foreach (var skipped in skippedFiles)
+                {
+                    skipped.ErrorMessage = "File data was not available for upload. Please re-attach the file and try again.";
+                }
+            }
+
             if (pendingFiles.Count > 0)
             {
                 _uploadProgress = 0;

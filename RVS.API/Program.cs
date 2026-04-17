@@ -39,21 +39,25 @@ if (!string.IsNullOrEmpty(keyVaultUri))
         new DefaultAzureCredential());
 }
 
-// Application Insights telemetry — reads APPLICATIONINSIGHTS_CONNECTION_STRING from config/env.
-// In Development this is a no-op (connection string is empty). In staging/production the connection
-// string is injected by Bicep (app-service-config.bicep → APPLICATIONINSIGHTS_CONNECTION_STRING).
-builder.Services.AddApplicationInsightsTelemetry();
-builder.Services.Configure<TelemetryConfiguration>(config =>
+// Application Insights telemetry — only registered when a connection string is present.
+// In Development this block is skipped — no connection string means no App Insights.
+// In staging/production the connection string is injected by Bicep (app-service-config.bicep → APPLICATIONINSIGHTS_CONNECTION_STRING).
+var appInsightsConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+if (!string.IsNullOrWhiteSpace(appInsightsConnectionString))
 {
-    config.ConfigureOpenTelemetryBuilder(otel =>
+    builder.Services.AddApplicationInsightsTelemetry();
+    builder.Services.Configure<TelemetryConfiguration>(config =>
     {
-        otel.WithTracing(tracing =>
+        config.ConfigureOpenTelemetryBuilder(otel =>
         {
-            tracing.AddProcessor<TenantActivityProcessor>();
-            tracing.AddProcessor<PiiFilterActivityProcessor>();
+            otel.WithTracing(tracing =>
+            {
+                tracing.AddProcessor<TenantActivityProcessor>();
+                tracing.AddProcessor<PiiFilterActivityProcessor>();
+            });
         });
     });
-});
+}
 
 // Configure CORS — AllowBlazorClient for Blazor.Intake WASM + Blazor.Manager WASM
 if (builder.Environment.IsProduction())

@@ -115,6 +115,36 @@
         "application/pdf"
     ];
 
+    /// <summary>
+    /// Infers MIME type from file extension when the browser reports an empty content type.
+    /// Common with iPhone camera recordings in Safari.
+    /// </summary>
+    private static readonly Dictionary<string, string> ExtensionToMimeType = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".png"] = "image/png",
+        [".gif"] = "image/gif",
+        [".webp"] = "image/webp",
+        [".heic"] = "image/heic",
+        [".mp4"] = "video/mp4",
+        [".mov"] = "video/quicktime",
+        [".webm"] = "video/webm",
+        [".pdf"] = "application/pdf"
+    };
+
+    private static string ResolveContentType(Microsoft.AspNetCore.Components.Forms.IBrowserFile file)
+    {
+        if (!string.IsNullOrWhiteSpace(file.ContentType) && AllowedMimeTypes.Contains(file.ContentType))
+            return file.ContentType;
+
+        var extension = Path.GetExtension(file.Name);
+        if (!string.IsNullOrEmpty(extension) && ExtensionToMimeType.TryGetValue(extension, out var inferred))
+            return inferred;
+
+        return file.ContentType;
+    }
+
     private string AcceptedTypes => State.Config?.AcceptedFileTypes is { Count: > 0 } types
         ? string.Join(",", types)
         : "image/*,video/*,application/pdf";
@@ -143,7 +173,9 @@
                 continue;
             }
 
-            if (!AllowedMimeTypes.Contains(file.ContentType))
+            var contentType = ResolveContentType(file);
+
+            if (!AllowedMimeTypes.Contains(contentType))
             {
                 _fileErrors.Add($"{file.Name}: file type '{file.ContentType}' is not supported.");
                 continue;
@@ -152,7 +184,7 @@
             var attachment = new AttachmentFileInfo
             {
                 FileName = file.Name,
-                ContentType = file.ContentType,
+                ContentType = contentType,
                 SizeBytes = file.Size,
                 BrowserFile = file
             };
@@ -169,7 +201,8 @@
             }
             catch (Exception ex)
             {
-                attachment.ErrorMessage = $"Failed to read file: {ex.Message}";
+                _fileErrors.Add($"{file.Name}: failed to read file — it may be too large for in-browser processing.");
+                continue;
             }
 
             State.Attachments.Add(attachment);
