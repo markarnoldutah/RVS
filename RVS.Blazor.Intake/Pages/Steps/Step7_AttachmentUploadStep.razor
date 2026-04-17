@@ -21,6 +21,14 @@
             </MudText>
         }
 
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" NoIcon="false"
+                  Icon="@Icons.Material.Filled.Videocam" Class="mt-n2">
+            <MudText Typo="Typo.body2">
+                <strong>Recording a video?</strong> Keep clips under @EstimatedMaxVideoSeconds seconds
+                (@MaxFileSizeMb MB limit). Shorter clips or lower resolution record better.
+            </MudText>
+        </MudAlert>
+
         <MudPaper Elevation="0" Outlined="true"
                   Class="pa-8 d-flex flex-column align-center justify-center"
                   Style="border-style: dashed; border-width: 2px; min-height: 140px; cursor: pointer;
@@ -33,21 +41,6 @@
             <InputFile OnChange="HandleFilesSelected"
                        multiple
                        accept="@AcceptedTypes"
-                       style="opacity: 0.001; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0; z-index: 1;" />
-        </MudPaper>
-
-        @* Camera capture button for mobile devices *@
-        <MudPaper Elevation="0" Outlined="true"
-                  Class="pa-4 d-flex flex-column align-center justify-center"
-                  Style="border-style: dashed; border-width: 2px; cursor: pointer;
-                         border-color: var(--mud-palette-secondary); position: relative;">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.CameraAlt" Color="Color.Secondary" />
-                <MudText Typo="Typo.body1">Take a Photo</MudText>
-            </MudStack>
-            <InputFile OnChange="HandleFilesSelected"
-                       accept="image/*"
-                       capture="environment"
                        style="opacity: 0.001; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0; z-index: 1;" />
         </MudPaper>
 
@@ -151,6 +144,22 @@
 
     private int MaxAttachments => State.Config?.MaxAttachments ?? 10;
     private int MaxFileSizeMb => State.Config?.MaxFileSizeMb ?? 25;
+
+    /// <summary>
+    /// Conservative estimate of the longest video a phone can record within the file size limit.
+    /// Based on ~14 Mbps (typical iPhone 1080p HEVC / Android 1080p H.264), rounded down to
+    /// the nearest 5 seconds so the guidance feels intentional rather than falsely precise.
+    /// </summary>
+    private int EstimatedMaxVideoSeconds
+    {
+        get
+        {
+            const double typicalBitrateMbps = 14.0;
+            var rawSeconds = MaxFileSizeMb * 8.0 / typicalBitrateMbps;
+            var rounded = (int)(rawSeconds / 5) * 5;
+            return Math.Max(rounded, 5);
+        }
+    }
 
     private async Task HandleFilesSelected(InputFileChangeEventArgs e)
     {
