@@ -189,12 +189,9 @@
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Approx. Purchase Date</MudText>
                     <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">When did you purchase your RV? (MM/YYYY)</MudText>
                     <MudDatePicker Date="_approxPurchaseDate"
-                                   PickerVariant="PickerVariant.Dialog"
-                                   ShowToolbar="false" 
-                                   HelperText="No header"
                                    DateChanged="HandlePurchaseDateChanged"
                                    Validation="@(new Func<DateTime?, string?>(ValidateApproxPurchaseDate))"
-                                   DateFormat="MM.yyyy"
+                                   DateFormat="MM/yyyy"
                                    FixDay="1"
                                    OpenTo="OpenTo.Month"
                                    Variant="Variant.Outlined"
