@@ -14,6 +14,7 @@ namespace RVS.API.Tests.Controllers;
 public class LocationsControllerTests
 {
     private readonly Mock<ILocationService> _serviceMock = new();
+    private readonly Mock<IDealershipService> _dealershipServiceMock = new();
     private readonly ClaimsService _claimsService;
     private readonly LocationsController _sut;
 
@@ -22,7 +23,13 @@ public class LocationsControllerTests
     public LocationsControllerTests()
     {
         _claimsService = BuildClaimsService(TenantId);
-        _sut = new LocationsController(_serviceMock.Object, _claimsService);
+        _dealershipServiceMock
+            .Setup(s => s.ListByTenantAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Dealership>
+            {
+                new() { TenantId = TenantId, Name = "Test Dealership", Slug = "test-dealership" }
+            });
+        _sut = new LocationsController(_serviceMock.Object, _dealershipServiceMock.Object, _claimsService);
     }
 
     [Fact]
@@ -89,7 +96,7 @@ public class LocationsControllerTests
     }
 
     [Fact]
-    public async Task GetQrCode_ShouldReturnOkWithIntakeUrl()
+    public async Task GetQrCode_ShouldReturnPngFileWithQrCode()
     {
         var location = BuildLocation();
         _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
@@ -97,8 +104,10 @@ public class LocationsControllerTests
 
         var result = await _sut.GetQrCode(location.Id, CancellationToken.None);
 
-        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        okResult.Value.Should().NotBeNull();
+        var fileResult = result.Should().BeOfType<FileContentResult>().Subject;
+        fileResult.ContentType.Should().Be("image/png");
+        fileResult.FileContents.Should().NotBeEmpty();
+        fileResult.FileDownloadName.Should().Contain(location.Slug);
     }
 
     private static Location BuildLocation(string id = "loc_test", string name = "Test Location") => new()

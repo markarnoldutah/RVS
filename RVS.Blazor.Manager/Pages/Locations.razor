@@ -25,54 +25,40 @@
     }
     else
     {
-        <MudGrid Spacing="3">
-            @foreach (var loc in _locations)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudCard Elevation="2">
-                        <MudCardHeader>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary" />
-                                <MudText Typo="Typo.h6">@loc.Name</MudText>
-                            </MudStack>
-                        </MudCardHeader>
-                        <MudCardContent>
-                            <MudStack Spacing="1">
-                                <MudText Typo="Typo.body2"><strong>Slug:</strong> @loc.Slug</MudText>
-                                @if (!string.IsNullOrEmpty(loc.Phone))
-                                {
-                                    <MudText Typo="Typo.body2"><strong>Phone:</strong> @loc.Phone</MudText>
-                                }
-                                @if (loc.Address is not null)
-                                {
-                                    <MudText Typo="Typo.body2">
-                                        <strong>Address:</strong>
-                                        @FormatAddress(loc.Address)
-                                    </MudText>
-                                }
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    Created: @loc.CreatedAtUtc.ToLocalTime().ToString("g")
-                                </MudText>
-                            </MudStack>
-                        </MudCardContent>
-                        <MudCardActions>
-                            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                                       OnClick="@(() => ShowEditDialog(loc))">
-                                Edit
-                            </MudButton>
-                            <MudButton Variant="Variant.Text" Color="Color.Secondary" Size="Size.Small"
-                                       OnClick="@(() => DownloadQrCodeAsync(loc.Id, loc.Slug))">
-                                QR Code
-                            </MudButton>
-                        </MudCardActions>
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
+        <MudTable Items="@_locations" Hover="true" Elevation="2" Dense="true"
+                  Breakpoint="Breakpoint.Sm" Loading="@_loading"
+                  LoadingProgressColor="Color.Primary">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Slug</MudTh>
+                <MudTh>Phone</MudTh>
+                <MudTh>City / State</MudTh>
+                <MudTh>Created</MudTh>
+                <MudTh Style="text-align:right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Slug">@context.Slug</MudTd>
+                <MudTd DataLabel="Phone">@(context.Phone ?? "—")</MudTd>
+                <MudTd DataLabel="City / State">@FormatCityState(context.Address)</MudTd>
+                <MudTd DataLabel="Created">@context.CreatedAtUtc.ToLocalTime().ToString("g")</MudTd>
+                <MudTd DataLabel="Actions" Style="text-align:right">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary"
+                                   Size="Size.Small" aria-label="Edit location"
+                                   OnClick="@(() => ShowEditDialog(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.QrCode2" Color="Color.Secondary"
+                                   Size="Size.Small" aria-label="Download QR code"
+                                   OnClick="@(() => DownloadQrCodeAsync(context.LocationId, context.Slug))" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body1">No locations found. Click <strong>Add Location</strong> to create one.</MudText>
+            </NoRecordsContent>
+        </MudTable>
     }
 
     @* Create / Edit Dialog *@
-    <MudDialog @bind-Visible="_dialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <MudDialog @bind-Visible="_dialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
         <TitleContent>
             <MudText Typo="Typo.h6">@(_editingLocationId is null ? "Create Location" : "Edit Location")</MudText>
         </TitleContent>
@@ -81,10 +67,11 @@
                 <MudTextField T="string" Label="Name" Variant="Variant.Outlined"
                               @bind-Value="_form.Name" Required="true" />
                 <MudTextField T="string" Label="Slug" Variant="Variant.Outlined"
-                              @bind-Value="_form.Slug" Required="true"
-                              HelperText="URL-friendly identifier (e.g., 'salt-lake-city')" />
+                              @bind-Value="_form.Slug"
+                              HelperText="@(_editingLocationId is null ? "Leave blank to auto-generate from dealership + location name" : "URL-friendly identifier (e.g., 'salt-lake-city')")" />
                 <MudTextField T="string" Label="Phone" Variant="Variant.Outlined"
                               @bind-Value="_form.Phone" />
+
                 <MudText Typo="Typo.subtitle2">Address</MudText>
                 <MudTextField T="string" Label="Address Line 1" Variant="Variant.Outlined"
                               @bind-Value="_form.Address1" />
@@ -104,6 +91,28 @@
                                       @bind-Value="_form.PostalCode" />
                     </MudItem>
                 </MudGrid>
+
+                <MudDivider Class="my-2" />
+                <MudText Typo="Typo.subtitle2">Intake Configuration</MudText>
+
+                <MudTextField T="string" Label="Accepted File Types (comma-separated)" Variant="Variant.Outlined"
+                              @bind-Value="_form.AcceptedFileTypes"
+                              HelperText="e.g., .jpg, .png, .mp4" />
+                <MudGrid Spacing="2">
+                    <MudItem xs="6">
+                        <MudNumericField T="int" Label="Max File Size (MB)" Variant="Variant.Outlined"
+                                         @bind-Value="_form.MaxFileSizeMb" Min="1" Max="100" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudNumericField T="int" Label="Max Attachments" Variant="Variant.Outlined"
+                                         @bind-Value="_form.MaxAttachments" Min="1" Max="10" />
+                    </MudItem>
+                </MudGrid>
+                <MudTextField T="string" Label="AI Context" Variant="Variant.Outlined"
+                              @bind-Value="_form.AiContext" Lines="3"
+                              HelperText="Optional context appended to AI prompts (max 500 chars)" />
+                <MudSwitch T="bool" @bind-Value="_form.AllowAnonymousIntake"
+                           Label="Allow Anonymous Intake" Color="Color.Primary" />
             </MudStack>
         </DialogContent>
         <DialogActions>
@@ -121,7 +130,7 @@
 </MudStack>
 
 @code {
-    private List<LocationDetailDto> _locations = [];
+    private List<LocationSummaryResponseDto> _locations = [];
     private bool _loading = true;
     private string? _error;
     private bool _dialogOpen;
@@ -142,9 +151,7 @@
 
         try
         {
-            var summaries = await LookupClient.GetLocationsAsync();
-            var detailTasks = summaries.Select(s => LookupClient.GetLocationByIdAsync(s.LocationId));
-            _locations = [.. await Task.WhenAll(detailTasks)];
+            _locations = await LookupClient.GetLocationsAsync();
         }
         catch (AccessTokenNotAvailableException ex)
         {
@@ -167,21 +174,36 @@
         _dialogOpen = true;
     }
 
-    private void ShowEditDialog(LocationDetailDto location)
+    private async Task ShowEditDialog(LocationSummaryResponseDto summary)
     {
-        _editingLocationId = location.Id;
-        _form = new LocationForm
+        try
         {
-            Name = location.Name,
-            Slug = location.Slug,
-            Phone = location.Phone,
-            Address1 = location.Address?.Address1,
-            Address2 = location.Address?.Address2,
-            City = location.Address?.City,
-            State = location.Address?.State,
-            PostalCode = location.Address?.PostalCode
-        };
-        _dialogOpen = true;
+            var location = await LookupClient.GetLocationByIdAsync(summary.LocationId);
+            _editingLocationId = location.Id;
+            _form = new LocationForm
+            {
+                Name = location.Name,
+                Slug = location.Slug,
+                Phone = location.Phone,
+                Address1 = location.Address?.Address1,
+                Address2 = location.Address?.Address2,
+                City = location.Address?.City,
+                State = location.Address?.State,
+                PostalCode = location.Address?.PostalCode,
+                AcceptedFileTypes = location.IntakeConfig is not null
+                    ? string.Join(", ", location.IntakeConfig.AcceptedFileTypes)
+                    : ".jpg, .jpeg, .png, .mp4, .m4a, .wav",
+                MaxFileSizeMb = location.IntakeConfig?.MaxFileSizeMb ?? 25,
+                MaxAttachments = location.IntakeConfig?.MaxAttachments ?? 10,
+                AiContext = location.IntakeConfig?.AiContext,
+                AllowAnonymousIntake = location.IntakeConfig?.AllowAnonymousIntake ?? true
+            };
+            _dialogOpen = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load location details: {ex.Message}", Severity.Error);
+        }
     }
 
     private void CloseDialog()
@@ -196,10 +218,16 @@
 
         try
         {
+            var acceptedTypes = string.IsNullOrWhiteSpace(_form.AcceptedFileTypes)
+                ? []
+                : _form.AcceptedFileTypes
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToList();
+
             var request = new LocationCreateRequestDto
             {
                 Name = _form.Name ?? string.Empty,
-                Slug = _form.Slug ?? string.Empty,
+                Slug = string.IsNullOrWhiteSpace(_form.Slug) ? null : _form.Slug,
                 Phone = _form.Phone,
                 Address = new AddressDto
                 {
@@ -208,6 +236,14 @@
                     City = _form.City,
                     State = _form.State,
                     PostalCode = _form.PostalCode
+                },
+                IntakeConfig = new IntakeConfigDto
+                {
+                    AcceptedFileTypes = acceptedTypes,
+                    MaxFileSizeMb = _form.MaxFileSizeMb,
+                    MaxAttachments = _form.MaxAttachments,
+                    AiContext = _form.AiContext,
+                    AllowAnonymousIntake = _form.AllowAnonymousIntake
                 }
             };
 
@@ -250,13 +286,12 @@
         }
     }
 
-    private static string FormatAddress(AddressDto address)
+    private static string FormatCityState(AddressDto? address)
     {
+        if (address is null) return "—";
         var parts = new List<string>();
-        if (!string.IsNullOrEmpty(address.Address1)) parts.Add(address.Address1);
         if (!string.IsNullOrEmpty(address.City)) parts.Add(address.City);
         if (!string.IsNullOrEmpty(address.State)) parts.Add(address.State);
-        if (!string.IsNullOrEmpty(address.PostalCode)) parts.Add(address.PostalCode);
         return parts.Count > 0 ? string.Join(", ", parts) : "—";
     }
 
@@ -270,5 +305,10 @@
         public string? City { get; set; }
         public string? State { get; set; }
         public string? PostalCode { get; set; }
+        public string? AcceptedFileTypes { get; set; } = ".jpg, .jpeg, .png, .mp4, .m4a, .wav";
+        public int MaxFileSizeMb { get; set; } = 25;
+        public int MaxAttachments { get; set; } = 10;
+        public string? AiContext { get; set; }
+        public bool AllowAnonymousIntake { get; set; } = true;
     }
 }

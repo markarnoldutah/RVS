@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using QRCoder;
 using RVS.API.Mappers;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
@@ -16,14 +17,16 @@ namespace RVS.API.Controllers;
 public class LocationsController : ControllerBase
 {
     private readonly ILocationService _service;
+    private readonly IDealershipService _dealershipService;
     private readonly ClaimsService _claimsService;
 
     /// <summary>
     /// Initializes a new instance of <see cref="LocationsController"/>.
     /// </summary>
-    public LocationsController(ILocationService service, ClaimsService claimsService)
+    public LocationsController(ILocationService service, IDealershipService dealershipService, ClaimsService claimsService)
     {
         _service = service;
+        _dealershipService = dealershipService;
         _claimsService = claimsService;
     }
 
@@ -58,7 +61,8 @@ public class LocationsController : ControllerBase
     }
 
     /// <summary>
-    /// Creates a new location.
+    /// Creates a new location. When slug is omitted, one is auto-generated from the
+    /// dealership name and location name.
     /// </summary>
     /// <param name="request">Location creation request.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -70,7 +74,14 @@ public class LocationsController : ControllerBase
         var tenantId = _claimsService.GetTenantIdOrThrow();
         var userId = _claimsService.GetUserIdOrThrow();
 
-        var entity = request.ToEntity(tenantId, userId);
+        string? dealershipName = null;
+        var dealerships = await _dealershipService.ListByTenantAsync(tenantId, ct);
+        if (dealerships.Count > 0)
+        {
+            dealershipName = dealerships[0].Name;
+        }
+
+        var entity = request.ToEntity(tenantId, userId, dealershipName);
         var created = await _service.CreateAsync(tenantId, entity, ct);
 
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created.ToDetailDto());
@@ -98,7 +109,7 @@ public class LocationsController : ControllerBase
     }
 
     /// <summary>
-    /// Generates a QR code URL for the location's intake form.
+    /// Generates and returns a QR code PNG image for the location's intake form URL.
     /// </summary>
     /// <param name="id">Location identifier.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -111,6 +122,10 @@ public class LocationsController : ControllerBase
         var entity = await _service.GetByIdAsync(tenantId, id, ct);
         var intakeUrl = $"https://intake.rvserviceflow.com/{entity.Slug}";
 
-        return Ok(new { intakeUrl, slug = entity.Slug });
+        using var qrGenerator = new QRCodeGenerator();
+        using var qrCodeData = qrGenerator.CreateQrCode(intakeUrl, QRCodeGenerator.ECCLevel.Q);
+        var pngBytes = new PngByteQRCode(qrCodeData).GetGraphic(20);
+
+        return File(pngBytes, "image/png", $"qr-{entity.Slug}.png");
     }
 }

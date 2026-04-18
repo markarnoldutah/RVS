@@ -1,5 +1,6 @@
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Mappers;
 
@@ -39,28 +40,40 @@ public static class LocationMapper
         return new LocationSummaryResponseDto
         {
             LocationId = entity.Id,
-            Name = entity.Name
+            Name = entity.Name,
+            Slug = entity.Slug,
+            Phone = entity.Phone,
+            Address = entity.Address.ToDto(),
+            CreatedAtUtc = entity.CreatedAtUtc
         };
     }
 
     /// <summary>
     /// Maps a <see cref="LocationCreateRequestDto"/> to a new <see cref="Location"/> entity.
+    /// When <paramref name="dto"/>.<see cref="LocationCreateRequestDto.Slug"/> is null or
+    /// whitespace, a slug is auto-generated from <paramref name="dealershipName"/> and the
+    /// location name.
     /// </summary>
     /// <param name="dto">The create request DTO.</param>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
     /// <param name="createdByUserId">The ID of the user creating the location.</param>
-    public static Location ToEntity(this LocationCreateRequestDto dto, string tenantId, string createdByUserId)
+    /// <param name="dealershipName">Dealership (org) name used for auto-slug generation.</param>
+    public static Location ToEntity(this LocationCreateRequestDto dto, string tenantId, string createdByUserId, string? dealershipName = null)
     {
         ArgumentNullException.ThrowIfNull(dto);
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentException.ThrowIfNullOrWhiteSpace(createdByUserId);
+
+        var slug = !string.IsNullOrWhiteSpace(dto.Slug)
+            ? dto.Slug.Trim().ToLowerInvariant()
+            : SlugGenerator.Generate(dealershipName, dto.Name);
 
         return new Location
         {
             TenantId = tenantId,
             CreatedByUserId = createdByUserId,
             Name = dto.Name.Trim(),
-            Slug = dto.Slug.Trim().ToLowerInvariant(),
+            Slug = slug,
             Phone = dto.Phone?.Trim(),
             Address = dto.Address is not null ? dto.Address.ToEmbedded() : new AddressEmbedded(),
             IntakeConfig = dto.IntakeConfig is not null ? dto.IntakeConfig.ToEmbedded() : new IntakeFormConfigEmbedded()
@@ -80,7 +93,11 @@ public static class LocationMapper
         ArgumentNullException.ThrowIfNull(dto);
 
         entity.Name = dto.Name.Trim();
-        entity.Slug = dto.Slug.Trim().ToLowerInvariant();
+
+        if (!string.IsNullOrWhiteSpace(dto.Slug))
+        {
+            entity.Slug = dto.Slug.Trim().ToLowerInvariant();
+        }
 
         if (dto.Phone is not null)
         {

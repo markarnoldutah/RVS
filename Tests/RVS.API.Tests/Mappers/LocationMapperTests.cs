@@ -77,18 +77,32 @@ public class LocationMapperTests
     }
 
     [Fact]
-    public void ToSummaryDto_ShouldMapIdAndName()
+    public void ToSummaryDto_ShouldMapAllFields()
     {
         var entity = new Location
         {
             TenantId = "ten_1",
-            Name = "Denver Service Center"
+            Name = "Denver Service Center",
+            Slug = "denver-service-center",
+            Phone = "(303) 555-0100",
+            Address = new AddressEmbedded
+            {
+                Address1 = "789 Broadway",
+                City = "Denver",
+                State = "CO",
+                PostalCode = "80202"
+            }
         };
 
         var dto = entity.ToSummaryDto();
 
         dto.LocationId.Should().Be(entity.Id);
         dto.Name.Should().Be("Denver Service Center");
+        dto.Slug.Should().Be("denver-service-center");
+        dto.Phone.Should().Be("(303) 555-0100");
+        dto.Address.Should().NotBeNull();
+        dto.Address!.City.Should().Be("Denver");
+        dto.CreatedAtUtc.Should().Be(entity.CreatedAtUtc);
     }
 
     // ── ToEntity (create) ────────────────────────────────────────────────────
@@ -346,4 +360,50 @@ public class LocationMapperTests
             Slug = "phoenix-service-center",
             Phone = "(602) 555-0200"
         };
+
+    // ── Auto-slug generation ─────────────────────────────────────────────────
+
+    [Fact]
+    public void ToEntity_WhenSlugIsNull_ShouldAutoGenerateFromDealershipAndLocationName()
+    {
+        var dto = new LocationCreateRequestDto { Name = "Salt Lake City", Phone = null };
+
+        var entity = dto.ToEntity("ten_1", "usr_1", "Camping World");
+
+        entity.Slug.Should().Be("camping-world-salt-lake-city");
+    }
+
+    [Fact]
+    public void ToEntity_WhenSlugIsWhitespace_ShouldAutoGenerateFromDealershipAndLocationName()
+    {
+        var dto = new LocationCreateRequestDto { Name = "Provo Service" } with { Slug = "   " };
+
+        var entity = dto.ToEntity("ten_1", "usr_1", "Blue Compass RV");
+
+        entity.Slug.Should().Be("blue-compass-rv-provo-service");
+    }
+
+    [Fact]
+    public void ToEntity_WhenSlugProvidedExplicitly_ShouldUseProvidedSlug()
+    {
+        var dto = new LocationCreateRequestDto { Name = "My Location", Slug = "custom-slug" };
+
+        var entity = dto.ToEntity("ten_1", "usr_1", "Some Dealer");
+
+        entity.Slug.Should().Be("custom-slug");
+    }
+
+    // ── ApplyUpdate with null slug ───────────────────────────────────────────
+
+    [Fact]
+    public void ApplyUpdate_WhenSlugIsNull_ShouldPreserveExistingSlug()
+    {
+        var entity = new Location { TenantId = "ten_1", Name = "Old Name", Slug = "old-slug" };
+        var dto = new LocationCreateRequestDto { Name = "New Name", Phone = "(555) 000-0000" };
+
+        entity.ApplyUpdate(dto, "usr_updater");
+
+        entity.Name.Should().Be("New Name");
+        entity.Slug.Should().Be("old-slug");
+    }
 }
