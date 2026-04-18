@@ -29,22 +29,50 @@
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="1">
                 <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">VIN</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Enter or snap a pic of your VIN</MudText>
-                <MudTextField T="string"
-                              Value="@State.Vin"
-                              ValueChanged="HandleVinChanged"
-                              Validation="@(new Func<string?, string?>(ValidateVin))"
-                              MaxLength="17"
-                              Variant="Variant.Outlined"
-                              Margin="Margin.Dense"
-                              Placeholder="17-character VIN"
-                              Immediate="true"
-                              Adornment="Adornment.End"
-                              AdornmentIcon="@Icons.Material.Filled.CameraAlt"
-                              AdornmentColor="Color.Primary"
-                              AdornmentSize="Size.Large"
-                              OnAdornmentClick="TriggerCameraCapture"
-                              Style="max-width: 27ch;" />
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Enter, speak, or snap a pic of your VIN</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField T="string"
+                                  Value="@State.Vin"
+                                  ValueChanged="HandleVinChanged"
+                                  Validation="@(new Func<string?, string?>(ValidateVin))"
+                                  MaxLength="17"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Placeholder="17-character VIN"
+                                  Immediate="true"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@(_isRecording ? Icons.Material.Filled.MicOff : Icons.Material.Filled.Mic)"
+                                  AdornmentColor="@(_isRecording ? Color.Error : Color.Primary)"
+                                  OnAdornmentClick="ToggleVinRecording"
+                                  Disabled="_isTranscribing"
+                                  Style="max-width: 27ch;" />
+                    <MudIconButton Icon="@Icons.Material.Filled.CameraAlt"
+                                   Color="Color.Primary"
+                                   Size="Size.Medium"
+                                   OnClick="TriggerCameraCapture"
+                                   Disabled="@(_isRecording || _isTranscribing)"
+                                   aria-label="Capture VIN with camera" />
+                </MudStack>
+                @if (_isRecording)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudProgressCircular Size="Size.Small" Color="Color.Error" Indeterminate="true" />
+                        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Listening… tap mic to stop</MudText>
+                    </MudStack>
+                }
+                @if (_isTranscribing)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Transcribing…</MudText>
+                    </MudStack>
+                }
+                @if (_transcriptionError is not null)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
+                        <MudText Typo="Typo.body2">@_transcriptionError</MudText>
+                    </MudAlert>
+                }
             </MudStack>
         </MudPaper>
 
@@ -162,8 +190,11 @@
     private string? _capturedImageUrl;
     private bool _isLookingUp;
     private bool _isExtracting;
+    private bool _isRecording;
+    private bool _isTranscribing;
     private bool _lookupFailed;
     private string? _extractionMessage;
+    private string? _transcriptionError;
     private Severity _extractionSeverity = Severity.Info;
 
     private string? ValidateVin(string? value)
@@ -220,6 +251,73 @@
         if (_cameraInput?.Element is not null)
         {
             await JsRuntime.InvokeVoidAsync("rvs_triggerClick", _cameraInput.Element);
+        }
+    }
+
+    private async Task ToggleVinRecording()
+    {
+        if (_isRecording)
+        {
+            _isRecording = false;
+            _isTranscribing = true;
+            _transcriptionError = null;
+            StateHasChanged();
+
+            try
+            {
+                var recording = await JsRuntime.InvokeAsync<AudioRecordingResult?>("rvs_stopRecording");
+                if (recording is null || string.IsNullOrWhiteSpace(recording.Audio))
+                {
+                    _transcriptionError = "No audio was captured.";
+                    return;
+                }
+
+                var request = new IssueTranscriptionRequestDto
+                {
+                    AudioBase64 = recording.Audio,
+                    ContentType = recording.MimeType
+                };
+
+                var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
+                if (result?.Result?.RawTranscript is not null)
+                {
+                    var vin = VinTranscriptCleaner.Clean(result.Result.RawTranscript);
+                    if (!string.IsNullOrEmpty(vin))
+                    {
+                        HandleVinChanged(vin);
+                    }
+                    else
+                    {
+                        _transcriptionError = "Could not recognize a VIN from the audio. Please try again or type it manually.";
+                    }
+                }
+                else
+                {
+                    _transcriptionError = "Could not transcribe the audio. Please try again or type it manually.";
+                }
+            }
+            catch (Exception)
+            {
+                _transcriptionError = "Transcription failed. Please try again or type the VIN manually.";
+            }
+            finally
+            {
+                _isTranscribing = false;
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            _transcriptionError = null;
+            try
+            {
+                await JsRuntime.InvokeVoidAsync("rvs_startRecording");
+                _isRecording = true;
+            }
+            catch (Exception)
+            {
+                _transcriptionError = "Microphone access was denied or is unavailable.";
+            }
         }
     }
 
@@ -339,4 +437,9 @@
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
     }
+
+    /// <summary>
+    /// Mirrors the JS object returned by rvs_stopRecording: { audio, mimeType }.
+    /// </summary>
+    private sealed record AudioRecordingResult(string? Audio, string MimeType);
 }
