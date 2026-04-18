@@ -207,10 +207,7 @@ else if (_sr is not null)
                             </MudStack>
                         </MudCardHeader>
                         <MudCardContent>
-                            @foreach (var diag in _sr.DiagnosticResponses)
-                            {
-                                <DiagnosticResponseView Response="@diag" />
-                            }
+                            <DiagnosticResponseView Responses="@_sr.DiagnosticResponses" />
                         </MudCardContent>
                     </MudCard>
                 </MudItem>

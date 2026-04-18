@@ -1,7 +1,7 @@
 @page "/board"
-@using System.Security.Claims
 @implements IDisposable
 @inject RVS.UI.Shared.Services.ServiceRequestApiClient SrClient
+@inject RVS.UI.Shared.Services.LookupApiClient LookupClient
 @inject NavigationManager Navigation
 
 <PageTitle>RVS Manager — Service Board</PageTitle>
@@ -162,9 +162,6 @@
     /// </summary>
     private const int DefaultPollIntervalSeconds = 300;
 
-    [CascadingParameter]
-    private Task<AuthenticationState>? AuthStateTask { get; set; }
-
     private string? _dealershipId;
 
     private static readonly BoardColumn[] _columns =
@@ -187,11 +184,8 @@
 
     private async Task<string?> ResolveDealershipIdAsync()
     {
-        if (AuthStateTask is null) return null;
-        var authState = await AuthStateTask;
-        var user = authState.User;
-
-        return user.FindFirst("https://rvserviceflow.com/tenantId")?.Value;
+        var dealerships = await LookupClient.GetDealershipsAsync();
+        return dealerships.FirstOrDefault()?.Id;
     }
 
     private async Task LoadBoardDataAsync()

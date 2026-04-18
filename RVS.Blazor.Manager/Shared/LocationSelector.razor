@@ -1,5 +1,4 @@
-@using System.Security.Claims
-@using System.Text.Json
+@inject RVS.UI.Shared.Services.LookupApiClient LookupClient
 
 <AuthorizeView>
     <Authorized>
@@ -17,7 +16,7 @@
                                Style="min-width: 250px;">
                         @foreach (var location in _locations)
                         {
-                            <MudSelectItem T="string" Value="@location">@location</MudSelectItem>
+                            <MudSelectItem T="string" Value="@location.LocationId">@location.Name</MudSelectItem>
                         }
                     </MudSelect>
                 </MudStack>
@@ -30,7 +29,7 @@
                     <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
                              aria-hidden="true" />
                     <MudText Typo="Typo.body1">
-                        Location: <strong>@_locations[0]</strong>
+                        Location: <strong>@_locations[0].Name</strong>
                     </MudText>
                 </MudStack>
             </MudPaper>
@@ -39,7 +38,7 @@
 </AuthorizeView>
 
 @code {
-    private List<string> _locations = [];
+    private List<LocationSummaryResponseDto> _locations = [];
 
     [Parameter]
     public string? SelectedLocation { get; set; }
@@ -47,47 +46,14 @@
     [Parameter]
     public EventCallback<string?> SelectedLocationChanged { get; set; }
 
-    [CascadingParameter]
-    private Task<AuthenticationState>? AuthStateTask { get; set; }
-
     protected override async Task OnInitializedAsync()
     {
-        if (AuthStateTask is null) return;
-
-        var authState = await AuthStateTask;
-        var user = authState.User;
-
-        if (user.Identity?.IsAuthenticated != true) return;
-
-        // Extract location IDs from claims (Auth0 namespaced custom claim added to the ID token)
-        // Claim type must match the namespace set in the Auth0 PostLogin Action:
-        //   const namespace = 'https://rvserviceflow.com/'
-        //   api.idToken.setCustomClaim(namespace + 'locationIds', locationIds)
-        const string locationIdsClaimType = "https://rvserviceflow.com/locationIds";
-        var locationClaim = user.FindFirst(locationIdsClaimType);
-        if (locationClaim is not null && !string.IsNullOrWhiteSpace(locationClaim.Value))
-        {
-            // The claim value is a JSON array, e.g. '["loc_blue_compass_slc","loc_other"]'
-            // Parse it to extract individual location IDs (mirrors ClaimsService.GetLocationIdsOrThrow on the API)
-            try
-            {
-                var parsed = JsonSerializer.Deserialize<List<string>>(locationClaim.Value);
-                if (parsed is not null)
-                {
-                    _locations.AddRange(parsed.Where(id => !string.IsNullOrWhiteSpace(id)));
-                }
-            }
-            catch (JsonException)
-            {
-                // Fallback: treat as a single plain location ID
-                _locations.Add(locationClaim.Value);
-            }
-        }
+        _locations = await LookupClient.GetLocationsAsync();
 
         // Auto-select if only one location
         if (_locations.Count == 1 && SelectedLocation is null)
         {
-            SelectedLocation = _locations[0];
+            SelectedLocation = _locations[0].LocationId;
             await SelectedLocationChanged.InvokeAsync(SelectedLocation);
         }
     }
