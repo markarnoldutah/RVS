@@ -1,35 +1,21 @@
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject NavigationManager Navigation
 
-<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
-    <MudPaper Elevation="2" Class="pa-8 text-center" Style="max-width: 500px; width: 100%;">
-        <MudIcon Icon="@Icons.Material.Filled.Lock"
-                 Color="Color.Primary" Size="Size.Large" Class="mb-4"
-                 aria-hidden="true" />
-        <MudText Typo="Typo.h5" Class="mb-2">Authentication Required</MudText>
-        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
-            You need to sign in to access this page.
-        </MudText>
-        <MudStack Row="true" Justify="Justify.Center" Spacing="2">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Person"
-                       OnClick="BeginLogin">
-                Sign In
-            </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Default"
-                       StartIcon="@Icons.Material.Filled.Home"
-                       OnClick="GoHome">
-                Go to Home
-            </MudButton>
-        </MudStack>
-    </MudPaper>
-</MudContainer>
+<MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 100vh;" Spacing="4">
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" aria-label="Signing in" />
+    <MudText Typo="Typo.body1" Color="Color.Secondary">Signing in&hellip;</MudText>
+</MudStack>
 
 @code {
     [Parameter]
     public string? ReturnUrl { get; set; }
 
-    private void BeginLogin()
+    /// <summary>
+    /// Automatically initiates the OIDC login redirect so the user never has to
+    /// click a "Sign In" button. Uses OnInitialized because in Blazor WASM
+    /// NavigateToLogin is a synchronous NavigateTo call (no JS interop required).
+    /// </summary>
+    protected override void OnInitialized()
     {
         var returnUrl = ReturnUrl ?? Navigation.Uri;
 
@@ -40,10 +26,5 @@
         };
 
         Navigation.NavigateToLogin("authentication/login", requestOptions);
-    }
-
-    private void GoHome()
-    {
-        Navigation.NavigateTo("/");
     }
 }

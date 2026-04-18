@@ -1,5 +1,7 @@
 @page "/"
 @using System.Security.Claims
+@attribute [AllowAnonymous]
+@inject NavigationManager Navigation
 
 <PageTitle>RVS Manager — Home</PageTitle>
 
@@ -30,6 +32,23 @@
                                     DealershipId="@_dealershipId" />
         </MudStack>
     </Authorized>
+    <NotAuthorized>
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center"
+                  Style="min-height: 400px;" Spacing="4">
+            <MudIcon Icon="@Icons.Material.Filled.RvHookup"
+                     Color="Color.Primary" Size="Size.Large"
+                     aria-hidden="true" />
+            <MudText Typo="Typo.h5">RVS Manager</MudText>
+@*             <MudText Typo="Typo.body1" Color="Color.Secondary">
+                Sign in to manage service requests.
+            </MudText> *@
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Login"
+                       OnClick="BeginLogin">
+                Log In
+            </MudButton>
+        </MudStack>
+    </NotAuthorized>
 </AuthorizeView>
 
 @code {
@@ -58,5 +77,10 @@
         return context.User.Identity?.Name
             ?? context.User.FindFirst("email")?.Value
             ?? "Manager";
+    }
+
+    private void BeginLogin()
+    {
+        Navigation.NavigateToLogin("authentication/login");
     }
 }

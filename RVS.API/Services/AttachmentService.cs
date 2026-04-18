@@ -28,7 +28,12 @@ public sealed class AttachmentService : IAttachmentService
     [
         "image/jpeg",
         "image/png",
+        "image/gif",
+        "image/webp",
+        "image/heic",
         "video/mp4",
+        "video/quicktime",
+        "video/webm",
         "audio/mp4",
         "audio/x-m4a",
         "audio/wav",
