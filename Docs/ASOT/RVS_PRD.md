@@ -500,6 +500,24 @@ The MVP comprises three distinct front-end applications, each optimized for its 
   - Status badge colors are consistent: New (blue), In Progress (amber), Completed (green), Cancelled (grey).
   - The queue refreshes automatically or on demand (manual refresh button).
 
+- **Design rationale — drag-and-drop Service Board vs. simple table:**
+
+  The `Blazor.Manager` dashboard provides **two complementary views** of service requests: a searchable **table queue** (section 9.9) and a drag-and-drop **Service Board** with Kanban-style status columns (see FR-DASH-03 in the Technical PRD). Both are required. A simple table alone is insufficient for the following reasons:
+
+  1. **Status-centric workflow.** A service advisor's primary action is moving requests through status stages (`New` → `In Progress` → `Completed`). A Kanban board makes the current status distribution visible at a glance — advisors see how many requests are stuck in each stage without reading individual rows or applying filters. A table requires scanning a status column and mentally grouping rows; the board externalizes that grouping.
+
+  2. **Rapid status transitions.** Drag-and-drop lets an advisor move a request from one status to another in a single gesture. In a table, the same action requires: click row → open detail → change status dropdown → save → navigate back. For a service department processing 20–50 requests per day, the board eliminates dozens of round-trips into and out of detail views.
+
+  3. **Operational visibility for managers.** Dealership managers and owners (section 2.2) need to monitor workload distribution across all locations from one screen. A board with status columns is a natural operational dashboard — it immediately answers "How many jobs are waiting?", "Where is the bottleneck?", and "Is anything stuck?" A table answers those questions only after the user applies filters and counts rows.
+
+  4. **Physical board replacement.** Many RV service departments already use physical dispatch boards (whiteboards, magnetic boards, or paper card systems) to track active jobs. A Kanban-style Service Board maps directly to that existing mental model, reducing training time and adoption friction. A table is a database tool; a board is an operations tool.
+
+  5. **Table is still essential for search and bulk operations.** The table view remains the right tool for searching by keyword, filtering by date range or category, exporting to CSV, and performing batch outcome entry (FR-DASH-02). The two views serve different tasks: the board is for triage and flow management; the table is for lookup, search, and reporting.
+
+  6. **Implementation cost is proportional to value.** MudBlazor 9.x provides `MudDropZone` and `MudDropContainer` components that handle drag-and-drop with minimal custom code. The backend already supports status updates via `PUT` on the service request — the board simply calls the same API endpoint on drop. The incremental frontend cost is small compared to the productivity gain for advisors and the operational visibility gain for managers.
+
+  **Summary:** The drag-and-drop Service Board is a deliberate UX choice that matches how service departments actually work — visually, spatially, and in real time. The table queue complements it for search, filter, and export workflows. Both views share the same API endpoints and data model; the distinction is purely a frontend concern driven by user task analysis.
+
 ### 9.9. Search and filter service requests
 
 - **ID:** RVS-009
