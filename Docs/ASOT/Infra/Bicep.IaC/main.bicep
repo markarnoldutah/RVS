@@ -14,6 +14,20 @@
 // ──────────────────────────────────────────────────────────────
 targetScope = 'subscription'
 
+@description('Which app component to deploy. Use "all" to deploy everything, or "api", "intake", "manager" to deploy only that component.')
+@allowed([
+  'all'
+  'api'
+  'intake'
+  'manager'
+])
+param deployTarget string = 'all'
+
+// Computed flags for conditional module deployment
+var deployApi = deployTarget == 'api' || (deployTarget == 'all' && deployAppService)
+var deployIntake = deployTarget == 'intake' || (deployTarget == 'all' && deploySwa)
+var deployManager = deployTarget == 'manager' || (deployTarget == 'all' && deploySwa)
+
 // ── Parameters ────────────────────────────────────────────────
 
 @description('The Azure region for the primary resources.')
@@ -246,7 +260,7 @@ resource rgSwa 'Microsoft.Resources/resourceGroups@2024-07-01' = if (deploySwa) 
 
 // ── App Service (API) — deployed first; no cross-resource refs ──
 
-module appService 'modules/app-service.bicep' = if (deployAppService) {
+module appService 'modules/app-service.bicep' = if (deployApi) {
   name: 'deploy-app-${environmentName}'
   scope: rgPrimary
   params: {
@@ -520,7 +534,7 @@ module appInsightsKeyVaultSecrets 'modules/appinsights-keyvault-secrets.bicep' =
 
 // ── Static Web Apps (Intake + Manager) ────────────────────────
 
-module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
+module swaIntake 'modules/static-web-app.bicep' = if (deployIntake) {
   name: 'deploy-swa-intake-${environmentName}'
   scope: rgSwa
   params: {
@@ -531,7 +545,7 @@ module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
   }
 }
 
-module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
+module swaManager 'modules/static-web-app.bicep' = if (deployManager) {
   name: 'deploy-swa-manager-${environmentName}'
   scope: rgSwa
   params: {

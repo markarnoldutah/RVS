@@ -72,6 +72,9 @@ jobs:
       group: deploy-production-api
       cancel-in-progress: false
     steps:
+      - name: Checkout repository (for Bicep templates)
+        uses: actions/checkout@v4
+
       - name: Download API artifact from staging run
         uses: actions/download-artifact@v4
         with:
@@ -86,6 +89,17 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy API Bicep infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: subscription
+          region: ${{ vars.AZURE_LOCATION }}
+          template: ./Docs/ASOT/Infra/Bicep.IaC/main.bicep
+          parameters: >-
+            ./Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam
+            deployTarget=api
+          failOnStdErr: false
 
       - name: Deploy API to production
         uses: azure/webapps-deploy@v3
@@ -107,11 +121,16 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     permissions:
+      contents: read
+      id-token: write
       actions: read
     concurrency:
       group: deploy-production-intake
       cancel-in-progress: false
     steps:
+      - name: Checkout repository (for Bicep templates)
+        uses: actions/checkout@v4
+
       - name: Download Intake artifact from staging run
         uses: actions/download-artifact@v4
         with:
@@ -119,6 +138,24 @@ jobs:
           path: ./publish/intake/wwwroot
           run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
           github-token: ${{ github.token }}
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Intake Bicep infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: subscription
+          region: ${{ vars.AZURE_LOCATION }}
+          template: ./Docs/ASOT/Infra/Bicep.IaC/main.bicep
+          parameters: >-
+            ./Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam
+            deployTarget=intake
+          failOnStdErr: false
 
       - name: Set blazor-environment to Production
         run: |
@@ -138,6 +175,10 @@ jobs:
           app_location: ./publish/intake/wwwroot
           skip_app_build: true
 
+      - name: Azure logout
+        if: always()
+        run: az logout
+
   # ---------------------------------------------------------------------------
   # Deploy Manager SWA to production
   # ---------------------------------------------------------------------------
@@ -148,11 +189,16 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     permissions:
+      contents: read
+      id-token: write
       actions: read
     concurrency:
       group: deploy-production-manager
       cancel-in-progress: false
     steps:
+      - name: Checkout repository (for Bicep templates)
+        uses: actions/checkout@v4
+
       - name: Download Manager artifact from staging run
         uses: actions/download-artifact@v4
         with:
@@ -160,6 +206,24 @@ jobs:
           path: ./publish/manager/wwwroot
           run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
           github-token: ${{ github.token }}
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Manager Bicep infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: subscription
+          region: ${{ vars.AZURE_LOCATION }}
+          template: ./Docs/ASOT/Infra/Bicep.IaC/main.bicep
+          parameters: >-
+            ./Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam
+            deployTarget=manager
+          failOnStdErr: false
 
       - name: Set blazor-environment to Production
         run: |
@@ -178,3 +242,7 @@ jobs:
           action: upload
           app_location: ./publish/manager/wwwroot
           skip_app_build: true
+
+      - name: Azure logout
+        if: always()
+        run: az logout
