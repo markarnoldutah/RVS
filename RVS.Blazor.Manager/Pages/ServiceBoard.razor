@@ -3,6 +3,9 @@
 @inject RVS.UI.Shared.Services.ServiceRequestApiClient SrClient
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
 @inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@using RVS.Domain.Validation
 
 <PageTitle>RVS Manager — Service Board</PageTitle>
 
@@ -32,7 +35,7 @@
                               SelectedLocationChanged="OnLocationChangedAsync" />
 
             @* Loading skeleton *@
-            @if (_loading && _allItems.Count == 0)
+            @if (_loading && _boardItems.Count == 0)
             {
                 <MudGrid>
                     @for (var col = 0; col < 4; col++)
@@ -57,92 +60,105 @@
                     </MudButton>
                 </MudAlert>
             }
+            else if (_selectedLocation is null)
+            {
+                <MudAlert Severity="Severity.Info" Class="my-4">
+                    Select a location above to view the service board.
+                </MudAlert>
+            }
             else
             {
-                @* Kanban columns *@
-                <MudGrid>
-                    @foreach (var column in _columns)
-                    {
-                        var items = GetColumnItems(column.Status);
-                        <MudItem xs="12" sm="6" md="3">
-                            <MudPaper Elevation="1" Class="pa-3" Style="min-height: 200px;">
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
-                                    <MudIcon Icon="@column.Icon" Color="@column.Color" Size="Size.Small"
-                                             aria-hidden="true" />
-                                    <MudText Typo="Typo.h6">@column.Title</MudText>
-                                    <MudChip T="string" Size="Size.Small" Color="@column.Color"
-                                             Variant="Variant.Outlined">
-                                        @items.Count
-                                    </MudChip>
-                                </MudStack>
+                @* Drag-and-drop Kanban columns *@
+                <MudDropContainer T="BoardItem"
+                                  @ref="_dropContainer"
+                                  Items="_boardItems"
+                                  ItemsSelector="@((item, zone) => item.Status == zone)"
+                                  ItemDropped="OnItemDroppedAsync"
+                                  ApplyDropClassesOnDragStarted="true"
+                                  CanDropClass="mud-border-success"
+                                  NoDropClass="mud-border-error"
+                                  Class="d-flex flex-row flex-wrap gap-4">
+                    <ChildContent>
+                        <MudGrid>
+                            @foreach (var column in _columns)
+                            {
+                                var columnItems = _boardItems.Where(i => i.Status == column.Status).ToList();
+                                <MudItem xs="12" sm="6" md="3">
+                                    <MudPaper Elevation="1" Class="pa-3" Style="min-height: 200px;">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                                            <MudIcon Icon="@column.Icon" Color="@column.Color" Size="Size.Small"
+                                                     aria-hidden="true" />
+                                            <MudText Typo="Typo.h6">@column.Title</MudText>
+                                            <MudChip T="string" Size="Size.Small" Color="@column.Color"
+                                                     Variant="Variant.Outlined">
+                                                @columnItems.Count
+                                            </MudChip>
+                                        </MudStack>
 
-                                @if (items.Count == 0)
-                                {
-                                    <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="py-6">
-                                        <MudIcon Icon="@Icons.Material.Filled.Inbox"
-                                                 Color="Color.Default" Size="Size.Large"
-                                                 Style="opacity: 0.4;"
-                                                 aria-hidden="true" />
-                                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                            No @column.Title.ToLowerInvariant() requests
+                                        <MudDropZone T="BoardItem"
+                                                     Identifier="@column.Status"
+                                                     Class="d-flex flex-column gap-2"
+                                                     Style="min-height: 120px;"
+                                                     AllowReorder="true" />
+                                    </MudPaper>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </ChildContent>
+                    <ItemRenderer Context="boardItem">
+                        <MudCard Elevation="2"
+                                 Style="cursor: grab;"
+                                 @onclick="() => NavigateToDetail(boardItem.Summary.Id)">
+                            <MudCardContent Class="pa-3">
+                                <MudStack Spacing="1">
+                                    @* Header row: customer name + drag handle *@
+                                    <MudStack Row="true" AlignItems="AlignItems.Center"
+                                              Justify="Justify.SpaceBetween">
+                                        <MudText Typo="Typo.subtitle2">
+                                            @boardItem.Summary.CustomerFullName
                                         </MudText>
+                                        <MudIcon Icon="@Icons.Material.Filled.DragIndicator"
+                                                 Size="Size.Small"
+                                                 Color="Color.Default"
+                                                 Class="mud-text-disabled"
+                                                 aria-hidden="true" />
                                     </MudStack>
-                                }
-                                else
-                                {
-                                    <MudStack Spacing="2">
-                                        @foreach (var sr in items)
+
+                                    @* Asset info *@
+                                    @if (!string.IsNullOrWhiteSpace(boardItem.Summary.AssetDisplay))
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                            @boardItem.Summary.AssetDisplay
+                                        </MudText>
+                                    }
+
+                                    @* Category *@
+                                    @if (!string.IsNullOrWhiteSpace(boardItem.Summary.IssueCategory))
+                                    {
+                                        <MudChip T="string" Size="Size.Small"
+                                                 Variant="Variant.Outlined"
+                                                 Color="Color.Default">
+                                            @boardItem.Summary.IssueCategory
+                                        </MudChip>
+                                    }
+
+                                    @* Age and priority row *@
+                                    <MudStack Row="true" AlignItems="AlignItems.Center"
+                                               Justify="Justify.SpaceBetween" Class="mt-1">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @FormatAge(boardItem.Summary.CreatedAtUtc)
+                                        </MudText>
+                                        @if (!string.IsNullOrWhiteSpace(boardItem.Summary.Priority))
                                         {
-                                            <MudCard Elevation="2"
-                                                     Style="cursor: pointer;"
-                                                     @onclick="() => NavigateToDetail(sr.Id)">
-                                                <MudCardContent Class="pa-3">
-                                                    <MudStack Spacing="1">
-                                                        @* Customer name *@
-                                                        <MudText Typo="Typo.subtitle2">
-                                                            @sr.CustomerFullName
-                                                        </MudText>
-
-                                                        @* Asset info *@
-                                                        @if (!string.IsNullOrWhiteSpace(sr.AssetDisplay))
-                                                        {
-                                                            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                                                @sr.AssetDisplay
-                                                            </MudText>
-                                                        }
-
-                                                        @* Category *@
-                                                        @if (!string.IsNullOrWhiteSpace(sr.IssueCategory))
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small"
-                                                                     Variant="Variant.Outlined"
-                                                                     Color="Color.Default">
-                                                                @sr.IssueCategory
-                                                            </MudChip>
-                                                        }
-
-                                                        @* Age and priority row *@
-                                                        <MudStack Row="true" AlignItems="AlignItems.Center"
-                                                                   Justify="Justify.SpaceBetween" Class="mt-1">
-                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                                @FormatAge(sr.CreatedAtUtc)
-                                                            </MudText>
-                                                            @if (!string.IsNullOrWhiteSpace(sr.Priority))
-                                                            {
-                                                                <RVS.UI.Shared.Components.PriorityBadge
-                                                                    Priority="@sr.Priority" />
-                                                            }
-                                                        </MudStack>
-                                                    </MudStack>
-                                                </MudCardContent>
-                                            </MudCard>
+                                            <RVS.UI.Shared.Components.PriorityBadge
+                                                Priority="@boardItem.Summary.Priority" />
                                         }
                                     </MudStack>
-                                }
-                            </MudPaper>
-                        </MudItem>
-                    }
-                </MudGrid>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </ItemRenderer>
+                </MudDropContainer>
             }
         </MudStack>
     </Authorized>
@@ -153,9 +169,10 @@
     private string? _error;
     private string? _selectedLocation;
     private DateTime? _lastRefreshed;
-    private List<ServiceRequestSummaryResponseDto> _allItems = [];
+    private List<BoardItem> _boardItems = [];
     private CancellationTokenSource? _pollCts;
     private PeriodicTimer? _pollTimer;
+    private MudDropContainer<BoardItem>? _dropContainer;
 
     /// <summary>
     /// Polling interval in seconds. Configurable; defaults to 300 (5 minutes).
@@ -175,11 +192,6 @@
     protected override async Task OnInitializedAsync()
     {
         _dealershipId = await ResolveDealershipIdAsync();
-        if (_dealershipId is not null)
-        {
-            await LoadBoardDataAsync();
-            StartPolling();
-        }
     }
 
     private async Task<string?> ResolveDealershipIdAsync()
@@ -204,7 +216,11 @@
             };
 
             var result = await SrClient.SearchAsync(_dealershipId, request);
-            _allItems = result.Results?.Items?.ToList() ?? [];
+            var items = result.Results?.Items ?? [];
+            _boardItems = items
+                .OrderByDescending(sr => sr.CreatedAtUtc)
+                .Select(sr => new BoardItem(sr))
+                .ToList();
             _lastRefreshed = DateTime.UtcNow;
         }
         catch (Exception ex)
@@ -214,15 +230,58 @@
         finally
         {
             _loading = false;
+            _dropContainer?.Refresh();
         }
     }
 
-    private List<ServiceRequestSummaryResponseDto> GetColumnItems(string status)
+    private async Task OnItemDroppedAsync(MudItemDropInfo<BoardItem> dropInfo)
     {
-        return _allItems
-            .Where(sr => string.Equals(sr.Status, status, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(sr => sr.CreatedAtUtc)
-            .ToList();
+        var item = dropInfo.Item;
+        var newStatus = dropInfo.DropzoneIdentifier;
+
+        if (item is null || string.Equals(item.Status, newStatus, StringComparison.Ordinal))
+            return;
+
+        var previousStatus = item.Status;
+        // Optimistic update — move the card immediately
+        item.Status = newStatus;
+
+        if (_dealershipId is null) return;
+
+        try
+        {
+            // Fetch full detail to build a valid update DTO
+            var detail = await SrClient.GetByIdAsync(_dealershipId, item.Summary.Id);
+
+            var updateRequest = new ServiceRequestUpdateRequestDto
+            {
+                Status = newStatus,
+                IssueDescription = detail.IssueDescription,
+                Priority = detail.Priority ?? "Medium",
+                IssueCategory = detail.IssueCategory,
+                TechnicianSummary = detail.TechnicianSummary,
+                Urgency = detail.Urgency,
+                RvUsage = detail.RvUsage,
+                HasExtendedWarranty = detail.HasExtendedWarranty,
+                ApproxPurchaseDate = detail.ApproxPurchaseDate,
+                AssignedTechnicianId = detail.AssignedTechnicianId,
+                AssignedBayId = detail.AssignedBayId,
+                ScheduledDateUtc = detail.ScheduledDateUtc,
+                RequiredSkills = detail.RequiredSkills,
+                UpdatedAtUtc = detail.UpdatedAtUtc,
+            };
+
+            await SrClient.UpdateAsync(_dealershipId, item.Summary.Id, updateRequest);
+
+            var columnTitle = _columns.FirstOrDefault(c => c.Status == newStatus)?.Title ?? newStatus;
+            Snackbar.Add($"Moved to {columnTitle}.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            // Revert on failure
+            item.Status = previousStatus;
+            Snackbar.Add("Unable to update status.", Severity.Error);
+        }
     }
 
     private async Task RefreshBoardAsync()
@@ -233,7 +292,15 @@
     private async Task OnLocationChangedAsync(string? location)
     {
         _selectedLocation = location;
+        if (_selectedLocation is null) return;
+
         await LoadBoardDataAsync();
+
+        // Start polling on first location selection
+        if (_pollTimer is null)
+        {
+            StartPolling();
+        }
     }
 
     private void NavigateToDetail(string srId)
@@ -287,6 +354,16 @@
         _pollCts?.Cancel();
         _pollCts?.Dispose();
         _pollTimer?.Dispose();
+    }
+
+    /// <summary>
+    /// Mutable wrapper around <see cref="ServiceRequestSummaryResponseDto"/> for drag-and-drop.
+    /// MudDropContainer requires a mutable zone identifier property.
+    /// </summary>
+    private sealed class BoardItem(ServiceRequestSummaryResponseDto summary)
+    {
+        public ServiceRequestSummaryResponseDto Summary { get; } = summary;
+        public string Status { get; set; } = summary.Status;
     }
 
     private sealed record BoardColumn(string Title, string Status, string Icon, Color Color);

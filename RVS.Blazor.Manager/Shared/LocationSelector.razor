@@ -9,7 +9,8 @@
                     <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
                              aria-hidden="true" />
                     <MudSelect T="string" Label="Select Location"
-                               @bind-Value="SelectedLocation"
+                               Value="SelectedLocation"
+                               ValueChanged="OnLocationSelectedAsync"
                                Variant="Variant.Outlined"
                                AnchorOrigin="Origin.BottomCenter"
                                aria-label="Select your location"
@@ -53,8 +54,13 @@
         // Auto-select if only one location
         if (_locations.Count == 1 && SelectedLocation is null)
         {
-            SelectedLocation = _locations[0].LocationId;
-            await SelectedLocationChanged.InvokeAsync(SelectedLocation);
+            await OnLocationSelectedAsync(_locations[0].LocationId);
         }
+    }
+
+    private async Task OnLocationSelectedAsync(string? value)
+    {
+        SelectedLocation = value;
+        await SelectedLocationChanged.InvokeAsync(value);
     }
 }
