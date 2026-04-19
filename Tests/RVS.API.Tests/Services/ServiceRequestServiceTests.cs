@@ -200,7 +200,7 @@ public class ServiceRequestServiceTests
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
 
-        var request = BuildUpdateRequest() with { Status = "Completed" };
+        var request = BuildUpdateRequest() with { Status = "InvalidStatus" };
 
         var act = () => _sut.UpdateAsync("ten_1", existing.Id, request);
 
@@ -329,7 +329,7 @@ public class ServiceRequestServiceTests
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
 
-        var act = () => _sut.UpdateStatusAsync("ten_1", existing.Id, "Completed");
+        var act = () => _sut.UpdateStatusAsync("ten_1", existing.Id, "InvalidStatus");
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*Invalid status transition*");
