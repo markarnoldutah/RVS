@@ -1,7 +1,9 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject RVS.Blazor.Manager.State.ManagerAppState AppState
+@inject ThemeService ThemeService
 
-<MudThemeProvider Theme="_theme" />
+<MudThemeProvider Theme="ThemeService.CurrentTheme" IsDarkMode="ThemeService.IsDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -59,6 +61,11 @@
 @code {
     private bool _drawerOpen = true;
 
+    protected override void OnInitialized()
+    {
+        ThemeService.OnThemeChanged += StateHasChanged;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -67,32 +74,10 @@
         }
     }
 
-    private readonly MudTheme _theme = new()
+    public void Dispose()
     {
-        PaletteLight = new PaletteLight
-        {
-            Primary = "#3F51B5",              // Indigo 500
-            PrimaryDarken = "#303F9F",        // Indigo 700
-            PrimaryLighten = "#C5CAE9",       // Indigo 100
-            PrimaryContrastText = "#FFFFFF",
-            Secondary = "#00897B",            // Teal 600
-            AppbarBackground = "#303F9F",     // Indigo 700
-            AppbarText = "#FFFFFF",
-            Background = "#FAFAFA",
-            Surface = "#FFFFFF",
-        },
-        Typography = new Typography
-        {
-            Default = new DefaultTypography
-            {
-                FontFamily = ["Roboto", "Helvetica", "Arial", "sans-serif"]
-            }
-        },
-        LayoutProperties = new LayoutProperties
-        {
-            DefaultBorderRadius = "8px"
-        }
-    };
+        ThemeService.OnThemeChanged -= StateHasChanged;
+    }
 
     private void ToggleDrawer()
     {
