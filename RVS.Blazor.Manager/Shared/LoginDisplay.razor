@@ -1,5 +1,6 @@
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject NavigationManager Navigation
+@inject ThemeService ThemeService
 
 <AuthorizeView>
     <Authorized Context="authState">
@@ -25,6 +26,17 @@
                     </MudStack>
                 </MudMenuItem>
                 <MudDivider />
+                <div class="px-4 py-2">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Theme</MudText>
+                        <MudRadioGroup T="ThemeMode" Value="ThemeService.Mode" ValueChanged="OnThemeModeChanged">
+                            <MudRadio T="ThemeMode" Value="ThemeMode.Light" Dense="true" Color="Color.Primary">Light</MudRadio>
+                            <MudRadio T="ThemeMode" Value="ThemeMode.Dark" Dense="true" Color="Color.Primary">Dark</MudRadio>
+                            <MudRadio T="ThemeMode" Value="ThemeMode.HighContrast" Dense="true" Color="Color.Primary">High Contrast</MudRadio>
+                        </MudRadioGroup>
+                    </MudStack>
+                </div>
+                <MudDivider />
                 <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="BeginLogout">
                     Sign Out
                 </MudMenuItem>
@@ -49,6 +61,11 @@
     private void BeginLogout()
     {
         Navigation.NavigateToLogout("authentication/logout");
+    }
+
+    private void OnThemeModeChanged(ThemeMode mode)
+    {
+        ThemeService.Mode = mode;
     }
 
     private static string GetFirstName(AuthenticationState context)
