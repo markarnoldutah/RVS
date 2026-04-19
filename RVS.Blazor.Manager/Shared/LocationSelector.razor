@@ -1,5 +1,7 @@
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
 @inject RVS.Blazor.Manager.State.ManagerAppState AppState
+@inject NavigationManager Navigation
 
 <AuthorizeView>
     <Authorized>
@@ -43,7 +45,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _locations = await LookupClient.GetLocationsAsync();
+        try
+        {
+            _locations = await LookupClient.GetLocationsAsync();
 
         // Auto-select single location, or validate persisted selection still exists
         if (_locations.Count == 1 && AppState.SelectedLocation is null)

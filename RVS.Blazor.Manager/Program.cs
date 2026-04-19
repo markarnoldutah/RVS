@@ -39,9 +39,6 @@ builder.Services.AddScoped<AuthorizationMessageHandler>();
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API"));
 
-// Typed API clients
-builder.Services.AddScoped<ServiceRequestApiClient>();
-
 // MudBlazor component library
 builder.Services.AddMudServices();
 
