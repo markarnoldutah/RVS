@@ -4,36 +4,35 @@
     <Authorized>
         @if (_locations.Count > 1)
         {
-            <MudPaper Elevation="1" Class="pa-4">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
-                             aria-hidden="true" />
-                    <MudSelect T="string" Label="Select Location"
-                               Value="SelectedLocation"
-                               ValueChanged="OnLocationSelectedAsync"
-                               Variant="Variant.Outlined"
-                               AnchorOrigin="Origin.BottomCenter"
-                               aria-label="Select your location"
-                               Style="min-width: 250px;">
-                        @foreach (var location in _locations)
-                        {
-                            <MudSelectItem T="string" Value="@location.LocationId">@location.Name</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudStack>
-            </MudPaper>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
+                         aria-hidden="true" />
+                <MudSelect T="string" Label="Location"
+                           Value="SelectedLocation"
+                           ValueChanged="OnLocationSelectedAsync"
+                           Variant="Variant.Outlined"
+                           AnchorOrigin="Origin.BottomCenter"
+                           TransformOrigin="Origin.TopCenter"
+                           RelativeWidth="DropdownWidth.Adaptive"
+                           aria-label="Select your location"
+                           Style="max-width: 280px; width: auto;"
+                           Dense="true">
+                    @foreach (var location in _locations)
+                    {
+                        <MudSelectItem T="string" Value="@location.LocationId">@location.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudStack>
         }
         else if (_locations.Count == 1)
         {
-            <MudPaper Elevation="1" Class="pa-4">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
-                             aria-hidden="true" />
-                    <MudText Typo="Typo.body1">
-                        Location: <strong>@_locations[0].Name</strong>
-                    </MudText>
-                </MudStack>
-            </MudPaper>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
+                         aria-hidden="true" />
+                <MudText Typo="Typo.body1">
+                    Location: <strong>@_locations[0].Name</strong>
+                </MudText>
+            </MudStack>
         }
     </Authorized>
 </AuthorizeView>

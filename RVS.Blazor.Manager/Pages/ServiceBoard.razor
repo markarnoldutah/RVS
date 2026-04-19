@@ -79,13 +79,13 @@
                                   NoDropClass="mud-border-error"
                                   Class="d-flex flex-row flex-wrap gap-4">
                     <ChildContent>
-                        <MudGrid>
+                        <MudGrid Spacing="2">
                             @foreach (var column in _columns)
                             {
                                 var columnItems = _boardItems.Where(i => i.Status == column.Status).ToList();
                                 <MudItem xs="12" sm="6" md="3">
-                                    <MudPaper Elevation="1" Class="pa-3" Style="min-height: 200px;">
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                                    <div style="display: flex; flex-direction: column; height: calc(100vh - 260px);">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                                             <MudIcon Icon="@column.Icon" Color="@column.Color" Size="Size.Small"
                                                      aria-hidden="true" />
                                             <MudText Typo="Typo.h6">@column.Title</MudText>
@@ -97,10 +97,10 @@
 
                                         <MudDropZone T="BoardItem"
                                                      Identifier="@column.Status"
-                                                     Class="d-flex flex-column gap-2"
-                                                     Style="min-height: 120px;"
+                                                     Class="d-flex flex-column gap-2 flex-grow-1"
+                                                     Style="overflow-y: auto; background: var(--mud-palette-background-gray); border-radius: 4px; padding: 8px;"
                                                      AllowReorder="true" />
-                                    </MudPaper>
+                                    </div>
                                 </MudItem>
                             }
                         </MudGrid>
@@ -189,6 +189,9 @@
         new("Blocked", "WaitingOnParts", Icons.Material.Filled.Block, Color.Error),
     ];
 
+    // Board-visible statuses — Cancelled is managed via the SR table, not the board
+    private static readonly HashSet<string> _boardStatuses = _columns.Select(c => c.Status).ToHashSet();
+
     protected override async Task OnInitializedAsync()
     {
         _dealershipId = await ResolveDealershipIdAsync();
@@ -218,6 +221,7 @@
             var result = await SrClient.SearchAsync(_dealershipId, request);
             var items = result.Results?.Items ?? [];
             _boardItems = items
+                .Where(sr => _boardStatuses.Contains(sr.Status))
                 .OrderBy(sr => sr.BoardSequence)
                 .ThenByDescending(sr => sr.CreatedAtUtc)
                 .Select(sr => new BoardItem(sr))
@@ -341,12 +345,17 @@
             var columnTitle = _columns.FirstOrDefault(c => c.Status == newStatus)?.Title ?? newStatus;
             Snackbar.Add(statusChanged ? $"Moved to {columnTitle}." : "Card reordered.", Severity.Success);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Revert on failure
             item.Status = previousStatus;
             item.Sequence = previousSequence;
-            Snackbar.Add("Unable to update card position.", Severity.Error);
+            _dropContainer?.Refresh();
+
+            var message = ex.Message.Contains("status transition", StringComparison.OrdinalIgnoreCase)
+                ? ex.Message
+                : "Unable to update card position.";
+            Snackbar.Add(message, Severity.Error);
         }
     }
 
