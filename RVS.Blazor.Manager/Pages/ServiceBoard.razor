@@ -173,6 +173,7 @@
     private CancellationTokenSource? _pollCts;
     private PeriodicTimer? _pollTimer;
     private MudDropContainer<BoardItem>? _dropContainer;
+    private bool _needsContainerRefresh;
 
     /// <summary>
     /// Polling interval in seconds. Configurable; defaults to 300 (5 minutes).
@@ -192,6 +193,15 @@
     protected override async Task OnInitializedAsync()
     {
         _dealershipId = await ResolveDealershipIdAsync();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (_needsContainerRefresh)
+        {
+            _needsContainerRefresh = false;
+            _dropContainer?.Refresh();
+        }
     }
 
     private async Task<string?> ResolveDealershipIdAsync()
@@ -231,7 +241,7 @@
         finally
         {
             _loading = false;
-            _dropContainer?.Refresh();
+            _needsContainerRefresh = true;
         }
     }
 
