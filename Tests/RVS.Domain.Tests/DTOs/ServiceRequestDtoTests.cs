@@ -64,6 +64,7 @@ public class ServiceRequestDtoTests
             AttachmentCount = 3,
             AssignedTechnicianId = "tech-1",
             Priority = "High",
+            BoardSequence = 5,
             HasOutcome = true,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
@@ -73,7 +74,24 @@ public class ServiceRequestDtoTests
         dto.CustomerFullName.Should().Be("Jane Doe");
         dto.AttachmentCount.Should().Be(3);
         dto.Priority.Should().Be("High");
+        dto.BoardSequence.Should().Be(5);
         dto.HasOutcome.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ServiceRequestSummaryResponseDto_DefaultBoardSequenceIsZero()
+    {
+        var dto = new ServiceRequestSummaryResponseDto();
+
+        dto.BoardSequence.Should().Be(0);
+    }
+
+    [Fact]
+    public void ServiceRequestDetailResponseDto_DefaultBoardSequenceIsZero()
+    {
+        var dto = new ServiceRequestDetailResponseDto();
+
+        dto.BoardSequence.Should().Be(0);
     }
 
     [Fact]

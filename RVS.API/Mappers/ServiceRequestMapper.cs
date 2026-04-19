@@ -39,6 +39,7 @@ public static class ServiceRequestMapper
             AssignedBayId = entity.AssignedBayId,
             ScheduledDateUtc = entity.ScheduledDateUtc,
             RequiredSkills = entity.RequiredSkills,
+            BoardSequence = entity.BoardSequence,
             DiagnosticResponses = entity.DiagnosticResponses.Select(d => d.ToDto()).ToList(),
             Attachments = entity.Attachments.Select(a => a.ToDto()).ToList(),
             AiEnrichment = entity.AiEnrichment?.ToDto(),
@@ -75,6 +76,7 @@ public static class ServiceRequestMapper
             AttachmentCount = entity.Attachments.Count,
             AssignedTechnicianId = entity.AssignedTechnicianId,
             Priority = entity.Priority,
+            BoardSequence = entity.BoardSequence,
             HasOutcome = hasOutcome,
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
@@ -155,6 +157,7 @@ public static class ServiceRequestMapper
         entity.AssignedBayId = dto.AssignedBayId?.Trim();
         entity.ScheduledDateUtc = dto.ScheduledDateUtc;
         entity.RequiredSkills = dto.RequiredSkills;
+        entity.BoardSequence = dto.BoardSequence ?? entity.BoardSequence;
         entity.ServiceEvent = dto.ServiceEvent?.ToEmbedded();
         entity.MarkAsUpdated(updatedByUserId);
     }

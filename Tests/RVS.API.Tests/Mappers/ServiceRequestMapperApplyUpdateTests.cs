@@ -47,6 +47,7 @@ public class ServiceRequestMapperApplyUpdateTests
             AssignedBayId = "  bay_2  ",
             ScheduledDateUtc = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc),
             RequiredSkills = ["electrical", "plumbing"],
+            BoardSequence = 4,
             ServiceEvent = new ServiceEventDto
             {
                 ComponentType = "  Wiring  ",
@@ -73,6 +74,7 @@ public class ServiceRequestMapperApplyUpdateTests
         entity.AssignedBayId.Should().Be("bay_2");
         entity.ScheduledDateUtc.Should().Be(new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc));
         entity.RequiredSkills.Should().BeEquivalentTo(["electrical", "plumbing"]);
+        entity.BoardSequence.Should().Be(4);
         entity.ServiceEvent.Should().NotBeNull();
         entity.ServiceEvent!.ComponentType.Should().Be("Wiring");
         entity.ServiceEvent.FailureMode.Should().Be("Short Circuit");
@@ -171,6 +173,32 @@ public class ServiceRequestMapperApplyUpdateTests
         dto.PartsUsed.Should().BeEquivalentTo(["Coolant"]);
         dto.LaborHours.Should().Be(3.0m);
         dto.ServiceDateUtc.Should().Be(new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenBoardSequenceIsNull_ShouldPreserveExistingValue()
+    {
+        var entity = BuildServiceRequest();
+        entity.BoardSequence = 5;
+
+        var dto = BuildUpdateRequest() with { BoardSequence = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.BoardSequence.Should().Be(5);
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenBoardSequenceIsProvided_ShouldUpdateValue()
+    {
+        var entity = BuildServiceRequest();
+        entity.BoardSequence = 5;
+
+        var dto = BuildUpdateRequest() with { BoardSequence = 2 };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.BoardSequence.Should().Be(2);
     }
 
     private static ServiceRequest BuildServiceRequest() => new()

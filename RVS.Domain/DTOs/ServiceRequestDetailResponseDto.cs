@@ -24,6 +24,7 @@ public sealed record ServiceRequestDetailResponseDto
     public string? AssignedBayId { get; init; }
     public DateTime? ScheduledDateUtc { get; init; }
     public List<string> RequiredSkills { get; init; } = [];
+    public int BoardSequence { get; init; }
     public List<DiagnosticResponseDto> DiagnosticResponses { get; init; } = [];
     public List<AttachmentDto> Attachments { get; init; } = [];
     public AiEnrichmentMetadataDto? AiEnrichment { get; init; }
