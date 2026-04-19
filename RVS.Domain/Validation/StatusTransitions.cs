@@ -8,11 +8,11 @@ public static class StatusTransitions
 {
     private static readonly Dictionary<string, HashSet<string>> _allowed = new()
     {
-        ["New"] = ["InProgress", "Cancelled"],
-        ["InProgress"] = ["Completed", "Cancelled", "WaitingOnParts"],
-        ["WaitingOnParts"] = ["InProgress", "Cancelled"],
-        ["Completed"] = [],
-        ["Cancelled"] = ["New"]
+        ["New"] = ["InProgress", "Completed", "Cancelled", "WaitingOnParts"],
+        ["InProgress"] = ["New", "Completed", "Cancelled", "WaitingOnParts"],
+        ["WaitingOnParts"] = ["New", "InProgress", "Completed", "Cancelled"],
+        ["Completed"] = ["New", "InProgress", "Cancelled", "WaitingOnParts"],
+        ["Cancelled"] = ["New", "InProgress", "Completed", "WaitingOnParts"],
     };
 
     /// <summary>

@@ -7,34 +7,37 @@ public class StatusTransitionsTests
 {
     [Theory]
     [InlineData("New", "InProgress")]
+    [InlineData("New", "Completed")]
     [InlineData("New", "Cancelled")]
+    [InlineData("New", "WaitingOnParts")]
+    [InlineData("InProgress", "New")]
     [InlineData("InProgress", "Completed")]
     [InlineData("InProgress", "Cancelled")]
     [InlineData("InProgress", "WaitingOnParts")]
+    [InlineData("WaitingOnParts", "New")]
     [InlineData("WaitingOnParts", "InProgress")]
+    [InlineData("WaitingOnParts", "Completed")]
     [InlineData("WaitingOnParts", "Cancelled")]
+    [InlineData("Completed", "New")]
+    [InlineData("Completed", "InProgress")]
+    [InlineData("Completed", "Cancelled")]
+    [InlineData("Completed", "WaitingOnParts")]
     [InlineData("Cancelled", "New")]
+    [InlineData("Cancelled", "InProgress")]
+    [InlineData("Cancelled", "Completed")]
+    [InlineData("Cancelled", "WaitingOnParts")]
     public void IsValid_AllowedTransition_ReturnsTrue(string from, string to)
     {
         StatusTransitions.IsValid(from, to).Should().BeTrue();
     }
 
     [Theory]
-    [InlineData("New", "Completed")]
-    [InlineData("New", "WaitingOnParts")]
     [InlineData("New", "New")]
-    [InlineData("InProgress", "New")]
     [InlineData("InProgress", "InProgress")]
-    [InlineData("WaitingOnParts", "Completed")]
     [InlineData("WaitingOnParts", "WaitingOnParts")]
-    [InlineData("WaitingOnParts", "New")]
-    [InlineData("Completed", "New")]
-    [InlineData("Completed", "InProgress")]
-    [InlineData("Completed", "Cancelled")]
-    [InlineData("Cancelled", "InProgress")]
-    [InlineData("Cancelled", "Completed")]
+    [InlineData("Completed", "Completed")]
     [InlineData("Cancelled", "Cancelled")]
-    public void IsValid_DisallowedTransition_ReturnsFalse(string from, string to)
+    public void IsValid_SameStatus_ReturnsFalse(string from, string to)
     {
         StatusTransitions.IsValid(from, to).Should().BeFalse();
     }
@@ -60,31 +63,19 @@ public class StatusTransitionsTests
     }
 
     [Fact]
-    public void IsValid_CompletedIsTerminal_ReturnsFalseForAllTargets()
-    {
-        string[] allStatuses = ["New", "InProgress", "WaitingOnParts", "Completed", "Cancelled"];
-
-        foreach (var target in allStatuses)
-        {
-            StatusTransitions.IsValid("Completed", target).Should().BeFalse(
-                because: $"Completed should not transition to {target}");
-        }
-    }
-
-    [Fact]
-    public void GetAllowedTargets_New_ReturnsInProgressAndCancelled()
+    public void GetAllowedTargets_New_ReturnsAllOtherStatuses()
     {
         var targets = StatusTransitions.GetAllowedTargets("New");
 
-        targets.Should().BeEquivalentTo(["InProgress", "Cancelled"]);
+        targets.Should().BeEquivalentTo(["InProgress", "Completed", "Cancelled", "WaitingOnParts"]);
     }
 
     [Fact]
-    public void GetAllowedTargets_Completed_ReturnsEmpty()
+    public void GetAllowedTargets_Completed_ReturnsAllOtherStatuses()
     {
         var targets = StatusTransitions.GetAllowedTargets("Completed");
 
-        targets.Should().BeEmpty();
+        targets.Should().BeEquivalentTo(["New", "InProgress", "Cancelled", "WaitingOnParts"]);
     }
 
     [Fact]
