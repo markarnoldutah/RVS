@@ -1,5 +1,6 @@
 @page "/"
 @attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject NavigationManager Navigation
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
 
@@ -64,8 +65,15 @@
         var authState = await AuthStateTask;
         if (authState.User.Identity?.IsAuthenticated != true) return;
 
-        var dealerships = await LookupClient.GetDealershipsAsync();
-        _dealershipId = dealerships.FirstOrDefault()?.Id;
+        try
+        {
+            var dealerships = await LookupClient.GetDealershipsAsync();
+            _dealershipId = dealerships.FirstOrDefault()?.Id;
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
     }
 
     private static string GetDisplayName(AuthenticationState context)

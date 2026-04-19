@@ -1,4 +1,6 @@
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
+@inject NavigationManager Navigation
 
 <AuthorizeView>
     <Authorized>
@@ -49,12 +51,19 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _locations = await LookupClient.GetLocationsAsync();
-
-        // Auto-select if only one location
-        if (_locations.Count == 1 && SelectedLocation is null)
+        try
         {
-            await OnLocationSelectedAsync(_locations[0].LocationId);
+            _locations = await LookupClient.GetLocationsAsync();
+
+            // Auto-select if only one location
+            if (_locations.Count == 1 && SelectedLocation is null)
+            {
+                await OnLocationSelectedAsync(_locations[0].LocationId);
+            }
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
         }
     }
 
