@@ -3,16 +3,16 @@
         <MudStack Spacing="1">
             <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Attachments</MudText>
             <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                Upload photos or videos of the issue. Drag and drop files, browse, or take a photo.
+                Attach up to 10 photos and/or videos to help us with early diagnosis.  
             </MudText>
         </MudStack>
 
         @if (State.Config is not null)
         {
-            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
+            @* <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
                 Max @State.Config.MaxAttachments files, up to @State.Config.MaxFileSizeMb MB each.
                 Accepted: @string.Join(", ", State.Config.AcceptedFileTypes)
-            </MudText>
+            </MudText> *@
         }
         else
         {
@@ -33,10 +33,10 @@
                   Class="pa-8 d-flex flex-column align-center justify-center"
                   Style="border-style: dashed; border-width: 2px; min-height: 140px; cursor: pointer;
                          border-color: var(--mud-palette-primary); position: relative;">
-            <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Primary"
+            <MudIcon Icon="@Icons.Material.Filled.PhotoCamera" Color="Color.Primary"
                      Style="font-size: 3rem;" />
             <MudText Typo="Typo.body1" Class="mt-2">
-                Drag files here or click to browse
+                 Take picture, video, or upload from gallery
             </MudText>
             <InputFile OnChange="HandleFilesSelected"
                        multiple

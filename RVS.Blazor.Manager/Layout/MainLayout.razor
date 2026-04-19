@@ -71,6 +71,7 @@
         if (firstRender)
         {
             await AppState.InitializeAsync();
+            await ThemeService.InitializeAsync();
         }
     }
 

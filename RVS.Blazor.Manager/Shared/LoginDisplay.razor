@@ -1,15 +1,13 @@
-@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject NavigationManager Navigation
 @inject ThemeService ThemeService
 
 <AuthorizeView>
     <Authorized Context="authState">
-        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
-                 aria-label="User menu">
-            <ActivatorContent Context="menuContext">
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+            <ActivatorContent>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
-                           Style="cursor: pointer;" @onclick="@(() => menuContext.ToggleAsync())">
-                    <MudText Typo="Typo.body2" Style="color: inherit;">
+                           Style="cursor: pointer;">
+                    <MudText Typo="Typo.body2" Color="Color.Inherit">
                         @GetFirstName(authState)
                     </MudText>
                     <MudAvatar Color="Color.Secondary" Size="Size.Small"
@@ -29,7 +27,7 @@
                 <div class="px-4 py-2">
                     <MudStack Spacing="1">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Theme</MudText>
-                        <MudRadioGroup T="ThemeMode" Value="ThemeService.Mode" ValueChanged="OnThemeModeChanged">
+                        <MudRadioGroup T="ThemeMode" Value="ThemeService.Mode" ValueChanged="OnThemeModeChangedAsync">
                             <MudRadio T="ThemeMode" Value="ThemeMode.Light" Dense="true" Color="Color.Primary">Light</MudRadio>
                             <MudRadio T="ThemeMode" Value="ThemeMode.Dark" Dense="true" Color="Color.Primary">Dark</MudRadio>
                             <MudRadio T="ThemeMode" Value="ThemeMode.HighContrast" Dense="true" Color="Color.Primary">High Contrast</MudRadio>
@@ -63,9 +61,9 @@
         Navigation.NavigateToLogout("authentication/logout");
     }
 
-    private void OnThemeModeChanged(ThemeMode mode)
+    private async Task OnThemeModeChangedAsync(ThemeMode mode)
     {
-        ThemeService.Mode = mode;
+        await ThemeService.SetModeAsync(mode);
     }
 
     private static string GetFirstName(AuthenticationState context)

@@ -2,7 +2,7 @@ html, body {
     font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
     margin: 0;
     padding: 0;
-    background: #FAFAFA;
+    background-color: var(--mud-palette-background);
 }
 
 /* Blazor error UI */
