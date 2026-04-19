@@ -3,6 +3,7 @@
 @inject LookupApiClient LookupClient
 @inject AttachmentApiClient AttachmentClient
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>RVS Manager — Service Request Detail</PageTitle>
 
@@ -21,8 +22,8 @@ else if (_sr is not null)
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
-                               OnClick="@(() => Navigation.NavigateTo("/service-requests"))"
-                               aria-label="Back to queue" />
+                               OnClick="NavigateBackAsync"
+                               aria-label="Back" />
                 <MudText Typo="Typo.h5">Service Request</MudText>
                 <StatusBadge Status="@_sr.Status" />
                 @if (!string.IsNullOrEmpty(_sr.Priority))
@@ -374,6 +375,11 @@ else if (_sr is not null)
         "WaitingOnParts" => "Waiting on Parts",
         _ => status
     };
+
+    private async Task NavigateBackAsync()
+    {
+        await JS.InvokeVoidAsync("history.back");
+    }
 
     private static string GetAttachmentIcon(string contentType)
     {
