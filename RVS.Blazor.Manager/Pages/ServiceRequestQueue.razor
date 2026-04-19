@@ -2,6 +2,7 @@
 @inject ServiceRequestApiClient SrClient
 @inject LookupApiClient LookupClient
 @inject NavigationManager Navigation
+@inject RVS.Blazor.Manager.State.ManagerAppState AppState
 
 <PageTitle>RVS Manager — Service Requests</PageTitle>
 
@@ -174,6 +175,12 @@
             _locations = await LookupClient.GetLocationsAsync();
             var dealerships = await LookupClient.GetDealershipsAsync();
             _dealershipId = dealerships.FirstOrDefault()?.Id;
+
+            // Pre-populate location filter from centralized state
+            if (AppState.SelectedLocation is not null)
+            {
+                _search.LocationId = AppState.SelectedLocation;
+            }
 
             if (_dealershipId is not null)
             {

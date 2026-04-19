@@ -2,6 +2,7 @@
 @attribute [AllowAnonymous]
 @inject NavigationManager Navigation
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
+@inject RVS.Blazor.Manager.State.ManagerAppState AppState
 
 <PageTitle>RVS Manager — Home</PageTitle>
 
@@ -14,19 +15,22 @@
 
             <LocationSelector />
 
-            <MudCard Elevation="2">
-                <MudCardContent>
-                    <MudStack Spacing="3">
-                        <MudIcon Icon="@Icons.Material.Filled.Dashboard"
-                                 Color="Color.Primary" Size="Size.Large"
-                                 aria-hidden="true" />
-                        <MudText Typo="Typo.h6">Manager Dashboard</MudText>
-                        <MudText Typo="Typo.body1" Color="Color.Secondary">
-                            Select a location above to begin managing service requests.
-                        </MudText>
-                    </MudStack>
-                </MudCardContent>
-            </MudCard>
+            @if (AppState.SelectedLocation is null)
+            {
+                <MudCard Elevation="2">
+                    <MudCardContent>
+                        <MudStack Spacing="3">
+                            <MudIcon Icon="@Icons.Material.Filled.Dashboard"
+                                     Color="Color.Primary" Size="Size.Large"
+                                     aria-hidden="true" />
+                            <MudText Typo="Typo.h6">Manager Dashboard</MudText>
+                            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                                Select a location above to begin managing service requests.
+                            </MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            }
 
             <OutcomeComplianceWidget @ref="_complianceWidget"
                                     DealershipId="@_dealershipId" />

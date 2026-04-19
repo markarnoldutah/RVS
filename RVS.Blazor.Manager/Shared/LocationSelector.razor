@@ -1,4 +1,5 @@
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
+@inject RVS.Blazor.Manager.State.ManagerAppState AppState
 
 <AuthorizeView>
     <Authorized>
@@ -8,7 +9,7 @@
                 <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
                          aria-hidden="true" />
                 <MudSelect T="string" Label="Location"
-                           Value="SelectedLocation"
+                           Value="AppState.SelectedLocation"
                            ValueChanged="OnLocationSelectedAsync"
                            Variant="Variant.Outlined"
                            AnchorOrigin="Origin.BottomCenter"
@@ -40,26 +41,25 @@
 @code {
     private List<LocationSummaryResponseDto> _locations = [];
 
-    [Parameter]
-    public string? SelectedLocation { get; set; }
-
-    [Parameter]
-    public EventCallback<string?> SelectedLocationChanged { get; set; }
-
     protected override async Task OnInitializedAsync()
     {
         _locations = await LookupClient.GetLocationsAsync();
 
-        // Auto-select if only one location
-        if (_locations.Count == 1 && SelectedLocation is null)
+        // Auto-select single location, or validate persisted selection still exists
+        if (_locations.Count == 1 && AppState.SelectedLocation is null)
         {
-            await OnLocationSelectedAsync(_locations[0].LocationId);
+            await AppState.SetLocationAsync(_locations[0].LocationId);
+        }
+        else if (AppState.SelectedLocation is not null &&
+                 !_locations.Any(l => l.LocationId == AppState.SelectedLocation))
+        {
+            // Persisted location no longer valid — clear it
+            await AppState.SetLocationAsync(null);
         }
     }
 
     private async Task OnLocationSelectedAsync(string? value)
     {
-        SelectedLocation = value;
-        await SelectedLocationChanged.InvokeAsync(value);
+        await AppState.SetLocationAsync(value);
     }
 }

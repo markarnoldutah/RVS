@@ -4,14 +4,14 @@
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
-@inject IJSRuntime JS
+@inject RVS.Blazor.Manager.State.ManagerAppState AppState
 @using RVS.Domain.Validation
 
 <PageTitle>RVS Manager — Service Board</PageTitle>
 
 <AuthorizeView>
     <Authorized>
-        <MudStack Spacing="4" Class="pa-4">
+        <MudStack Spacing="2" Class="pa-2" Style="height: calc(100vh - 160px); overflow: hidden;">
             @* Header row *@
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
                 <MudText Typo="Typo.h4">Service Board</MudText>
@@ -31,8 +31,7 @@
             </MudStack>
 
             @* Location filter *@
-            <LocationSelector SelectedLocation="@_selectedLocation"
-                              SelectedLocationChanged="OnLocationChangedAsync" />
+            <LocationSelector />
 
             @* Loading skeleton *@
             @if (_loading && _boardItems.Count == 0)
@@ -60,7 +59,7 @@
                     </MudButton>
                 </MudAlert>
             }
-            else if (_selectedLocation is null)
+            else if (AppState.SelectedLocation is null)
             {
                 <MudAlert Severity="Severity.Info" Class="my-4">
                     Select a location above to view the service board.
@@ -77,14 +76,14 @@
                                   ApplyDropClassesOnDragStarted="true"
                                   CanDropClass="mud-border-success"
                                   NoDropClass="mud-border-error"
-                                  Class="d-flex flex-row flex-wrap gap-4">
+                                   Class="d-flex flex-row flex-wrap gap-4 flex-grow-1"
+                                  Style="min-height: 0;">
                     <ChildContent>
-                        <MudGrid Spacing="2">
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; height: 100%;">
                             @foreach (var column in _columns)
                             {
                                 var columnItems = _boardItems.Where(i => i.Status == column.Status).ToList();
-                                <MudItem xs="12" sm="6" md="3">
-                                    <div style="display: flex; flex-direction: column; height: calc(100vh - 260px);">
+                                <div style="display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;">
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                                             <MudIcon Icon="@column.Icon" Color="@column.Color" Size="Size.Small"
                                                      aria-hidden="true" />
@@ -98,16 +97,15 @@
                                         <MudDropZone T="BoardItem"
                                                      Identifier="@column.Status"
                                                      Class="d-flex flex-column gap-2 flex-grow-1"
-                                                     Style="overflow-y: auto; background: var(--mud-palette-background-gray); border-radius: 4px; padding: 8px;"
+                                                     Style="overflow-y: auto; overflow-x: hidden; background: var(--mud-palette-background-gray); border-radius: 4px; padding: 8px;"
                                                      AllowReorder="true" />
-                                    </div>
-                                </MudItem>
-                            }
-                        </MudGrid>
-                    </ChildContent>
+                                                </div>
+                                            }
+                                        </div>
+                                    </ChildContent>
                     <ItemRenderer Context="boardItem">
                         <MudCard Elevation="2"
-                                 Style="cursor: grab;"
+                                 Style="cursor: grab; min-width: 0; overflow: hidden;"
                                  @onclick="() => NavigateToDetail(boardItem.Summary.Id)">
                             <MudCardContent Class="pa-3">
                                 <MudStack Spacing="1">
@@ -167,7 +165,6 @@
 @code {
     private bool _loading;
     private string? _error;
-    private string? _selectedLocation;
     private DateTime? _lastRefreshed;
     private List<BoardItem> _boardItems = [];
     private CancellationTokenSource? _pollCts;
@@ -196,6 +193,15 @@
     protected override async Task OnInitializedAsync()
     {
         _dealershipId = await ResolveDealershipIdAsync();
+
+        AppState.OnLocationChanged += HandleLocationChangedAsync;
+
+        // If a location was already persisted, load data immediately
+        if (AppState.SelectedLocation is not null)
+        {
+            await LoadBoardDataAsync();
+            StartPolling();
+        }
     }
 
     protected override void OnAfterRender(bool firstRender)
@@ -224,7 +230,7 @@
         {
             var request = new ServiceRequestSearchRequestDto
             {
-                LocationId = _selectedLocation,
+                LocationId = AppState.SelectedLocation,
                 PageSize = 100,
             };
 
@@ -374,12 +380,12 @@
         await LoadBoardDataAsync();
     }
 
-    private async Task OnLocationChangedAsync(string? location)
+    private async Task HandleLocationChangedAsync(string? location)
     {
-        _selectedLocation = location;
-        if (_selectedLocation is null) return;
+        if (location is null) return;
 
         await LoadBoardDataAsync();
+        await InvokeAsync(StateHasChanged);
 
         // Start polling on first location selection
         if (_pollTimer is null)
@@ -436,6 +442,7 @@
 
     public void Dispose()
     {
+        AppState.OnLocationChanged -= HandleLocationChangedAsync;
         _pollCts?.Cancel();
         _pollCts?.Dispose();
         _pollTimer?.Dispose();
