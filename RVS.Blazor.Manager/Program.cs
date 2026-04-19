@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using MudBlazor.Services;
 using RVS.Blazor.Manager;
+using RVS.Blazor.Manager.Services;
 using RVS.Blazor.Manager.State;
 using RVS.UI.Shared.Services;
 
@@ -16,6 +17,9 @@ builder.Services.AddMudServices();
 
 // Centralized app state (singleton in WASM — single user)
 builder.Services.AddSingleton<ManagerAppState>();
+
+// Theme switcher state (scoped per browser tab)
+builder.Services.AddScoped<ThemeService>();
 
 // Get API base URL from configuration
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
