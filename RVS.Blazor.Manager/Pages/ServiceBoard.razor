@@ -218,7 +218,8 @@
             var result = await SrClient.SearchAsync(_dealershipId, request);
             var items = result.Results?.Items ?? [];
             _boardItems = items
-                .OrderByDescending(sr => sr.CreatedAtUtc)
+                .OrderBy(sr => sr.BoardSequence)
+                .ThenByDescending(sr => sr.CreatedAtUtc)
                 .Select(sr => new BoardItem(sr))
                 .ToList();
             _lastRefreshed = DateTime.UtcNow;
@@ -239,18 +240,56 @@
         var item = dropInfo.Item;
         var newStatus = dropInfo.DropzoneIdentifier;
 
-        if (item is null || string.Equals(item.Status, newStatus, StringComparison.Ordinal))
-            return;
+        if (item is null) return;
 
+        var statusChanged = !string.Equals(item.Status, newStatus, StringComparison.Ordinal);
         var previousStatus = item.Status;
+        var previousSequence = item.Sequence;
+
         // Optimistic update — move the card immediately
         item.Status = newStatus;
+
+        // Update sequence numbers for all items in the target column
+        var targetColumnItems = _boardItems
+            .Where(i => i.Status == newStatus)
+            .ToList();
+
+        // Determine the new index from MudBlazor drop info
+        var newIndex = dropInfo.IndexInZone;
+        if (newIndex < 0 || newIndex > targetColumnItems.Count)
+            newIndex = targetColumnItems.Count;
+
+        // Remove item from its current position in the target list (if it's already there)
+        targetColumnItems.Remove(item);
+        // Insert at the new position
+        if (newIndex > targetColumnItems.Count)
+            newIndex = targetColumnItems.Count;
+        targetColumnItems.Insert(newIndex, item);
+
+        // Reassign sequence numbers for the target column
+        for (var i = 0; i < targetColumnItems.Count; i++)
+        {
+            targetColumnItems[i].Sequence = i;
+        }
+
+        // If the item moved out of a column, also renumber the source column
+        if (statusChanged)
+        {
+            var sourceColumnItems = _boardItems
+                .Where(i => i.Status == previousStatus)
+                .OrderBy(i => i.Sequence)
+                .ToList();
+            for (var i = 0; i < sourceColumnItems.Count; i++)
+            {
+                sourceColumnItems[i].Sequence = i;
+            }
+        }
 
         if (_dealershipId is null) return;
 
         try
         {
-            // Fetch full detail to build a valid update DTO
+            // Persist the updated sequence for the dropped item
             var detail = await SrClient.GetByIdAsync(_dealershipId, item.Summary.Id);
 
             var updateRequest = new ServiceRequestUpdateRequestDto
@@ -268,19 +307,46 @@
                 AssignedBayId = detail.AssignedBayId,
                 ScheduledDateUtc = detail.ScheduledDateUtc,
                 RequiredSkills = detail.RequiredSkills,
+                BoardSequence = item.Sequence,
                 UpdatedAtUtc = detail.UpdatedAtUtc,
             };
 
             await SrClient.UpdateAsync(_dealershipId, item.Summary.Id, updateRequest);
 
+            // Persist reordered siblings in the target column (fire-and-forget style, but awaited)
+            foreach (var sibling in targetColumnItems.Where(i => i.Summary.Id != item.Summary.Id))
+            {
+                var siblingDetail = await SrClient.GetByIdAsync(_dealershipId, sibling.Summary.Id);
+                var siblingUpdate = new ServiceRequestUpdateRequestDto
+                {
+                    Status = sibling.Status,
+                    IssueDescription = siblingDetail.IssueDescription,
+                    Priority = siblingDetail.Priority ?? "Medium",
+                    IssueCategory = siblingDetail.IssueCategory,
+                    TechnicianSummary = siblingDetail.TechnicianSummary,
+                    Urgency = siblingDetail.Urgency,
+                    RvUsage = siblingDetail.RvUsage,
+                    HasExtendedWarranty = siblingDetail.HasExtendedWarranty,
+                    ApproxPurchaseDate = siblingDetail.ApproxPurchaseDate,
+                    AssignedTechnicianId = siblingDetail.AssignedTechnicianId,
+                    AssignedBayId = siblingDetail.AssignedBayId,
+                    ScheduledDateUtc = siblingDetail.ScheduledDateUtc,
+                    RequiredSkills = siblingDetail.RequiredSkills,
+                    BoardSequence = sibling.Sequence,
+                    UpdatedAtUtc = siblingDetail.UpdatedAtUtc,
+                };
+                await SrClient.UpdateAsync(_dealershipId, sibling.Summary.Id, siblingUpdate);
+            }
+
             var columnTitle = _columns.FirstOrDefault(c => c.Status == newStatus)?.Title ?? newStatus;
-            Snackbar.Add($"Moved to {columnTitle}.", Severity.Success);
+            Snackbar.Add(statusChanged ? $"Moved to {columnTitle}." : "Card reordered.", Severity.Success);
         }
         catch (Exception)
         {
             // Revert on failure
             item.Status = previousStatus;
-            Snackbar.Add("Unable to update status.", Severity.Error);
+            item.Sequence = previousSequence;
+            Snackbar.Add("Unable to update card position.", Severity.Error);
         }
     }
 
@@ -364,6 +430,7 @@
     {
         public ServiceRequestSummaryResponseDto Summary { get; } = summary;
         public string Status { get; set; } = summary.Status;
+        public int Sequence { get; set; } = summary.BoardSequence;
     }
 
     private sealed record BoardColumn(string Title, string Status, string Icon, Color Color);

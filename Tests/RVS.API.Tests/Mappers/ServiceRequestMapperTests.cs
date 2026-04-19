@@ -42,6 +42,7 @@ public class ServiceRequestMapperTests
             AssignedBayId = "bay_2",
             ScheduledDateUtc = now,
             RequiredSkills = ["electrical"],
+            BoardSequence = 7,
             CreatedAtUtc = now
         };
 
@@ -64,6 +65,7 @@ public class ServiceRequestMapperTests
         dto.AssignedBayId.Should().Be("bay_2");
         dto.ScheduledDateUtc.Should().Be(now);
         dto.RequiredSkills.Should().ContainSingle().Which.Should().Be("electrical");
+        dto.BoardSequence.Should().Be(7);
         dto.CreatedAtUtc.Should().Be(now);
     }
 
@@ -244,6 +246,7 @@ public class ServiceRequestMapperTests
             Priority = "High",
             AssignedTechnicianId = "tech_2",
             TechnicianSummary = "Slide motor failed",
+            BoardSequence = 3,
             CreatedAtUtc = now,
             CustomerSnapshot = new CustomerSnapshotEmbedded { FirstName = "Mike", LastName = "Johnson" },
             AssetInfo = new AssetInfoEmbedded { Year = 2021, Manufacturer = "Forest River", Model = "XLR" }
@@ -259,6 +262,7 @@ public class ServiceRequestMapperTests
         dto.IssueCategory.Should().Be("Slide System");
         dto.TechnicianSummary.Should().Be("Slide motor failed");
         dto.Priority.Should().Be("High");
+        dto.BoardSequence.Should().Be(3);
         dto.AssignedTechnicianId.Should().Be("tech_2");
         dto.AttachmentCount.Should().Be(0);
         dto.CreatedAtUtc.Should().Be(now);
