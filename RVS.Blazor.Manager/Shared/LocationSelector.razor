@@ -49,16 +49,21 @@
         {
             _locations = await LookupClient.GetLocationsAsync();
 
-        // Auto-select single location, or validate persisted selection still exists
-        if (_locations.Count == 1 && AppState.SelectedLocation is null)
-        {
-            await AppState.SetLocationAsync(_locations[0].LocationId);
+            // Auto-select single location, or validate persisted selection still exists
+            if (_locations.Count == 1 && AppState.SelectedLocation is null)
+            {
+                await AppState.SetLocationAsync(_locations[0].LocationId);
+            }
+            else if (AppState.SelectedLocation is not null &&
+                     !_locations.Any(l => l.LocationId == AppState.SelectedLocation))
+            {
+                // Persisted location no longer valid — clear it
+                await AppState.SetLocationAsync(null);
+            }
         }
-        else if (AppState.SelectedLocation is not null &&
-                 !_locations.Any(l => l.LocationId == AppState.SelectedLocation))
+        catch (AccessTokenNotAvailableException ex)
         {
-            // Persisted location no longer valid — clear it
-            await AppState.SetLocationAsync(null);
+            ex.Redirect();
         }
     }
 
