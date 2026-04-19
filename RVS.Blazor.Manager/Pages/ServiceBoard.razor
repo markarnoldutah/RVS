@@ -1,5 +1,6 @@
 @page "/board"
 @implements IDisposable
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject RVS.UI.Shared.Services.ServiceRequestApiClient SrClient
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
 @inject NavigationManager Navigation
@@ -237,6 +238,10 @@
                 .Select(sr => new BoardItem(sr))
                 .ToList();
             _lastRefreshed = DateTime.UtcNow;
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
         }
         catch (Exception ex)
         {
