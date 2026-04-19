@@ -138,6 +138,13 @@ public class ServiceRequest : EntityBase
     public string? ApproxPurchaseDate { get; set; }
 
     /// <summary>
+    /// Board display order within a status column. Lower values appear first.
+    /// Defaults to 0; updated when cards are reordered on the Service Board.
+    /// </summary>
+    [JsonProperty("boardSequence")]
+    public int BoardSequence { get; set; }
+
+    /// <summary>
     /// AI enrichment provenance metadata. Records which AI capabilities were
     /// used during intake, their providers, and confidence scores.
     /// Null when no AI enrichment was applied.

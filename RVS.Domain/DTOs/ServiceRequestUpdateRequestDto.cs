@@ -22,6 +22,11 @@ public sealed record ServiceRequestUpdateRequestDto
     public ServiceEventDto? ServiceEvent { get; init; }
 
     /// <summary>
+    /// Board display order within a status column. Lower values appear first.
+    /// </summary>
+    public int? BoardSequence { get; init; }
+
+    /// <summary>
     /// Last-known <c>UpdatedAtUtc</c> value for optimistic concurrency validation.
     /// </summary>
     public DateTime? UpdatedAtUtc { get; init; }
