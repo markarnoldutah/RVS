@@ -28,6 +28,25 @@ public class ServiceRequestsController : ControllerBase
     }
 
     /// <summary>
+    /// Creates a new service request from the manager dashboard.
+    /// </summary>
+    /// <param name="dealershipId">Dealership identifier (route segment).</param>
+    /// <param name="request">The create request DTO.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpPost]
+    [Authorize(Policy = "CanCreateServiceRequests")]
+    public async Task<ActionResult<ServiceRequestDetailResponseDto>> Create(
+        string dealershipId, [FromBody] ServiceRequestCreateRequestDto request, CancellationToken ct)
+    {
+        var tenantId = _claimsService.GetTenantIdOrThrow();
+
+        var entity = request.ToEntity(tenantId, _claimsService.GetUserIdOrThrow());
+        var created = await _service.CreateAsync(tenantId, entity, ct);
+
+        return CreatedAtAction(nameof(GetById), new { dealershipId, srId = created.Id }, created.ToDetailDto());
+    }
+
+    /// <summary>
     /// Gets a single service request by its identifier.
     /// </summary>
     /// <param name="dealershipId">Dealership identifier (route segment).</param>

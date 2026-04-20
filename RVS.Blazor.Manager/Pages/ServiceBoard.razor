@@ -23,6 +23,11 @@
                             Updated @_lastRefreshed.Value.ToLocalTime().ToString("h:mm tt")
                         </MudText>
                     }
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="@(() => OpenCreateDialog())">
+                        New SR
+                    </MudButton>
                     <MudIconButton Icon="@Icons.Material.Filled.Refresh"
                                    Color="Color.Primary"
                                    OnClick="RefreshBoardAsync"
@@ -118,23 +123,21 @@
                                                       title="@boardItem.Summary.Priority"
                                                       aria-label="Priority: @boardItem.Summary.Priority"></span>
                                             }
-                                            <MudLink Typo="Typo.subtitle2"
-                                                     Href="@($"/service-requests/{boardItem.Summary.Id}")"
-                                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-                                                     @onclick:stopPropagation="true">
+                                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--mud-palette-primary); font-weight: 500;"
+                                                  @onclick="@(() => OpenDetailDialog(boardItem.Summary.Id, boardItem.Status))"
+                                                  @onclick:stopPropagation="true">
                                                 @boardItem.Summary.CustomerFullName
-                                            </MudLink>
+                                            </span>
                                         </MudStack>
 
                                         @* Asset info *@
                                         @if (!string.IsNullOrWhiteSpace(boardItem.Summary.AssetDisplay))
                                         {
-                                            <MudLink Typo="Typo.body2"
-                                                     Href="@($"/service-requests/{boardItem.Summary.Id}")"
-                                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-                                                     @onclick:stopPropagation="true">
+                                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--mud-palette-primary); font-size: 0.875rem;"
+                                                  @onclick="@(() => OpenDetailDialog(boardItem.Summary.Id, boardItem.Status))"
+                                                  @onclick:stopPropagation="true">
                                                 @boardItem.Summary.AssetDisplay
-                                            </MudLink>
+                                            </span>
                                         }
 
                                         @* Chips row: created date, category *@
@@ -162,6 +165,11 @@
         </MudStack>
     </Authorized>
 </AuthorizeView>
+
+<ServiceRequestDetailDialog @bind-Visible="_detailDialogOpen"
+                            ServiceRequestId="@_detailDialogSrId"
+                            CurrentStatus="@_detailDialogStatus"
+                            OnChanged="OnDialogChangedAsync" />
 
 @code {
     private bool _loading;
@@ -448,6 +456,30 @@
         "low"      => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: transparent; border: 2px solid #9e9e9e;",
         _          => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: transparent;",
     };
+
+    private bool _detailDialogOpen;
+    private string? _detailDialogSrId;
+    private string? _detailDialogStatus;
+
+    private void OpenDetailDialog(string serviceRequestId, string? currentStatus = null)
+    {
+        _detailDialogSrId = serviceRequestId;
+        _detailDialogStatus = currentStatus;
+        _detailDialogOpen = true;
+    }
+
+    private void OpenCreateDialog(string? currentStatus = null)
+    {
+        _detailDialogSrId = null;
+        _detailDialogStatus = currentStatus;
+        _detailDialogOpen = true;
+    }
+
+    private async Task OnDialogChangedAsync()
+    {
+        await LoadBoardDataAsync();
+        StateHasChanged();
+    }
 
     public void Dispose()
     {
