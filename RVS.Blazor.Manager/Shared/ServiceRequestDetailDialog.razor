@@ -1,0 +1,648 @@
+@inject ServiceRequestApiClient SrClient
+@inject LookupApiClient LookupClient
+@inject AttachmentApiClient AttachmentClient
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<MudDialog @bind-Visible="Visible" Options="@(new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true })">
+    <TitleContent>
+        @if (_mode == DialogMode.Create)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Primary" />
+                <MudText Typo="Typo.h6">New Service Request</MudText>
+            </MudStack>
+        }
+        else if (_sr is not null)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.h6">Service Request</MudText>
+                <StatusBadge Status="@_sr.Status" />
+                @if (!string.IsNullOrEmpty(_sr.Priority))
+                {
+                    <PriorityBadge Priority="@_sr.Priority" />
+                }
+            </MudStack>
+        }
+        else
+        {
+            <MudText Typo="Typo.h6">Service Request</MudText>
+        }
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="ma-2">@_error</MudAlert>
+        }
+        else if (_mode == DialogMode.Create)
+        {
+            @* Create form *@
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.subtitle1">Customer Information</MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="First Name" Variant="Variant.Outlined"
+                                      @bind-Value="_createForm.FirstName" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="Last Name" Variant="Variant.Outlined"
+                                      @bind-Value="_createForm.LastName" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="Email" Variant="Variant.Outlined"
+                                      @bind-Value="_createForm.Email" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="Phone" Variant="Variant.Outlined"
+                                      @bind-Value="_createForm.Phone" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudText Typo="Typo.subtitle1">Asset / Vehicle</MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="VIN / Asset ID" Variant="Variant.Outlined"
+                                      @bind-Value="_createForm.AssetId" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="Manufacturer" Variant="Variant.Outlined"
+                                      @bind-Value="_createForm.Manufacturer" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="Model" Variant="Variant.Outlined"
+                                      @bind-Value="_createForm.Model" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudNumericField T="int?" Label="Year" Variant="Variant.Outlined"
+                                         @bind-Value="_createForm.Year" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudText Typo="Typo.subtitle1">Issue Details</MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="Issue Category" Variant="Variant.Outlined"
+                                      @bind-Value="_createForm.IssueCategory" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="string" Label="Priority" Variant="Variant.Outlined"
+                                   @bind-Value="_createForm.Priority">
+                            <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField T="string" Label="Issue Description" Variant="Variant.Outlined"
+                                      @bind-Value="_createForm.IssueDescription" Required="true"
+                                      Lines="4" />
+                    </MudItem>
+                </MudGrid>
+            </MudStack>
+        }
+        else if (_sr is not null)
+        {
+            @* Detail view *@
+            <MudStack Spacing="3">
+                @* Status Update *@
+                @if (_allowedStatuses.Count > 0)
+                {
+                    <MudPaper Elevation="1" Class="pa-4">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <MudText Typo="Typo.subtitle1">Quick Status Update:</MudText>
+                            <MudSelect T="string" Label="Change Status" Variant="Variant.Outlined"
+                                       Value="@_selectedStatus"
+                                       ValueChanged="OnStatusChangeAsync"
+                                       Style="max-width: 250px;">
+                                @foreach (var status in _allowedStatuses)
+                                {
+                                    <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
+                                }
+                            </MudSelect>
+                            @if (_statusUpdating)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                        </MudStack>
+                        @if (_statusError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="mt-2">@_statusError</MudAlert>
+                        }
+                    </MudPaper>
+                }
+
+                <MudGrid Spacing="3">
+                    @* Customer Info *@
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="2">
+                            <MudCardHeader>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
+                                    <MudText Typo="Typo.h6">Customer</MudText>
+                                </MudStack>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1"><strong>Name:</strong> @_sr.Customer.FirstName @_sr.Customer.LastName</MudText>
+                                    <MudText Typo="Typo.body1"><strong>Email:</strong> @_sr.Customer.Email</MudText>
+                                    @if (!string.IsNullOrEmpty(_sr.Customer.Phone))
+                                    {
+                                        <MudText Typo="Typo.body1"><strong>Phone:</strong> @_sr.Customer.Phone</MudText>
+                                    }
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    @* Asset Info *@
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="2">
+                            <MudCardHeader>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" Color="Color.Primary" />
+                                    <MudText Typo="Typo.h6">Asset / Vehicle</MudText>
+                                </MudStack>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1"><strong>VIN / Asset ID:</strong> @_sr.Asset.AssetId</MudText>
+                                    @if (_sr.Asset.Year.HasValue)
+                                    {
+                                        <MudText Typo="Typo.body1"><strong>Year:</strong> @_sr.Asset.Year</MudText>
+                                    }
+                                    @if (!string.IsNullOrEmpty(_sr.Asset.Manufacturer))
+                                    {
+                                        <MudText Typo="Typo.body1"><strong>Make:</strong> @_sr.Asset.Manufacturer</MudText>
+                                    }
+                                    @if (!string.IsNullOrEmpty(_sr.Asset.Model))
+                                    {
+                                        <MudText Typo="Typo.body1"><strong>Model:</strong> @_sr.Asset.Model</MudText>
+                                    }
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    @* Issue Details *@
+                    <MudItem xs="12">
+                        <MudCard Elevation="2">
+                            <MudCardHeader>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Build" Color="Color.Primary" />
+                                    <MudText Typo="Typo.h6">Issue Details</MudText>
+                                </MudStack>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12" sm="6" md="3">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Category</MudText>
+                                        <MudText Typo="Typo.body1">@_sr.IssueCategory</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" sm="6" md="3">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Urgency</MudText>
+                                        <MudText Typo="Typo.body1">@(_sr.Urgency ?? "—")</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" sm="6" md="3">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">RV Usage</MudText>
+                                        <MudText Typo="Typo.body1">@(_sr.RvUsage ?? "—")</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" sm="6" md="3">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Scheduled Date</MudText>
+                                        <MudText Typo="Typo.body1">@(_sr.ScheduledDateUtc?.ToLocalTime().ToString("g") ?? "—")</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Description</MudText>
+                                        <MudText Typo="Typo.body1">@_sr.IssueDescription</MudText>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    @* Assignment *@
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="2">
+                            <MudCardHeader>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Assignment" Color="Color.Primary" />
+                                    <MudText Typo="Typo.h6">Assignment</MudText>
+                                </MudStack>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1"><strong>Technician:</strong> @(_sr.AssignedTechnicianId ?? "Unassigned")</MudText>
+                                    <MudText Typo="Typo.body1"><strong>Bay:</strong> @(_sr.AssignedBayId ?? "Unassigned")</MudText>
+                                    @if (_sr.RequiredSkills.Count > 0)
+                                    {
+                                        <MudText Typo="Typo.body1"><strong>Required Skills:</strong></MudText>
+                                        <MudStack Row="true" Spacing="1">
+                                            @foreach (var skill in _sr.RequiredSkills)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@skill</MudChip>
+                                            }
+                                        </MudStack>
+                                    }
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    @* Advisor Notes *@
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="2">
+                            <MudCardHeader>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Notes" Color="Color.Primary" />
+                                    <MudText Typo="Typo.h6">Advisor Notes</MudText>
+                                </MudStack>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudText Typo="Typo.body1">@(_sr.TechnicianSummary ?? "No notes yet.")</MudText>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    @* Diagnostic Responses *@
+                    @if (_sr.DiagnosticResponses.Count > 0)
+                    {
+                        <MudItem xs="12">
+                            <MudCard Elevation="2">
+                                <MudCardHeader>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.Quiz" Color="Color.Primary" />
+                                        <MudText Typo="Typo.h6">Diagnostic Responses</MudText>
+                                    </MudStack>
+                                </MudCardHeader>
+                                <MudCardContent>
+                                    <DiagnosticResponseView Responses="@_sr.DiagnosticResponses" />
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    }
+
+                    @* Attachments *@
+                    @if (_sr.Attachments.Count > 0)
+                    {
+                        <MudItem xs="12">
+                            <MudCard Elevation="2">
+                                <MudCardHeader>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" />
+                                        <MudText Typo="Typo.h6">Attachments (@_sr.Attachments.Count)</MudText>
+                                    </MudStack>
+                                </MudCardHeader>
+                                <MudCardContent>
+                                    <MudGrid Spacing="2">
+                                        @foreach (var att in _sr.Attachments)
+                                        {
+                                            <MudItem xs="6" sm="4" md="3">
+                                                <MudPaper Elevation="1" Class="pa-2 text-center">
+                                                    <MudIcon Icon="@GetAttachmentIcon(att.ContentType)"
+                                                             Size="Size.Large" Color="Color.Secondary" />
+                                                    <MudText Typo="Typo.caption" Class="d-block text-truncate">
+                                                        @att.FileName
+                                                    </MudText>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @FormatFileSize(att.SizeBytes)
+                                                    </MudText>
+                                                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
+                                                               OnClick="@(() => ViewAttachmentAsync(att))">
+                                                        View
+                                                    </MudButton>
+                                                </MudPaper>
+                                            </MudItem>
+                                        }
+                                    </MudGrid>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+
+                @* Metadata footer *@
+                <MudPaper Elevation="0" Class="pa-2">
+                    <MudStack Row="true" Spacing="4">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Created: @_sr.CreatedAtUtc.ToLocalTime().ToString("g")
+                        </MudText>
+                        @if (_sr.UpdatedAtUtc.HasValue)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Updated: @_sr.UpdatedAtUtc.Value.ToLocalTime().ToString("g")
+                            </MudText>
+                        }
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            ID: @_sr.Id
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_mode == DialogMode.Create)
+        {
+            <MudButton OnClick="CloseDialog">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="CreateAsync" Disabled="_saving">
+                @if (_saving)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Create
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Edit"
+                       OnClick="NavigateToEdit">
+                Edit
+            </MudButton>
+            <MudButton OnClick="CloseDialog">Close</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    /// <summary>
+    /// Controls visibility of the dialog. Bind two-way from parent.
+    /// </summary>
+    [Parameter]
+    public bool Visible { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> VisibleChanged { get; set; }
+
+    /// <summary>
+    /// Service request ID to display. Null for create mode.
+    /// </summary>
+    [Parameter]
+    public string? ServiceRequestId { get; set; }
+
+    /// <summary>
+    /// Current column/status to pre-populate in create mode.
+    /// </summary>
+    [Parameter]
+    public string? CurrentStatus { get; set; }
+
+    /// <summary>
+    /// Fired after a service request is created or updated so the parent can refresh.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private enum DialogMode { View, Create }
+
+    private DialogMode _mode;
+    private ServiceRequestDetailResponseDto? _sr;
+    private bool _loading;
+    private string? _error;
+    private string? _dealershipId;
+    private List<string> _allowedStatuses = [];
+    private string? _selectedStatus;
+    private bool _statusUpdating;
+    private string? _statusError;
+    private bool _saving;
+    private CreateForm _createForm = new();
+    private string? _previousServiceRequestId;
+    private bool _previousVisible;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var needsLoad = false;
+
+        if (Visible && !_previousVisible)
+        {
+            needsLoad = true;
+        }
+        else if (Visible && ServiceRequestId != _previousServiceRequestId)
+        {
+            needsLoad = true;
+        }
+
+        _previousVisible = Visible;
+        _previousServiceRequestId = ServiceRequestId;
+
+        if (!needsLoad) return;
+
+        _error = null;
+        _sr = null;
+        _statusError = null;
+        _selectedStatus = null;
+
+        if (string.IsNullOrEmpty(ServiceRequestId))
+        {
+            _mode = DialogMode.Create;
+            _createForm = new CreateForm();
+            return;
+        }
+
+        _mode = DialogMode.View;
+        _loading = true;
+
+        try
+        {
+            _dealershipId ??= await ResolveDealershipIdAsync();
+
+            if (_dealershipId is null)
+            {
+                _error = "No dealership found.";
+                return;
+            }
+
+            _sr = await SrClient.GetByIdAsync(_dealershipId, ServiceRequestId);
+            RefreshAllowedStatuses();
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task<string?> ResolveDealershipIdAsync()
+    {
+        var dealerships = await LookupClient.GetDealershipsAsync();
+        return dealerships.FirstOrDefault()?.Id;
+    }
+
+    private void RefreshAllowedStatuses()
+    {
+        if (_sr is null) return;
+        _allowedStatuses = [.. StatusTransitions.GetAllowedTargets(_sr.Status)];
+        _selectedStatus = null;
+    }
+
+    private async Task OnStatusChangeAsync(string newStatus)
+    {
+        if (_sr is null || _dealershipId is null || string.IsNullOrEmpty(newStatus)) return;
+
+        _statusUpdating = true;
+        _statusError = null;
+        StateHasChanged();
+
+        try
+        {
+            var request = new ServiceRequestUpdateRequestDto
+            {
+                Status = newStatus,
+                IssueDescription = _sr.IssueDescription,
+                Priority = _sr.Priority ?? "Medium"
+            };
+
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            RefreshAllowedStatuses();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _statusError = ex.Message;
+        }
+        finally
+        {
+            _statusUpdating = false;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_createForm.FirstName) ||
+            string.IsNullOrWhiteSpace(_createForm.LastName) ||
+            string.IsNullOrWhiteSpace(_createForm.Email) ||
+            string.IsNullOrWhiteSpace(_createForm.AssetId) ||
+            string.IsNullOrWhiteSpace(_createForm.IssueCategory) ||
+            string.IsNullOrWhiteSpace(_createForm.IssueDescription))
+        {
+            Snackbar.Add("Please fill in all required fields.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        StateHasChanged();
+
+        try
+        {
+            _dealershipId ??= await ResolveDealershipIdAsync();
+
+            if (_dealershipId is null)
+            {
+                Snackbar.Add("No dealership found.", Severity.Error);
+                return;
+            }
+
+            var request = new ServiceRequestCreateRequestDto
+            {
+                Customer = new CustomerInfoDto
+                {
+                    FirstName = _createForm.FirstName!,
+                    LastName = _createForm.LastName!,
+                    Email = _createForm.Email!,
+                    Phone = _createForm.Phone
+                },
+                Asset = new AssetInfoDto
+                {
+                    AssetId = _createForm.AssetId!,
+                    Manufacturer = _createForm.Manufacturer,
+                    Model = _createForm.Model,
+                    Year = _createForm.Year
+                },
+                IssueCategory = _createForm.IssueCategory!,
+                IssueDescription = _createForm.IssueDescription!
+            };
+
+            await SrClient.CreateAsync(_dealershipId, request);
+            Snackbar.Add("Service request created.", Severity.Success);
+            await OnChanged.InvokeAsync();
+            await CloseDialog();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to create service request: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ViewAttachmentAsync(AttachmentDto attachment)
+    {
+        if (_dealershipId is null || _sr is null) return;
+
+        try
+        {
+            var sas = await AttachmentClient.GetReadSasAsync(_dealershipId, _sr.Id, attachment.AttachmentId);
+            Navigation.NavigateTo(sas.SasUrl, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            _statusError = $"Failed to open attachment: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private void NavigateToEdit()
+    {
+        if (_sr is null) return;
+        Navigation.NavigateTo($"/service-requests/{_sr.Id}/edit");
+    }
+
+    private async Task CloseDialog()
+    {
+        Visible = false;
+        await VisibleChanged.InvokeAsync(false);
+    }
+
+    private static string FormatStatus(string status) => status switch
+    {
+        "InProgress" => "In Progress",
+        "WaitingOnParts" => "Waiting on Parts",
+        _ => status
+    };
+
+    private static string GetAttachmentIcon(string contentType)
+    {
+        if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return Icons.Material.Filled.Image;
+        if (contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase))
+            return Icons.Material.Filled.PictureAsPdf;
+        return Icons.Material.Filled.InsertDriveFile;
+    }
+
+    private static string FormatFileSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+        _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
+    };
+
+    private sealed class CreateForm
+    {
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string? AssetId { get; set; }
+        public string? Manufacturer { get; set; }
+        public string? Model { get; set; }
+        public int? Year { get; set; }
+        public string? IssueCategory { get; set; }
+        public string? IssueDescription { get; set; }
+        public string? Priority { get; set; } = "Medium";
+    }
+}

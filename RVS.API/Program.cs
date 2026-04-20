@@ -134,6 +134,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("permissions", "service-requests:read"));
     options.AddPolicy("CanSearchServiceRequests", policy =>
         policy.RequireClaim("permissions", "service-requests:search"));
+    options.AddPolicy("CanCreateServiceRequests", policy =>
+        policy.RequireClaim("permissions", "service-requests:create"));
     options.AddPolicy("CanUpdateServiceRequests", policy =>
         policy.RequireClaim("permissions", "service-requests:update"));
     options.AddPolicy("CanUpdateServiceEvent", policy =>
