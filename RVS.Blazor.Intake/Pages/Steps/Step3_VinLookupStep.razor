@@ -46,12 +46,15 @@
                                   OnAdornmentClick="ToggleVinRecording"
                                   Disabled="_isTranscribing"
                                   Style="max-width: 27ch;" />
-                    <MudIconButton Icon="@Icons.Material.Filled.CameraAlt"
-                                   Color="Color.Primary"
-                                   Size="Size.Medium"
-                                   OnClick="TriggerCameraCapture"
-                                   Disabled="@(_isRecording || _isTranscribing)"
-                                   aria-label="Capture VIN with camera" />
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Outlined.CameraAlt"
+                               Size="Size.Medium"
+                               OnClick="TriggerCameraCapture"
+                               Disabled="@(_isRecording || _isTranscribing)"
+                               aria-label="Capture VIN with camera">
+                        Camera
+                    </MudButton>
                 </MudStack>
                 @if (_isRecording)
                 {

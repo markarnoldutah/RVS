@@ -109,7 +109,7 @@
                                      Style="cursor: grab; min-width: 0; overflow: hidden; background: transparent; border: 1px solid var(--mud-palette-lines-default);">
                                 <MudCardContent Class="pa-3">
                                     <MudStack Spacing="1">
-                                        @* Header row: priority dot + customer name link *@
+                                        @* Header row: priority dot + customer name / asset link *@
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
                                                   Style="overflow: hidden; min-width: 0;">
                                             @if (!string.IsNullOrWhiteSpace(boardItem.Summary.Priority))
@@ -118,26 +118,24 @@
                                                       title="@boardItem.Summary.Priority"
                                                       aria-label="Priority: @boardItem.Summary.Priority"></span>
                                             }
-                                            <MudLink Typo="Typo.subtitle2"
-                                                     Href="@($"/service-requests/{boardItem.Summary.Id}")"
-                                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-                                                     @onclick:stopPropagation="true">
-                                                @boardItem.Summary.CustomerFullName
-                                            </MudLink>
-                                        </MudStack>
-
-                                        @* Asset info *@
-                                        @if (!string.IsNullOrWhiteSpace(boardItem.Summary.AssetDisplay))
-                                        {
                                             <MudLink Typo="Typo.body2"
                                                      Href="@($"/service-requests/{boardItem.Summary.Id}")"
                                                      Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
                                                      @onclick:stopPropagation="true">
-                                                @boardItem.Summary.AssetDisplay
+                                                @FormatCustomerAssetLine(boardItem.Summary)
                                             </MudLink>
+                                        </MudStack>
+
+                                        @* Advisor notes (first line) *@
+                                        @if (!string.IsNullOrWhiteSpace(boardItem.Summary.TechnicianSummary))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary"
+                                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                @GetFirstLine(boardItem.Summary.TechnicianSummary)
+                                            </MudText>
                                         }
 
-                                        @* Chips row: created date, category *@
+                                        @* Chips row: created date, category, assigned tech *@
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
                                                   Wrap="Wrap.Wrap" Class="mt-1">
                                             <MudChip T="string" Size="Size.Small"
@@ -151,9 +149,17 @@
                                                     @boardItem.Summary.IssueCategory
                                                 </MudChip>
                                             }
-                                        </MudStack>
-                                    </MudStack>
-                                </MudCardContent>
+                                                    @if (!string.IsNullOrWhiteSpace(boardItem.Summary.AssignedTechnicianId))
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small"
+                                                                 Variant="Variant.Outlined"
+                                                                 Icon="@Icons.Material.Filled.Person">
+                                                            @boardItem.Summary.AssignedTechnicianId
+                                                        </MudChip>
+                                                    }
+                                                </MudStack>
+                                            </MudStack>
+                                        </MudCardContent>
                             </MudCard>
                         </MudDynamicDropItem>
                     </ItemRenderer>
@@ -438,6 +444,26 @@
             return $"{(int)age.TotalDays}d ago";
 
         return $"{(int)(age.TotalDays / 30)}mo ago";
+    }
+
+    private static string GetFirstLine(string text)
+    {
+        var idx = text.AsSpan().IndexOfAny('\r', '\n');
+        return idx >= 0 ? text[..idx] : text;
+    }
+
+    private static string FormatCustomerAssetLine(ServiceRequestSummaryResponseDto summary)
+    {
+        var name = ToTitleCase(summary.CustomerFullName);
+        return string.IsNullOrWhiteSpace(summary.AssetDisplay)
+            ? name
+            : $"{name}, {summary.AssetDisplay}";
+    }
+
+    private static string ToTitleCase(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(value.ToLowerInvariant());
     }
 
     private static string GetPriorityDotStyle(string? priority) => priority?.Trim().ToLowerInvariant() switch
