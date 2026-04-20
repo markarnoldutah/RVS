@@ -39,16 +39,15 @@
     </Authorized>
     <NotAuthorized>
         <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center"
-                  Style="min-height: 400px;" Spacing="4">
-            <MudIcon Icon="@Icons.Material.Filled.RvHookup"
-                     Color="Color.Primary" Size="Size.Large"
-                     aria-hidden="true" />
-            <MudText Typo="Typo.h5">RVS Manager</MudText>
-@*             <MudText Typo="Typo.body1" Color="Color.Secondary">
-                Sign in to manage service requests.
-            </MudText> *@
+                  Style="min-height: 80vh;" Spacing="4">
+            <MudText Typo="Typo.h5" Style="margin: 0 0 8px; font-weight: 500; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+                RVS Manager
+            </MudText>
+            <MudText Typo="Typo.body2" Style="margin: 0 0 24px; color: #e0e0e0; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+                Manage service requests and operations
+            </MudText>
             <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Login"
+                       Size="Size.Large"
                        OnClick="BeginLogin">
                 Log In
             </MudButton>

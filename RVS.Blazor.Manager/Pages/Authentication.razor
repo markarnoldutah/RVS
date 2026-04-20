@@ -50,10 +50,18 @@
         </MudStack>
     </LogOutFailed>
     <LogOutSucceeded>
-        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 400px;" Spacing="4">
-            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" aria-hidden="true" />
-            <MudText Typo="Typo.body1">You have been successfully logged out.</MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">Return to Home</MudButton>
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 80vh;" Spacing="4">
+            <MudText Typo="Typo.h5" Style="margin: 0 0 8px; font-weight: 500; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+                RVS Manager
+            </MudText>
+            <MudText Typo="Typo.body2" Style="margin: 0 0 24px; font-size: 0.875rem; color: #e0e0e0; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+                You have been successfully logged out.
+            </MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       Size="Size.Large"
+                       Href="authentication/login">
+                Log In
+            </MudButton>
         </MudStack>
     </LogOutSucceeded>
 </RemoteAuthenticatorView>

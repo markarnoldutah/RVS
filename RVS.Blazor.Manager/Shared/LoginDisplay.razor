@@ -1,12 +1,12 @@
 @inject NavigationManager Navigation
 @inject ThemeService ThemeService
 
-<AuthorizeView>
-    <Authorized Context="authState">
+<AuthorizeView Context="authState">
+    <Authorized>
         <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
             <ActivatorContent>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
-                           Style="cursor: pointer;">
+                           Style="cursor: pointer;" @onclick="context.ToggleAsync">
                     <MudText Typo="Typo.body2" Color="Color.Inherit">
                         @GetFirstName(authState)
                     </MudText>
@@ -43,7 +43,6 @@
     </Authorized>
     <NotAuthorized>
         <MudButton Variant="Variant.Text" Color="Color.Inherit"
-                   StartIcon="@Icons.Material.Filled.Login"
                    OnClick="BeginLogin">
             Log in
         </MudButton>
@@ -66,30 +65,30 @@
         await ThemeService.SetModeAsync(mode);
     }
 
-    private static string GetFirstName(AuthenticationState context)
+    private static string GetFirstName(AuthenticationState authState)
     {
-        var givenName = context.User.FindFirst("given_name")?.Value;
+        var givenName = authState.User.FindFirst("given_name")?.Value;
         if (!string.IsNullOrWhiteSpace(givenName))
         {
             return givenName;
         }
 
-        var fullName = GetDisplayName(context);
+        var fullName = GetDisplayName(authState);
         var nameParts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return nameParts.Length > 0 ? nameParts[0] : "User";
     }
 
-    private static string GetDisplayName(AuthenticationState context)
+    private static string GetDisplayName(AuthenticationState authState)
     {
-        return context.User.Identity?.Name
-            ?? context.User.FindFirst("email")?.Value
-            ?? context.User.FindFirst("preferred_username")?.Value
+        return authState.User.Identity?.Name
+            ?? authState.User.FindFirst("email")?.Value
+            ?? authState.User.FindFirst("preferred_username")?.Value
             ?? "User";
     }
 
-    private static string GetUserInitials(AuthenticationState context)
+    private static string GetUserInitials(AuthenticationState authState)
     {
-        var fullName = GetDisplayName(context);
+        var fullName = GetDisplayName(authState);
         var nameParts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
         if (nameParts.Length >= 2)
@@ -105,11 +104,11 @@
         return "U";
     }
 
-    private static string GetUserEmail(AuthenticationState context)
+    private static string GetUserEmail(AuthenticationState authState)
     {
-        return context.User.FindFirst("email")?.Value
-            ?? context.User.FindFirst("preferred_username")?.Value
-            ?? context.User.FindFirst("upn")?.Value
+        return authState.User.FindFirst("email")?.Value
+            ?? authState.User.FindFirst("preferred_username")?.Value
+            ?? authState.User.FindFirst("upn")?.Value
             ?? string.Empty;
     }
 }

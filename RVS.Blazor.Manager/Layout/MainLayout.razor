@@ -8,30 +8,65 @@
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<MudLayout>
-    <MudAppBar Elevation="2" Color="Color.Primary">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu"
-                       Color="Color.Inherit"
-                       Edge="Edge.Start"
-                       aria-label="Toggle navigation menu"
-                       OnClick="ToggleDrawer" />
+<CascadingAuthenticationState>
+    <AuthorizeView>
+        <Authorized>
+            @{ _isAuthorized = true; }
+        </Authorized>
+        <NotAuthorized>
+            @{ _isAuthorized = false; }
+        </NotAuthorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
+
+<MudLayout Style="@GetLayoutStyle()">
+    <MudAppBar Elevation="2"
+               Color="Color.Primary">
+        @if (_isAuthorized)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                           Color="Color.Inherit"
+                           Edge="Edge.Start"
+                           aria-label="Toggle navigation menu"
+                           OnClick="ToggleDrawer" />
+        }
         <MudIconButton Icon="@Icons.Material.Filled.RvHookup"
                        Color="Color.Inherit"
                        Href="/"
                        aria-label="RVS Manager home" />
-        <MudText Typo="Typo.h6" Class="ml-2">
+        <MudText Typo="Typo.h6" Class="ml-2" Style="color: white;">
             RVS Manager
         </MudText>
         <MudSpacer />
-        <LoginDisplay />
+        @if (_isAuthorized)
+        {
+            <LoginDisplay />
+        }
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always">
-        <NavMenu />
-    </MudDrawer>
+    @if (_isAuthorized)
+    {
+        <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always">
+            <NavMenu />
+        </MudDrawer>
+    }
 
-    <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.Large" Class="py-4 px-4">
+    <MudMainContent Style="@GetMainContentStyle()">
+        @if (_isAuthorized)
+        {
+            <MudContainer MaxWidth="MaxWidth.Large" Class="py-4 px-4">
+                <ErrorBoundary>
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent Context="ex">
+                        <MudAlert Severity="Severity.Error" Class="my-4">@ex.Message</MudAlert>
+                    </ErrorContent>
+                </ErrorBoundary>
+            </MudContainer>
+        }
+        else
+        {
             <ErrorBoundary>
                 <ChildContent>
                     @Body
@@ -40,16 +75,19 @@
                     <MudAlert Severity="Severity.Error" Class="my-4">@ex.Message</MudAlert>
                 </ErrorContent>
             </ErrorBoundary>
-        </MudContainer>
+        }
     </MudMainContent>
 
-    <MudAppBar Bottom="true" Elevation="0" Color="Color.Transparent" Dense="true"
-               Style="background: var(--mud-palette-background-gray);">
-        <MudText Typo="Typo.caption" Color="Color.Secondary">
-            &copy; @DateTime.UtcNow.Year RV Service Flow &mdash; Manager
-        </MudText>
-        <MudSpacer />
-    </MudAppBar>
+    @if (_isAuthorized)
+    {
+        <MudAppBar Bottom="true" Elevation="0" Color="Color.Transparent" Dense="true"
+                   Style="background: var(--mud-palette-background-gray);">
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                &copy; @DateTime.UtcNow.Year RV Service Flow &mdash; Manager
+            </MudText>
+            <MudSpacer />
+        </MudAppBar>
+    }
 </MudLayout>
 
 <div id="blazor-error-ui" data-nosnippet>
@@ -60,6 +98,7 @@
 
 @code {
     private bool _drawerOpen = true;
+    private bool _isAuthorized;
 
     protected override void OnInitialized()
     {
@@ -83,5 +122,19 @@
     private void ToggleDrawer()
     {
         _drawerOpen = !_drawerOpen;
+    }
+
+    private string GetMainContentStyle()
+    {
+        return _isAuthorized
+            ? string.Empty
+            : "min-height: calc(100vh - var(--mud-appbar-height));";
+    }
+
+    private string GetLayoutStyle()
+    {
+        return _isAuthorized
+            ? string.Empty
+            : "background: linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url('images/tetons-desktop.jpg') center 40%/cover no-repeat fixed; min-height: 100vh;";
     }
 }

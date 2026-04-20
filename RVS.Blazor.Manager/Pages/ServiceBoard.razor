@@ -77,85 +77,85 @@
                                   ApplyDropClassesOnDragStarted="true"
                                   CanDropClass="mud-border-success"
                                   NoDropClass="mud-border-error"
-                                   Class="d-flex flex-row flex-wrap gap-4 flex-grow-1"
+                                  Class="flex-grow-1"
                                   Style="min-height: 0;">
                     <ChildContent>
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; height: 100%;">
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; height: 100%; width: 100%;">
                             @foreach (var column in _columns)
                             {
                                 var columnItems = _boardItems.Where(i => i.Status == column.Status).ToList();
-                                <div style="display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;">
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-                                            <MudIcon Icon="@column.Icon" Color="@column.Color" Size="Size.Small"
-                                                     aria-hidden="true" />
-                                            <MudText Typo="Typo.h6">@column.Title</MudText>
-                                            <MudChip T="string" Size="Size.Small" Color="@column.Color"
-                                                     Variant="Variant.Outlined">
-                                                @columnItems.Count
-                                            </MudChip>
+                                <div style="display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--mud-palette-background-gray); border-radius: 4px;">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="pa-2">
+                                        <MudText Typo="Typo.subtitle2">@column.Title</MudText>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                                 Color="Color.Default"
+                                                 Style="font-weight: 700; min-height: 24px;">
+                                            @columnItems.Count
+                                        </MudChip>
+                                    </MudStack>
+
+                                    <MudDropZone T="BoardItem"
+                                                 Identifier="@column.Status"
+                                                 Class="d-flex flex-column gap-2 flex-grow-1"
+                                                 Style="overflow-y: auto; overflow-x: hidden; padding: 8px; padding-top: 0;"
+                                                 AllowReorder="true" />
+                                </div>
+                            }
+                        </div>
+                    </ChildContent>
+                    <ItemRenderer Context="boardItem">
+                        <MudDynamicDropItem T="BoardItem" @ref="boardItem.DropItemRef" Item="boardItem">
+                            <MudCard Elevation="1"
+                                     Style="cursor: grab; min-width: 0; overflow: hidden; background: transparent; border: 1px solid var(--mud-palette-lines-default);">
+                                <MudCardContent Class="pa-3">
+                                    <MudStack Spacing="1">
+                                        @* Header row: priority dot + customer name link *@
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
+                                                  Style="overflow: hidden; min-width: 0;">
+                                            @if (!string.IsNullOrWhiteSpace(boardItem.Summary.Priority))
+                                            {
+                                                <span style="@GetPriorityDotStyle(boardItem.Summary.Priority)"
+                                                      title="@boardItem.Summary.Priority"
+                                                      aria-label="Priority: @boardItem.Summary.Priority"></span>
+                                            }
+                                            <MudLink Typo="Typo.subtitle2"
+                                                     Href="@($"/service-requests/{boardItem.Summary.Id}")"
+                                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                                                     @onclick:stopPropagation="true">
+                                                @boardItem.Summary.CustomerFullName
+                                            </MudLink>
                                         </MudStack>
 
-                                        <MudDropZone T="BoardItem"
-                                                     Identifier="@column.Status"
-                                                     Class="d-flex flex-column gap-2 flex-grow-1"
-                                                     Style="overflow-y: auto; overflow-x: hidden; background: var(--mud-palette-background-gray); border-radius: 4px; padding: 8px;"
-                                                     AllowReorder="true" />
-                                                </div>
-                                            }
-                                        </div>
-                                    </ChildContent>
-                    <ItemRenderer Context="boardItem">
-                        <MudCard Elevation="2"
-                                 Style="cursor: grab; min-width: 0; overflow: hidden;"
-                                 @onclick="() => NavigateToDetail(boardItem.Summary.Id)">
-                            <MudCardContent Class="pa-3">
-                                <MudStack Spacing="1">
-                                    @* Header row: customer name + drag handle *@
-                                    <MudStack Row="true" AlignItems="AlignItems.Center"
-                                              Justify="Justify.SpaceBetween">
-                                        <MudText Typo="Typo.subtitle2">
-                                            @boardItem.Summary.CustomerFullName
-                                        </MudText>
-                                        <MudIcon Icon="@Icons.Material.Filled.DragIndicator"
-                                                 Size="Size.Small"
-                                                 Color="Color.Default"
-                                                 Class="mud-text-disabled"
-                                                 aria-hidden="true" />
-                                    </MudStack>
-
-                                    @* Asset info *@
-                                    @if (!string.IsNullOrWhiteSpace(boardItem.Summary.AssetDisplay))
-                                    {
-                                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                            @boardItem.Summary.AssetDisplay
-                                        </MudText>
-                                    }
-
-                                    @* Category *@
-                                    @if (!string.IsNullOrWhiteSpace(boardItem.Summary.IssueCategory))
-                                    {
-                                        <MudChip T="string" Size="Size.Small"
-                                                 Variant="Variant.Outlined"
-                                                 Color="Color.Default">
-                                            @boardItem.Summary.IssueCategory
-                                        </MudChip>
-                                    }
-
-                                    @* Age and priority row *@
-                                    <MudStack Row="true" AlignItems="AlignItems.Center"
-                                               Justify="Justify.SpaceBetween" Class="mt-1">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            @FormatAge(boardItem.Summary.CreatedAtUtc)
-                                        </MudText>
-                                        @if (!string.IsNullOrWhiteSpace(boardItem.Summary.Priority))
+                                        @* Asset info *@
+                                        @if (!string.IsNullOrWhiteSpace(boardItem.Summary.AssetDisplay))
                                         {
-                                            <RVS.UI.Shared.Components.PriorityBadge
-                                                Priority="@boardItem.Summary.Priority" />
+                                            <MudLink Typo="Typo.body2"
+                                                     Href="@($"/service-requests/{boardItem.Summary.Id}")"
+                                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                                                     @onclick:stopPropagation="true">
+                                                @boardItem.Summary.AssetDisplay
+                                            </MudLink>
                                         }
+
+                                        @* Chips row: created date, category *@
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
+                                                  Wrap="Wrap.Wrap" Class="mt-1">
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Variant="Variant.Outlined">
+                                                @FormatAge(boardItem.Summary.CreatedAtUtc)
+                                            </MudChip>
+                                            @if (!string.IsNullOrWhiteSpace(boardItem.Summary.IssueCategory))
+                                            {
+                                                <MudChip T="string" Size="Size.Small"
+                                                         Variant="Variant.Outlined">
+                                                    @boardItem.Summary.IssueCategory
+                                                </MudChip>
+                                            }
+                                        </MudStack>
                                     </MudStack>
-                                </MudStack>
-                            </MudCardContent>
-                        </MudCard>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudDynamicDropItem>
                     </ItemRenderer>
                 </MudDropContainer>
             }
@@ -399,11 +399,6 @@
         }
     }
 
-    private void NavigateToDetail(string srId)
-    {
-        Navigation.NavigateTo($"/service-requests/{srId}");
-    }
-
     private void StartPolling()
     {
         _pollCts = new CancellationTokenSource();
@@ -445,6 +440,15 @@
         return $"{(int)(age.TotalDays / 30)}mo ago";
     }
 
+    private static string GetPriorityDotStyle(string? priority) => priority?.Trim().ToLowerInvariant() switch
+    {
+        "critical" => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--mud-palette-error);",
+        "high"     => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--mud-palette-warning);",
+        "medium"   => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #9e9e9e;",
+        "low"      => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: transparent; border: 2px solid #9e9e9e;",
+        _          => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: transparent;",
+    };
+
     public void Dispose()
     {
         AppState.OnLocationChanged -= HandleLocationChangedAsync;
@@ -462,6 +466,7 @@
         public ServiceRequestSummaryResponseDto Summary { get; } = summary;
         public string Status { get; set; } = summary.Status;
         public int Sequence { get; set; } = summary.BoardSequence;
+        public MudDynamicDropItem<BoardItem>? DropItemRef { get; set; }
     }
 
     private sealed record BoardColumn(string Title, string Status, string Icon, Color Color);

@@ -155,6 +155,8 @@ public sealed class ThemeService(IJSRuntime js)
             ActionDisabled = "#666666",
             AppbarBackground = "#000000",
             AppbarText = "#FFFFFF",
+            DrawerBackground = "#000000",
+            DrawerText = "#FFFFFF",
         },
         Typography = new Typography
         {

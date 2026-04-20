@@ -199,11 +199,9 @@
         @if (_uploadProgress is not null)
         {
             <MudStack Spacing="1">
-                <MudProgressLinear Color="Color.Primary"
-                                   Indeterminate="true"
-                                   Rounded="true"
-                                   Size="Size.Large"
-                                   Class="mt-2" />
+                <MudStack AlignItems="AlignItems.Center" Class="mt-2">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" aria-label="Submitting" />
+                </MudStack>
                 <MudProgressLinear Color="Color.Primary"
                                    Value="@_uploadProgress.Value"
                                    Max="100"
