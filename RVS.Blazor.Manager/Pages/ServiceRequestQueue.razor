@@ -7,7 +7,14 @@
 <PageTitle>RVS Manager — Service Requests</PageTitle>
 
 <MudStack Spacing="4" Class="pa-2">
-    <MudText Typo="Typo.h4">Service Requests</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4">Service Requests</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            New Service Request
+        </MudButton>
+    </MudStack>
 
     @* Search / Filter Panel *@
     <MudExpansionPanels>
@@ -153,6 +160,11 @@
     }
 </MudStack>
 
+<ServiceRequestDetailDialog @bind-Visible="_detailDialogOpen"
+                            ServiceRequestId="@_detailDialogSrId"
+                            CurrentStatus="@_detailDialogStatus"
+                            OnChanged="OnDialogChangedAsync" />
+
 @code {
     private const int PageSize = 25;
     private SearchModel _search = new();
@@ -274,8 +286,26 @@
 
     private void OnRowClick(TableRowClickEventArgs<ServiceRequestSummaryResponseDto> args)
     {
-        Navigation.NavigateTo($"/service-requests/{args.Item!.Id}");
+        _detailDialogSrId = args.Item!.Id;
+        _detailDialogStatus = args.Item.Status;
+        _detailDialogOpen = true;
     }
+
+    private void OpenCreateDialog()
+    {
+        _detailDialogSrId = null;
+        _detailDialogStatus = null;
+        _detailDialogOpen = true;
+    }
+
+    private async Task OnDialogChangedAsync()
+    {
+        await SearchAsync();
+    }
+
+    private bool _detailDialogOpen;
+    private string? _detailDialogSrId;
+    private string? _detailDialogStatus;
 
     private sealed class SearchModel
     {

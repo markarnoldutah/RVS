@@ -22,6 +22,28 @@ public sealed class ServiceRequestApiClient
     }
 
     /// <summary>
+    /// Creates a new service request.
+    /// </summary>
+    public async Task<ServiceRequestDetailResponseDto> CreateAsync(
+        string dealershipId,
+        ServiceRequestCreateRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests",
+            request,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<ServiceRequestDetailResponseDto>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize create response.");
+    }
+
+    /// <summary>
     /// Gets a single service request by ID.
     /// </summary>
     public async Task<ServiceRequestDetailResponseDto> GetByIdAsync(

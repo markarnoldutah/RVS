@@ -19,8 +19,8 @@ else if (_sr is not null)
     <MudStack Spacing="4" Class="pa-2">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
-                           OnClick="@(() => Navigation.NavigateTo($"/service-requests/{Id}"))"
-                           aria-label="Back to detail" />
+                           OnClick="@(() => Navigation.NavigateTo("/service-requests"))"
+                           aria-label="Back to list" />
             <MudText Typo="Typo.h5">Edit Service Request</MudText>
         </MudStack>
 
@@ -90,7 +90,7 @@ else if (_sr is not null)
                 @* Actions *@
                 <MudItem xs="12" Class="d-flex gap-2 justify-end">
                     <MudButton Variant="Variant.Outlined" Color="Color.Default"
-                               Href="@($"/service-requests/{Id}")">
+                               Href="/service-requests">
                         Cancel
                     </MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary"
@@ -190,7 +190,7 @@ else if (_sr is not null)
 
             await SrClient.UpdateAsync(_dealershipId, Id, request);
             Snackbar.Add("Service request updated.", Severity.Success);
-            Navigation.NavigateTo($"/service-requests/{Id}");
+            Navigation.NavigateTo("/service-requests");
         }
         catch (Exception ex)
         {
