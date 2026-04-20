@@ -114,7 +114,7 @@
                                      Style="cursor: grab; min-width: 0; overflow: hidden; background: transparent; border: 1px solid var(--mud-palette-lines-default);">
                                 <MudCardContent Class="pa-3">
                                     <MudStack Spacing="1">
-                                        @* Header row: priority dot + customer name / asset link *@
+                                        @* Header row: priority dot + customer name, asset link *@
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
                                                   Style="overflow: hidden; min-width: 0;">
                                             @if (!string.IsNullOrWhiteSpace(boardItem.Summary.Priority))
@@ -123,21 +123,22 @@
                                                       title="@boardItem.Summary.Priority"
                                                       aria-label="Priority: @boardItem.Summary.Priority"></span>
                                             }
-                                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--mud-palette-primary); font-weight: 500;"
-                                                  @onclick="@(() => OpenDetailDialog(boardItem.Summary.Id, boardItem.Status))"
-                                                  @onclick:stopPropagation="true">
-                                                @boardItem.Summary.CustomerFullName
+                                            <span @onclick:stopPropagation="true">
+                                                <MudLink Typo="Typo.body2"
+                                                         Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-weight: 400;"
+                                                         OnClick="@(() => OpenDetailDialog(boardItem.Summary.Id, boardItem.Status))">
+                                                    @FormatCustomerAssetLine(boardItem.Summary)
+                                                </MudLink>
                                             </span>
                                         </MudStack>
 
                                         @* Advisor notes (first line) *@
                                         @if (!string.IsNullOrWhiteSpace(boardItem.Summary.TechnicianSummary))
                                         {
-                                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--mud-palette-primary); font-size: 0.875rem;"
-                                                  @onclick="@(() => OpenDetailDialog(boardItem.Summary.Id, boardItem.Status))"
-                                                  @onclick:stopPropagation="true">
-                                                @boardItem.Summary.AssetDisplay
-                                            </span>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary"
+                                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                @GetFirstLine(boardItem.Summary.TechnicianSummary)
+                                            </MudText>
                                         }
 
                                         @* Chips row: created date, category, assigned tech *@
