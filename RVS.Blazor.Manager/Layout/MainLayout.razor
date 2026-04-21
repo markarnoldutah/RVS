@@ -34,7 +34,7 @@
                        Color="Color.Inherit"
                        Href="/"
                        aria-label="RVS Manager home" />
-        <MudText Typo="Typo.h6" Class="ml-2" Style="color: white;">
+        <MudText Typo="Typo.h6" Class="ml-2" Style="@($"color: {(ThemeService.Mode == ThemeMode.HighContrast ? "black" : "white")};")">
             RVS Manager
         </MudText>
         <MudSpacer />

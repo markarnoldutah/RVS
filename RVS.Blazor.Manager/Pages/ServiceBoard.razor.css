@@ -1,0 +1,21 @@
+.board-column-scroll {
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px;
+    padding-top: 0;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.board-column-add {
+    opacity: 0;
+    transition: opacity 0.15s ease-in-out;
+    margin-top: 8px;
+    flex-shrink: 0;
+}
+
+.board-column:hover .board-column-add {
+    opacity: 1;
+}

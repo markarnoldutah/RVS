@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject RVS.Blazor.Manager.State.ManagerAppState AppState
+@inject ThemeService ThemeService
 @using RVS.Domain.Validation
 
 <PageTitle>RVS Manager — Service Board</PageTitle>
@@ -23,11 +24,6 @@
                             Updated @_lastRefreshed.Value.ToLocalTime().ToString("h:mm tt")
                         </MudText>
                     }
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.Add"
-                               OnClick="@(() => OpenCreateDialog())">
-                        New SR
-                    </MudButton>
                     <MudIconButton Icon="@Icons.Material.Filled.Refresh"
                                    Color="Color.Primary"
                                    OnClick="RefreshBoardAsync"
@@ -89,7 +85,8 @@
                             @foreach (var column in _columns)
                             {
                                 var columnItems = _boardItems.Where(i => i.Status == column.Status).ToList();
-                                <div style="display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--mud-palette-background-gray); border-radius: 4px;">
+                                var columnStatus = column.Status;
+                                <div class="board-column" style="display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--mud-palette-background-gray); border-radius: 4px;">
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="pa-2">
                                         <MudText Typo="Typo.subtitle2">@column.Title</MudText>
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
@@ -99,11 +96,22 @@
                                         </MudChip>
                                     </MudStack>
 
-                                    <MudDropZone T="BoardItem"
-                                                 Identifier="@column.Status"
-                                                 Class="d-flex flex-column gap-2 flex-grow-1"
-                                                 Style="overflow-y: auto; overflow-x: hidden; padding: 8px; padding-top: 0;"
-                                                 AllowReorder="true" />
+                                    <div class="board-column-scroll">
+                                        <MudDropZone T="BoardItem"
+                                                     Identifier="@column.Status"
+                                                     Class="d-flex flex-column gap-2"
+                                                     AllowReorder="true" />
+                                        <div class="board-column-add">
+                                            <MudButton Variant="Variant.Text"
+                                                       Style="@($"color: {AddButtonColor};")"
+                                                       EndIcon="@Icons.Material.Filled.Add"
+                                                       Size="Size.Small"
+                                                       FullWidth="true"
+                                                       OnClick="@(() => OpenCreateDialog(columnStatus))">
+                                                Add
+                                            </MudButton>
+                                        </div>
+                                    </div>
                                 </div>
                             }
                         </div>
@@ -111,21 +119,21 @@
                     <ItemRenderer Context="boardItem">
                         <MudDynamicDropItem T="BoardItem" @ref="boardItem.DropItemRef" Item="boardItem">
                             <MudCard Elevation="1"
-                                     Style="cursor: grab; min-width: 0; overflow: hidden; background: transparent; border: 1px solid var(--mud-palette-lines-default);">
+                                     Style="@($"cursor: grab; min-width: 0; overflow: hidden; background: transparent; border: 1px solid {CardBorderColor};")">
                                 <MudCardContent Class="pa-3">
                                     <MudStack Spacing="1">
                                         @* Header row: priority dot + customer name, asset link *@
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
-                                                  Style="overflow: hidden; min-width: 0;">
+                                        <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2"
+                                                  Style="min-width: 0;">
                                             @if (!string.IsNullOrWhiteSpace(boardItem.Summary.Priority))
                                             {
-                                                <span style="@GetPriorityDotStyle(boardItem.Summary.Priority)"
+                                                <span style="@GetPriorityDotStyle(boardItem.Summary.Priority) margin-top: 6px;"
                                                       title="@boardItem.Summary.Priority"
                                                       aria-label="Priority: @boardItem.Summary.Priority"></span>
                                             }
-                                            <span @onclick:stopPropagation="true">
+                                            <span @onclick:stopPropagation="true" style="min-width: 0; flex: 1;">
                                                 <MudLink Typo="Typo.body2"
-                                                         Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-weight: 400;"
+                                                         Style="@($"color: {CardTextColor} !important; font-weight: 400; word-break: break-word; white-space: normal;")"
                                                          OnClick="@(() => OpenDetailDialog(boardItem.Summary.Id, boardItem.Status))">
                                                     @FormatCustomerAssetLine(boardItem.Summary)
                                                 </MudLink>
@@ -135,8 +143,8 @@
                                         @* Advisor notes (first line) *@
                                         @if (!string.IsNullOrWhiteSpace(boardItem.Summary.TechnicianSummary))
                                         {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary"
-                                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                            <MudText Typo="Typo.caption"
+                                                     Style="@($"color: {CardTextColor}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;")">
                                                 @GetFirstLine(boardItem.Summary.TechnicianSummary)
                                             </MudText>
                                         }
@@ -213,6 +221,7 @@
         _dealershipId = await ResolveDealershipIdAsync();
 
         AppState.OnLocationChanged += HandleLocationChangedAsync;
+        ThemeService.OnThemeChanged += HandleThemeChanged;
 
         // If a location was already persisted, load data immediately
         if (AppState.SelectedLocation is not null)
@@ -221,6 +230,30 @@
             StartPolling();
         }
     }
+
+    private void HandleThemeChanged()
+    {
+        _needsContainerRefresh = true;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private string CardBorderColor => ThemeService.Mode switch
+    {
+        ThemeMode.Dark => "#FFFFFF",
+        ThemeMode.HighContrast => "#FFFF00",
+        _ => "var(--mud-palette-lines-default)"
+    };
+
+    private string CardTextColor => ThemeService.Mode switch
+    {
+        ThemeMode.Dark => "#FFFFFF",
+        ThemeMode.HighContrast => "#FFFF00",
+        _ => "var(--mud-palette-text-primary)"
+    };
+
+    private string AddButtonColor => ThemeService.Mode == ThemeMode.Dark
+        ? "#FFFFFF"
+        : "var(--mud-palette-primary)";
 
     protected override void OnAfterRender(bool firstRender)
     {
@@ -513,6 +546,7 @@
     public void Dispose()
     {
         AppState.OnLocationChanged -= HandleLocationChangedAsync;
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
         _pollCts?.Cancel();
         _pollCts?.Dispose();
         _pollTimer?.Dispose();
