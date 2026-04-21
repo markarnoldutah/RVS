@@ -71,12 +71,15 @@ public class VinTranscriptCleanerTests
     [InlineData("foxtrot", "F")]
     [InlineData("golf", "G")]
     [InlineData("hotel", "H")]
+    [InlineData("india", "I")]
     [InlineData("juliet", "J")]
     [InlineData("kilo", "K")]
     [InlineData("lima", "L")]
     [InlineData("mike", "M")]
     [InlineData("november", "N")]
+    [InlineData("oscar", "O")]
     [InlineData("papa", "P")]
+    [InlineData("quebec", "Q")]
     [InlineData("romeo", "R")]
     [InlineData("sierra", "S")]
     [InlineData("tango", "T")]
@@ -92,6 +95,36 @@ public class VinTranscriptCleanerTests
         var result = VinTranscriptCleaner.Clean(input);
 
         result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("banana", "B")]
+    [InlineData("elephant", "E")]
+    [InlineData("Mango", "M")]
+    [InlineData("seventeen", "S")]
+    public void Clean_WhenInputContainsUnknownWord_ShouldFallBackToFirstLetter(string input, string expected)
+    {
+        var result = VinTranscriptCleaner.Clean(input);
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Clean_WhenInputMixesIrsaAndUnknownWords_ShouldApplyFirstLetterFallbackToUnknowns()
+    {
+        // alpha→A, banana→B (first-letter fallback), charlie→C
+        var result = VinTranscriptCleaner.Clean("alpha banana charlie");
+
+        result.Should().Be("ABC");
+    }
+
+    [Fact]
+    public void Clean_WhenMultiCharTokenContainsDigits_ShouldKeepAllAlphanumericCharacters()
+    {
+        // Multi-char tokens with digits are treated as VIN chunks, not unknown words.
+        var result = VinTranscriptCleaner.Clean("1HGBH41J");
+
+        result.Should().Be("1HGBH41J");
     }
 
     [Fact]

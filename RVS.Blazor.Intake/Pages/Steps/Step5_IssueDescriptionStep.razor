@@ -200,7 +200,8 @@
                                    Placeholder="MM/YYYY"
                                    MaxDate="@DateTime.Today"
                                    MinDate="_minPurchaseDate"
-                                   AutoClose="true" />
+                                   AutoClose="true"
+                                   UserAttributes="@(new Dictionary<string, object?> { ["inputmode"] = "none" })" />
                 </MudStack>
             </MudPaper>
 

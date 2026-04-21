@@ -5,9 +5,10 @@ namespace RVS.UI.Shared.Validation;
 
 /// <summary>
 /// Converts a speech-to-text transcript of a dictated VIN into clean alphanumeric characters.
-/// Handles spoken numbers ("four" → "4"), NATO phonetic alphabet ("foxtrot" → "F"),
-/// common homophones ("for" → "4", "eye" → "I"), and strips non-alphanumeric characters.
-/// The result is uppercased and truncated to 17 characters (standard VIN length).
+/// Handles spoken numbers ("four" → "4"), IRSA / NATO phonetic alphabet ("foxtrot" → "F"),
+/// common homophones ("for" → "4", "eye" → "I"), and falls back to the first letter for any
+/// alphabetic word not found in the IRSA map ("banana" → "B"). Digit-bearing tokens are kept
+/// as-is (treated as VIN chunks). The result is uppercased and truncated to 17 characters.
 /// </summary>
 public static partial class VinTranscriptCleaner
 {
@@ -56,7 +57,7 @@ public static partial class VinTranscriptCleaner
         ["lima"] = "L",
         ["mike"] = "M",
         ["november"] = "N",
-        ["oscar"] = "0",
+        ["oscar"] = "O",
         ["papa"] = "P",
         ["quebec"] = "Q",
         ["romeo"] = "R",
@@ -134,7 +135,9 @@ public static partial class VinTranscriptCleaner
 
     /// <summary>
     /// Resolves a single token to its VIN character(s).
-    /// Checks the word map first, then falls through to the raw characters.
+    /// Order: word map (spoken digits, homophones, IRSA) → single alphanumeric → digit-bearing VIN chunk → first-letter fallback.
+    /// The first-letter fallback implements the rule: any multi-character word not in the IRSA alphabet
+    /// collapses to its first letter (e.g. "banana" → "B").
     /// </summary>
     private static string ResolveToken(string token)
     {
@@ -143,14 +146,20 @@ public static partial class VinTranscriptCleaner
             return mapped;
         }
 
-        // If it's a single alphanumeric character, keep it
         if (token.Length == 1 && char.IsLetterOrDigit(token[0]))
         {
             return token;
         }
 
-        // For multi-character tokens not in the map, strip non-alphanumeric and keep what remains
-        return NonAlphanumericRegex().Replace(token, "");
+        var stripped = NonAlphanumericRegex().Replace(token, "");
+        if (stripped.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        // Tokens containing any digit are treated as VIN chunks or numerics (e.g. "1HGBH", "17") — keep all.
+        // Pure alphabetic tokens that weren't matched above are unknown IRSA words — collapse to first letter.
+        return stripped.Any(char.IsDigit) ? stripped : stripped[..1];
     }
 
     [GeneratedRegex(@"[\s,;]+")]
