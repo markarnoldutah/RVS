@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using RVS.API.Controllers;
 using RVS.API.Options;
+using MsOptions = Microsoft.Extensions.Options.Options;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
@@ -26,7 +27,7 @@ public class LocationsControllerTests
     public LocationsControllerTests()
     {
         _claimsService = BuildClaimsService(TenantId);
-        var intakeUrlOptions = Options.Create(new IntakeUrlOptions { BaseUrl = IntakeBaseUrl });
+        var intakeUrlOptions = MsOptions.Create(new IntakeUrlOptions { BaseUrl = IntakeBaseUrl });
         _sut = new LocationsController(_serviceMock.Object, _claimsService, intakeUrlOptions);
     }
 
@@ -115,7 +116,7 @@ public class LocationsControllerTests
         _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(location);
 
-        var optionsWithSlash = Options.Create(new IntakeUrlOptions { BaseUrl = "https://rvintake.com/" });
+        var optionsWithSlash = MsOptions.Create(new IntakeUrlOptions { BaseUrl = "https://rvintake.com/" });
         var sut = new LocationsController(_serviceMock.Object, _claimsService, optionsWithSlash);
 
         var result = await sut.GetQrCode(location.Id, CancellationToken.None);

@@ -18,6 +18,8 @@ param cosmosCapacityMode = 'Serverless'
 // Storage (rvs-attachments container + CORS for SAS uploads)
 param deployStorageAccount = true
 param storageCorsOrigins = [
+  'https://staging.rvintake.com'
+  'https://manager-staging.rvserviceflow.com'
   'https://zealous-island-0ff7ab71e.6.azurestaticapps.net'
   'https://mango-grass-08484a41e.1.azurestaticapps.net'
 ]

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using MsOptions = Microsoft.Extensions.Options.Options;
 using RVS.API.Controllers;
 using RVS.API.Integrations;
 using RVS.Domain.DTOs;
@@ -27,7 +28,7 @@ public class IntakeControllerTests
 
     public IntakeControllerTests()
     {
-        var aiOptions = Options.Create(new AiOptions { MaxImageBytes = 5 * 1024 * 1024, MaxAudioBytes = 10 * 1024 * 1024 });
+        var aiOptions = MsOptions.Create(new AiOptions { MaxImageBytes = 5 * 1024 * 1024, MaxAudioBytes = 10 * 1024 * 1024 });
         _sut = new IntakeController(
             _intakeServiceMock.Object,
             _categorizationMock.Object,
