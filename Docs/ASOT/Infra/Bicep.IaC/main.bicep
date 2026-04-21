@@ -86,20 +86,29 @@ param swaSkuName string = 'Free'
 
 // ── DNS Parameters ────────────────────────────────────────────
 
-@description('When true, provisions the Azure DNS zone and SWA CNAME records. Requires deploySwa = true.')
+@description('When true, provisions Azure DNS records for the SWA custom domains. Requires deploySwa = true.')
 param deployDns bool = false
 
-@description('Public DNS zone apex domain.')
-param domainName string = 'rvserviceflow.com'
-
-@description('Resource group that owns the DNS zone. The apex zone is shared across environments.')
+@description('Resource group that owns the DNS zones. Apex zones are shared across environments and owned by the prod RG.')
 param dnsResourceGroupName string = 'rg-rvs-prod-westus3'
 
-@description('Subdomain prefix for the Intake SWA CNAME record.')
-param intakeDnsPrefix string = environmentName == 'prod' ? 'intake' : 'intake-${environmentName}'
+@description('DNS zone for the Manager SWA (CNAME subdomain in every env).')
+param managerZoneName string = 'rvserviceflow.com'
+
+@description('DNS zone for the Intake SWA (apex in prod, subdomain CNAME in non-prod envs).')
+param intakeZoneName string = 'rvintake.com'
 
 @description('Subdomain prefix for the Manager SWA CNAME record.')
 param managerDnsPrefix string = environmentName == 'prod' ? 'manager' : 'manager-${environmentName}'
+
+@description('Subdomain prefix for the Intake SWA CNAME record in non-prod envs (e.g. "staging" -> staging.rvintake.com). Ignored in prod where Intake binds to the apex.')
+param intakeDnsPrefix string = environmentName == 'prod' ? '' : environmentName
+
+@description('IPv4 addresses for the Intake apex A record (prod only). SWA does not support Azure DNS alias targeting — Microsoft advertises the regional anycast IPs via the portal after the SWA custom-domain registration is accepted. Leave empty for non-prod; required for prod DNS to resolve to Intake.')
+param intakeApexIpv4Addresses array = []
+
+@description('TXT record values for the Intake apex domain-ownership validation (prod only). Provided by Azure after the SWA customDomains registration request; typically a single-entry list. Leave empty for non-prod.')
+param intakeApexValidationValues array = []
 
 // ── App Service Parameters ────────────────────────────────────
 
@@ -542,19 +551,55 @@ module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
   }
 }
 
-// ── DNS Zone + SWA CNAME Records ──────────────────────────────
+// ── DNS: Manager zone (rvserviceflow.com) — CNAME subdomain ────
+// Every env maps a subdomain of rvserviceflow.com to the Manager SWA.
 
-module dns 'modules/dns.bicep' = if (deploySwa && deployDns) {
-  name: 'deploy-dns-${environmentName}'
+module dnsManager 'modules/dns.bicep' = if (deploySwa && deployDns) {
+  name: 'deploy-dns-manager-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
   params: {
-    zoneName: domainName
-    intakePrefix: intakeDnsPrefix
-    managerPrefix: managerDnsPrefix
-    #disable-next-line BCP318
-    intakeSwaHostname: deploySwa ? swaIntake.outputs.defaultHostname : ''
-    #disable-next-line BCP318
-    managerSwaHostname: deploySwa ? swaManager.outputs.defaultHostname : ''
+    zoneName: managerZoneName
+    cnameRecords: [
+      {
+        name: managerDnsPrefix
+        #disable-next-line BCP318
+        target: swaManager.outputs.defaultHostname
+      }
+    ]
+  }
+}
+
+// ── DNS: Intake zone (rvintake.com) ────────────────────────────
+// Prod:    apex A-record + TXT validation (CNAME at apex is invalid per RFC 1034).
+//          intakeApexIpv4Addresses + intakeApexValidationValues must be set before
+//          the apex resolves — they come from Azure after the SWA customDomains
+//          registration is accepted (two-phase deploy).
+// Non-prod: subdomain CNAME (e.g. staging.rvintake.com → default SWA hostname).
+
+module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
+  name: 'deploy-dns-intake-${environmentName}'
+  scope: resourceGroup(dnsResourceGroupName)
+  params: {
+    zoneName: intakeZoneName
+    cnameRecords: environmentName == 'prod' ? [] : [
+      {
+        name: intakeDnsPrefix
+        #disable-next-line BCP318
+        target: swaIntake.outputs.defaultHostname
+      }
+    ]
+    aRecords: (environmentName == 'prod' && !empty(intakeApexIpv4Addresses)) ? [
+      {
+        name: '@'
+        ipv4Addresses: intakeApexIpv4Addresses
+      }
+    ] : []
+    txtRecords: (environmentName == 'prod' && !empty(intakeApexValidationValues)) ? [
+      {
+        name: '@'
+        values: intakeApexValidationValues
+      }
+    ] : []
   }
 }
 
@@ -688,14 +733,16 @@ output swaManagerDeploymentToken string = deploySwa ? swaManager.outputs.deploym
 
 // ── DNS ───────────────────────────────────────────────────────
 
-@description('Azure-assigned nameservers for the DNS zone. Empty when deployDns = false.')
+@description('Azure-assigned nameservers for the Manager DNS zone (rvserviceflow.com). Empty when deployDns = false.')
 #disable-next-line BCP318
-output dnsNameServers array = (deploySwa && deployDns) ? dns.outputs.nameServers : []
+output dnsManagerNameServers array = (deploySwa && deployDns) ? dnsManager.outputs.nameServers : []
 
-@description('FQDN for the Intake SWA custom domain. Empty when deployDns = false.')
+@description('Azure-assigned nameservers for the Intake DNS zone (rvintake.com). Empty when deployDns = false.')
 #disable-next-line BCP318
-output intakeFqdn string = (deploySwa && deployDns) ? dns.outputs.intakeFqdn : ''
+output dnsIntakeNameServers array = (deploySwa && deployDns) ? dnsIntake.outputs.nameServers : []
 
-@description('FQDN for the Manager SWA custom domain. Empty when deployDns = false.')
-#disable-next-line BCP318
-output managerFqdn string = (deploySwa && deployDns) ? dns.outputs.managerFqdn : ''
+@description('FQDN for the Intake SWA custom domain — apex in prod, subdomain elsewhere.')
+output intakeFqdn string = environmentName == 'prod' ? intakeZoneName : '${intakeDnsPrefix}.${intakeZoneName}'
+
+@description('FQDN for the Manager SWA custom domain.')
+output managerFqdn string = '${managerDnsPrefix}.${managerZoneName}'

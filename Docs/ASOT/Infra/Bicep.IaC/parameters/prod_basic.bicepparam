@@ -34,5 +34,7 @@ param swaLocation = 'westus2'
 param swaResourceGroupName = 'rg-rvs-prod-westus2'
 param swaSkuName = 'Standard'
 
-// DNS — Manager: CNAME manager.rvserviceflow.com. Intake: apex rvintake.com (separate zone; see dns.bicep follow-up refactor).
+// DNS — Manager: CNAME manager.rvserviceflow.com. Intake: apex A-record for rvintake.com (separate zone).
+// Apex binding is two-phase: first deploy creates the zone; register the SWA custom domain, then set
+// intakeApexIpv4Addresses + intakeApexValidationValues (from Azure portal / `az staticwebapp hostname`) and redeploy.
 param deployDns = true

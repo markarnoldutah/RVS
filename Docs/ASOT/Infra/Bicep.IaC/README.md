@@ -26,7 +26,7 @@ Infrastructure as Code for the RVS Azure platform. Supports **independent deploy
 | Communication Services | `communication-services.bicep` | Email + SMS | Email + SMS |
 | Static Web App (Intake) | `static-web-app.bicep` | Standard | Standard |
 | Static Web App (Manager) | `static-web-app.bicep` | Standard | Standard |
-| DNS Zone + CNAMEs | `dns.bicep` | Shared zone | Shared zone |
+| DNS (Manager + Intake zones) | `dns.bicep` (×2) | Shared zones | Shared zones |
 
 ---
 
@@ -75,7 +75,7 @@ Docs/ASOT/Infra/Bicep.IaC/
 │   ├── acs-keyvault-secrets.bicep          # Stores ACS secrets in Key Vault
 │   ├── storage-account.bicep               # Storage account + rvs-attachments container
 │   ├── static-web-app.bicep                # Azure Static Web App
-│   └── dns.bicep                           # DNS zone + CNAME records
+│   └── dns.bicep                           # DNS zone + CNAME/A/TXT record sets (called once per zone)
 ├── parameters/
 │   ├── staging.bicepparam                  # Staging parameter values (full)
 │   └── prod.bicepparam                     # Production parameter values (full)
