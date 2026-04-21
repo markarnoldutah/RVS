@@ -77,44 +77,107 @@
             <MudText Typo="Typo.h6">@(_editingLocationId is null ? "Create Location" : "Edit Location")</MudText>
         </TitleContent>
         <DialogContent>
-            <MudStack Spacing="3">
-                <MudTextField T="string" Label="Name" Variant="Variant.Outlined"
-                              @bind-Value="_form.Name" Required="true" />
-                <MudTextField T="string" Label="Slug" Variant="Variant.Outlined"
-                              @bind-Value="_form.Slug" Required="true"
-                              HelperText="URL-friendly identifier (e.g., 'salt-lake-city')" />
-                <MudTextField T="string" Label="Phone" Variant="Variant.Outlined"
-                              @bind-Value="_form.Phone" />
-                <MudText Typo="Typo.subtitle2">Address</MudText>
-                <MudTextField T="string" Label="Address Line 1" Variant="Variant.Outlined"
-                              @bind-Value="_form.Address1" />
-                <MudTextField T="string" Label="Address Line 2" Variant="Variant.Outlined"
-                              @bind-Value="_form.Address2" />
-                <MudGrid Spacing="2">
-                    <MudItem xs="12" sm="5">
-                        <MudTextField T="string" Label="City" Variant="Variant.Outlined"
-                                      @bind-Value="_form.City" />
-                    </MudItem>
-                    <MudItem xs="6" sm="3">
-                        <MudTextField T="string" Label="State" Variant="Variant.Outlined"
-                                      @bind-Value="_form.State" />
-                    </MudItem>
-                    <MudItem xs="6" sm="4">
-                        <MudTextField T="string" Label="Postal Code" Variant="Variant.Outlined"
-                                      @bind-Value="_form.PostalCode" />
-                    </MudItem>
-                </MudGrid>
-            </MudStack>
+            <MudForm @ref="_form2">
+                <MudStack Spacing="3">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Name</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How this location appears to staff and customers</MudText>
+                        <MudTextField T="string" @bind-Value="_form.Name"
+                                      Validation="@(new Func<string?, string?>(ValidateName))"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="e.g., Salt Lake City"
+                                      autocomplete="off" />
+                    </MudStack>
+
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Slug</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">URL-friendly identifier (e.g., 'salt-lake-city')</MudText>
+                        <MudTextField T="string" @bind-Value="_form.Slug"
+                                      Validation="@(new Func<string?, string?>(ValidateSlug))"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="salt-lake-city"
+                                      autocomplete="off" />
+                    </MudStack>
+
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Phone</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional — shown on intake landing page</MudText>
+                        <MudTextField T="string" @bind-Value="_form.Phone"
+                                      InputType="InputType.Telephone"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="(555) 123-4567"
+                                      autocomplete="tel" />
+                    </MudStack>
+
+                    <MudText Typo="Typo.h6" Class="mt-2" Style="color: var(--mud-palette-text-primary);">Address</MudText>
+
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Address line 1</MudText>
+                        <MudTextField T="string" @bind-Value="_form.Address1"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="123 Main St"
+                                      autocomplete="address-line1" />
+                    </MudStack>
+
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Address line 2</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Apartment, suite, or unit (optional)</MudText>
+                        <MudTextField T="string" @bind-Value="_form.Address2"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Suite 200"
+                                      autocomplete="address-line2" />
+                    </MudStack>
+
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" sm="5">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">City</MudText>
+                                <MudTextField T="string" @bind-Value="_form.City"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Placeholder="Salt Lake City"
+                                              autocomplete="address-level2" />
+                            </MudStack>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">State</MudText>
+                                <MudTextField T="string" @bind-Value="_form.State"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Placeholder="UT"
+                                              autocomplete="address-level1" />
+                            </MudStack>
+                        </MudItem>
+                        <MudItem xs="6" sm="4">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Postal code</MudText>
+                                <MudTextField T="string" @bind-Value="_form.PostalCode"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Placeholder="84101"
+                                              autocomplete="postal-code" />
+                            </MudStack>
+                        </MudItem>
+                    </MudGrid>
+                </MudStack>
+            </MudForm>
         </DialogContent>
         <DialogActions>
-            <MudButton OnClick="CloseDialog">Cancel</MudButton>
+            <MudButton OnClick="CloseDialog" Style="text-transform: none;">Cancel</MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                       OnClick="SaveLocationAsync" Disabled="_saving">
+                       OnClick="SaveLocationAsync" Disabled="_saving"
+                       Style="text-transform: none;">
                 @if (_saving)
                 {
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                 }
-                Save
+                Save location
             </MudButton>
         </DialogActions>
     </MudDialog>
@@ -126,8 +189,16 @@
     private string? _error;
     private bool _dialogOpen;
     private bool _saving;
+    private bool _submitted;
     private string? _editingLocationId;
     private LocationForm _form = new();
+    private MudForm? _form2;
+
+    private string? ValidateName(string? value) =>
+        _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a location name" : null;
+
+    private string? ValidateSlug(string? value) =>
+        _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a URL slug" : null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -164,12 +235,14 @@
     {
         _editingLocationId = null;
         _form = new LocationForm();
+        _submitted = false;
         _dialogOpen = true;
     }
 
     private void ShowEditDialog(LocationDetailDto location)
     {
         _editingLocationId = location.Id;
+        _submitted = false;
         _form = new LocationForm
         {
             Name = location.Name,
@@ -191,6 +264,17 @@
 
     private async Task SaveLocationAsync()
     {
+        _submitted = true;
+        if (_form2 is not null)
+        {
+            await _form2.ValidateAsync();
+            if (!_form2.IsValid)
+            {
+                Snackbar.Add("Fix the highlighted fields and try again.", Severity.Warning);
+                return;
+            }
+        }
+
         _saving = true;
         StateHasChanged();
 

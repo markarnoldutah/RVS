@@ -13,15 +13,24 @@
 
     @* Search for SRs to select *@
     <MudPaper Elevation="1" Class="pa-4">
-        <MudStack Row="true" AlignItems="AlignItems.End" Spacing="2">
-            <MudTextField T="string" Label="Search keyword" Variant="Variant.Outlined"
-                          @bind-Value="_keyword"
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                          Style="flex: 1;" />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchAsync"
-                       Disabled="_searching">
-                Search
-            </MudButton>
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Search</MudText>
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                Search by customer name, asset ID, category, or technician.
+            </MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudTextField T="string" @bind-Value="_keyword"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Placeholder="Start typing to find service requests"
+                              Style="flex: 1;" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchAsync"
+                           Disabled="_searching"
+                           Style="text-transform: none;">
+                    Search
+                </MudButton>
+            </MudStack>
         </MudStack>
     </MudPaper>
 
@@ -68,37 +77,77 @@
     @* Outcome Form *@
     @if (_selectedItems.Count > 0 && _selectedItems.Count <= 25)
     {
-        <MudPaper Elevation="2" Class="pa-6">
-            <MudText Typo="Typo.h6" Class="mb-4">Repair Outcome</MudText>
-            <MudGrid Spacing="3">
-                <MudItem xs="12" sm="6">
-                    <MudTextField T="string" Label="Failure Mode" Variant="Variant.Outlined"
-                                  @bind-Value="_outcome.FailureMode" />
-                </MudItem>
-                <MudItem xs="12" sm="6">
-                    <MudTextField T="string" Label="Repair Action" Variant="Variant.Outlined"
-                                  @bind-Value="_outcome.RepairAction" />
-                </MudItem>
-                <MudItem xs="12" sm="6">
-                    <MudTextField T="string" Label="Parts Used (comma-separated)" Variant="Variant.Outlined"
-                                  @bind-Value="_partsInput" />
-                </MudItem>
-                <MudItem xs="12" sm="6">
-                    <MudNumericField T="decimal?" Label="Labor Hours" Variant="Variant.Outlined"
-                                     @bind-Value="_outcome.LaborHours" Min="0" />
-                </MudItem>
-                <MudItem xs="12" Class="d-flex justify-end">
+        <MudPaper Elevation="2" Class="pa-6 rounded-lg">
+            <MudStack Spacing="4">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Repair outcome</MudText>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                        This outcome will be applied to every selected service request.
+                    </MudText>
+                </MudStack>
+
+                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Failure mode</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">What went wrong (e.g. "Water pump failure")</MudText>
+                        <MudTextField T="string" @bind-Value="_outcome.FailureMode"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Describe the failure"
+                                      autocomplete="off" />
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Repair action</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">What was done to fix it</MudText>
+                        <MudTextField T="string" @bind-Value="_outcome.RepairAction"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Describe the repair"
+                                      autocomplete="off" />
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Parts used</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Separate multiple parts with commas</MudText>
+                        <MudTextField T="string" @bind-Value="_partsInput"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="e.g., Water pump, O-ring, hose clamp"
+                                      autocomplete="off" />
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Labor hours</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Total hours applied to each SR</MudText>
+                        <MudNumericField T="decimal?" @bind-Value="_outcome.LaborHours"
+                                         Min="0"
+                                         Variant="Variant.Outlined"
+                                         Margin="Margin.Dense"
+                                         Placeholder="0.0"
+                                         InputMode="@(InputMode.@decimal)" />
+                    </MudStack>
+                </MudPaper>
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.CheckCircle"
-                               OnClick="ApplyOutcomeAsync" Disabled="_applying">
+                               OnClick="ApplyOutcomeAsync" Disabled="_applying"
+                               Style="text-transform: none;">
                         @if (_applying)
                         {
                             <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                         }
-                        Apply Outcome to @_selectedItems.Count SRs
+                        Apply outcome to @_selectedItems.Count SRs
                     </MudButton>
-                </MudItem>
-            </MudGrid>
+                </MudStack>
+            </MudStack>
         </MudPaper>
     }
 

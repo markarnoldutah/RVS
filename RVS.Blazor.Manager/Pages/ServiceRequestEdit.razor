@@ -28,79 +28,126 @@ else if (_sr is not null)
             <MudGrid Spacing="3">
                 @* Status *@
                 <MudItem xs="12" sm="6" md="4">
-                    <MudSelect T="string" Label="Status" Variant="Variant.Outlined"
-                               @bind-Value="_model.Status">
-                        <MudSelectItem T="string" Value="@_sr.Status">@FormatStatus(_sr.Status) (current)</MudSelectItem>
-                        @foreach (var status in _allowedStatuses.Where(s => s != _sr.Status))
-                        {
-                            <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
-                        }
-                    </MudSelect>
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Status</MudText>
+                        <MudSelect T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   @bind-Value="_model.Status"
+                                   AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                            <MudSelectItem T="string" Value="@_sr.Status">@FormatStatus(_sr.Status) (current)</MudSelectItem>
+                            @foreach (var status in _allowedStatuses.Where(s => s != _sr.Status))
+                            {
+                                <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudStack>
                 </MudItem>
 
                 @* Priority *@
                 <MudItem xs="12" sm="6" md="4">
-                    <MudSelect T="string" Label="Priority" Variant="Variant.Outlined"
-                               @bind-Value="_model.Priority">
-                        <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
-                    </MudSelect>
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Priority</MudText>
+                        <MudSelect T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   @bind-Value="_model.Priority"
+                                   AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                            <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                        </MudSelect>
+                    </MudStack>
                 </MudItem>
 
                 @* Assigned Technician *@
                 <MudItem xs="12" sm="6" md="4">
-                    <MudTextField T="string" Label="Assigned Technician" Variant="Variant.Outlined"
-                                  @bind-Value="_model.AssignedTechnicianId" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Assigned technician</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Technician ID — leave blank if unassigned</MudText>
+                        <MudTextField T="string" @bind-Value="_model.AssignedTechnicianId"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="e.g., tech-123"
+                                      autocomplete="off" />
+                    </MudStack>
                 </MudItem>
 
                 @* Assigned Bay *@
                 <MudItem xs="12" sm="6" md="4">
-                    <MudTextField T="string" Label="Assigned Bay" Variant="Variant.Outlined"
-                                  @bind-Value="_model.AssignedBayId" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Assigned bay</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Bay ID — leave blank if unassigned</MudText>
+                        <MudTextField T="string" @bind-Value="_model.AssignedBayId"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="e.g., bay-2"
+                                      autocomplete="off" />
+                    </MudStack>
                 </MudItem>
 
                 @* Scheduled Date *@
                 <MudItem xs="12" sm="6" md="4">
-                    <MudDatePicker Label="Scheduled Date" Variant="Variant.Outlined"
-                                   @bind-Date="_scheduledDate" Clearable="true" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Scheduled date</MudText>
+                        <MudDatePicker Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       @bind-Date="_scheduledDate" Clearable="true"
+                                       Placeholder="Pick a date" />
+                    </MudStack>
                 </MudItem>
 
                 @* Issue Category *@
                 <MudItem xs="12" sm="6" md="4">
-                    <MudTextField T="string" Label="Issue Category" Variant="Variant.Outlined"
-                                  @bind-Value="_model.IssueCategory" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue category</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">e.g. Electrical, Plumbing, Slide-out</MudText>
+                        <MudTextField T="string" @bind-Value="_model.IssueCategory"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Enter a category"
+                                      autocomplete="off" />
+                    </MudStack>
                 </MudItem>
 
                 @* Issue Description *@
                 <MudItem xs="12">
-                    <MudTextField T="string" Label="Issue Description" Variant="Variant.Outlined"
-                                  @bind-Value="_model.IssueDescription"
-                                  Lines="4" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue description</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Symptoms, when they started, and anything already tried</MudText>
+                        <MudTextField T="string" @bind-Value="_model.IssueDescription"
+                                      Lines="4"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Describe the issue in detail" />
+                    </MudStack>
                 </MudItem>
 
                 @* Technician Notes *@
                 <MudItem xs="12">
-                    <MudTextField T="string" Label="Technician / Advisor Notes" Variant="Variant.Outlined"
-                                  @bind-Value="_model.TechnicianSummary"
-                                  Lines="3" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Technician / advisor notes</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Internal notes for shop staff</MudText>
+                        <MudTextField T="string" @bind-Value="_model.TechnicianSummary"
+                                      Lines="3"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Add notes for the tech or advisor" />
+                    </MudStack>
                 </MudItem>
 
                 @* Actions *@
                 <MudItem xs="12" Class="d-flex gap-2 justify-end">
                     <MudButton Variant="Variant.Outlined" Color="Color.Default"
-                               Href="/service-requests">
+                               Href="/service-requests"
+                               Style="text-transform: none;">
                         Cancel
                     </MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.Save"
-                               OnClick="SaveAsync" Disabled="_saving">
+                               OnClick="SaveAsync" Disabled="_saving"
+                               Style="text-transform: none;">
                         @if (_saving)
                         {
                             <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                         }
-                        Save Changes
+                        Save changes
                     </MudButton>
                 </MudItem>
             </MudGrid>

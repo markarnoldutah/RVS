@@ -70,44 +70,20 @@
                         }
                     </MudStack>
                     <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Select the area that best describes the issue</MudText>
-                    @if (_categories.Count > 0)
-                    {
-                        <MudSelect T="string"
-                                   Value="State.IssueCategory"
-                                   ValueChanged="OnCategoryChanged"
-                                   Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
-                                   Variant="Variant.Outlined"
-                                   Margin="Margin.Dense"
-                                   AnchorOrigin="Origin.BottomCenter"
-                                   TransformOrigin="Origin.TopCenter"
-                                   RelativeWidth="DropdownWidth.Adaptive">
-                            @foreach (var category in _categories)
-                            {
-                                <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    }
-                    else
-                    {
-                        <MudSelect T="string"
-                                   Value="State.IssueCategory"
-                                   ValueChanged="OnCategoryChanged"
-                                   Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
-                                   Variant="Variant.Outlined"
-                                   Margin="Margin.Dense"
-                                   AnchorOrigin="Origin.BottomCenter"
-                                   TransformOrigin="Origin.TopCenter"
-                                   RelativeWidth="DropdownWidth.Adaptive">
-                            <MudSelectItem T="string" Value="@("Electrical")">Electrical</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Plumbing")">Plumbing</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("HVAC")">HVAC / Climate Control</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Appliance")">Appliance</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Structural")">Structural / Body</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Slide-Out")">Slide-Out</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Awning")">Awning</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Other")">Other</MudSelectItem>
-                        </MudSelect>
-                    }
+                    <MudSelect T="string"
+                               Value="State.IssueCategory"
+                               ValueChanged="OnCategoryChanged"
+                               Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               AnchorOrigin="Origin.BottomCenter"
+                               TransformOrigin="Origin.TopCenter"
+                               RelativeWidth="DropdownWidth.Adaptive">
+                        @foreach (var category in _categories)
+                        {
+                            <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
+                        }
+                    </MudSelect>
                 </MudStack>
             </MudPaper>
 
@@ -194,7 +170,8 @@
                                    DateFormat="MM/yyyy"
                                    FixDay="1"
                                    OpenTo="OpenTo.Month"
-                                   Variant="Variant.Outlined"
+                                   Variant="Variant.Outlined" 
+                                   ShowToolbar="false"
                                    Margin="Margin.Dense"
                                    Editable="true"
                                    Placeholder="MM/YYYY"

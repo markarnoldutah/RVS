@@ -51,38 +51,87 @@
                 </MudStack>
             </MudCardHeader>
             <MudCardContent>
-                <MudStack Spacing="3">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudSwitch T="bool" @bind-Value="_loginsEnabled"
-                                   Color="Color.Primary"
-                                   Label="@(_loginsEnabled ? "Logins Enabled" : "Logins Disabled")" />
+                <MudForm @ref="_form">
+                    <MudStack Spacing="4">
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Logins</MudText>
+                                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                    Turn off to block all non-administrator sign-ins.
+                                </MudText>
+                                <MudSwitch T="bool" @bind-Value="_loginsEnabled"
+                                           Color="Color.Primary"
+                                           Label="@(_loginsEnabled ? "Logins enabled" : "Logins disabled")" />
+                            </MudStack>
+                        </MudPaper>
+
+                        @if (!_loginsEnabled)
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                When logins are disabled, all users except administrators will be blocked from signing in.
+                            </MudAlert>
+
+                            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Disabled reason</MudText>
+                                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                        Internal — for your audit trail. Users will not see this.
+                                    </MudText>
+                                    <MudTextField T="string" @bind-Value="_disabledReason"
+                                                  Validation="@(new Func<string?, string?>(ValidateDisabledReason))"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Placeholder="e.g., Scheduled maintenance through Friday"
+                                                  autocomplete="off" />
+                                </MudStack>
+                            </MudPaper>
+
+                            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">User-facing message</MudText>
+                                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                        What your users will see when they try to sign in.
+                                    </MudText>
+                                    <MudTextField T="string" @bind-Value="_disabledMessage"
+                                                  Validation="@(new Func<string?, string?>(ValidateDisabledMessage))"
+                                                  Lines="3"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Placeholder="We're temporarily unavailable. Please check back soon."
+                                                  autocomplete="off" />
+                                </MudStack>
+                            </MudPaper>
+
+                            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Support contact email</MudText>
+                                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                        Shown alongside the message so users know who to contact.
+                                    </MudText>
+                                    <MudTextField T="string" @bind-Value="_supportEmail"
+                                                  Validation="@(new Func<string?, string?>(ValidateSupportEmail))"
+                                                  InputType="InputType.Email"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Placeholder="support@example.com"
+                                                  autocomplete="email" />
+                                </MudStack>
+                            </MudPaper>
+                        }
                     </MudStack>
-
-                    @if (!_loginsEnabled)
-                    {
-                        <MudAlert Severity="Severity.Warning">
-                            When logins are disabled, all users except administrators will be blocked from signing in.
-                        </MudAlert>
-
-                        <MudTextField T="string" Label="Disabled Reason (internal)" Variant="Variant.Outlined"
-                                      @bind-Value="_disabledReason" />
-                        <MudTextField T="string" Label="Disabled Message (shown to users)" Variant="Variant.Outlined"
-                                      @bind-Value="_disabledMessage" Lines="3" />
-                        <MudTextField T="string" Label="Support Contact Email" Variant="Variant.Outlined"
-                                      @bind-Value="_supportEmail" InputType="InputType.Email" />
-                    }
-                </MudStack>
+                </MudForm>
             </MudCardContent>
             <MudCardActions>
                 <MudSpacer />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Save"
-                           OnClick="SaveSettingsAsync" Disabled="_saving">
+                           OnClick="SaveSettingsAsync" Disabled="_saving"
+                           Style="text-transform: none;">
                     @if (_saving)
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                     }
-                    Save Settings
+                    Save settings
                 </MudButton>
             </MudCardActions>
         </MudCard>
@@ -127,12 +176,27 @@
     private AccessGateStatusDto? _accessGate;
     private bool _loading = true;
     private bool _saving;
+    private bool _submitted;
     private string? _error;
+    private MudForm? _form;
 
     private bool _loginsEnabled;
     private string? _disabledReason;
     private string? _disabledMessage;
     private string? _supportEmail;
+
+    private string? ValidateDisabledReason(string? value) =>
+        _submitted && !_loginsEnabled && string.IsNullOrWhiteSpace(value) ? "Enter a reason for the audit trail" : null;
+
+    private string? ValidateDisabledMessage(string? value) =>
+        _submitted && !_loginsEnabled && string.IsNullOrWhiteSpace(value) ? "Enter a message to show users" : null;
+
+    private string? ValidateSupportEmail(string? value)
+    {
+        if (!_submitted || _loginsEnabled) return null;
+        if (string.IsNullOrWhiteSpace(value)) return "Enter a support contact email";
+        return value.Contains('@') && value.Contains('.') ? null : "Enter a valid email address";
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -162,6 +226,17 @@
 
     private async Task SaveSettingsAsync()
     {
+        _submitted = true;
+        if (_form is not null)
+        {
+            await _form.ValidateAsync();
+            if (!_form.IsValid)
+            {
+                Snackbar.Add("Fix the highlighted fields and try again.", Severity.Warning);
+                return;
+            }
+        }
+
         _saving = true;
         StateHasChanged();
 

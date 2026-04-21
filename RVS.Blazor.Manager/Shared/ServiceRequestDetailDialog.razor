@@ -42,69 +42,165 @@
         else if (_mode == DialogMode.Create)
         {
             @* Create form *@
-            <MudStack Spacing="3">
-                <MudText Typo="Typo.subtitle1">Customer Information</MudText>
-                <MudGrid Spacing="2">
-                    <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="First Name" Variant="Variant.Outlined"
-                                      @bind-Value="_createForm.FirstName" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="Last Name" Variant="Variant.Outlined"
-                                      @bind-Value="_createForm.LastName" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="Email" Variant="Variant.Outlined"
-                                      @bind-Value="_createForm.Email" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="Phone" Variant="Variant.Outlined"
-                                      @bind-Value="_createForm.Phone" />
-                    </MudItem>
-                </MudGrid>
+            <MudForm @ref="_createFormRef">
+                <MudStack Spacing="4">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Customer</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                            Who is this service request for?
+                        </MudText>
+                    </MudStack>
 
-                <MudText Typo="Typo.subtitle1">Asset / Vehicle</MudText>
-                <MudGrid Spacing="2">
-                    <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="VIN / Asset ID" Variant="Variant.Outlined"
-                                      @bind-Value="_createForm.AssetId" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="Manufacturer" Variant="Variant.Outlined"
-                                      @bind-Value="_createForm.Manufacturer" />
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="Model" Variant="Variant.Outlined"
-                                      @bind-Value="_createForm.Model" />
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudNumericField T="int?" Label="Year" Variant="Variant.Outlined"
-                                         @bind-Value="_createForm.Year" />
-                    </MudItem>
-                </MudGrid>
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">First name</MudText>
+                            <MudTextField T="string" @bind-Value="_createForm.FirstName"
+                                          Validation="@(new Func<string?, string?>(ValidateFirstName))"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          autocomplete="given-name" />
+                        </MudStack>
+                    </MudPaper>
 
-                <MudText Typo="Typo.subtitle1">Issue Details</MudText>
-                <MudGrid Spacing="2">
-                    <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="Issue Category" Variant="Variant.Outlined"
-                                      @bind-Value="_createForm.IssueCategory" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudSelect T="string" Label="Priority" Variant="Variant.Outlined"
-                                   @bind-Value="_createForm.Priority">
-                            <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12">
-                        <MudTextField T="string" Label="Issue Description" Variant="Variant.Outlined"
-                                      @bind-Value="_createForm.IssueDescription" Required="true"
-                                      Lines="4" />
-                    </MudItem>
-                </MudGrid>
-            </MudStack>
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Last name</MudText>
+                            <MudTextField T="string" @bind-Value="_createForm.LastName"
+                                          Validation="@(new Func<string?, string?>(ValidateLastName))"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          autocomplete="family-name" />
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Email</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Service updates are sent here</MudText>
+                            <MudTextField T="string" @bind-Value="_createForm.Email"
+                                          Validation="@(new Func<string?, string?>(ValidateEmail))"
+                                          InputType="InputType.Email"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Placeholder="name@example.com"
+                                          autocomplete="email" />
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Phone</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional — for SMS status updates</MudText>
+                            <MudTextField T="string" @bind-Value="_createForm.Phone"
+                                          InputType="InputType.Telephone"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Placeholder="(555) 123-4567"
+                                          autocomplete="tel" />
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudStack Spacing="1" Class="mt-2">
+                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Asset / Vehicle</MudText>
+                    </MudStack>
+
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">VIN / Asset ID</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">17-character VIN or dealer asset tag</MudText>
+                            <MudTextField T="string" @bind-Value="_createForm.AssetId"
+                                          Validation="@(new Func<string?, string?>(ValidateAssetId))"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Placeholder="e.g., 1HGCM82633A123456"
+                                          autocomplete="off" />
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Manufacturer</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional</MudText>
+                            <MudTextField T="string" @bind-Value="_createForm.Manufacturer"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Placeholder="e.g., Winnebago, Thor, Jayco"
+                                          autocomplete="off" />
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Model</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional</MudText>
+                            <MudTextField T="string" @bind-Value="_createForm.Model"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Placeholder="e.g., Vista, Aria, Eagle"
+                                          autocomplete="off" />
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Year</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional</MudText>
+                            <MudNumericField T="int?" @bind-Value="_createForm.Year"
+                                             Min="1950" Max="2100"
+                                             Variant="Variant.Outlined"
+                                             Margin="Margin.Dense"
+                                             InputMode="InputMode.numeric"
+                                             Placeholder="e.g., 2023" />
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudStack Spacing="1" Class="mt-2">
+                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Issue</MudText>
+                    </MudStack>
+
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue category</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">e.g. Electrical, Plumbing, Slide-out</MudText>
+                            <MudTextField T="string" @bind-Value="_createForm.IssueCategory"
+                                          Validation="@(new Func<string?, string?>(ValidateIssueCategory))"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Placeholder="Enter a category"
+                                          autocomplete="off" />
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Priority</MudText>
+                            <MudSelect T="string" @bind-Value="_createForm.Priority"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       AnchorOrigin="Origin.BottomCenter"
+                                       TransformOrigin="Origin.TopCenter">
+                                <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                            </MudSelect>
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Description</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Symptoms, when they started, and anything already tried</MudText>
+                            <MudTextField T="string" @bind-Value="_createForm.IssueDescription"
+                                          Validation="@(new Func<string?, string?>(ValidateIssueDescription))"
+                                          Lines="4"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Placeholder="Describe the issue in detail" />
+                        </MudStack>
+                    </MudPaper>
+                </MudStack>
+            </MudForm>
         }
         else if (_sr is not null)
         {
@@ -412,8 +508,32 @@
     private string? _statusError;
     private bool _saving;
     private CreateForm _createForm = new();
+    private MudForm? _createFormRef;
+    private bool _createSubmitted;
     private string? _previousServiceRequestId;
     private bool _previousVisible;
+
+    private string? ValidateFirstName(string? value) =>
+        _createSubmitted && string.IsNullOrWhiteSpace(value) ? "Enter the customer's first name" : null;
+
+    private string? ValidateLastName(string? value) =>
+        _createSubmitted && string.IsNullOrWhiteSpace(value) ? "Enter the customer's last name" : null;
+
+    private string? ValidateEmail(string? value)
+    {
+        if (!_createSubmitted) return null;
+        if (string.IsNullOrWhiteSpace(value)) return "Enter an email address";
+        return value.Contains('@') && value.Contains('.') ? null : "Enter a valid email address";
+    }
+
+    private string? ValidateAssetId(string? value) =>
+        _createSubmitted && string.IsNullOrWhiteSpace(value) ? "Enter a VIN or asset ID" : null;
+
+    private string? ValidateIssueCategory(string? value) =>
+        _createSubmitted && string.IsNullOrWhiteSpace(value) ? "Enter an issue category" : null;
+
+    private string? ValidateIssueDescription(string? value) =>
+        _createSubmitted && string.IsNullOrWhiteSpace(value) ? "Describe the issue" : null;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -442,6 +562,7 @@
         {
             _mode = DialogMode.Create;
             _createForm = new CreateForm();
+            _createSubmitted = false;
             return;
         }
 
@@ -521,15 +642,15 @@
 
     private async Task CreateAsync()
     {
-        if (string.IsNullOrWhiteSpace(_createForm.FirstName) ||
-            string.IsNullOrWhiteSpace(_createForm.LastName) ||
-            string.IsNullOrWhiteSpace(_createForm.Email) ||
-            string.IsNullOrWhiteSpace(_createForm.AssetId) ||
-            string.IsNullOrWhiteSpace(_createForm.IssueCategory) ||
-            string.IsNullOrWhiteSpace(_createForm.IssueDescription))
+        _createSubmitted = true;
+        if (_createFormRef is not null)
         {
-            Snackbar.Add("Please fill in all required fields.", Severity.Warning);
-            return;
+            await _createFormRef.ValidateAsync();
+            if (!_createFormRef.IsValid)
+            {
+                Snackbar.Add("Fix the highlighted fields and try again.", Severity.Warning);
+                return;
+            }
         }
 
         _saving = true;

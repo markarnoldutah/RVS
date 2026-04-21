@@ -11,80 +11,131 @@
         <MudText Typo="Typo.h4">Service Requests</MudText>
         <MudButton Variant="Variant.Filled" Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="OpenCreateDialog">
-            New Service Request
+                   OnClick="OpenCreateDialog"
+                   Style="text-transform: none;">
+            New service request
         </MudButton>
     </MudStack>
 
     @* Search / Filter Panel *@
     <MudExpansionPanels>
-        <MudExpansionPanel Text="Search &amp; Filter" Expanded="_filtersExpanded">
+        <MudExpansionPanel Text="Search &amp; filter" Expanded="_filtersExpanded">
             <MudGrid Spacing="2">
                 <MudItem xs="12" sm="6" md="3">
-                    <MudTextField T="string" Label="Keyword" Variant="Variant.Outlined"
-                                  @bind-Value="_search.Keyword"
-                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Keyword</MudText>
+                        <MudTextField T="string" @bind-Value="_search.Keyword"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                      Placeholder="Customer, asset, category..." />
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudSelect T="string" Label="Status" Variant="Variant.Outlined"
-                               @bind-Value="_search.Status" Clearable="true">
-                        <MudSelectItem T="string" Value="@("New")">New</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("InProgress")">In Progress</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("WaitingOnParts")">Waiting on Parts</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Completed")">Completed</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Cancelled")">Cancelled</MudSelectItem>
-                    </MudSelect>
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Status</MudText>
+                        <MudSelect T="string" @bind-Value="_search.Status"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Clearable="true"
+                                   AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                            <MudSelectItem T="string" Value="@("New")">New</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("InProgress")">In Progress</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("WaitingOnParts")">Waiting on Parts</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Completed")">Completed</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Cancelled")">Cancelled</MudSelectItem>
+                        </MudSelect>
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudTextField T="string" Label="Issue Category" Variant="Variant.Outlined"
-                                  @bind-Value="_search.IssueCategory" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue category</MudText>
+                        <MudTextField T="string" @bind-Value="_search.IssueCategory"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="e.g., Electrical" />
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudSelect T="string" Label="Location" Variant="Variant.Outlined"
-                               @bind-Value="_search.LocationId" Clearable="true">
-                        @foreach (var loc in _locations)
-                        {
-                            <MudSelectItem T="string" Value="@loc.LocationId">@loc.Name</MudSelectItem>
-                        }
-                    </MudSelect>
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Location</MudText>
+                        <MudSelect T="string" @bind-Value="_search.LocationId"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Clearable="true"
+                                   AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                            @foreach (var loc in _locations)
+                            {
+                                <MudSelectItem T="string" Value="@loc.LocationId">@loc.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudTextField T="string" Label="Assigned Technician" Variant="Variant.Outlined"
-                                  @bind-Value="_search.AssignedTechnicianId" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Assigned technician</MudText>
+                        <MudTextField T="string" @bind-Value="_search.AssignedTechnicianId"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Technician ID" />
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudTextField T="string" Label="Assigned Bay" Variant="Variant.Outlined"
-                                  @bind-Value="_search.AssignedBayId" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Assigned bay</MudText>
+                        <MudTextField T="string" @bind-Value="_search.AssignedBayId"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Bay ID" />
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudTextField T="string" Label="Asset / VIN" Variant="Variant.Outlined"
-                                  @bind-Value="_search.AssetId" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Asset / VIN</MudText>
+                        <MudTextField T="string" @bind-Value="_search.AssetId"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Full or partial VIN" />
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudSelect T="string" Label="Priority" Variant="Variant.Outlined"
-                               @bind-Value="_search.Priority" Clearable="true">
-                        <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
-                    </MudSelect>
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Priority</MudText>
+                        <MudSelect T="string" @bind-Value="_search.Priority"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Clearable="true"
+                                   AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                            <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                        </MudSelect>
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudDatePicker Label="Date From" Variant="Variant.Outlined"
-                                   @bind-Date="_dateFrom" Clearable="true" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Date from</MudText>
+                        <MudDatePicker Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       @bind-Date="_dateFrom" Clearable="true"
+                                       Placeholder="Start date" />
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudDatePicker Label="Date To" Variant="Variant.Outlined"
-                                   @bind-Date="_dateTo" Clearable="true" />
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Date to</MudText>
+                        <MudDatePicker Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       @bind-Date="_dateTo" Clearable="true"
+                                       Placeholder="End date" />
+                    </MudStack>
                 </MudItem>
                 <MudItem xs="12" Class="d-flex gap-2">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.Search"
-                               OnClick="SearchAsync">
+                               OnClick="SearchAsync"
+                               Style="text-transform: none;">
                         Search
                     </MudButton>
                     <MudButton Variant="Variant.Outlined" Color="Color.Default"
-                               OnClick="ClearFilters">
+                               OnClick="ClearFilters"
+                               Style="text-transform: none;">
                         Clear
                     </MudButton>
                 </MudItem>
