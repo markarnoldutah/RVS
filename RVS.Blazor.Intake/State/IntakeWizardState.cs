@@ -430,7 +430,7 @@ public sealed class IntakeWizardState
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
 
-        var url = $"/intake/{Uri.EscapeDataString(slug)}";
+        var url = $"/{Uri.EscapeDataString(slug)}";
         if (!string.IsNullOrWhiteSpace(token))
         {
             url += $"?token={Uri.EscapeDataString(token)}";

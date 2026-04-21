@@ -707,7 +707,7 @@ public class IntakeWizardStateTests
     {
         var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", null);
 
-        url.Should().Be("/intake/camping-world-slc");
+        url.Should().Be("/camping-world-slc");
     }
 
     [Fact]
@@ -715,7 +715,7 @@ public class IntakeWizardStateTests
     {
         var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ");
 
-        url.Should().Be("/intake/camping-world-slc?token=dK3mRw9x%3AXv2pLqN8aTcBfY7mZs4eWQ");
+        url.Should().Be("/camping-world-slc?token=dK3mRw9x%3AXv2pLqN8aTcBfY7mZs4eWQ");
     }
 
     [Fact]
@@ -723,7 +723,7 @@ public class IntakeWizardStateTests
     {
         var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "   ");
 
-        url.Should().Be("/intake/camping-world-slc");
+        url.Should().Be("/camping-world-slc");
     }
 
     [Fact]
@@ -731,7 +731,7 @@ public class IntakeWizardStateTests
     {
         var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "");
 
-        url.Should().Be("/intake/camping-world-slc");
+        url.Should().Be("/camping-world-slc");
     }
 
     [Fact]
@@ -739,7 +739,7 @@ public class IntakeWizardStateTests
     {
         var url = IntakeWizardState.BuildStartOverUrl("slug with spaces", null);
 
-        url.Should().Be("/intake/slug%20with%20spaces");
+        url.Should().Be("/slug%20with%20spaces");
     }
 
     [Fact]

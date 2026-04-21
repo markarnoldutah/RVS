@@ -38,5 +38,5 @@ param swaLocation = 'westus2'
 param swaResourceGroupName = 'rg-rvs-staging-westus2'
 param swaSkuName = 'Standard'
 
-// DNS (CNAME records: intake-staging.rvserviceflow.com, manager-staging.rvserviceflow.com)
+// DNS — Manager: CNAME manager-staging.rvserviceflow.com. Intake: staging.rvintake.com (separate zone; see dns.bicep follow-up refactor).
 param deployDns = true

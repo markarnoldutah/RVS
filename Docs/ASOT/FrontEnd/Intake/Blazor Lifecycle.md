@@ -7,7 +7,7 @@
 ## First Visit (cold — no service worker cache)
 
 ```
-GET https://app.rvserviceflow.com/intake/blue-compass-salt-lake
+GET https://rvintake.com/blue-compass-salt-lake
  └─ Azure Static Web Apps CDN
      └─ Returns index.html (static shell — no .NET, just HTML + blazor.webassembly.js link)
  └─ Browser downloads blazor.webassembly.js
@@ -15,7 +15,7 @@ GET https://app.rvserviceflow.com/intake/blue-compass-salt-lake
  └─ Service worker installs, caches WASM runtime and app assets
  └─ .NET runtime boots in browser WebAssembly sandbox
  └─ Program.cs runs (DI container built, HttpClient registered, routing configured)
- └─ Router resolves /intake/blue-compass-salt-lake → IntakeLanding.razor
+ └─ Router resolves /blue-compass-salt-lake → IntakeLanding.razor
      └─ OnInitializedAsync: GET api/intake/{slug} → dealer config loaded
      └─ Page renders: dealer logo, name, "Start Service Request" button
 ```
@@ -25,7 +25,7 @@ GET https://app.rvserviceflow.com/intake/blue-compass-salt-lake
 ## Subsequent Visits (warm — service worker cache active)
 
 ```
-GET https://app.rvserviceflow.com/intake/blue-compass-salt-lake
+GET https://rvintake.com/blue-compass-salt-lake
  └─ Service worker intercepts request
      └─ Serves WASM runtime + app DLLs from browser cache (no network download)
  └─ .NET runtime boots (near-instant from cache)

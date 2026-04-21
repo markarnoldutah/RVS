@@ -91,7 +91,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - Location-scoped roles filter within the tenant partition; they do not cross tenant boundaries.
 
 - **FR-002: Anonymous customer intake** (Priority: Critical)
-  - The intake form is accessible at a location-specific URL: `https://intake.rvserviceflow.com/intake/{locationSlug}`.
+  - The intake form is accessible at a location-specific URL: `https://rvintake.com/{locationSlug}`.
   - No customer account or login is required to submit a service request.
   - The form collects: first name, last name, email, phone, VIN (manual entry or camera scan), make, model, year, issue description (text or speech-to-text), photo/video attachments, urgency level (routine, urgent, emergency), full-time or part-time RV use, extended warranty status, and approximate purchase date.
   - On submission, the API automatically creates or updates a tenant-scoped `CustomerProfile` and a cross-dealer `GlobalCustomerAcct` (resolved by email).
@@ -133,7 +133,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - Dealer dashboard photo/video viewing uses time-limited SAS URLs (1-hour expiry) generated on demand.
 
 - **FR-008: Magic-link customer status page** (Priority: High)
-  - Each customer receives a magic-link token in their submission confirmation email, embedded in a status URL: `https://intake.rvserviceflow.com/status/{token}`.
+  - Each customer receives a magic-link token in their submission confirmation email, embedded in a status URL: `https://rvintake.com/status/{token}`.
   - The token is stored on the `GlobalCustomerAcct` with an expiry. Token format encodes an email-hash prefix so the lookup is a single-partition point read (no cross-partition scan).
   - The status page shows all active service requests for that customer across all dealerships where they have submitted.
   - Each request shows: location name, status, issue summary, last updated date.
@@ -471,7 +471,7 @@ The MVP comprises three distinct front-end applications, each optimized for its 
 - **ID:** RVS-006
 - **Description:** As an RV owner, I want to check my service request status without logging in so that I can stay informed without calling the dealership.
 - **Acceptance criteria:**
-  - The confirmation email contains a magic-link URL in the format `https://intake.rvserviceflow.com/status/{token}`.
+  - The confirmation email contains a magic-link URL in the format `https://rvintake.com/status/{token}`.
   - The status page shows all active service requests for that customer across all dealerships, each showing: dealership name, location name, status, issue category, submission date, last updated date.
   - Expired or invalid tokens return a message prompting the customer to request a new link by email.
   - The status endpoint is rate-limited to 30 requests per IP per hour.
@@ -569,7 +569,7 @@ The MVP comprises three distinct front-end applications, each optimized for its 
 - **Acceptance criteria:**
   - Authorized users can create a new location with: display name, address, service email, phone, and region tag.
   - Authorized users can update location settings: display name, contact info, logo, `IntakeFormConfig` (accepted file types, max file size).
-  - Each location is assigned a unique slug that generates the intake URL: `https://intake.rvserviceflow.com/intake/{slug}`.
+  - Each location is assigned a unique slug that generates the intake URL: `https://rvintake.com/{slug}`.
   - The slug is immutable after creation (changing it would break existing QR codes and links).
   - Creating a location automatically writes a corresponding `slugLookup` document.
 
@@ -578,7 +578,7 @@ The MVP comprises three distinct front-end applications, each optimized for its 
 - **ID:** RVS-014
 - **Description:** As a dealership manager, I want to download a QR code that links directly to my location's intake form so that I can print and display it in the service drive.
 - **Acceptance criteria:**
-  - `GET /api/locations/{id}/qr-code` returns a QR code image encoding `https://intake.rvserviceflow.com/intake/{locationSlug}`.
+  - `GET /api/locations/{id}/qr-code` returns a QR code image encoding `https://rvintake.com/{locationSlug}`.
   - The QR code is returned as a PNG image.
   - The dealer dashboard provides a download button that triggers the endpoint.
   - Users require `locations:read` permission to access the QR code endpoint.

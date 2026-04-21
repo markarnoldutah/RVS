@@ -34,5 +34,5 @@ param swaLocation = 'westus2'
 param swaResourceGroupName = 'rg-rvs-prod-westus2'
 param swaSkuName = 'Standard'
 
-// DNS (CNAME records: intake.rvserviceflow.com, manager.rvserviceflow.com)
+// DNS — Manager: CNAME manager.rvserviceflow.com. Intake: apex rvintake.com (separate zone; see dns.bicep follow-up refactor).
 param deployDns = true

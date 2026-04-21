@@ -118,9 +118,9 @@ Customer = Anonymous (MVP); no Auth0 account required
 ### 4.2 Intake URL Structure
 
 ```
-https://intake.rvserviceflow.com/intake/{locationSlug}   — Location intake portal
-https://intake.rvserviceflow.com/status/{token}           — Customer status page
-https://intake.rvserviceflow.com/                         — Platform landing (dealer search)
+https://rvintake.com/{locationSlug}          — Location intake portal
+https://rvintake.com/status/{token}           — Customer status page
+https://rvintake.com/                         — Platform landing (dealer search)
 ```
 
 ---
@@ -232,7 +232,7 @@ The `PUT api/dealerships/{id}/service-requests/{srId}` endpoint MUST accept `Ser
 On `POST api/locations` or `PUT api/locations/{id}` (slug rename), `ILocationService` MUST atomically: delete the old `slugLookup` entry, write the new one, then update the `Location` document. A stale slug MUST never resolve a valid intake route.
 
 **FR-TENANT-04 — QR code generation**
-`GET api/locations/{id}/qr-code` MUST return a QR code image encoding `https://intake.rvserviceflow.com/intake/{locationSlug}`. Acceptable response formats: `image/png` (default), `image/svg+xml`. QR code MUST encode the full HTTPS URL.
+`GET api/locations/{id}/qr-code` MUST return a QR code image encoding `https://rvintake.com/{locationSlug}`. Acceptable response formats: `image/png` (default), `image/svg+xml`. QR code MUST encode the full HTTPS URL.
 
 ---
 
@@ -800,7 +800,7 @@ Before MVP release, run load tests at:
 | Component | Resource | Notes |
 |---|---|---|
 | API | Azure App Service (B2/B3) or Container Apps (MVP) | Enable Always On |
-| `Blazor.Intake` WASM | Azure Static Web Apps | CDN-enabled; custom domain `intake.rvserviceflow.com`; PWA service worker caches WASM runtime for instant repeat visits |
+| `Blazor.Intake` WASM | Azure Static Web Apps | CDN-enabled; custom domain apex `rvintake.com`; PWA service worker caches WASM runtime for instant repeat visits |
 | `Blazor.Manager` WASM | Azure Static Web Apps | CDN-enabled; same hosting pattern as Blazor.Intake |
 | Cosmos DB | Single account, single region (MVP) | 9 containers per spec |
 | Blob Storage | Single account | `rvs-attachments` container with per-tenant virtual paths |

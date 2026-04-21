@@ -37,7 +37,7 @@ Each dealership location has its own intake URL.
 Example:
 
 ```
-rvserviceflow.com/intake/blue-compass-salt-lake
+rvintake.com/blue-compass-salt-lake
 ```
 
 Page header includes:

@@ -19,7 +19,7 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
 | **Camera access** | VIN scanning, photo/video upload | View photos/videos | QR/VIN scanning, photo capture |
 | **Offline support** | Not required | Not required | **Critical** (poor bay connectivity) |
 | **Device APIs** | Camera (via browser is sufficient) | None beyond browser | Camera, **voice notes**, local storage, barcode/QR scanner |
-| **Distribution** | URL per dealership (`rvserviceflow.com/intake/{slug}`) | Browser bookmark | Installed on technician devices |
+| **Distribution** | URL per dealership (`rvintake.com/{slug}`) | Browser bookmark | Installed on technician devices |
 | **Install friction** | **Zero** (no app store) | **Zero** (bookmark) | Acceptable (employer-provisioned) |
 | **Touch/glove use** | Standard mobile touch | Mouse/keyboard | **Glove-friendly**, large tap targets |
 | **SEO/discoverability** | Dealer intake pages should be indexable | N/A | N/A |
@@ -33,7 +33,7 @@ Based on the five research documents in `Docs/Research/FrontEnd/` and the curren
 
 | Factor | Rationale |
 |---|---|
-| **Zero install friction** | Customers access via a dealer-specific URL (`rvserviceflow.com/intake/blue-compass-salt-lake`). Requiring an app store download to report a leaky slide-out would kill conversion. |
+| **Zero install friction** | Customers access via a dealer-specific URL (`rvintake.com/blue-compass-salt-lake`). Requiring an app store download to report a leaky slide-out would kill conversion. |
 | **Mobile-first browser app** | The docs explicitly state *"mobile-first because most customers will submit requests from their phones."* A browser-delivered SPA is the only format that matches this. |
 | **Anonymous / magic-link auth** | No accounts in MVP. Shadow profiles link by email/VIN. This is entirely a server-side concern — no native auth APIs needed. |
 | **Camera access is sufficient via browser** | Modern `<input type="file" accept="image/*,video/*" capture>` gives photo/video upload from the browser. VIN scanning can use a JS-interop barcode library (e.g., ZXing-JS). No native SDK required. |

@@ -2,8 +2,10 @@ using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Moq;
 using RVS.API.Controllers;
+using RVS.API.Options;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
@@ -19,10 +21,13 @@ public class LocationsControllerTests
 
     private const string TenantId = "ten_test";
 
+    private const string IntakeBaseUrl = "https://rvintake.com";
+
     public LocationsControllerTests()
     {
         _claimsService = BuildClaimsService(TenantId);
-        _sut = new LocationsController(_serviceMock.Object, _claimsService);
+        var intakeUrlOptions = Options.Create(new IntakeUrlOptions { BaseUrl = IntakeBaseUrl });
+        _sut = new LocationsController(_serviceMock.Object, _claimsService, intakeUrlOptions);
     }
 
     [Fact]
@@ -89,7 +94,7 @@ public class LocationsControllerTests
     }
 
     [Fact]
-    public async Task GetQrCode_ShouldReturnOkWithIntakeUrl()
+    public async Task GetQrCode_ShouldReturnOkWithConfiguredBaseUrlAndIntakePath()
     {
         var location = BuildLocation();
         _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
@@ -98,7 +103,27 @@ public class LocationsControllerTests
         var result = await _sut.GetQrCode(location.Id, CancellationToken.None);
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        okResult.Value.Should().NotBeNull();
+        var payload = okResult.Value.Should().NotBeNull().And.Subject;
+        var intakeUrlProp = payload!.GetType().GetProperty("intakeUrl")!.GetValue(payload) as string;
+        intakeUrlProp.Should().Be($"{IntakeBaseUrl}/{location.Slug}");
+    }
+
+    [Fact]
+    public async Task GetQrCode_ShouldTrimTrailingSlashOnConfiguredBaseUrl()
+    {
+        var location = BuildLocation();
+        _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var optionsWithSlash = Options.Create(new IntakeUrlOptions { BaseUrl = "https://rvintake.com/" });
+        var sut = new LocationsController(_serviceMock.Object, _claimsService, optionsWithSlash);
+
+        var result = await sut.GetQrCode(location.Id, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = okResult.Value!;
+        var intakeUrlProp = payload.GetType().GetProperty("intakeUrl")!.GetValue(payload) as string;
+        intakeUrlProp.Should().Be($"https://rvintake.com/{location.Slug}");
     }
 
     private static Location BuildLocation(string id = "loc_test", string name = "Test Location") => new()

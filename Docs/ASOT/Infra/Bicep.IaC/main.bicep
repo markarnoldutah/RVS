@@ -176,9 +176,9 @@ var resolvedStorageAccountName = empty(storageAccountNameOverride)
 
 // Environment-aware default CORS origins for browser-based SAS uploads.
 var defaultCorsOrigins = environmentName == 'prod'
-  ? ['https://intake.rvserviceflow.com', 'https://manager.rvserviceflow.com']
+  ? ['https://rvintake.com', 'https://manager.rvserviceflow.com']
   : environmentName == 'staging'
-      ? ['https://intake-staging.rvserviceflow.com', 'https://manager-staging.rvserviceflow.com']
+      ? ['https://staging.rvintake.com', 'https://manager-staging.rvserviceflow.com']
       : [
           'https://localhost:7008'
           'https://localhost:7116'

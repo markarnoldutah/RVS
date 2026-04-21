@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using RVS.API.Mappers;
+using RVS.API.Options;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
 using RVS.Domain.Interfaces;
@@ -17,14 +19,19 @@ public class LocationsController : ControllerBase
 {
     private readonly ILocationService _service;
     private readonly ClaimsService _claimsService;
+    private readonly IntakeUrlOptions _intakeUrlOptions;
 
     /// <summary>
     /// Initializes a new instance of <see cref="LocationsController"/>.
     /// </summary>
-    public LocationsController(ILocationService service, ClaimsService claimsService)
+    public LocationsController(
+        ILocationService service,
+        ClaimsService claimsService,
+        IOptions<IntakeUrlOptions> intakeUrlOptions)
     {
         _service = service;
         _claimsService = claimsService;
+        _intakeUrlOptions = intakeUrlOptions.Value;
     }
 
     /// <summary>
@@ -109,7 +116,8 @@ public class LocationsController : ControllerBase
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
         var entity = await _service.GetByIdAsync(tenantId, id, ct);
-        var intakeUrl = $"https://intake.rvserviceflow.com/{entity.Slug}";
+        var baseUrl = _intakeUrlOptions.BaseUrl.TrimEnd('/');
+        var intakeUrl = $"{baseUrl}/{entity.Slug}";
 
         return Ok(new { intakeUrl, slug = entity.Slug });
     }

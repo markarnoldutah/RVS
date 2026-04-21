@@ -67,7 +67,7 @@ if (builder.Environment.IsProduction())
         options.AddPolicy("AllowBlazorClient", corsBuilder =>
         {
             corsBuilder
-                .WithOrigins("https://intake.rvserviceflow.com", "https://manager.rvserviceflow.com")
+                .WithOrigins("https://rvintake.com", "https://manager.rvserviceflow.com")
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
@@ -346,6 +346,9 @@ var useMockIntegrations = builder.Configuration.GetValue<bool>("Integrations:Use
 
 // AI options — payload limits and allowed media types for all AI endpoints
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
+
+// Intake app URL — used to build QR-code / magic-link URLs pointing at the public Intake SPA
+builder.Services.Configure<RVS.API.Options.IntakeUrlOptions>(builder.Configuration.GetSection("Intake"));
 
 // VIN Decoder
 if (useMockIntegrations)

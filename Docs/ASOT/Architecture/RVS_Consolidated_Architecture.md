@@ -383,10 +383,10 @@ Authorization policies referenced below are defined in **RVS_Auth0_Identity_Vers
 | Environment | Origins |
 |---|---|
 | Development | `https://localhost:7xxx` |
-| Staging | `https://intake-staging.rvserviceflow.com`, `https://manager-staging.rvserviceflow.com` |
-| Production | `https://manager.rvserviceflow.com`, `https://intake.rvserviceflow.com` |
+| Staging | `https://staging.rvintake.com`, `https://manager-staging.rvserviceflow.com` |
+| Production | `https://manager.rvserviceflow.com`, `https://rvintake.com` |
 
-The intake form (`intake.rvserviceflow.com`) and service manager (`manager.rvserviceflow.com`) are different subdomains and must both be listed.
+The intake form (`rvintake.com`, apex of a separate DNS zone) and service manager (`manager.rvserviceflow.com`) live in different zones and must both be listed in the CORS allowlist.
 
 ### TenantAccessGateMiddleware Scale Considerations
 

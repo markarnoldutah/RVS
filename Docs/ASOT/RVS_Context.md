@@ -50,7 +50,7 @@ RVS is a cloud-based **service intake and workflow platform** that sits in front
 **For RV owners — requires no account.**
 
 - **App:** `RVS.Blazor.Intake` — Blazor WebAssembly (Standalone PWA). All surfaces (landing page, guided wizard, confirmation, status pages) are routes within a single WASM SPA. No SSR, no SignalR. A service worker caches the WASM runtime after first load — subsequent visits skip the network download entirely.
-- **URL:** `https://app.rvserviceflow.com/intake/{locationSlug}` (location-specific, accessible via QR code)
+- **URL:** `https://rvintake.com/{locationSlug}` (location-specific, accessible via QR code)
 - **Submits:** VIN (camera scan or manual entry; AI-assisted photo extraction), make/model/year, issue description (text or speech-to-text with AI transcript cleanup), photos/videos (up to 10 files), urgency level, RV usage (full-time vs. part-time)
 - **Flow:** Description-first capture: after the customer enters or records an issue description, AI suggests a top-level issue category (pre-selected in the dropdown, clearly marked as AI-suggested, customer can override). The wizard then presents contextual follow-up questions specific to that category (e.g., for Refrigerator → absorption vs. residential, error codes, shore power; for Slide-out → which slide number, manual override attempted)
 - **Outcomes:** Service request created, customer receives confirmation email with magic-link status URL
@@ -61,7 +61,7 @@ RVS is a cloud-based **service intake and workflow platform** that sits in front
 **For RV owners — check status any time, any dealership.**
 
 - **App:** Part of `RVS.Blazor.Intake` — the status page is a client-side route within the same WASM SPA. No separate server-rendered page; the service worker ensures fast loads on repeat visits.
-- **URL:** `https://app.rvserviceflow.com/status/{token}` (anonymous, rate-limited)
+- **URL:** `https://rvintake.com/status/{token}` (anonymous, rate-limited)
 - **Token:** Secure magic-link generated on intake submission, embedded in confirmation email
 - **Shows:** All active service requests from that customer **across all dealerships** where they've submitted
 - **Data:** Location name, status, issue summary, last-updated date, request total count

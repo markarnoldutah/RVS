@@ -585,7 +585,7 @@ Step 4: Owner Invites Staff
 Step 5: Ready
         ─────
         Intake URL is live:
-          rvserviceflow.com/intake/blue-compass-salt-lake
+          rvintake.com/blue-compass-salt-lake
         Dashboard is accessible:
           dashboard.rvserviceflow.com
 ```
