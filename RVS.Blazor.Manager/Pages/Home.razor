@@ -1,7 +1,6 @@
 @page "/"
 @attribute [AllowAnonymous]
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
-@inject NavigationManager Navigation
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
 @inject RVS.Blazor.Manager.State.ManagerAppState AppState
 
@@ -38,20 +37,9 @@
         </MudStack>
     </Authorized>
     <NotAuthorized>
-        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center"
-                  Style="min-height: 80vh;" Spacing="4">
-            <MudText Typo="Typo.h5" Style="margin: 0 0 8px; font-weight: 500; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
-                RVS Manager
-            </MudText>
-            <MudText Typo="Typo.body2" Style="margin: 0 0 24px; color: #e0e0e0; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
-                Manage service requests and operations
-            </MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                       Size="Size.Large"
-                       OnClick="BeginLogin">
-                Log In
-            </MudButton>
-        </MudStack>
+        <AuthStatePanel Message="Manage service requests and operations"
+                        ButtonText="Log In"
+                        ButtonHref="authentication/login" />
     </NotAuthorized>
 </AuthorizeView>
 
@@ -84,10 +72,5 @@
         return context.User.Identity?.Name
             ?? context.User.FindFirst("email")?.Value
             ?? "Manager";
-    }
-
-    private void BeginLogin()
-    {
-        Navigation.NavigateToLogin("authentication/login");
     }
 }

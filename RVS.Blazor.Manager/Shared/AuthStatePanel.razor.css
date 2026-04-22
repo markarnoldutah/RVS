@@ -1,0 +1,20 @@
+@keyframes auth-bar-slide {
+    0%   { transform: translateX(-150%); }
+    100% { transform: translateX(350%); }
+}
+
+.auth-progress-track {
+    width: 200px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.auth-progress-bar {
+    width: 40%;
+    height: 100%;
+    background: #ffffff;
+    border-radius: 2px;
+    animation: auth-bar-slide 1.5s ease-in-out infinite;
+}

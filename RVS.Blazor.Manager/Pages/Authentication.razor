@@ -4,65 +4,32 @@
 
 <RemoteAuthenticatorView Action="@Action">
     <LoggingIn>
-        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 400px;" Spacing="4">
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" aria-label="Redirecting to Auth0" />
-            <MudText Typo="Typo.body1">Redirecting to Auth0...</MudText>
-        </MudStack>
+        <AuthStatePanel Message="Redirecting for authentication..." ShowSpinner="true" />
     </LoggingIn>
     <CompletingLoggingIn>
-        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 400px;" Spacing="4">
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" aria-label="Completing login" />
-            <MudText Typo="Typo.body1">Completing login...</MudText>
-        </MudStack>
+        <AuthStatePanel Message="Completing login..." ShowSpinner="true" />
     </CompletingLoggingIn>
     <LogInFailed>
-        @{
-            var errorMessage = context;
-        }
-        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 400px;" Spacing="4">
-            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Large" aria-hidden="true" />
-            <MudText Typo="Typo.h6" Color="Color.Error">Login Failed</MudText>
-            <MudText Typo="Typo.body1">There was an error logging in. Please try again.</MudText>
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-2" Style="max-width: 600px; word-break: break-all;">
-                <MudText Typo="Typo.caption">@errorMessage</MudText>
-            </MudAlert>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">Return to Home</MudButton>
-        </MudStack>
+        <AuthStatePanel Message="There was an error logging in. Please try again."
+                        ErrorDetail="@context"
+                        ButtonText="Try Again"
+                        ButtonHref="authentication/login" />
     </LogInFailed>
     <LogOut>
-        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 400px;" Spacing="4">
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" aria-label="Logging out" />
-            <MudText Typo="Typo.body1">Logging out...</MudText>
-        </MudStack>
+        <AuthStatePanel Message="Logging out..." ShowSpinner="true" />
     </LogOut>
     <CompletingLogOut>
-        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 400px;" Spacing="4">
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" aria-label="Completing logout" />
-            <MudText Typo="Typo.body1">Completing logout...</MudText>
-        </MudStack>
+        <AuthStatePanel Message="Completing logout..." ShowSpinner="true" />
     </CompletingLogOut>
     <LogOutFailed>
-        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 400px;" Spacing="4">
-            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Large" aria-hidden="true" />
-            <MudText Typo="Typo.h6" Color="Color.Error">Logout Failed</MudText>
-            <MudText Typo="Typo.body1">There was an error logging out.</MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">Return to Home</MudButton>
-        </MudStack>
+        <AuthStatePanel Message="There was an error logging out."
+                        ButtonText="Log In"
+                        ButtonHref="authentication/login" />
     </LogOutFailed>
     <LogOutSucceeded>
-        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 80vh;" Spacing="4">
-            <MudText Typo="Typo.h5" Style="margin: 0 0 8px; font-weight: 500; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
-                RVS Manager
-            </MudText>
-            <MudText Typo="Typo.body2" Style="margin: 0 0 24px; font-size: 0.875rem; color: #e0e0e0; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
-                You have been successfully logged out.
-            </MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                       Size="Size.Large"
-                       Href="authentication/login">
-                Log In
-            </MudButton>
-        </MudStack>
+        <AuthStatePanel Message="You have been successfully logged out."
+                        ButtonText="Log In"
+                        ButtonHref="authentication/login" />
     </LogOutSucceeded>
 </RemoteAuthenticatorView>
 

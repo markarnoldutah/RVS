@@ -19,14 +19,14 @@
             <ChildContent>
                 <MudMenuItem Disabled="true">
                     <MudStack Spacing="0">
-                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">@GetDisplayName(authState)</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Tertiary">@GetUserEmail(authState)</MudText>
+                        <MudText Typo="Typo.subtitle2" Style="@($"color: {MenuItemTextColor}")">@GetDisplayName(authState)</MudText>
+                        <MudText Typo="Typo.caption" Style="@($"color: {MenuItemTextColor}")">@GetUserEmail(authState)</MudText>
                     </MudStack>
                 </MudMenuItem>
                 <MudDivider />
                 <div class="px-4 py-2">
                     <MudStack Spacing="1">
-                        <MudText Color="Color.Tertiary" Style="font-size: 0.7rem;">Theme</MudText>
+                        <MudText Typo="Typo.subtitle2" Style="@($"color: {MenuItemTextColor}")">Theme</MudText>
                         <MudRadioGroup T="ThemeMode" Value="ThemeService.Mode" ValueChanged="OnThemeModeChangedAsync">
                             <MudStack Spacing="0">
                                 <MudRadio T="ThemeMode" Value="ThemeMode.Light" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">Light</MudRadio>
@@ -64,6 +64,13 @@
     {
         Navigation.NavigateToLogout("authentication/logout");
     }
+
+    private string MenuItemTextColor => ThemeService.Mode switch
+    {
+        ThemeMode.Dark => "#FFFFFF",
+        ThemeMode.HighContrast => "#FFFF00",
+        _ => "var(--mud-palette-primary)"
+    };
 
     private async Task OnThemeModeChangedAsync(ThemeMode mode)
     {

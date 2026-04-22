@@ -1,0 +1,58 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; display: flex; align-items: center; justify-content: center; background: linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url('images/tetons-desktop.jpg') center 40%/cover no-repeat fixed;">
+    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="0">
+        <MudText Typo="Typo.h5" Style="margin: 0 0 8px; font-weight: 500; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+            RVS Manager
+        </MudText>
+        <MudText Typo="Typo.body2" Style="margin: 0 0 24px; font-size: 0.875rem; color: #e0e0e0; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+            @Message
+        </MudText>
+        @if (!string.IsNullOrEmpty(ErrorDetail))
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true"
+                      Style="margin: 0 0 16px; max-width: 600px; word-break: break-all;">
+                <MudText Typo="Typo.caption">@ErrorDetail</MudText>
+            </MudAlert>
+        }
+        <div class="auth-progress-track" role="progressbar" aria-label="@Message" aria-hidden="@(!ShowSpinner ? "true" : null)">
+            @if (ShowSpinner)
+            {
+                <div class="auth-progress-bar"></div>
+            }
+        </div>
+        <div style="@GetButtonWrapperStyle()">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                       Href="@(ButtonHref ?? "#")"
+                       tabindex="@(string.IsNullOrEmpty(ButtonText) ? "-1" : null)"
+                       aria-hidden="@(string.IsNullOrEmpty(ButtonText) ? "true" : null)">
+                @(string.IsNullOrEmpty(ButtonText) ? " " : ButtonText)
+            </MudButton>
+        </div>
+    </MudStack>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Message { get; set; } = string.Empty;
+    [Parameter] public bool ShowSpinner { get; set; }
+    [Parameter] public string? ButtonText { get; set; }
+    [Parameter] public string? ButtonHref { get; set; }
+    [Parameter] public string? ErrorDetail { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("rvs_setHtmlOverflow", "hidden");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await JS.InvokeVoidAsync("rvs_setHtmlOverflow", "");
+    }
+
+    private string GetButtonWrapperStyle() =>
+        string.IsNullOrEmpty(ButtonText)
+            ? "margin-top: 24px; visibility: hidden; pointer-events: none;"
+            : "margin-top: 24px;";
+}

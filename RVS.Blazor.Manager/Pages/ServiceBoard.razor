@@ -239,7 +239,7 @@
 
     private string CardBorderColor => ThemeService.Mode switch
     {
-        ThemeMode.Dark => "#FFFFFF",
+        ThemeMode.Dark => "rgba(255, 255, 255, 0.18)",
         ThemeMode.HighContrast => "#FFFF00",
         _ => "var(--mud-palette-lines-default)"
     };
