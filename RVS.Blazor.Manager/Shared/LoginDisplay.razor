@@ -19,25 +19,26 @@
             <ChildContent>
                 <MudMenuItem Disabled="true">
                     <MudStack Spacing="0">
-                        <MudText Typo="Typo.subtitle2">@GetDisplayName(authState)</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@GetUserEmail(authState)</MudText>
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">@GetDisplayName(authState)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Tertiary">@GetUserEmail(authState)</MudText>
                     </MudStack>
                 </MudMenuItem>
                 <MudDivider />
                 <div class="px-4 py-2">
                     <MudStack Spacing="1">
-                        <MudText Color="Color.Secondary" Style="font-size: 0.7rem;">Theme</MudText>
-                        <MudRadioGroup T="ThemeMode" Value="ThemeService.Mode" ValueChanged="OnThemeModeChangedAsync" Style="font-size: 0.75rem;">
-                            <MudRadio T="ThemeMode" Value="ThemeMode.Light" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">Light</MudRadio>
-                            <MudRadio T="ThemeMode" Value="ThemeMode.Dark" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">Dark</MudRadio>
-                            <MudRadio T="ThemeMode" Value="ThemeMode.HighContrast" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">High Contrast</MudRadio>
+                        <MudText Color="Color.Tertiary" Style="font-size: 0.7rem;">Theme</MudText>
+                        <MudRadioGroup T="ThemeMode" Value="ThemeService.Mode" ValueChanged="OnThemeModeChangedAsync">
+                            <MudStack Spacing="0">
+                                <MudRadio T="ThemeMode" Value="ThemeMode.Light" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">Light</MudRadio>
+                                <MudRadio T="ThemeMode" Value="ThemeMode.Dark" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">Dark</MudRadio>
+                                <MudRadio T="ThemeMode" Value="ThemeMode.HighContrast" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">High Contrast</MudRadio>
+                            </MudStack>
                         </MudRadioGroup>
                     </MudStack>
                 </div>
                 <MudDivider />
                 <div class="px-4 py-2">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                               FullWidth="true"
                                OnClick="BeginLogout">
                         Log Out
                     </MudButton>

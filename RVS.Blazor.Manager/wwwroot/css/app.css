@@ -54,3 +54,10 @@ html, body {
 .skip-link:focus {
     top: 0;
 }
+
+/* Fix MudRadio selected/hover state layer to be circular, not oval */
+.mud-radio .mud-button-root {
+    border-radius: 50%;
+    aspect-ratio: 1 / 1;
+    min-width: unset;
+}
