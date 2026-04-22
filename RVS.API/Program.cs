@@ -432,6 +432,12 @@ else
                 client.DefaultRequestHeaders.Add("api-key", apiKey);
             }
         })
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            // Recycle connections every 2 minutes so Azure OpenAI's server-side
+            // idle-connection closes don't cause stale-socket errors on reuse.
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+        })
         .AddStandardResilienceHandler(options =>
         {
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(20);

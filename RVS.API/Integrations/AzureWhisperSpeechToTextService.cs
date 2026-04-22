@@ -101,7 +101,7 @@ public sealed class AzureWhisperSpeechToTextService : ISpeechToTextService
             _logger.LogError(ex, "Whisper transcription network error (Status: {StatusCode})", ex.StatusCode);
             return null;
         }
-        catch (TaskCanceledException ex)
+        catch (OperationCanceledException ex)
         {
             _logger.LogWarning(ex, "Whisper transcription timed out or was cancelled");
             return null;
