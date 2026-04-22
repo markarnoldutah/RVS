@@ -104,3 +104,51 @@ window.rvs_stopRecording = function () {
         window._rvs_mediaRecorder.stop();
     });
 };
+
+/**
+ * Attaches an iOS soft-keyboard guard to the adornment button of a MudDatePicker
+ * located inside the wrapper with the given id.
+ *
+ * Without this guard, tapping the calendar icon on iOS either keeps the prior
+ * keyboard up or causes the input to focus (spawning the keyboard), which
+ * pushes the date picker popover off-screen.
+ *
+ * The guard blurs the active element on pointerdown/touchstart over the
+ * adornment and briefly applies `readonly` to the text input so iOS will
+ * not open the keyboard while MudDatePicker processes the click. Tapping
+ * the input directly is unaffected, so the keyboard still spawns there.
+ *
+ * Safe to call repeatedly; the handler is only attached once per adornment.
+ * @param {string} wrapperId - The id of the wrapping element around the MudDatePicker.
+ */
+window.rvs_attachDatePickerKeyboardGuard = function (wrapperId) {
+    var wrapper = document.getElementById(wrapperId);
+    if (!wrapper) return;
+
+    var attach = function () {
+        var adornment = wrapper.querySelector('.mud-input-adornment button');
+        var input = wrapper.querySelector('input');
+        if (!adornment || !input) return false;
+        if (adornment.dataset.rvsKbGuard === '1') return true;
+        adornment.dataset.rvsKbGuard = '1';
+
+        var handler = function () {
+            if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                document.activeElement.blur();
+            }
+            input.setAttribute('readonly', 'readonly');
+            setTimeout(function () { input.removeAttribute('readonly'); }, 500);
+        };
+        adornment.addEventListener('pointerdown', handler, true);
+        adornment.addEventListener('touchstart', handler, { capture: true, passive: true });
+        return true;
+    };
+
+    if (attach()) return;
+
+    var observer = new MutationObserver(function () {
+        if (attach()) observer.disconnect();
+    });
+    observer.observe(wrapper, { childList: true, subtree: true });
+    setTimeout(function () { observer.disconnect(); }, 5000);
+};

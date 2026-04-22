@@ -164,20 +164,22 @@
                 <MudStack Spacing="1">
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Approx. Purchase Date</MudText>
                     <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">When did you purchase your RV? (MM/YYYY)</MudText>
-                    <MudDatePicker Date="_approxPurchaseDate"
-                                   DateChanged="HandlePurchaseDateChanged"
-                                   Validation="@(new Func<DateTime?, string?>(ValidateApproxPurchaseDate))"
-                                   DateFormat="MM/yyyy"
-                                   FixDay="1"
-                                   OpenTo="OpenTo.Month"
-                                   Variant="Variant.Outlined" 
-                                   ShowToolbar="false"
-                                   Margin="Margin.Dense"
-                                   Editable="true"
-                                   Placeholder="MM/YYYY"
-                                   MaxDate="@DateTime.Today"
-                                   MinDate="_minPurchaseDate"
-                                   AutoClose="true" />
+                    <div id="@PurchaseDateWrapperId">
+                        <MudDatePicker Date="_approxPurchaseDate"
+                                       DateChanged="HandlePurchaseDateChanged"
+                                       Validation="@(new Func<DateTime?, string?>(ValidateApproxPurchaseDate))"
+                                       DateFormat="MM/yyyy"
+                                       FixDay="1"
+                                       OpenTo="OpenTo.Month"
+                                       Variant="Variant.Outlined"
+                                       ShowToolbar="false"
+                                       Margin="Margin.Dense"
+                                       Editable="true"
+                                       Placeholder="MM/YYYY"
+                                       MaxDate="@DateTime.Today"
+                                       MinDate="_minPurchaseDate"
+                                       AutoClose="true" />
+                    </div>
                 </MudStack>
             </MudPaper>
 
@@ -212,6 +214,7 @@
     private CancellationTokenSource? _suggestCategoryCts;
     private CancellationTokenSource? _suggestInsightsCts;
     private readonly DateTime _minPurchaseDate = new(1960, 1, 1);
+    private const string PurchaseDateWrapperId = "approx-purchase-date-wrapper";
 
     protected override void OnInitialized()
     {
@@ -226,6 +229,21 @@
                 System.Globalization.DateTimeStyles.None, out var parsedDate))
         {
             _approxPurchaseDate = parsedDate;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("rvs_attachDatePickerKeyboardGuard", PurchaseDateWrapperId);
+            }
+            catch
+            {
+                // Guard is a progressive enhancement; failure is non-fatal.
+            }
         }
     }
 
