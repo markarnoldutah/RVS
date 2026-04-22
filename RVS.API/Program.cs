@@ -82,8 +82,10 @@ else if (builder.Environment.IsEnvironment("Staging"))
         {
             corsBuilder
                 .WithOrigins(
-                    "https://zealous-island-0ff7ab71e.6.azurestaticapps.net", // intake
-                    "https://mango-grass-08484a41e.1.azurestaticapps.net") // manager
+                    "https://staging.rvintake.com",                           // intake (custom domain)
+                    "https://zealous-island-0ff7ab71e.6.azurestaticapps.net", // intake (default SWA domain)
+                    "https://manager-staging.rvserviceflow.com",              // manager (custom domain)
+                    "https://mango-grass-08484a41e.1.azurestaticapps.net")    // manager (default SWA domain)
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
