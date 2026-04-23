@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.JSInterop;
 using RVS.Domain.DTOs;
+using RVS.Domain.Interfaces;
 using RVS.UI.Shared.Validation;
 
 namespace RVS.Blazor.Intake.State;
@@ -10,7 +11,7 @@ namespace RVS.Blazor.Intake.State;
 /// Holds all step data, current step index, validation state, and returning customer prefill data.
 /// Persisted in <c>sessionStorage</c> for offline resilience.
 /// </summary>
-public sealed class IntakeWizardState
+public sealed class IntakeWizardState : IIntakeWizardState
 {
     private const string StorageKey = "rvs_intake_wizard_state";
     private const int TotalStepCount = 8;

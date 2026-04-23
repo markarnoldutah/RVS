@@ -82,7 +82,7 @@
 </MudPaper>
 
 @code {
-    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public IIntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
 
     private MudForm _form = default!;

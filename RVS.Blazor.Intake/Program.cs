@@ -5,6 +5,7 @@ using MudBlazor.Services;
 using RVS.Blazor.Intake;
 using RVS.Blazor.Intake.Services;
 using RVS.Blazor.Intake.State;
+using RVS.Domain.Interfaces;
 using RVS.UI.Shared.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
@@ -33,6 +34,10 @@ builder.Services.AddScoped<AttachmentApiClient>();
 
 // Intake wizard shared state — scoped (one per browser tab lifetime)
 builder.Services.AddScoped<IntakeWizardState>();
+builder.Services.AddScoped<IIntakeWizardState>(sp => sp.GetRequiredService<IntakeWizardState>());
+
+// Shared intake-step AI helper client (anonymous, slug-scoped — routes through IntakeController)
+builder.Services.AddScoped<IIntakeAiClient, WizardScopedIntakeAiClient>();
 
 // Theme switcher — scoped (one per browser tab lifetime)
 builder.Services.AddScoped<ThemeService>();

@@ -196,9 +196,9 @@
 </MudPaper>
 
 @code {
-    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public IIntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
-    [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+    [Inject] private IIntakeAiClient IntakeAi { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private MudForm _form = default!;
@@ -271,7 +271,7 @@
                     ContentType = recording.MimeType
                 };
 
-                var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
+                var result = await IntakeAi.TranscribeIssueAsync(request);
                 if (result?.Result is not null)
                 {
                     // Start with the Whisper result as a baseline
@@ -295,7 +295,7 @@
                             IssueCategory = State.IssueCategory
                         };
 
-                        var refined = await IntakeApi.RefineIssueTextAsync(State.Slug, refinementRequest);
+                        var refined = await IntakeAi.RefineIssueTextAsync(refinementRequest);
                         if (!string.IsNullOrWhiteSpace(refined?.Result?.CleanedDescription))
                         {
                             State.IssueDescription = refined.Result.CleanedDescription;
@@ -365,7 +365,7 @@
                 IssueDescription = State.IssueDescription
             };
 
-            var result = await IntakeApi.SuggestIssueCategoryAsync(State.Slug, request, ct);
+            var result = await IntakeAi.SuggestIssueCategoryAsync(request, ct);
             if (result?.Result?.IssueCategory is not null && !ct.IsCancellationRequested)
             {
                 State.IssueCategory = result.Result.IssueCategory;
@@ -426,7 +426,7 @@
                 IssueDescription = rawTranscript
             };
 
-            var result = await IntakeApi.SuggestIssueInsightsAsync(State.Slug, request, ct);
+            var result = await IntakeAi.SuggestIssueInsightsAsync(request, ct);
             if (result?.Result is not null && !ct.IsCancellationRequested)
             {
                 if (result.Result.Urgency is not null)

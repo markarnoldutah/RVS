@@ -382,6 +382,63 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
+    public void BuildCreateRequest_FullyPopulatedState_ShouldProduceExpectedDto()
+    {
+        // Baseline snapshot — every field on IntakeWizardState that feeds
+        // ServiceRequestCreateRequestDto is set, and the full DTO is asserted.
+        // Pins current behaviour before the IIntakeWizardState extraction refactor.
+        var state = CreateState();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Phone = "555-1234";
+        state.SmsOptOut = true;
+        state.EmailOptOut = true;
+        state.Vin = "1HGBH41JXMN109186";
+        state.Manufacturer = "Winnebago";
+        state.Model = "Vista";
+        state.Year = 2023;
+        state.IssueCategory = "Electrical";
+        state.IssueDescription = "Lights flickering in the main cabin.";
+        state.Urgency = "High";
+        state.RvUsage = "Full-Time";
+        state.HasExtendedWarranty = "Yes";
+        state.ApproxPurchaseDate = "03/2023";
+        state.DiagnosticResponses =
+        [
+            new DiagnosticResponseDto
+            {
+                QuestionText = "When did the flickering start?",
+                SelectedOptions = ["This week"],
+                FreeTextResponse = "After a storm"
+            }
+        ];
+
+        var request = state.BuildCreateRequest();
+
+        request.Customer.FirstName.Should().Be("Jane");
+        request.Customer.LastName.Should().Be("Doe");
+        request.Customer.Email.Should().Be("jane@example.com");
+        request.Customer.Phone.Should().Be("555-1234");
+        request.Asset.AssetId.Should().Be("1HGBH41JXMN109186");
+        request.Asset.Manufacturer.Should().Be("Winnebago");
+        request.Asset.Model.Should().Be("Vista");
+        request.Asset.Year.Should().Be(2023);
+        request.IssueCategory.Should().Be("Electrical");
+        request.IssueDescription.Should().Be("Lights flickering in the main cabin.");
+        request.Urgency.Should().Be("High");
+        request.RvUsage.Should().Be("Full-Time");
+        request.HasExtendedWarranty.Should().Be("Yes");
+        request.ApproxPurchaseDate.Should().Be("03/2023");
+        request.SmsOptOut.Should().BeTrue();
+        request.EmailOptOut.Should().BeTrue();
+        request.DiagnosticResponses.Should().HaveCount(1);
+        request.DiagnosticResponses![0].QuestionText.Should().Be("When did the flickering start?");
+        request.DiagnosticResponses[0].SelectedOptions.Should().ContainSingle().Which.Should().Be("This week");
+        request.DiagnosticResponses[0].FreeTextResponse.Should().Be("After a storm");
+    }
+
+    [Fact]
     public void BuildCreateRequest_ShouldTrimStrings()
     {
         var state = CreateState();

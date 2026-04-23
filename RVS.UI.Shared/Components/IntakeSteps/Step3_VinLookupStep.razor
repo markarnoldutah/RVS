@@ -181,9 +181,9 @@
     private const double VinAutoFillThreshold = 0.7;
     private const double VinAutoLookupThreshold = 0.9;
 
-    [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
+    [Parameter, EditorRequired] public IIntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
-    [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+    [Inject] private IIntakeAiClient IntakeAi { get; set; } = default!;
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
 
     private MudForm _form = default!;
@@ -280,7 +280,7 @@
                     ContentType = recording.MimeType
                 };
 
-                var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
+                var result = await IntakeAi.TranscribeIssueAsync(request);
                 if (result?.Result?.RawTranscript is not null)
                 {
                     var vin = VinTranscriptCleaner.Clean(result.Result.RawTranscript);
@@ -347,7 +347,7 @@
                 ContentType = file.ContentType
             };
 
-            var response = await IntakeApi.ExtractVinFromImageAsync(State.Slug, request);
+            var response = await IntakeAi.ExtractVinFromImageAsync(request);
 
             if (response is { Success: true, Result.Vin: { } vin } && response.Confidence >= VinAutoFillThreshold)
             {
@@ -400,7 +400,7 @@
 
         try
         {
-            var decoded = await IntakeApi.DecodeVinAsync(State.Slug, State.Vin);
+            var decoded = await IntakeAi.DecodeVinAsync(State.Vin);
             if (decoded is not null)
             {
                 State.Manufacturer = decoded.Manufacturer;
