@@ -69,21 +69,27 @@
             </MudStack>
         </MudPaper>
 
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   FullWidth="true"
-                   OnClick="HandleNext"
-                   Style="text-transform: none;"
-                   Class="mt-6">
-            Continue
-        </MudButton>
+        @if (!HideContinueButton)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       OnClick="HandleNext"
+                       Style="text-transform: none;"
+                       Class="mt-6">
+                Continue
+            </MudButton>
+        }
     </MudStack>
     </MudForm>
 </MudPaper>
 
 @code {
     [Parameter, EditorRequired] public IIntakeWizardState State { get; set; } = default!;
-    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter] public EventCallback OnNext { get; set; }
+
+    /// <summary>Hides the per-step Continue button when the host renders multiple steps on one surface.</summary>
+    [Parameter] public bool HideContinueButton { get; set; }
 
     private MudForm _form = default!;
     private bool _submitted;

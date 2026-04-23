@@ -24,6 +24,14 @@
                             Updated @_lastRefreshed.Value.ToLocalTime().ToString("h:mm tt")
                         </MudText>
                     }
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.PersonAdd"
+                               OnClick="OpenWalkInDialog"
+                               Disabled="@(AppState.SelectedLocation is null)"
+                               Style="text-transform: none;">
+                        New Walk-In SR
+                    </MudButton>
                     <MudIconButton Icon="@Icons.Material.Filled.Refresh"
                                    Color="Color.Primary"
                                    OnClick="RefreshBoardAsync"
@@ -188,6 +196,9 @@
                             ServiceRequestId="@_detailDialogSrId"
                             CurrentStatus="@_detailDialogStatus"
                             OnChanged="OnDialogChangedAsync" />
+
+<NewWalkInServiceRequestDialog @bind-Visible="_walkInDialogOpen"
+                               OnCreated="OnDialogChangedAsync" />
 
 @code {
     private bool _loading;
@@ -523,6 +534,9 @@
     private bool _detailDialogOpen;
     private string? _detailDialogSrId;
     private string? _detailDialogStatus;
+    private bool _walkInDialogOpen;
+
+    private void OpenWalkInDialog() => _walkInDialogOpen = true;
 
     private void OpenDetailDialog(string serviceRequestId, string? currentStatus = null)
     {

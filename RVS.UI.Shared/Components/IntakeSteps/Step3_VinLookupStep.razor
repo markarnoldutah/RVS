@@ -141,7 +141,7 @@
         }
 
         <MudStack Spacing="2" Class="mt-6">
-            @if (_lookupFailed)
+            @if (_lookupFailed && !HideContinueButton)
             {
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Secondary"
@@ -166,6 +166,10 @@
                 {
                     @:Try Lookup Again
                 }
+                else if (HideContinueButton)
+                {
+                    @:Look Up VIN
+                }
                 else
                 {
                     @:Continue
@@ -182,7 +186,11 @@
     private const double VinAutoLookupThreshold = 0.9;
 
     [Parameter, EditorRequired] public IIntakeWizardState State { get; set; } = default!;
-    [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Parameter] public EventCallback OnNext { get; set; }
+
+    /// <summary>Hides the per-step Continue / Lookup button when the host renders multiple steps on one surface.</summary>
+    [Parameter] public bool HideContinueButton { get; set; }
+
     [Inject] private IIntakeAiClient IntakeAi { get; set; } = default!;
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
 

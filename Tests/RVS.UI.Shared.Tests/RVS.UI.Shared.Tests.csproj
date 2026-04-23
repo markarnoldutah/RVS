@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\RVS.UI.Shared\RVS.UI.Shared.csproj" />
     <ProjectReference Include="..\..\RVS.Blazor.Intake\RVS.Blazor.Intake.csproj" />
+    <ProjectReference Include="..\..\RVS.Blazor.Manager\RVS.Blazor.Manager.csproj" />
   </ItemGroup>
 
 </Project>

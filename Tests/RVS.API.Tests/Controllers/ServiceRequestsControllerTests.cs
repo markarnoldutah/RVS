@@ -18,10 +18,11 @@ public class ServiceRequestsControllerTests
     private readonly ServiceRequestsController _sut;
 
     private const string TenantId = "ten_test";
+    private const string UserId = "auth0|user_123";
 
     public ServiceRequestsControllerTests()
     {
-        _claimsService = BuildClaimsService(TenantId);
+        _claimsService = BuildClaimsService(TenantId, UserId);
         _sut = new ServiceRequestsController(_serviceMock.Object, _claimsService);
     }
 
@@ -131,12 +132,70 @@ public class ServiceRequestsControllerTests
         }
     };
 
-    private static ClaimsService BuildClaimsService(string tenantId)
+    // ── Create ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Create_ShouldStampCreatedByUserIdFromClaims()
+    {
+        // Critical audit-trail guarantee: when the Manager walk-in dialog (or any
+        // authenticated caller) posts a service request, the resulting entity must
+        // carry the caller's user id — not a hard-coded value, not the intake
+        // fallback. A regression here silently loses provenance for every SR.
+        var request = new ServiceRequestCreateRequestDto
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "Jane", LastName = "Doe", Email = "jane@example.com"
+            },
+            Asset = new AssetInfoDto { AssetId = "1HGBH41JXMN109186" },
+            IssueCategory = "Electrical",
+            IssueDescription = "Walk-in: lights flickering."
+        };
+
+        ServiceRequest? capturedEntity = null;
+        _serviceMock
+            .Setup(s => s.CreateAsync(TenantId, It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<string, ServiceRequest, CancellationToken>((_, entity, _) => capturedEntity = entity)
+            .ReturnsAsync(BuildServiceRequest());
+
+        var result = await _sut.Create("dlr_1", request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+        capturedEntity.Should().NotBeNull();
+        capturedEntity!.CreatedByUserId.Should().Be(UserId);
+        capturedEntity.TenantId.Should().Be(TenantId);
+    }
+
+    [Fact]
+    public async Task Create_WhenUserIdClaimIsMissing_ShouldThrowUnauthorized()
+    {
+        var sutWithoutUser = new ServiceRequestsController(
+            _serviceMock.Object,
+            BuildClaimsService(TenantId, userId: null));
+        var request = new ServiceRequestCreateRequestDto
+        {
+            Customer = new CustomerInfoDto { FirstName = "J", LastName = "D", Email = "j@d.com" },
+            Asset = new AssetInfoDto { AssetId = "1HGBH41JXMN109186" },
+            IssueCategory = "Electrical",
+            IssueDescription = "x"
+        };
+
+        var act = async () => await sutWithoutUser.Create("dlr_1", request, CancellationToken.None);
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    private static ClaimsService BuildClaimsService(string tenantId, string? userId = null)
     {
         var claims = new List<Claim>
         {
             new(ClaimsService.TenantIdClaimType, tenantId)
         };
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, userId));
+        }
+
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var principal = new ClaimsPrincipal(identity);
 

@@ -6,6 +6,7 @@ using MudBlazor.Services;
 using RVS.Blazor.Manager;
 using RVS.Blazor.Manager.Services;
 using RVS.Blazor.Manager.State;
+using RVS.Domain.Interfaces;
 using RVS.UI.Shared.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
@@ -55,6 +56,24 @@ builder.Services.AddScoped<RVS.UI.Shared.Services.LookupApiClient>(sp =>
     new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
 builder.Services.AddScoped<RVS.UI.Shared.Services.AttachmentApiClient>(sp =>
     new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+
+// Intake config client — anonymous slug-based endpoint for fetching issue categories / intake config.
+// Used by the walk-in dialog to populate the shared step components.
+builder.Services.AddScoped<RVS.UI.Shared.Services.IntakeApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+
+// IIntakeAiClient — authenticated dealer-scoped implementation. Transient so each step
+// instance picks up the current dealership id resolved into ManagerAppState. Callers must
+// call ManagerAppState.EnsureDealershipResolvedAsync() before the shared intake steps render.
+builder.Services.AddTransient<IIntakeAiClient>(sp =>
+{
+    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API");
+    var appState = sp.GetRequiredService<ManagerAppState>();
+    var dealershipId = appState.SelectedDealershipId
+        ?? throw new InvalidOperationException(
+            "SelectedDealershipId is not yet resolved. Call ManagerAppState.EnsureDealershipResolvedAsync() before rendering components that inject IIntakeAiClient.");
+    return new DealershipIntakeAiClient(http, dealershipId);
+});
 
 // Configure OIDC Authentication with Auth0
 builder.Services.AddOidcAuthentication(options =>

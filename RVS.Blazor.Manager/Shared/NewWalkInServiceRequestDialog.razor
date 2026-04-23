@@ -1,0 +1,189 @@
+@namespace RVS.Blazor.Manager.Shared
+@inject IntakeApiClient IntakeApi
+@inject LookupApiClient LookupClient
+@inject ServiceRequestApiClient SrClient
+@inject RVS.Blazor.Manager.State.ManagerAppState AppState
+@inject ISnackbar Snackbar
+@using RVS.Blazor.Manager.State
+@using RVS.UI.Shared.Components.IntakeSteps
+@using RVS.UI.Shared.Validation
+
+<MudDialog @bind-Visible="Visible"
+           Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true })">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">New Walk-In Service Request</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Loading intake configuration…</MudText>
+            </MudStack>
+        }
+        else if (_loadError is not null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="ma-2">@_loadError</MudAlert>
+        }
+        else if (_initialized)
+        {
+            <MudStack Spacing="4">
+                @if (_saveError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@_saveError</MudAlert>
+                }
+
+                <Step2_CustomerInfoStep State="_state" HideContinueButton="true" />
+                <Step3_VinLookupStep State="_state" HideContinueButton="true" />
+                <Step4_VehicleDetailsStep State="_state" HideContinueButton="true" />
+                <Step5_IssueDescriptionStep State="_state" HideContinueButton="true" />
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Size="Size.Large"
+                           FullWidth="true"
+                           Disabled="_saving"
+                           OnClick="HandleCreate"
+                           Style="text-transform: none;"
+                           Class="mt-4">
+                    @(_saving ? "Creating…" : "Create Service Request")
+                </MudButton>
+            </MudStack>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public EventCallback OnCreated { get; set; }
+
+    private WalkInIntakeState _state = new();
+    private bool _initialized;
+    private bool _loading;
+    private string? _loadError;
+    private bool _saving;
+    private string? _saveError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Visible && !_initialized && !_loading && _loadError is null)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+
+        try
+        {
+            var dealershipId = await AppState.EnsureDealershipResolvedAsync(LookupClient);
+            if (string.IsNullOrWhiteSpace(dealershipId))
+            {
+                _loadError = "No dealership found for this tenant. Contact your administrator.";
+                return;
+            }
+
+            var locationId = AppState.SelectedLocation;
+            if (string.IsNullOrWhiteSpace(locationId))
+            {
+                _loadError = "Select a location on the Service Board before creating a walk-in.";
+                return;
+            }
+
+            var location = await LookupClient.GetLocationByIdAsync(locationId);
+            _state.Slug = location.Slug;
+            _state.Config = await IntakeApi.GetConfigAsync(location.Slug);
+
+            _initialized = true;
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Could not load intake configuration: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task HandleCreate()
+    {
+        _saveError = null;
+
+        var validationErrors = ValidateAll();
+        if (validationErrors.Count > 0)
+        {
+            _saveError = string.Join(" ", validationErrors);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var dealershipId = AppState.SelectedDealershipId!;
+            var request = _state.BuildCreateRequest();
+
+            var created = await SrClient.CreateAsync(dealershipId, request);
+
+            Snackbar.Add($"Service request created for {created.Customer.FirstName} {created.Customer.LastName}.", Severity.Success);
+            await OnCreated.InvokeAsync();
+            await CloseAsync();
+        }
+        catch (Exception ex)
+        {
+            _saveError = $"Failed to create service request: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private List<string> ValidateAll()
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(_state.FirstName)) errors.Add("First name is required.");
+        if (string.IsNullOrWhiteSpace(_state.LastName)) errors.Add("Last name is required.");
+        if (string.IsNullOrWhiteSpace(_state.Email))
+        {
+            errors.Add("Email is required.");
+        }
+        else
+        {
+            var emailResult = EmailValidator.Validate(_state.Email);
+            if (!emailResult.IsValid) errors.Add(emailResult.ErrorMessage!);
+        }
+
+        if (string.IsNullOrWhiteSpace(_state.Vin))
+        {
+            errors.Add("VIN is required.");
+        }
+        else
+        {
+            var vinResult = ClientVinValidator.ValidateFormat(_state.Vin);
+            if (!vinResult.IsValid) errors.Add(vinResult.ErrorMessage!);
+        }
+
+        if (string.IsNullOrWhiteSpace(_state.IssueCategory)) errors.Add("Issue category is required.");
+        if (string.IsNullOrWhiteSpace(_state.IssueDescription)) errors.Add("Issue description is required.");
+
+        return errors;
+    }
+
+    private async Task CloseAsync()
+    {
+        await VisibleChanged.InvokeAsync(false);
+        _state = new WalkInIntakeState();
+        _initialized = false;
+        _saveError = null;
+        _loadError = null;
+    }
+}
