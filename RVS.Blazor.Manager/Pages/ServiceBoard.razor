@@ -79,9 +79,9 @@
                                   CanDropClass="mud-border-success"
                                   NoDropClass="mud-border-error"
                                   Class="flex-grow-1"
-                                  Style="min-height: 0;">
+                                  Style="min-height: 0; overflow-x: auto;">
                     <ChildContent>
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; height: 100%; width: 100%;">
+                        <div style="display: grid; grid-template-columns: repeat(4, minmax(280px, 1fr)); gap: 16px; height: 100%; min-width: 100%;">
                             @foreach (var column in _columns)
                             {
                                 var columnItems = _boardItems.Where(i => i.Status == column.Status).ToList();
@@ -119,9 +119,10 @@
                     <ItemRenderer Context="boardItem">
                         <MudDynamicDropItem T="BoardItem" @ref="boardItem.DropItemRef" Item="boardItem">
                             <MudCard Elevation="1"
-                                     Style="@($"cursor: grab; min-width: 0; overflow: hidden; background: transparent; border: 1px solid {CardBorderColor};")">
+                                     Style="@($"cursor: default; min-width: 0; overflow: hidden; background: transparent; border: 1px solid {CardBorderColor};")">
                                 <MudCardContent Class="pa-3">
                                     <MudStack Spacing="1">
+                                        <MudDragHandle />
                                         @* Header row: priority dot + customer name, asset link *@
                                         <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2"
                                                   Style="min-width: 0;">
