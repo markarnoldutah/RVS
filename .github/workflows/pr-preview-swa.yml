@@ -1,0 +1,81 @@
+name: SWA PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main]
+    paths:
+      - 'RVS.Blazor.Intake/**'
+      - 'RVS.Blazor.Manager/**'
+      - 'RVS.UI.Shared/**'
+      - 'RVS.Domain/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  # Stable preview env name -> stable hostname -> explicit Auth0 callback.
+  # Tradeoff: only one PR can occupy this slot per SWA at a time (last push wins).
+  PREVIEW_ENV: pr-preview
+
+concurrency:
+  # Serialize so two PRs cannot race the same named env on a given SWA.
+  group: swa-preview-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  intake-preview:
+    name: Intake SWA Preview
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Install wasm-tools workload
+        if: github.event.action != 'closed'
+        run: dotnet workload install wasm-tools
+      - name: Publish Intake
+        if: github.event.action != 'closed'
+        run: >-
+          dotnet publish RVS.Blazor.Intake/RVS.Blazor.Intake.csproj
+          --configuration Release --output ./publish/intake
+      - name: Deploy Intake preview
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.INTAKE_SWA_TOKEN_STAGING }}
+          repo_token: ${{ github.token }}
+          action: ${{ github.event.action == 'closed' && 'close' || 'upload' }}
+          app_location: ./publish/intake/wwwroot
+          skip_app_build: true
+          deployment_environment: ${{ env.PREVIEW_ENV }}
+
+  manager-preview:
+    name: Manager SWA Preview
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Install wasm-tools workload
+        if: github.event.action != 'closed'
+        run: dotnet workload install wasm-tools
+      - name: Publish Manager
+        if: github.event.action != 'closed'
+        run: >-
+          dotnet publish RVS.Blazor.Manager/RVS.Blazor.Manager.csproj
+          --configuration Release --output ./publish/manager
+      - name: Deploy Manager preview
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.MANAGER_SWA_TOKEN_STAGING }}
+          repo_token: ${{ github.token }}
+          action: ${{ github.event.action == 'closed' && 'close' || 'upload' }}
+          app_location: ./publish/manager/wwwroot
+          skip_app_build: true
+          deployment_environment: ${{ env.PREVIEW_ENV }}
