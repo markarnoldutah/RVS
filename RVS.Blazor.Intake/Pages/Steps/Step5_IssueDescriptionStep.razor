@@ -147,42 +147,6 @@
                 </MudStack>
             </MudPaper>
 
-            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-                <MudStack Spacing="1">
-                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Extended Warranty</MudText>
-                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Do you have an extended warranty on your RV?</MudText>
-                    <MudRadioGroup T="string" Value="State.HasExtendedWarranty" ValueChanged="OnExtendedWarrantyChanged"
-                                   Validation="@(new Func<string?, string?>(ValidateExtendedWarranty))">
-                        <MudRadio T="string" Value="@("Yes")" Color="Color.Primary">Yes</MudRadio>
-                        <MudRadio T="string" Value="@("No")" Color="Color.Primary">No</MudRadio>
-                        <MudRadio T="string" Value="@("Not Sure")" Color="Color.Primary">Not Sure</MudRadio>
-                    </MudRadioGroup>
-                </MudStack>
-            </MudPaper>
-
-            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-                <MudStack Spacing="1">
-                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Approx. Purchase Date</MudText>
-                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">When did you purchase your RV? (MM/YYYY)</MudText>
-                    <div id="@PurchaseDateWrapperId">
-                        <MudDatePicker Date="_approxPurchaseDate"
-                                       DateChanged="HandlePurchaseDateChanged"
-                                       Validation="@(new Func<DateTime?, string?>(ValidateApproxPurchaseDate))"
-                                       DateFormat="MM/yyyy"
-                                       FixDay="1"
-                                       OpenTo="OpenTo.Month"
-                                       Variant="Variant.Outlined"
-                                       ShowToolbar="false"
-                                       Margin="Margin.Dense"
-                                       Editable="true"
-                                       Placeholder="MM/YYYY"
-                                       MaxDate="@DateTime.Today"
-                                       MinDate="_minPurchaseDate"
-                                       AutoClose="true" />
-                    </div>
-                </MudStack>
-            </MudPaper>
-
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        FullWidth="true"
@@ -204,7 +168,6 @@
     private MudForm _form = default!;
     private bool _submitted;
     private List<LookupItemDto> _categories = [];
-    private DateTime? _approxPurchaseDate;
     private bool _isRecording;
     private bool _isTranscribing;
     private bool _isRefining;
@@ -213,37 +176,12 @@
     private string? _transcriptionError;
     private CancellationTokenSource? _suggestCategoryCts;
     private CancellationTokenSource? _suggestInsightsCts;
-    private readonly DateTime _minPurchaseDate = new(1960, 1, 1);
-    private const string PurchaseDateWrapperId = "approx-purchase-date-wrapper";
 
     protected override void OnInitialized()
     {
         if (State.Config?.IssueCategories is { Count: > 0 } categories)
         {
             _categories = categories.Where(c => c.IsSelectable).ToList();
-        }
-
-        if (!string.IsNullOrWhiteSpace(State.ApproxPurchaseDate) &&
-            DateTime.TryParseExact(State.ApproxPurchaseDate, "MM/yyyy",
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out var parsedDate))
-        {
-            _approxPurchaseDate = parsedDate;
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            try
-            {
-                await JS.InvokeVoidAsync("rvs_attachDatePickerKeyboardGuard", PurchaseDateWrapperId);
-            }
-            catch
-            {
-                // Guard is a progressive enhancement; failure is non-fatal.
-            }
         }
     }
 
@@ -400,11 +338,6 @@
         State.IsRvUsageSuggestedByAi = false;
     }
 
-    private void OnExtendedWarrantyChanged(string? value)
-    {
-        State.HasExtendedWarranty = value;
-    }
-
     private async Task RequestInsightsSuggestion(string rawTranscript)
     {
         if (string.IsNullOrWhiteSpace(rawTranscript) || rawTranscript.Length < 10)
@@ -452,22 +385,6 @@
             StateHasChanged();
         }
     }
-
-    private void HandlePurchaseDateChanged(DateTime? date)
-    {
-        _approxPurchaseDate = date;
-        State.ApproxPurchaseDate = date?.ToString("MM/yyyy");
-    }
-
-    private string? ValidateApproxPurchaseDate(DateTime? date)
-    {
-        if (!_submitted) return null;
-        if (date is null) return "Approximate purchase date is required";
-        return date > DateTime.Today ? "Purchase date cannot be in the future" : null;
-    }
-
-    private string? ValidateExtendedWarranty(string? value) =>
-        _submitted && string.IsNullOrWhiteSpace(value) ? "Extended warranty selection is required" : null;
 
     private string? ValidateIssueCategory(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "Issue category is required" : null;
