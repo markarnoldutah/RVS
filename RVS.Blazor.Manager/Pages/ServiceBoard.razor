@@ -122,7 +122,7 @@
                                      Style="@($"cursor: default; min-width: 0; overflow: hidden; background: transparent; border: 1px solid {CardBorderColor};")">
                                 <MudCardContent Class="pa-3">
                                     <MudStack Spacing="1">
-                                        <MudDragHandle />
+                                        <MudDragHandle T="BoardItem" />
                                         @* Header row: priority dot + customer name, asset link *@
                                         <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2"
                                                   Style="min-width: 0;">
