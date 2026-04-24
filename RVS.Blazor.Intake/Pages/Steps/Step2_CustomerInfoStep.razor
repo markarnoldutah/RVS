@@ -42,7 +42,7 @@
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="1">
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Email</MudText>
-                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">We'll send service updates to this address</MudText>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">We'll email service updates to this address. Opt out below</MudText>
                     <MudTextField @bind-Value="State.Email"
                                   T="string"
                                   Validation="@(new Func<string?, string?>(ValidateEmail))"
@@ -58,7 +58,7 @@
                 <MudStack Spacing="1">
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Phone</MudText>
                     <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                        We'll send service update texts to this number. Msg frequency varies. Msg &amp; data rates may apply.
+                        We'll text service updates to this number. Opt out below. 
                     </MudText>
                     <MudTextField @bind-Value="State.Phone"
                                   T="string"
@@ -74,8 +74,8 @@
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="2">
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Notification Preferences</MudText>
-                    <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
-                        We send updates via both email and text by default. Opt out of either below.
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                        We send updates via both email and text by default.  Message frequency varies. Message and data rates may apply.
                     </MudText>
                     <MudCheckBox @bind-Value="State.SmsOptOut"
                                  T="bool"
