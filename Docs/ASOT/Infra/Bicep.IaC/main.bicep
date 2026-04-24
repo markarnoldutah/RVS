@@ -529,6 +529,27 @@ module appInsightsKeyVaultSecrets 'modules/appinsights-keyvault-secrets.bicep' =
 
 // ── Static Web Apps (Intake + Manager) ────────────────────────
 
+var managerCustomDomains = deployDns ? [
+  {
+    hostname: '${managerDnsPrefix}.${managerZoneName}'
+    validationMethod: 'cname-delegation'
+  }
+] : []
+
+// Intake apex (prod) is two-phase: only bind the custom domain once intakeApexValidationValues
+// has been populated (after Azure generates the SWA ownership token on first deploy).
+var intakeCustomDomains = deployDns && environmentName == 'prod' && !empty(intakeApexValidationValues) ? [
+  {
+    hostname: intakeZoneName
+    validationMethod: 'dns-txt-token'
+  }
+] : deployDns && environmentName != 'prod' ? [
+  {
+    hostname: '${intakeDnsPrefix}.${intakeZoneName}'
+    validationMethod: 'cname-delegation'
+  }
+] : []
+
 module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
   name: 'deploy-swa-intake-${environmentName}'
   scope: rgSwa
@@ -537,6 +558,7 @@ module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
     resourceName: swaIntakeName
     skuName: swaSkuName
     tags: sharedTags
+    customDomains: intakeCustomDomains
   }
 }
 
@@ -548,6 +570,7 @@ module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
     resourceName: swaManagerName
     skuName: swaSkuName
     tags: sharedTags
+    customDomains: managerCustomDomains
   }
 }
 
