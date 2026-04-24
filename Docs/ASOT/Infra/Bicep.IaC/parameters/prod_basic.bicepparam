@@ -17,6 +17,10 @@ param cosmosCapacityMode = 'Serverless'
 
 // Storage (rvs-attachments container + CORS for SAS uploads)
 param deployStorageAccount = true
+param storageCorsOrigins = [
+  'https://rvintake.com'
+  'https://manager.rvserviceflow.com'
+]
 
 // Key Vault (RBAC model, API managed identity get + list)
 param deployKeyVault = true

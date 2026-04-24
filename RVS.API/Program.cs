@@ -85,7 +85,14 @@ else if (builder.Environment.IsEnvironment("Staging"))
                     "https://staging.rvintake.com",                           // intake (custom domain)
                     "https://zealous-island-0ff7ab71e.6.azurestaticapps.net", // intake (default SWA domain)
                     "https://manager-staging.rvserviceflow.com",              // manager (custom domain)
-                    "https://mango-grass-08484a41e.1.azurestaticapps.net")    // manager (default SWA domain)
+                    "https://mango-grass-08484a41e.1.azurestaticapps.net",    // manager (default SWA domain)
+                    // SWA preview environments (pr-preview, qa, demo) — see Docs/ASOT/Infra/SWA_Preview_Environments.md
+                    "https://intake-staging-pr-preview.azurestaticapps.net",
+                    "https://intake-staging-qa.azurestaticapps.net",
+                    "https://intake-staging-demo.azurestaticapps.net",
+                    "https://manager-staging-pr-preview.azurestaticapps.net",
+                    "https://manager-staging-qa.azurestaticapps.net",
+                    "https://manager-staging-demo.azurestaticapps.net")
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();

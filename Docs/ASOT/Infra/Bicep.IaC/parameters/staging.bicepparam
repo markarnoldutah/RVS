@@ -23,6 +23,13 @@ param storageCorsOrigins = [
   'https://manager-staging.rvserviceflow.com'
   'https://zealous-island-0ff7ab71e.6.azurestaticapps.net'
   'https://mango-grass-08484a41e.1.azurestaticapps.net'
+  // SWA preview environments (pr-preview, qa, demo) — see Docs/ASOT/Infra/SWA_Preview_Environments.md
+  'https://intake-staging-pr-preview.azurestaticapps.net'
+  'https://intake-staging-qa.azurestaticapps.net'
+  'https://intake-staging-demo.azurestaticapps.net'
+  'https://manager-staging-pr-preview.azurestaticapps.net'
+  'https://manager-staging-qa.azurestaticapps.net'
+  'https://manager-staging-demo.azurestaticapps.net'
 ]
 
 // Key Vault (RBAC model, API managed identity get + list)
