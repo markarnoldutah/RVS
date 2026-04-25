@@ -58,6 +58,9 @@ param storageAccountNameOverride string = ''
 @description('Allowed CORS origins for the Storage Account blob service (SAS direct-upload from SPAs).')
 param storageCorsOrigins string[] = []
 
+@description('Allow storage account key (shared key) access. Set false in staging/prod to force Entra ID + user-delegation SAS only.')
+param storageAllowSharedKeyAccess bool = true
+
 // ── ACS Parameters ────────────────────────────────────────────
 
 @description('When true, deploys an Azure Communication Services resource with Email and SMS capabilities.')
@@ -109,6 +112,9 @@ param intakeApexIpv4Addresses array = []
 
 @description('TXT record values for the Intake apex domain-ownership validation (prod only). Provided by Azure after the SWA customDomains registration request; typically a single-entry list. Leave empty for non-prod.')
 param intakeApexValidationValues array = []
+
+@description('Object IDs of principals (e.g. the staging GitHub Actions service principal) that need DNS Zone Contributor on the shared zones. Granted at zone scope so they cannot touch other prod resources. Set this in prod params, not staging.')
+param dnsZoneContributorPrincipalIds string[] = []
 
 // ── App Service Parameters ────────────────────────────────────
 
@@ -359,6 +365,7 @@ module storage 'modules/storage-account.bicep' = if (deployStorageAccount) {
       ? appService.outputs.stagingSlotPrincipalId
       : ''
     corsAllowedOrigins: resolvedCorsOrigins
+    allowSharedKeyAccess: storageAllowSharedKeyAccess
     tags: sharedTags
   }
 }
@@ -623,6 +630,35 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         values: intakeApexValidationValues
       }
     ] : []
+  }
+}
+
+// ── DNS RBAC: zone-scoped grants for cross-env deployers ──────
+// Run only from the prod deployment (the prod RG owns the zones).
+// Grants DNS Zone Contributor on each zone — NOT on the RG — so
+// non-prod deployers can write record sets without broader access.
+
+module dnsManagerRbac 'modules/dns-zone-contributor.bicep' = if (deploySwa && deployDns && environmentName == 'prod' && !empty(dnsZoneContributorPrincipalIds)) {
+  name: 'deploy-dns-mgr-rbac-${environmentName}'
+  scope: resourceGroup(dnsResourceGroupName)
+  dependsOn: [
+    dnsManager
+  ]
+  params: {
+    zoneName: managerZoneName
+    principalIds: dnsZoneContributorPrincipalIds
+  }
+}
+
+module dnsIntakeRbac 'modules/dns-zone-contributor.bicep' = if (deploySwa && deployDns && environmentName == 'prod' && !empty(dnsZoneContributorPrincipalIds)) {
+  name: 'deploy-dns-intake-rbac-${environmentName}'
+  scope: resourceGroup(dnsResourceGroupName)
+  dependsOn: [
+    dnsIntake
+  ]
+  params: {
+    zoneName: intakeZoneName
+    principalIds: dnsZoneContributorPrincipalIds
   }
 }
 

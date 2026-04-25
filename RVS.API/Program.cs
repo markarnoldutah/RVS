@@ -59,64 +59,22 @@ if (!string.IsNullOrWhiteSpace(appInsightsConnectionString))
     });
 }
 
-// Configure CORS — AllowBlazorClient for Blazor.Intake WASM + Blazor.Manager WASM
-if (builder.Environment.IsProduction())
+// CORS — origins driven by Cors:AllowedOrigins (per-env appsettings).
+// Bicep is the source of truth for prod/staging values; mirrored into appsettings.{Env}.json.
+var corsAllowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? throw new InvalidOperationException("Cors:AllowedOrigins is not configured.");
+
+builder.Services.AddCors(options =>
 {
-    builder.Services.AddCors(options =>
+    options.AddPolicy("AllowBlazorClient", corsBuilder =>
     {
-        options.AddPolicy("AllowBlazorClient", corsBuilder =>
-        {
-            corsBuilder
-                .WithOrigins("https://rvintake.com", "https://manager.rvserviceflow.com")
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
-        });
+        corsBuilder
+            .WithOrigins(corsAllowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
-}
-else if (builder.Environment.IsEnvironment("Staging"))
-{
-    builder.Services.AddCors(options =>
-    {
-        options.AddPolicy("AllowBlazorClient", corsBuilder =>
-        {
-            corsBuilder
-                .WithOrigins(
-                    "https://staging.rvintake.com",                           // intake (custom domain)
-                    "https://zealous-island-0ff7ab71e.6.azurestaticapps.net", // intake (default SWA domain)
-                    "https://manager-staging.rvserviceflow.com",              // manager (custom domain)
-                    "https://mango-grass-08484a41e.1.azurestaticapps.net")    // manager (default SWA domain)
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
-        });
-    });
-}
-else
-{
-    builder.Services.AddCors(options =>
-    {
-        options.AddPolicy("AllowBlazorClient", corsBuilder =>
-        {
-            corsBuilder
-                .WithOrigins(
-                    "https://localhost:7008",
-                    "http://localhost:7008",
-                    "https://localhost:5001",
-                    "http://localhost:5001",
-                    "https://localhost:7116",
-                    "http://localhost:5236",
-                    "https://localhost:7200",
-                    "http://localhost:5200",
-                    "https://localhost:7300",
-                    "http://localhost:5300"
-                )
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
-        });
-    });
-}
+});
 
 // Auth0 JWT Bearer authentication — audience: https://api.rvserviceflow.com
 builder.Services.AddAuthentication(options =>

@@ -17,12 +17,13 @@ param deployCosmosDb = true
 param cosmosCapacityMode = 'Serverless'
 
 // Storage (rvs-attachments container + CORS for SAS uploads)
+// Custom domains only — default SWA hostnames intentionally excluded; use the
+// custom domains for browser-based SAS uploads.
 param deployStorageAccount = true
+param storageAllowSharedKeyAccess = false
 param storageCorsOrigins = [
   'https://staging.rvintake.com'
   'https://manager-staging.rvserviceflow.com'
-  'https://zealous-island-0ff7ab71e.6.azurestaticapps.net'
-  'https://mango-grass-08484a41e.1.azurestaticapps.net'
 ]
 
 // Key Vault (RBAC model, API managed identity get + list)

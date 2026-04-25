@@ -78,7 +78,9 @@ Docs/ASOT/Infra/Bicep.IaC/
 │   └── dns.bicep                           # DNS zone + CNAME/A/TXT record sets (called once per zone)
 ├── parameters/
 │   ├── staging.bicepparam                  # Staging parameter values (full)
-│   └── prod.bicepparam                     # Production parameter values (full)
+│   ├── prod_phase1.bicepparam              # Production phase 1: all resources + DNS zones, Intake apex unbound
+│   ├── prod_phase2.bicepparam              # Production phase 2: binds Intake apex (A + TXT), requires values from phase 1
+│   └── prod_basic.bicepparam               # Production with B1 App Service (cost-conscious alt)
 └── README.md                               # This file
 ```
 
@@ -118,27 +120,53 @@ az deployment sub create \
   --name "rvs-staging-${TS}"
 ```
 
-### Deploy Production (only when ready)
+### Deploy Production (two-phase)
 
-**PowerShell**
+Production is deployed in **two phases** because the `rvintake.com` apex SWA
+custom domain requires Azure to issue a TXT validation token and apex anycast
+IPs *after* the SWA is created. Phase 1 stands up all resources plus the empty
+DNS zone; phase 2 binds the apex.
+
+**Phase 1 — initial provisioning (apex unbound)**
+
 ```powershell
 $ts = Get-Date -Format "yyyyMMddHHmm"
 az deployment sub create `
   --location westus3 `
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam `
-  --name "rvs-prod-$ts"
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase1.bicepparam `
+  --name "rvs-prod-phase1-$ts"
 ```
 
-**bash / zsh**
+**Between phases — register the apex with Azure and capture the values:**
+
 ```bash
-TS=$(date +%Y%m%d%H%M)
-az deployment sub create \
-  --location westus3 \
-  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
-  --name "rvs-prod-${TS}"
+az staticwebapp hostname add \
+  --name stapp-rvs-intake-prod \
+  --hostname rvintake.com \
+  --resource-group rg-rvs-prod-westus2
+
+az staticwebapp hostname show \
+  --name stapp-rvs-intake-prod \
+  --hostname rvintake.com \
+  --resource-group rg-rvs-prod-westus2
 ```
+
+Copy the validation token and apex IPv4 list into `prod_phase2.bicepparam`
+(`intakeApexValidationValues` and `intakeApexIpv4Addresses`).
+
+**Phase 2 — bind the apex**
+
+```powershell
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create `
+  --location westus3 `
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam `
+  --name "rvs-prod-phase2-$ts"
+```
+
+All subsequent prod deploys use `prod_phase2.bicepparam`.
 
 ### Pre-Provision Resource Groups (all environments)
 
@@ -206,7 +234,7 @@ $ts = Get-Date -Format "yyyyMMddHHmm"
 az deployment sub create `
   --location westus3 `
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam `
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam `
   --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 `
   --name "rvs-prod-cosmos-upgrade-$ts"
 ```
@@ -217,7 +245,7 @@ TS=$(date +%Y%m%d%H%M)
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam \
   --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 \
   --name "rvs-prod-cosmos-upgrade-${TS}"
 ```
@@ -249,6 +277,32 @@ az deployment sub create \
   --parameters swaSkuName='Standard' \
   --name "rvs-staging-swa-upgrade-${TS}"
 ```
+
+---
+
+## Cross-Environment DNS RBAC
+
+Both DNS zones (`rvserviceflow.com`, `rvintake.com`) live in the **prod** RG
+(`rg-rvs-prod-westus3`) by design — apex zones are global. The staging
+deployment writes CNAME records into those zones (`manager-staging`,
+`staging`), so the staging GitHub Actions service principal needs write
+access to the zones.
+
+We grant **DNS Zone Contributor** (`befefa01-2a29-4197-83a8-272ff33ce314`)
+**at the zone scope only** — never at the prod RG scope.
+
+**One-time setup:**
+
+1. Get the staging deployer SP object id:
+   ```bash
+   az ad sp show --id <STAGING_APP_REG_APPID> --query id -o tsv
+   ```
+2. Add it to `dnsZoneContributorPrincipalIds` in `prod_phase1.bicepparam`
+   (and `prod_phase2.bicepparam`).
+3. Re-run the prod deploy. The role assignments are created at zone scope.
+
+The staging principal can now upsert record sets in both zones but holds
+no other rights on the prod RG.
 
 ---
 

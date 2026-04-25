@@ -12,8 +12,18 @@ az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bice
 $ts = Get-Date -Format "yyyyMMddHHmm"
 az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --name "rvs-staging-$ts"
 
-# ── Deploy Production (only when ready) ──────────────────────
-az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam --name "rvs-prod-$(date +%Y%m%d%H%M)"
+# ── Deploy Production — TWO-PHASE (Intake apex requires Azure-issued TXT/IPs) ─
+
+# Phase 1: stand up everything; rvintake.com zone is created empty (apex unbound)
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase1.bicepparam --name "rvs-prod-phase1-$(date +%Y%m%d%H%M)"
+
+# Between phases: register apex with the SWA and grab the validation token + apex IPs
+az staticwebapp hostname add  --name stapp-rvs-intake-prod --hostname rvintake.com --resource-group rg-rvs-prod-westus2
+az staticwebapp hostname show --name stapp-rvs-intake-prod --hostname rvintake.com --resource-group rg-rvs-prod-westus2
+# → Paste validationToken and ipAddresses into prod_phase2.bicepparam
+
+# Phase 2: bind apex (A + TXT). All subsequent prod deploys use phase 2.
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam --name "rvs-prod-phase2-$(date +%Y%m%d%H%M)"
 
 # ── SKU Upgrades ──────────────────────────────────────────────
 
@@ -21,7 +31,7 @@ az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bice
 az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --parameters appServiceSkuName='S1' --name "rvs-staging-sku-$(date +%Y%m%d%H%M)"
 
 # Upgrade Cosmos DB Serverless → Provisioned Autoscale (prod)
-az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 --name "rvs-prod-cosmos-$(date +%Y%m%d%H%M)"
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 --name "rvs-prod-cosmos-$(date +%Y%m%d%H%M)"
 
 # Upgrade SWA Free → Standard (dev)
 az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/dev.bicepparam --parameters swaSkuName='Standard' --name "rvs-dev-swa-$(date +%Y%m%d%H%M)"
