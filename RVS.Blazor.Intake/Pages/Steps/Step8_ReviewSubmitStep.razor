@@ -65,6 +65,14 @@
                         {
                             <tr><td><strong>Year</strong></td><td>@State.Year</td></tr>
                         }
+                        @if (!string.IsNullOrWhiteSpace(State.HasExtendedWarranty))
+                        {
+                            <tr><td><strong>Extended Warranty</strong></td><td>@State.HasExtendedWarranty</td></tr>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(State.ApproxPurchaseDate))
+                        {
+                            <tr><td><strong>Approx. Purchase Date</strong></td><td>@State.ApproxPurchaseDate</td></tr>
+                        }
                     </tbody>
                 </MudSimpleTable>
             </MudStack>
@@ -94,14 +102,6 @@
                         @if (!string.IsNullOrWhiteSpace(State.RvUsage))
                         {
                             <tr><td><strong>RV Usage</strong></td><td>@State.RvUsage</td></tr>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(State.HasExtendedWarranty))
-                        {
-                            <tr><td><strong>Extended Warranty</strong></td><td>@State.HasExtendedWarranty</td></tr>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(State.ApproxPurchaseDate))
-                        {
-                            <tr><td><strong>Approx. Purchase Date</strong></td><td>@State.ApproxPurchaseDate</td></tr>
                         }
                     </tbody>
                 </MudSimpleTable>

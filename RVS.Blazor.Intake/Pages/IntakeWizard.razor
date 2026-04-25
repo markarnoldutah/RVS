@@ -128,7 +128,14 @@ else
             return;
         }
 
-        if (_state.ReturnToStepAfterEdit.HasValue)
+        // Step 3 always advances to Step 4 so the user can review/edit vehicle details
+        // (manufacturer, model, year, extended warranty, purchase date) before returning
+        // to the review page. ReturnToStepAfterEdit is preserved here and consumed on Step 4.
+        if (_state.CurrentStep == 3)
+        {
+            await _state.GoToStepAsync(4);
+        }
+        else if (_state.ReturnToStepAfterEdit.HasValue)
         {
             _state.ReturnToStepAfterEdit = null;
             await _state.GoToStepAsync(8);
