@@ -8,12 +8,8 @@
   <Project Path="RVS.Infra.AzCosmosRepository/RVS.Infra.AzCosmosRepository.csproj" />
   <Project Path="RVS.Infra.AzCredentials/RVS.Infra.AzCredentials.csproj" />
   <Project Path="RVS.Infra.AzTablesRepository/RVS.Infra.AzTablesRepository.csproj" />
-  <Project Path="RVS.UI.Shared/RVS.UI.Shared.csproj">
-    <Build Solution="Debug|*" Project="false" />
-  </Project>
+  <Project Path="RVS.UI.Shared/RVS.UI.Shared.csproj" />
   <Project Path="Tests/RVS.API.Tests/RVS.API.Tests.csproj" />
   <Project Path="Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj" />
-  <Project Path="Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj">
-    <Build Solution="Debug|*" Project="false" />
-  </Project>
+  <Project Path="Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj" />
 </Solution>
