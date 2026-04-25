@@ -104,10 +104,10 @@ public sealed class IntakeWizardState
     /// <summary>RV usage type — e.g., "Full-Time" or "Part-Time" (Step 5).</summary>
     public string? RvUsage { get; set; }
 
-    /// <summary>Whether the customer has an extended warranty — "Yes", "No", or "Not Sure" (Step 5).</summary>
+    /// <summary>Whether the customer has an extended warranty — "Yes", "No", or "Not Sure" (Step 4).</summary>
     public string? HasExtendedWarranty { get; set; }
 
-    /// <summary>Approximate RV purchase date, free-text entry (Step 5).</summary>
+    /// <summary>Approximate RV purchase date, free-text entry (Step 4).</summary>
     public string? ApproxPurchaseDate { get; set; }
 
     /// <summary>AI-generated diagnostic questions (Step 6).</summary>
@@ -249,7 +249,7 @@ public sealed class IntakeWizardState
             1 => ValidateLanding(),
             2 => ValidateCustomerInfo(),
             3 => ValidateVinLookup(),
-            4 => [],
+            4 => ValidateVehicleDetails(),
             5 => ValidateIssueDescription(),
             6 => ValidateDiagnosticQuestions(),
             7 => ValidateAttachments(),
@@ -515,6 +515,25 @@ public sealed class IntakeWizardState
         return errors;
     }
 
+    private List<string> ValidateVehicleDetails()
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(HasExtendedWarranty))
+        {
+            errors.Add("Extended warranty selection is required.");
+            FieldErrors["HasExtendedWarranty"] = "Extended warranty selection is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(ApproxPurchaseDate))
+        {
+            errors.Add("Approximate purchase date is required.");
+            FieldErrors["ApproxPurchaseDate"] = "Approximate purchase date is required.";
+        }
+
+        return errors;
+    }
+
     private List<string> ValidateIssueDescription()
     {
         var errors = new List<string>();
@@ -534,18 +553,6 @@ public sealed class IntakeWizardState
             var msg = $"Issue description must not exceed {MaxDescriptionLength} characters.";
             errors.Add(msg);
             FieldErrors["IssueDescription"] = msg;
-        }
-
-        if (string.IsNullOrWhiteSpace(HasExtendedWarranty))
-        {
-            errors.Add("Extended warranty selection is required.");
-            FieldErrors["HasExtendedWarranty"] = "Extended warranty selection is required.";
-        }
-
-        if (string.IsNullOrWhiteSpace(ApproxPurchaseDate))
-        {
-            errors.Add("Approximate purchase date is required.");
-            FieldErrors["ApproxPurchaseDate"] = "Approximate purchase date is required.";
         }
 
         return errors;
