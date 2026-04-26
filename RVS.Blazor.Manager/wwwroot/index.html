@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RVS Manager</title>
+    <title>RVS Service Flow</title>
     <base href="/" />
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
@@ -68,7 +68,7 @@
                              1 .45 1 1v3z"/>
                 </svg>-->
                 <h3 style="margin:0 0 8px;font-weight:500;font-size:1.5rem;color:#ffffff;text-shadow:0 2px 4px rgba(0,0,0,0.5);">
-                    RVS Manager
+                    RVS Service Flow
                 </h3>
                 <p style="margin:0 0 24px;font-size:0.875rem;color:#e0e0e0;text-shadow:0 1px 3px rgba(0,0,0,0.5);">
                     Loading application&hellip;
@@ -79,6 +79,9 @@
                 <div style="width:40%;height:100%;background:#ffffff;border-radius:2px;
                             animation:loading-progress 1.5s ease-in-out infinite;"></div>
             </div>
+            <!-- Reserves the same vertical space as AuthStatePanel's (hidden) MudButton Size.Large
+                 so the centered stack lines up identically and the swap to AuthStatePanel is jank-free. -->
+            <div aria-hidden="true" style="margin-top:24px;height:42px;visibility:hidden;"></div>
         </div>
     </div>
 
