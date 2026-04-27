@@ -1,4 +1,5 @@
 @page "/board"
+@layout RVS.Blazor.Manager.Layout.BoardLayout
 @implements IDisposable
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject RVS.UI.Shared.Services.ServiceRequestApiClient SrClient
@@ -485,17 +486,25 @@
             return;
         }
 
-        var q = _filterText.Trim();
-        _filteredBoardItems = _boardItems.Where(i => MatchesFilter(i, q)).ToList();
+        var tokens = _filterText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0)
+        {
+            _filteredBoardItems = _boardItems;
+            return;
+        }
+
+        _filteredBoardItems = _boardItems.Where(i => tokens.All(t => MatchesToken(i, t))).ToList();
     }
 
-    private static bool MatchesFilter(BoardItem item, string q)
+    private static bool MatchesToken(BoardItem item, string token)
     {
         var s = item.Summary;
-        return ContainsCi(s.CustomerFullName, q)
-            || ContainsCi(s.TechnicianSummary, q)
-            || ContainsCi(s.AssignedTechnicianId, q)
-            || ContainsCi(s.IssueCategory, q);
+        return ContainsCi(s.CustomerFullName, token)
+            || ContainsCi(s.TechnicianSummary, token)
+            || ContainsCi(s.AssignedTechnicianId, token)
+            || ContainsCi(s.IssueCategory, token)
+            || ContainsCi(s.Priority, token)
+            || ContainsCi(s.AssetDisplay, token);
     }
 
     private static bool ContainsCi(string? haystack, string needle)
