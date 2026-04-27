@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.JSInterop;
 using MudBlazor.Services;
 using RVS.Blazor.Manager;
 using RVS.Blazor.Manager.Services;
@@ -96,4 +97,12 @@ builder.Services.AddAuthorizationCore(options =>
         .Build();
 });
 
-await builder.Build().RunAsync();
+var app = builder.Build();
+
+// Startup diagnostics — console.warn is always visible in browser DevTools (F12 → Console)
+var js = app.Services.GetRequiredService<IJSRuntime>();
+await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] Environment       : {builder.HostEnvironment.Environment}");
+await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] BaseAddress       : {builder.HostEnvironment.BaseAddress}");
+await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] ApiBaseUrl resolved: {apiBaseUrl}");
+
+await app.RunAsync();

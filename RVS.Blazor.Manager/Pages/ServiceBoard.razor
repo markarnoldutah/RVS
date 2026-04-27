@@ -13,7 +13,7 @@
 
 <AuthorizeView>
     <Authorized>
-        <MudStack Spacing="2" Class="pa-2" Style="height: calc(100vh - 160px); overflow: hidden;">
+        <MudStack Spacing="2" Class="pa-2" Style="height: calc(100vh - var(--mud-appbar-height) - 16px); overflow: hidden;">
             @* Header row *@
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
                 <MudText Typo="Typo.h4">Service Board</MudText>
@@ -33,7 +33,23 @@
             </MudStack>
 
             @* Location filter *@
-            <LocationSelector />
+            <div style="display: flex; justify-content: flex-end; width: 100%;">
+                <LocationSelector />
+            </div>
+
+            @* Keyword filter *@
+            <div class="filter-no-helper mb-2">
+                <MudTextField T="string"
+                              Value="_filterText"
+                              ValueChanged="OnFilterChanged"
+                              Variant="Variant.Outlined"
+                              Placeholder="Filter by keyword or field"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Margin="Margin.Dense"
+                              Immediate="true"
+                              Clearable="true" />
+            </div>
 
             @* Loading skeleton *@
             @if (_loading && _boardItems.Count == 0)
@@ -72,7 +88,7 @@
                 @* Drag-and-drop Kanban columns *@
                 <MudDropContainer T="BoardItem"
                                   @ref="_dropContainer"
-                                  Items="_boardItems"
+                                  Items="_filteredBoardItems"
                                   ItemsSelector="@((item, zone) => item.Status == zone)"
                                   ItemDropped="OnItemDroppedAsync"
                                   ApplyDropClassesOnDragStarted="true"
@@ -81,12 +97,12 @@
                                   Class="flex-grow-1"
                                   Style="min-height: 0; overflow-x: auto;">
                     <ChildContent>
-                        <div style="display: grid; grid-template-columns: repeat(4, minmax(280px, 1fr)); gap: 16px; height: 100%; min-width: 100%;">
+                        <div style="display: grid; grid-template-columns: repeat(4, minmax(316px, 1fr)); gap: 16px; height: 100%; min-width: 100%;">
                             @foreach (var column in _columns)
                             {
-                                var columnItems = _boardItems.Where(i => i.Status == column.Status).ToList();
+                                var columnItems = _filteredBoardItems.Where(i => i.Status == column.Status).ToList();
                                 var columnStatus = column.Status;
-                                <div class="board-column" style="display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--mud-palette-background-gray); border-radius: 4px;">
+                                <div class="board-column" style="@($"display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: {ColumnBackground}; border-radius: 4px;")">
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="pa-2">
                                         <MudText Typo="Typo.subtitle2">@column.Title</MudText>
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
@@ -119,7 +135,7 @@
                     <ItemRenderer Context="boardItem">
                         <MudDynamicDropItem T="BoardItem" @ref="boardItem.DropItemRef" Item="boardItem">
                             <MudCard Elevation="1"
-                                     Style="@($"cursor: default; min-width: 0; overflow: hidden; background: transparent; border: 1px solid {CardBorderColor};")">
+                                     Style="@($"cursor: default; min-width: 300px; overflow: hidden; background: {CardBackground}; border: 1px solid {CardBorderColor};")">
                                 <MudCardContent Class="pa-3">
                                     <MudStack Spacing="1">
                                         <MudDragHandle T="BoardItem" />
@@ -154,13 +170,15 @@
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
                                                   Wrap="Wrap.Wrap" Class="mt-1">
                                             <MudChip T="string" Size="Size.Small"
-                                                     Variant="Variant.Outlined">
+                                                     Variant="Variant.Outlined"
+                                                     Style="@($"color: {ChipFontColor};")">
                                                 @FormatAge(boardItem.Summary.CreatedAtUtc)
                                             </MudChip>
                                             @if (!string.IsNullOrWhiteSpace(boardItem.Summary.IssueCategory))
                                             {
                                                 <MudChip T="string" Size="Size.Small"
-                                                         Variant="Variant.Outlined">
+                                                         Variant="Variant.Outlined"
+                                                         Style="@($"color: {ChipFontColor};")">
                                                     @boardItem.Summary.IssueCategory
                                                 </MudChip>
                                             }
@@ -168,7 +186,8 @@
                                                     {
                                                         <MudChip T="string" Size="Size.Small"
                                                                  Variant="Variant.Outlined"
-                                                                 Icon="@Icons.Material.Filled.Person">
+                                                                 Icon="@Icons.Material.Filled.Person"
+                                                                 Style="@($"color: {ChipFontColor};")">
                                                             @boardItem.Summary.AssignedTechnicianId
                                                         </MudChip>
                                                     }
@@ -194,6 +213,8 @@
     private string? _error;
     private DateTime? _lastRefreshed;
     private List<BoardItem> _boardItems = [];
+    private List<BoardItem> _filteredBoardItems = [];
+    private string? _filterText;
     private CancellationTokenSource? _pollCts;
     private PeriodicTimer? _pollTimer;
     private MudDropContainer<BoardItem>? _dropContainer;
@@ -252,6 +273,18 @@
         _ => "var(--mud-palette-text-primary)"
     };
 
+    private string ColumnBackground => ThemeService.Mode switch
+    {
+        ThemeMode.Dark => "#010409",
+        _ => "var(--mud-palette-background-gray)"
+    };
+
+    private string CardBackground => "var(--mud-palette-background)";
+
+    private string ChipFontColor => ThemeService.Mode == ThemeMode.HighContrast
+        ? "#FFFF00"
+        : "#9198A1";
+
     private string AddButtonColor => ThemeService.Mode == ThemeMode.Dark
         ? "#FFFFFF"
         : "var(--mud-palette-primary)";
@@ -294,6 +327,7 @@
                 .ThenByDescending(sr => sr.CreatedAtUtc)
                 .Select(sr => new BoardItem(sr))
                 .ToList();
+            ApplyFilter();
             _lastRefreshed = DateTime.UtcNow;
         }
         catch (AccessTokenNotAvailableException ex)
@@ -435,6 +469,38 @@
     {
         await LoadBoardDataAsync();
     }
+
+    private void OnFilterChanged(string? value)
+    {
+        _filterText = value;
+        ApplyFilter();
+        _needsContainerRefresh = true;
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_filterText))
+        {
+            _filteredBoardItems = _boardItems;
+            return;
+        }
+
+        var q = _filterText.Trim();
+        _filteredBoardItems = _boardItems.Where(i => MatchesFilter(i, q)).ToList();
+    }
+
+    private static bool MatchesFilter(BoardItem item, string q)
+    {
+        var s = item.Summary;
+        return ContainsCi(s.CustomerFullName, q)
+            || ContainsCi(s.TechnicianSummary, q)
+            || ContainsCi(s.AssignedTechnicianId, q)
+            || ContainsCi(s.IssueCategory, q);
+    }
+
+    private static bool ContainsCi(string? haystack, string needle)
+        => !string.IsNullOrEmpty(haystack)
+           && haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
 
     private async Task HandleLocationChangedAsync(string? location)
     {
