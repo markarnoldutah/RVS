@@ -3,7 +3,8 @@ using Newtonsoft.Json;
 namespace RVS.Domain.Entities;
 
 /// <summary>
-/// Tenant-level configuration. Includes access gate settings.
+/// Tenant-level configuration. Includes access gate settings and the master list of
+/// service capabilities available across all locations.
 ///
 /// Cosmos DB partition key: /tenantId
 /// </summary>
@@ -18,6 +19,14 @@ public class TenantConfig : EntityBase
     /// </summary>
     [JsonProperty("accessGate")]
     public TenantAccessGateEmbedded AccessGate { get; set; } = new();
+
+    /// <summary>
+    /// Master list of service capabilities offered by this tenant.
+    /// Individual locations choose which of these they support via
+    /// <see cref="Location.EnabledCapabilities"/>.
+    /// </summary>
+    [JsonProperty("availableCapabilities")]
+    public List<TenantCapabilityEmbedded> AvailableCapabilities { get; set; } = [];
 }
 
 // ---------------------------------------------------------------------------
@@ -60,4 +69,46 @@ public class TenantAccessGateEmbedded
     /// </summary>
     [JsonProperty("disabledAtUtc")]
     public DateTimeOffset? DisabledAtUtc { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: TenantCapabilityEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// A service capability available at the tenant level (e.g., "Diesel Engine Service").
+/// Locations opt in to specific capabilities from this master list.
+/// </summary>
+public class TenantCapabilityEmbedded
+{
+    /// <summary>
+    /// URL-safe unique code (e.g., "diesel-service").
+    /// Used as the reference key in <see cref="Location.EnabledCapabilities"/>.
+    /// </summary>
+    [JsonProperty("code")]
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Human-readable display name (e.g., "Diesel Engine Service").
+    /// </summary>
+    [JsonProperty("name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional description shown to staff when selecting capabilities for a location.
+    /// </summary>
+    [JsonProperty("description")]
+    public string? Description { get; set; }
+
+    /// <summary>
+    /// Controls display order in the UI.
+    /// </summary>
+    [JsonProperty("sortOrder")]
+    public int SortOrder { get; set; }
+
+    /// <summary>
+    /// When false the capability is soft-deleted and hidden from location selection.
+    /// </summary>
+    [JsonProperty("isActive")]
+    public bool IsActive { get; set; } = true;
 }

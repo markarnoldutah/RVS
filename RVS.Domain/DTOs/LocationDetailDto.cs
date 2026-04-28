@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace RVS.Domain.DTOs;
 
 /// <summary>
@@ -12,6 +14,12 @@ public sealed record LocationDetailDto
     public string? Phone { get; init; }
     public AddressDto? Address { get; init; }
     public IntakeConfigDto? IntakeConfig { get; init; }
+
+    /// <summary>
+    /// Capability codes that are enabled for this location.
+    /// </summary>
+    public List<string> EnabledCapabilities { get; init; } = [];
+
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
 }

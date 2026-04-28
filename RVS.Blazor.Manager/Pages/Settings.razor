@@ -168,14 +168,147 @@
                 </MudCardContent>
             </MudCard>
         }
+
+        @* Service Capabilities *@
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width: 100%;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Build" Color="Color.Primary" />
+                        <MudText Typo="Typo.h6">Service Capabilities</MudText>
+                    </MudStack>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               Size="Size.Small"
+                               OnClick="OpenAddCapabilityDialog"
+                               Style="text-transform: none;">
+                        Add Capability
+                    </MudButton>
+                </MudStack>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Define the service capabilities available across your locations. Each location can then
+                    opt in to the capabilities it offers.
+                </MudText>
+
+                @if (_capabilities.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                        No capabilities configured yet. Click "Add Capability" to get started.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="_capabilities" Dense="true" Hover="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Code</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh Style="width: 80px;"></MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudStack Spacing="0">
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Name</MudText>
+                                    @if (!string.IsNullOrEmpty(context.Description))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
+                                    }
+                                </MudStack>
+                            </MudTd>
+                            <MudTd><MudText Typo="Typo.caption" Style="font-family: monospace;">@context.Code</MudText></MudTd>
+                            <MudTd>
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Color="@(context.IsActive ? Color.Success : Color.Default)"
+                                         Variant="Variant.Outlined">
+                                    @(context.IsActive ? "Active" : "Inactive")
+                                </MudChip>
+                            </MudTd>
+                            <MudTd>
+                                <MudStack Row="true" Spacing="0">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                   Size="Size.Small"
+                                                   Color="Color.Primary"
+                                                   aria-label="Edit capability"
+                                                   OnClick="@(() => OpenEditCapabilityDialog(context))" />
+                                    <MudIconButton Icon="@(context.IsActive ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                                   Size="Size.Small"
+                                                   Color="Color.Default"
+                                                   aria-label="@(context.IsActive ? "Deactivate" : "Activate")"
+                                                   OnClick="@(() => ToggleCapabilityActive(context))" />
+                                </MudStack>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudCardContent>
+            <MudCardActions>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveCapabilitiesAsync" Disabled="_savingCapabilities"
+                           Style="text-transform: none;">
+                    @if (_savingCapabilities)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Save capabilities
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
     }
 </MudStack>
+
+@* Add / Edit Capability Dialog *@
+<MudDialog @bind-Visible="_capabilityDialogOpen">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingCapability is null ? "Add Capability" : "Edit Capability")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width: 360px;">
+            <MudTextField T="string" @bind-Value="_capForm.Name"
+                          Label="Name"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Placeholder="e.g., Diesel Engine Service"
+                          HelperText="How this capability appears to staff"
+                          autocomplete="off" />
+            <MudTextField T="string" @bind-Value="_capForm.Code"
+                          Label="Code"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Placeholder="e.g., diesel-service"
+                          HelperText="URL-safe identifier — lowercase letters, numbers, and hyphens"
+                          Disabled="@(_editingCapability is not null)"
+                          autocomplete="off" />
+            <MudTextField T="string" @bind-Value="_capForm.Description"
+                          Label="Description (optional)"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Lines="2"
+                          Placeholder="Brief description for staff"
+                          autocomplete="off" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseCapabilityDialog" Style="text-transform: none;">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   OnClick="SaveCapabilityDialog"
+                   Style="text-transform: none;">
+            @(_editingCapability is null ? "Add" : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
 
 @code {
     private TenantConfigResponseDto? _config;
     private AccessGateStatusDto? _accessGate;
+    private List<CapabilityEditModel> _capabilities = [];
     private bool _loading = true;
     private bool _saving;
+    private bool _savingCapabilities;
     private bool _submitted;
     private string? _error;
     private MudForm? _form;
@@ -184,6 +317,11 @@
     private string? _disabledReason;
     private string? _disabledMessage;
     private string? _supportEmail;
+
+    // Capability dialog state
+    private bool _capabilityDialogOpen;
+    private CapabilityEditModel? _editingCapability;
+    private CapabilityForm _capForm = new();
 
     private string? ValidateDisabledReason(string? value) =>
         _submitted && !_loginsEnabled && string.IsNullOrWhiteSpace(value) ? "Enter a reason for the audit trail" : null;
@@ -209,6 +347,10 @@
             _disabledReason = _config.AccessGate.DisabledReason;
             _disabledMessage = _config.AccessGate.DisabledMessage;
             _supportEmail = _config.AccessGate.SupportContactEmail;
+
+            _capabilities = _config.AvailableCapabilities
+                .Select(c => new CapabilityEditModel(c))
+                .ToList();
         }
         catch (AccessTokenNotAvailableException ex)
         {
@@ -258,5 +400,136 @@
         {
             _saving = false;
         }
+    }
+
+    private async Task SaveCapabilitiesAsync()
+    {
+        _savingCapabilities = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new TenantConfigUpdateRequestDto
+            {
+                AvailableCapabilities = _capabilities
+                    .Select((c, i) => new TenantCapabilityDto
+                    {
+                        Code = c.Code,
+                        Name = c.Name,
+                        Description = c.Description,
+                        SortOrder = (i + 1) * 10,
+                        IsActive = c.IsActive
+                    })
+                    .ToList()
+            };
+
+            _config = await LookupClient.UpdateTenantConfigAsync(request);
+
+            _capabilities = _config.AvailableCapabilities
+                .Select(c => new CapabilityEditModel(c))
+                .ToList();
+
+            Snackbar.Add("Capabilities saved.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save capabilities: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingCapabilities = false;
+        }
+    }
+
+    private void OpenAddCapabilityDialog()
+    {
+        _editingCapability = null;
+        _capForm = new CapabilityForm();
+        _capabilityDialogOpen = true;
+    }
+
+    private void OpenEditCapabilityDialog(CapabilityEditModel cap)
+    {
+        _editingCapability = cap;
+        _capForm = new CapabilityForm
+        {
+            Name = cap.Name,
+            Code = cap.Code,
+            Description = cap.Description
+        };
+        _capabilityDialogOpen = true;
+    }
+
+    private void CloseCapabilityDialog()
+    {
+        _capabilityDialogOpen = false;
+    }
+
+    private void SaveCapabilityDialog()
+    {
+        if (string.IsNullOrWhiteSpace(_capForm.Name) || string.IsNullOrWhiteSpace(_capForm.Code))
+        {
+            Snackbar.Add("Name and code are required.", Severity.Warning);
+            return;
+        }
+
+        if (_editingCapability is null)
+        {
+            // Add new
+            if (_capabilities.Any(c => string.Equals(c.Code, _capForm.Code.Trim(), StringComparison.OrdinalIgnoreCase)))
+            {
+                Snackbar.Add($"A capability with code '{_capForm.Code}' already exists.", Severity.Warning);
+                return;
+            }
+
+            _capabilities.Add(new CapabilityEditModel
+            {
+                Name = _capForm.Name.Trim(),
+                Code = _capForm.Code.Trim().ToLowerInvariant(),
+                Description = _capForm.Description?.Trim(),
+                IsActive = true,
+                SortOrder = (_capabilities.Count + 1) * 10
+            });
+        }
+        else
+        {
+            // Update existing
+            _editingCapability.Name = _capForm.Name.Trim();
+            _editingCapability.Description = _capForm.Description?.Trim();
+        }
+
+        _capabilityDialogOpen = false;
+    }
+
+    private void ToggleCapabilityActive(CapabilityEditModel cap)
+    {
+        cap.IsActive = !cap.IsActive;
+    }
+
+    private sealed class CapabilityEditModel
+    {
+        public CapabilityEditModel() { }
+
+        public CapabilityEditModel(TenantCapabilityDto dto)
+        {
+            Code = dto.Code;
+            Name = dto.Name;
+            Description = dto.Description;
+            SortOrder = dto.SortOrder;
+            IsActive = dto.IsActive;
+        }
+
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int SortOrder { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    private sealed class CapabilityForm
+    {
+        public string? Name { get; set; }
+        public string? Code { get; set; }
+        public string? Description { get; set; }
     }
 }
