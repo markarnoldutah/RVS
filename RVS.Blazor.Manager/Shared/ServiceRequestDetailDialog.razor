@@ -5,7 +5,8 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 
-<MudDialog @bind-Visible="Visible" Options="@(new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true })">
+<MudDialog @bind-Visible="Visible" Options="@(new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true })"
+           Style="border-left: 4px solid var(--mud-palette-primary);">
     <TitleContent>
         @if (_mode == DialogMode.Create)
         {

@@ -76,7 +76,8 @@
                Anchor="Anchor.End"
                Variant="DrawerVariant.Temporary"
                Width="480px"
-               Elevation="4">
+               Elevation="0"
+               Style="border-left: 4px solid var(--mud-palette-primary);">
         <MudDrawerHeader Style="border-bottom: 1px solid var(--mud-palette-divider);">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width: 100%;">
                 <MudText Typo="Typo.h6">@(_editingLocationId is null ? "Create Location" : "Edit Location")</MudText>
