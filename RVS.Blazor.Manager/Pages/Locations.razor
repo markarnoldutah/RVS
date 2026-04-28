@@ -102,17 +102,6 @@
                     </MudStack>
 
                     <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Slug</MudText>
-                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">URL-friendly identifier (e.g., 'salt-lake-city')</MudText>
-                        <MudTextField T="string" @bind-Value="_form.Slug"
-                                      Validation="@(new Func<string?, string?>(ValidateSlug))"
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      Placeholder="salt-lake-city"
-                                      autocomplete="off" />
-                    </MudStack>
-
-                    <MudStack Spacing="1">
                         <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Phone</MudText>
                         <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional — shown on intake landing page</MudText>
                         <MudTextField T="string" @bind-Value="_form.Phone"
@@ -209,8 +198,8 @@
     private string? ValidateName(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a location name" : null;
 
-    private string? ValidateSlug(string? value) =>
-        _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a URL slug" : null;
+    private static string GenerateSlug(string name) =>
+        System.Text.RegularExpressions.Regex.Replace(name.ToLowerInvariant().Trim(), @"[^a-z0-9]+", "-").Trim('-');
 
     protected override async Task OnInitializedAsync()
     {
@@ -292,10 +281,14 @@
 
         try
         {
+            var slug = _editingLocationId is not null
+                ? _form.Slug ?? string.Empty
+                : GenerateSlug(_form.Name ?? string.Empty);
+
             var request = new LocationCreateRequestDto
             {
                 Name = _form.Name ?? string.Empty,
-                Slug = _form.Slug ?? string.Empty,
+                Slug = slug,
                 Phone = _form.Phone,
                 Address = new AddressDto
                 {
