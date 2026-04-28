@@ -5,32 +5,45 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 
-<MudDialog @bind-Visible="Visible" Options="@(new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true })">
-    <TitleContent>
-        @if (_mode == DialogMode.Create)
-        {
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Primary" />
-                <MudText Typo="Typo.h6">New Service Request</MudText>
-            </MudStack>
-        }
-        else if (_sr is not null)
-        {
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudText Typo="Typo.h6">Service Request</MudText>
-                <StatusBadge Status="@_sr.Status" />
-                @if (!string.IsNullOrEmpty(_sr.Priority))
+<MudDrawer Open="Visible" OpenChanged="OnDrawerOpenChanged"
+           Anchor="Anchor.End"
+           Variant="@DrawerVariant.Temporary"
+           Fixed="true"
+           Elevation="6"
+           Width="min(720px, 100vw)"
+           Overlay="true">
+    <div class="d-flex flex-column" style="height: 100vh;">
+        @* Sticky header *@
+        <MudPaper Elevation="0" Square="true" Class="pa-4"
+                  Style="position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--mud-palette-divider); background: var(--mud-palette-surface);">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="width: 100%;">
+                @if (_mode == DialogMode.Create)
                 {
-                    <PriorityBadge Priority="@_sr.Priority" />
+                    <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">New Service Request</MudText>
                 }
+                else if (_sr is not null)
+                {
+                    <MudText Typo="Typo.h6">Service Request</MudText>
+                    <StatusBadge Status="@_sr.Status" />
+                    @if (!string.IsNullOrEmpty(_sr.Priority))
+                    {
+                        <PriorityBadge Priority="@_sr.Priority" />
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.h6">Service Request</MudText>
+                }
+                <MudSpacer />
+                <MudIconButton Icon="@Icons.Material.Filled.Close"
+                               aria-label="Close"
+                               OnClick="CloseDialog" />
             </MudStack>
-        }
-        else
-        {
-            <MudText Typo="Typo.h6">Service Request</MudText>
-        }
-    </TitleContent>
-    <DialogContent>
+        </MudPaper>
+
+        @* Scrollable body *@
+        <div class="flex-grow-1 pa-4" style="overflow-y: auto;">
         @if (_loading)
         {
             <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -210,21 +223,27 @@
                 @if (_allowedStatuses.Count > 0)
                 {
                     <MudPaper Elevation="1" Class="pa-4">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                            <MudText Typo="Typo.subtitle1">Quick Status Update:</MudText>
-                            <MudSelect T="string" Label="Change Status" Variant="Variant.Outlined"
-                                       Value="@_selectedStatus"
-                                       ValueChanged="OnStatusChangeAsync"
-                                       Style="max-width: 250px;">
-                                @foreach (var status in _allowedStatuses)
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Status</MudText>
+                                @if (_statusUpdating)
                                 {
-                                    <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                                 }
-                            </MudSelect>
-                            @if (_statusUpdating)
-                            {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                            }
+                            </MudStack>
+                            <div style="width: fit-content;">
+                                <MudSelect T="string" Variant="Variant.Outlined"
+                                           Margin="Margin.Dense"
+                                           Value="@_selectedStatus"
+                                           ValueChanged="OnStatusChangeAsync"
+                                           AnchorOrigin="Origin.BottomCenter"
+                                           TransformOrigin="Origin.TopCenter">
+                                    @foreach (var status in _allowedStatuses)
+                                    {
+                                        <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </div>
                         </MudStack>
                         @if (_statusError is not null)
                         {
@@ -240,16 +259,16 @@
                             <MudCardHeader>
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                     <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
-                                    <MudText Typo="Typo.h6">Customer</MudText>
+                                    <MudText Typo="Typo.subtitle2">Customer</MudText>
                                 </MudStack>
                             </MudCardHeader>
                             <MudCardContent>
                                 <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body1"><strong>Name:</strong> @_sr.Customer.FirstName @_sr.Customer.LastName</MudText>
-                                    <MudText Typo="Typo.body1"><strong>Email:</strong> @_sr.Customer.Email</MudText>
+                                    <MudText Typo="Typo.body2">@_sr.Customer.FirstName @_sr.Customer.LastName</MudText>
+                                    <MudText Typo="Typo.body2">@_sr.Customer.Email</MudText>
                                     @if (!string.IsNullOrEmpty(_sr.Customer.Phone))
                                     {
-                                        <MudText Typo="Typo.body1"><strong>Phone:</strong> @_sr.Customer.Phone</MudText>
+                                        <MudText Typo="Typo.body2">@_sr.Customer.Phone</MudText>
                                     }
                                 </MudStack>
                             </MudCardContent>
@@ -262,23 +281,23 @@
                             <MudCardHeader>
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                     <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" Color="Color.Primary" />
-                                    <MudText Typo="Typo.h6">Asset / Vehicle</MudText>
+                                    <MudText Typo="Typo.subtitle2">Asset / Vehicle</MudText>
                                 </MudStack>
                             </MudCardHeader>
                             <MudCardContent>
                                 <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body1"><strong>VIN / Asset ID:</strong> @_sr.Asset.AssetId</MudText>
+                                    <MudText Typo="Typo.body2"><strong>VIN / Asset ID:</strong> @_sr.Asset.AssetId</MudText>
                                     @if (_sr.Asset.Year.HasValue)
                                     {
-                                        <MudText Typo="Typo.body1"><strong>Year:</strong> @_sr.Asset.Year</MudText>
+                                        <MudText Typo="Typo.body2"><strong>Year:</strong> @_sr.Asset.Year</MudText>
                                     }
                                     @if (!string.IsNullOrEmpty(_sr.Asset.Manufacturer))
                                     {
-                                        <MudText Typo="Typo.body1"><strong>Make:</strong> @_sr.Asset.Manufacturer</MudText>
+                                        <MudText Typo="Typo.body2"><strong>Make:</strong> @_sr.Asset.Manufacturer</MudText>
                                     }
                                     @if (!string.IsNullOrEmpty(_sr.Asset.Model))
                                     {
-                                        <MudText Typo="Typo.body1"><strong>Model:</strong> @_sr.Asset.Model</MudText>
+                                        <MudText Typo="Typo.body2"><strong>Model:</strong> @_sr.Asset.Model</MudText>
                                     }
                                 </MudStack>
                             </MudCardContent>
@@ -291,30 +310,30 @@
                             <MudCardHeader>
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                     <MudIcon Icon="@Icons.Material.Filled.Build" Color="Color.Primary" />
-                                    <MudText Typo="Typo.h6">Issue Details</MudText>
+                                    <MudText Typo="Typo.subtitle2">Issue Details</MudText>
                                 </MudStack>
                             </MudCardHeader>
                             <MudCardContent>
                                 <MudGrid Spacing="2">
                                     <MudItem xs="12" sm="6" md="3">
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">Category</MudText>
-                                        <MudText Typo="Typo.body1">@_sr.IssueCategory</MudText>
+                                        <MudText Typo="Typo.body2">@_sr.IssueCategory</MudText>
                                     </MudItem>
                                     <MudItem xs="12" sm="6" md="3">
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">Urgency</MudText>
-                                        <MudText Typo="Typo.body1">@(_sr.Urgency ?? "—")</MudText>
+                                        <MudText Typo="Typo.body2">@(_sr.Urgency ?? "—")</MudText>
                                     </MudItem>
                                     <MudItem xs="12" sm="6" md="3">
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">RV Usage</MudText>
-                                        <MudText Typo="Typo.body1">@(_sr.RvUsage ?? "—")</MudText>
+                                        <MudText Typo="Typo.body2">@(_sr.RvUsage ?? "—")</MudText>
                                     </MudItem>
                                     <MudItem xs="12" sm="6" md="3">
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">Scheduled Date</MudText>
-                                        <MudText Typo="Typo.body1">@(_sr.ScheduledDateUtc?.ToLocalTime().ToString("g") ?? "—")</MudText>
+                                        <MudText Typo="Typo.body2">@(_sr.ScheduledDateUtc?.ToLocalTime().ToString("g") ?? "—")</MudText>
                                     </MudItem>
                                     <MudItem xs="12">
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">Description</MudText>
-                                        <MudText Typo="Typo.body1">@_sr.IssueDescription</MudText>
+                                        <MudText Typo="Typo.body2">@_sr.IssueDescription</MudText>
                                     </MudItem>
                                 </MudGrid>
                             </MudCardContent>
@@ -327,16 +346,16 @@
                             <MudCardHeader>
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                     <MudIcon Icon="@Icons.Material.Filled.Assignment" Color="Color.Primary" />
-                                    <MudText Typo="Typo.h6">Assignment</MudText>
+                                    <MudText Typo="Typo.subtitle2">Assignment</MudText>
                                 </MudStack>
                             </MudCardHeader>
                             <MudCardContent>
                                 <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body1"><strong>Technician:</strong> @(_sr.AssignedTechnicianId ?? "Unassigned")</MudText>
-                                    <MudText Typo="Typo.body1"><strong>Bay:</strong> @(_sr.AssignedBayId ?? "Unassigned")</MudText>
+                                    <MudText Typo="Typo.body2"><strong>Technician:</strong> @(_sr.AssignedTechnicianId ?? "Unassigned")</MudText>
+                                    <MudText Typo="Typo.body2"><strong>Bay:</strong> @(_sr.AssignedBayId ?? "Unassigned")</MudText>
                                     @if (_sr.RequiredSkills.Count > 0)
                                     {
-                                        <MudText Typo="Typo.body1"><strong>Required Skills:</strong></MudText>
+                                        <MudText Typo="Typo.body2"><strong>Required Skills:</strong></MudText>
                                         <MudStack Row="true" Spacing="1">
                                             @foreach (var skill in _sr.RequiredSkills)
                                             {
@@ -355,11 +374,11 @@
                             <MudCardHeader>
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                     <MudIcon Icon="@Icons.Material.Filled.Notes" Color="Color.Primary" />
-                                    <MudText Typo="Typo.h6">Advisor Notes</MudText>
+                                    <MudText Typo="Typo.subtitle2">Advisor Notes</MudText>
                                 </MudStack>
                             </MudCardHeader>
                             <MudCardContent>
-                                <MudText Typo="Typo.body1">@(_sr.TechnicianSummary ?? "No notes yet.")</MudText>
+                                <MudText Typo="Typo.body2">@(_sr.TechnicianSummary ?? "No notes yet.")</MudText>
                             </MudCardContent>
                         </MudCard>
                     </MudItem>
@@ -372,7 +391,7 @@
                                 <MudCardHeader>
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                         <MudIcon Icon="@Icons.Material.Filled.Quiz" Color="Color.Primary" />
-                                        <MudText Typo="Typo.h6">Diagnostic Responses</MudText>
+                                        <MudText Typo="Typo.subtitle2">Diagnostic Responses</MudText>
                                     </MudStack>
                                 </MudCardHeader>
                                 <MudCardContent>
@@ -390,7 +409,7 @@
                                 <MudCardHeader>
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                         <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" />
-                                        <MudText Typo="Typo.h6">Attachments (@_sr.Attachments.Count)</MudText>
+                                        <MudText Typo="Typo.subtitle2">Attachments (@_sr.Attachments.Count)</MudText>
                                     </MudStack>
                                 </MudCardHeader>
                                 <MudCardContent>
@@ -440,32 +459,38 @@
                 </MudPaper>
             </MudStack>
         }
-    </DialogContent>
-    <DialogActions>
-        @if (_mode == DialogMode.Create)
-        {
-            <MudButton OnClick="CloseDialog">Cancel</MudButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Save"
-                       OnClick="CreateAsync" Disabled="_saving">
-                @if (_saving)
+        </div>
+
+        @* Sticky footer *@
+        <MudPaper Elevation="0" Square="true" Class="pa-3"
+                  Style="position: sticky; bottom: 0; z-index: 2; border-top: 1px solid var(--mud-palette-divider); background: var(--mud-palette-surface);">
+            <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
+                @if (_mode == DialogMode.Create)
                 {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <MudButton OnClick="CloseDialog">Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="CreateAsync" Disabled="_saving">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Create
+                    </MudButton>
                 }
-                Create
-            </MudButton>
-        }
-        else
-        {
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Edit"
-                       OnClick="NavigateToEdit">
-                Edit
-            </MudButton>
-            <MudButton OnClick="CloseDialog">Close</MudButton>
-        }
-    </DialogActions>
-</MudDialog>
+                else
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Edit"
+                               OnClick="NavigateToEdit">
+                        Edit
+                    </MudButton>
+                    <MudButton OnClick="CloseDialog">Close</MudButton>
+                }
+            </MudStack>
+        </MudPaper>
+    </div>
+</MudDrawer>
 
 @code {
     /// <summary>
@@ -727,6 +752,13 @@
     {
         Visible = false;
         await VisibleChanged.InvokeAsync(false);
+    }
+
+    private async Task OnDrawerOpenChanged(bool open)
+    {
+        if (open == Visible) return;
+        Visible = open;
+        await VisibleChanged.InvokeAsync(open);
     }
 
     private static string FormatStatus(string status) => status switch

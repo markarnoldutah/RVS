@@ -14,7 +14,7 @@
 
 <AuthorizeView>
     <Authorized>
-        <MudStack Spacing="2" Class="pa-2" Style="height: calc(100vh - var(--mud-appbar-height) - 16px); overflow: hidden;">
+        <MudStack Spacing="2" Class="pa-2" Style="height: calc(100vh - var(--mud-appbar-height) - 16px); overflow: hidden; padding-left: 16px !important;">
             @* Header row *@
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
                 <MudText Typo="Typo.h4">Service Board</MudText>
@@ -34,7 +34,7 @@
             </MudStack>
 
             @* Location filter *@
-            <div style="display: flex; justify-content: flex-end; width: 100%;">
+            <div style="display: flex; justify-content: flex-start; width: 100%;">
                 <LocationSelector />
             </div>
 

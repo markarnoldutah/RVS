@@ -7,19 +7,18 @@
     <Authorized>
         @if (_locations.Count > 1)
         {
-            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
-                         aria-hidden="true" />
-                <MudSelect T="string" Label="Location"
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexStart" Spacing="2">
+                @* <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
+                         aria-hidden="true" /> *@
+                <MudSelect T="string" 
                            Value="AppState.SelectedLocation"
                            ValueChanged="OnLocationSelectedAsync"
                            Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
                            AnchorOrigin="Origin.BottomCenter"
                            TransformOrigin="Origin.TopCenter"
                            RelativeWidth="DropdownWidth.Adaptive"
-                           aria-label="Select your location"
-                           Style="max-width: 280px; width: auto;"
-                           Dense="true">
+                           aria-label="Select your location">
                     @foreach (var location in _locations)
                     {
                         <MudSelectItem T="string" Value="@location.LocationId">@location.Name</MudSelectItem>
@@ -29,7 +28,7 @@
         }
         else if (_locations.Count == 1)
         {
-            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexStart" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary"
                          aria-hidden="true" />
                 <MudText Typo="Typo.body1">
@@ -57,7 +56,7 @@
             else if (AppState.SelectedLocation is not null &&
                      !_locations.Any(l => l.LocationId == AppState.SelectedLocation))
             {
-                // Persisted location no longer valid — clear it
+                // Persisted location no longer valid ï¿½ clear it
                 await AppState.SetLocationAsync(null);
             }
         }
