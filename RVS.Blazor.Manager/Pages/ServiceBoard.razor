@@ -501,7 +501,9 @@
             || ContainsCi(s.AssignedTechnicianId, token)
             || ContainsCi(s.IssueCategory, token)
             || ContainsCi(s.Priority, token)
-            || ContainsCi(s.AssetDisplay, token);
+            || ContainsCi(s.AssetDisplay, token)
+            || ContainsCi(item.Status, token)
+            || ContainsCi(GetStatusLabel(item.Status), token);
     }
 
     private static bool ContainsCi(string? haystack, string needle)
@@ -650,6 +652,8 @@
 
     private static string GetStatusLabel(string status) => status switch
     {
+        "New"               => "New",
+        "InProgress"        => "In Progress",
         "WaitingOnParts"    => "Waiting on Parts",
         "WaitingOnCustomer" => "Waiting on Customer",
         "Completed"         => "Complete",
