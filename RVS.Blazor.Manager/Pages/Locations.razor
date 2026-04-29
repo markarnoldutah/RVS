@@ -114,41 +114,41 @@
             <MudForm @ref="_form2">
                 <MudStack Spacing="3">
                     <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Name</MudText>
                         <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How this location appears to staff and customers</MudText>
                         <MudTextField T="string" @bind-Value="_form.Name"
                                       Validation="@(new Func<string?, string?>(ValidateName))"
-                                      Variant="Variant.Outlined"
+                                      Label="Name"
+                                      Variant="Variant.Filled"
                                       Margin="Margin.Dense"
                                       Placeholder="e.g., Salt Lake City"
                                       autocomplete="off" />
                     </MudStack>
 
                     <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Phone</MudText>
                         <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional — shown on intake landing page</MudText>
                         <MudTextField T="string" @bind-Value="_form.Phone"
                                       InputType="InputType.Telephone"
-                                      Variant="Variant.Outlined"
+                                      Label="Phone"
+                                      Variant="Variant.Filled"
                                       Margin="Margin.Dense"
                                       Placeholder="(555) 123-4567"
                                       autocomplete="tel" />
                     </MudStack>
 
                     <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Address line 1</MudText>
                         <MudTextField T="string" @bind-Value="_form.Address1"
-                                      Variant="Variant.Outlined"
+                                      Label="Address line 1"
+                                      Variant="Variant.Filled"
                                       Margin="Margin.Dense"
                                       Placeholder="123 Main St"
                                       autocomplete="address-line1" />
                     </MudStack>
 
                     <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Address line 2</MudText>
                         <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Apartment, suite, or unit (optional)</MudText>
                         <MudTextField T="string" @bind-Value="_form.Address2"
-                                      Variant="Variant.Outlined"
+                                      Label="Address line 2"
+                                      Variant="Variant.Filled"
                                       Margin="Margin.Dense"
                                       Placeholder="Suite 200"
                                       autocomplete="address-line2" />
@@ -157,9 +157,9 @@
                     <MudGrid Spacing="2">
                         <MudItem xs="12" sm="5">
                             <MudStack Spacing="1">
-                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">City</MudText>
                                 <MudTextField T="string" @bind-Value="_form.City"
-                                              Variant="Variant.Outlined"
+                                              Label="City"
+                                              Variant="Variant.Filled"
                                               Margin="Margin.Dense"
                                               Placeholder="Salt Lake City"
                                               autocomplete="address-level2" />
@@ -167,9 +167,9 @@
                         </MudItem>
                         <MudItem xs="6" sm="3">
                             <MudStack Spacing="1">
-                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">State</MudText>
                                 <MudTextField T="string" @bind-Value="_form.State"
-                                              Variant="Variant.Outlined"
+                                              Label="State"
+                                              Variant="Variant.Filled"
                                               Margin="Margin.Dense"
                                               Placeholder="UT"
                                               autocomplete="address-level1" />
@@ -177,9 +177,9 @@
                         </MudItem>
                         <MudItem xs="6" sm="4">
                             <MudStack Spacing="1">
-                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Postal code</MudText>
                                 <MudTextField T="string" @bind-Value="_form.PostalCode"
-                                              Variant="Variant.Outlined"
+                                              Label="Postal code"
+                                              Variant="Variant.Filled"
                                               Margin="Margin.Dense"
                                               Placeholder="84101"
                                               autocomplete="postal-code" />
