@@ -153,6 +153,103 @@ public class LocationServiceTests
         _slugRepoMock.Verify(r => r.DeleteAsync(location.Slug, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task CreateAsync_WhenSlugProvided_ShouldUseItVerbatim()
+    {
+        var location = BuildLocation();
+        location.Slug = "preset-slug";
+
+        _slugRepoMock.Setup(r => r.GetBySlugAsync("preset-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        await _sut.CreateAsync("ten_1", location);
+
+        location.Slug.Should().Be("preset-slug");
+        _slugRepoMock.Verify(r => r.UpsertAsync(
+            It.Is<SlugLookup>(s => s.Slug == "preset-slug"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenSlugProvidedButTaken_ShouldThrowArgumentException()
+    {
+        var location = BuildLocation();
+        location.Slug = "taken-slug";
+
+        _slugRepoMock.Setup(r => r.GetBySlugAsync("taken-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup { Slug = "taken-slug" });
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenSlugMissing_ShouldGenerateSlugFromOrgAndLocationName()
+    {
+        var location = BuildLocation();
+        location.Slug = string.Empty; // request server-side generation
+
+        _dealershipRepoMock.Setup(r => r.ListByTenantAsync("ten_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Dealership { TenantId = "ten_1", Slug = "camping-world" }]);
+        _slugRepoMock.Setup(r => r.GetBySlugAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        await _sut.CreateAsync("ten_1", location);
+
+        location.Slug.Should().Be("camping-world-salt-lake-service-center");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenGeneratedSlugCollides_ShouldAppendNumericSuffix()
+    {
+        var location = BuildLocation();
+        location.Slug = string.Empty;
+
+        _dealershipRepoMock.Setup(r => r.ListByTenantAsync("ten_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Dealership { TenantId = "ten_1", Slug = "camping-world" }]);
+        _slugRepoMock.Setup(r => r.GetBySlugAsync("camping-world-salt-lake-service-center", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _slugRepoMock.Setup(r => r.GetBySlugAsync("camping-world-salt-lake-service-center-2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        await _sut.CreateAsync("ten_1", location);
+
+        location.Slug.Should().Be("camping-world-salt-lake-service-center-2");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenNoDealership_ShouldFallBackToLocationNameSlug()
+    {
+        var location = BuildLocation();
+        location.Slug = string.Empty;
+
+        _dealershipRepoMock.Setup(r => r.ListByTenantAsync("ten_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _slugRepoMock.Setup(r => r.GetBySlugAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        await _sut.CreateAsync("ten_1", location);
+
+        location.Slug.Should().Be("salt-lake-service-center");
+    }
+
     // ── UpdateAsync ──────────────────────────────────────────────────────────
 
     [Theory]

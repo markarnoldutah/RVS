@@ -91,6 +91,50 @@ public class LocationMapperTests
         dto.Name.Should().Be("Denver Service Center");
     }
 
+    [Fact]
+    public void ToSummaryDto_ShouldIncludeSlugPhoneAddressAndCapabilities()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Denver Service Center",
+            Slug = "rv-world-denver",
+            Phone = "(303) 555-0144",
+            Address = new AddressEmbedded
+            {
+                Address1 = "100 Mile High Way",
+                City = "Denver",
+                State = "CO",
+                PostalCode = "80014"
+            },
+            EnabledCapabilities = ["diesel-service", "hvac"]
+        };
+
+        var dto = entity.ToSummaryDto();
+
+        dto.Slug.Should().Be("rv-world-denver");
+        dto.Phone.Should().Be("(303) 555-0144");
+        dto.Address.Should().NotBeNull();
+        dto.Address!.City.Should().Be("Denver");
+        dto.EnabledCapabilities.Should().BeEquivalentTo(["diesel-service", "hvac"]);
+        dto.CreatedAtUtc.Should().Be(entity.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void ToSummaryDto_WhenAddressIsEmpty_ShouldReturnNullAddress()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Denver Service Center",
+            Address = new AddressEmbedded()
+        };
+
+        var dto = entity.ToSummaryDto();
+
+        dto.Address.Should().BeNull();
+    }
+
     // ── ToEntity (create) ────────────────────────────────────────────────────
 
     [Fact]
@@ -160,6 +204,27 @@ public class LocationMapperTests
 
         entity.Name.Should().Be("Phoenix Service Center");
         entity.Slug.Should().Be("phoenix-service-center");
+    }
+
+    [Fact]
+    public void ToEntity_WhenSlugNullOrWhiteSpace_ShouldLeaveSlugEmptyForServiceToGenerate()
+    {
+        var dto = BuildValidCreateRequest() with { Slug = null };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.Slug.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenSlugNullOrEmpty_ShouldPreserveExistingSlug()
+    {
+        var entity = new Location { TenantId = "ten_1", Name = "Old Name", Slug = "kept-slug" };
+        var dto = BuildValidCreateRequest() with { Slug = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.Slug.Should().Be("kept-slug");
     }
 
     [Fact]

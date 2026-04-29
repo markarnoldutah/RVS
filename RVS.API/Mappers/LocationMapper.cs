@@ -32,6 +32,8 @@ public static class LocationMapper
 
     /// <summary>
     /// Maps a <see cref="Location"/> entity to a <see cref="LocationSummaryResponseDto"/>.
+    /// Includes the basic info, contact details, and capability badges that the Manager
+    /// locations table renders inline (so per-row detail fetches are not required).
     /// </summary>
     public static LocationSummaryResponseDto ToSummaryDto(this Location entity)
     {
@@ -40,9 +42,21 @@ public static class LocationMapper
         return new LocationSummaryResponseDto
         {
             LocationId = entity.Id,
-            Name = entity.Name
+            Name = entity.Name,
+            Slug = entity.Slug,
+            Phone = entity.Phone,
+            Address = HasAnyField(entity.Address) ? entity.Address.ToDto() : null,
+            EnabledCapabilities = [.. entity.EnabledCapabilities],
+            CreatedAtUtc = entity.CreatedAtUtc
         };
     }
+
+    private static bool HasAnyField(AddressEmbedded address) =>
+        !string.IsNullOrWhiteSpace(address.Address1)
+        || !string.IsNullOrWhiteSpace(address.Address2)
+        || !string.IsNullOrWhiteSpace(address.City)
+        || !string.IsNullOrWhiteSpace(address.State)
+        || !string.IsNullOrWhiteSpace(address.PostalCode);
 
     /// <summary>
     /// Maps a <see cref="LocationCreateRequestDto"/> to a new <see cref="Location"/> entity.
@@ -61,7 +75,9 @@ public static class LocationMapper
             TenantId = tenantId,
             CreatedByUserId = createdByUserId,
             Name = dto.Name.Trim(),
-            Slug = dto.Slug.Trim().ToLowerInvariant(),
+            // Slug may be null/empty here; LocationService.CreateAsync will auto-generate
+            // a unique slug from {dealership-slug}-{location-name} when so.
+            Slug = string.IsNullOrWhiteSpace(dto.Slug) ? string.Empty : dto.Slug.Trim().ToLowerInvariant(),
             Phone = dto.Phone?.Trim(),
             Address = dto.Address is not null ? dto.Address.ToEmbedded() : new AddressEmbedded(),
             IntakeConfig = dto.IntakeConfig is not null ? dto.IntakeConfig.ToEmbedded() : new IntakeFormConfigEmbedded(),
@@ -82,7 +98,13 @@ public static class LocationMapper
         ArgumentNullException.ThrowIfNull(dto);
 
         entity.Name = dto.Name.Trim();
-        entity.Slug = dto.Slug.Trim().ToLowerInvariant();
+
+        // Only overwrite the slug when the caller explicitly provides one — otherwise
+        // preserve the existing (possibly server-generated) slug.
+        if (!string.IsNullOrWhiteSpace(dto.Slug))
+        {
+            entity.Slug = dto.Slug.Trim().ToLowerInvariant();
+        }
 
         if (dto.Phone is not null)
         {
