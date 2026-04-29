@@ -559,6 +559,23 @@ static List<TenantConfig> BuildTenantConfigs() =>
         TenantId = TenantBlueCompass,
         CreatedByUserId = "seed",
         AccessGate = new TenantAccessGateEmbedded { LoginsEnabled = true },
+        AvailableCapabilities =
+        [
+            new() { Code = "diesel-service",    Name = "Diesel Engine Service",            SortOrder = 10 },
+            new() { Code = "body-repair",       Name = "Body & Collision Repair",           SortOrder = 20 },
+            new() { Code = "rv-refrigerator",   Name = "RV Refrigerator Service",           SortOrder = 30 },
+            new() { Code = "slide-out-repair",  Name = "Slide-Out Repair & Leveling",      SortOrder = 40 },
+            new() { Code = "roof-repair",       Name = "Roof Repair & Resealing",           SortOrder = 50 },
+            new() { Code = "electrical",        Name = "Electrical Systems",                SortOrder = 60 },
+            new() { Code = "plumbing",          Name = "Plumbing & Water Systems",          SortOrder = 70 },
+            new() { Code = "hvac",              Name = "HVAC (Heating & Cooling)",          SortOrder = 80 },
+            new() { Code = "generator",         Name = "Generator Service",                 SortOrder = 90 },
+            new() { Code = "warranty-service",  Name = "Warranty Work",                    SortOrder = 100 },
+            new() { Code = "mobile-service",    Name = "Mobile / On-Site Service",          SortOrder = 110 },
+            new() { Code = "winterization",     Name = "Winterization & De-Winterization",  SortOrder = 120 },
+            new() { Code = "safety-inspection", Name = "Safety Inspection",                 SortOrder = 130 },
+            new() { Code = "tire-service",      Name = "Tire & Wheel Service",              SortOrder = 140 },
+        ],
     },
     new TenantConfig
     {
@@ -566,6 +583,19 @@ static List<TenantConfig> BuildTenantConfigs() =>
         TenantId = TenantHappyTrails,
         CreatedByUserId = "seed",
         AccessGate = new TenantAccessGateEmbedded { LoginsEnabled = true },
+        AvailableCapabilities =
+        [
+            new() { Code = "diesel-service",    Name = "Diesel Engine Service",            SortOrder = 10 },
+            new() { Code = "rv-refrigerator",   Name = "RV Refrigerator Service",           SortOrder = 30 },
+            new() { Code = "slide-out-repair",  Name = "Slide-Out Repair & Leveling",      SortOrder = 40 },
+            new() { Code = "roof-repair",       Name = "Roof Repair & Resealing",           SortOrder = 50 },
+            new() { Code = "electrical",        Name = "Electrical Systems",                SortOrder = 60 },
+            new() { Code = "plumbing",          Name = "Plumbing & Water Systems",          SortOrder = 70 },
+            new() { Code = "hvac",              Name = "HVAC (Heating & Cooling)",          SortOrder = 80 },
+            new() { Code = "generator",         Name = "Generator Service",                 SortOrder = 90 },
+            new() { Code = "warranty-service",  Name = "Warranty Work",                    SortOrder = 100 },
+            new() { Code = "winterization",     Name = "Winterization & De-Winterization",  SortOrder = 120 },
+        ],
     },
 ];
 
@@ -620,6 +650,7 @@ static List<Location> BuildLocations() =>
         Slug = "blue-compass-slc",
         Phone = "(801) 555-0101",
         CreatedByUserId = "seed",
+        EnabledCapabilities = ["electrical", "plumbing", "hvac", "generator", "warranty-service", "roof-repair", "slide-out-repair", "winterization", "tire-service"],
         Address = new AddressEmbedded
         {
             Address1 = "4500 S State St",
@@ -636,6 +667,7 @@ static List<Location> BuildLocations() =>
         Slug = "blue-compass-den",
         Phone = "(303) 555-0102",
         CreatedByUserId = "seed",
+        EnabledCapabilities = ["diesel-service", "electrical", "plumbing", "hvac", "generator", "warranty-service", "body-repair", "roof-repair", "slide-out-repair"],
         Address = new AddressEmbedded
         {
             Address1 = "7800 E Iliff Ave",
@@ -652,6 +684,7 @@ static List<Location> BuildLocations() =>
         Slug = "blue-compass-lv",
         Phone = "(702) 555-0103",
         CreatedByUserId = "seed",
+        EnabledCapabilities = ["electrical", "hvac", "plumbing", "warranty-service", "rv-refrigerator", "safety-inspection"],
         Address = new AddressEmbedded
         {
             Address1 = "3200 Boulder Hwy",
@@ -668,6 +701,7 @@ static List<Location> BuildLocations() =>
         Slug = "blue-compass-phx",
         Phone = "(602) 555-0104",
         CreatedByUserId = "seed",
+        EnabledCapabilities = ["diesel-service", "electrical", "hvac", "plumbing", "warranty-service", "body-repair", "tire-service", "mobile-service"],
         Address = new AddressEmbedded
         {
             Address1 = "1520 W Camelback Rd",
@@ -686,6 +720,7 @@ static List<Location> BuildLocations() =>
         Slug = "happy-trails-boise",
         Phone = "(208) 555-0201",
         CreatedByUserId = "seed",
+        EnabledCapabilities = ["electrical", "plumbing", "hvac", "generator", "warranty-service", "roof-repair", "winterization"],
         Address = new AddressEmbedded
         {
             Address1 = "2901 W Elder St",

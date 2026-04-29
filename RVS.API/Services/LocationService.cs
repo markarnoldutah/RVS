@@ -138,6 +138,7 @@ public sealed class LocationService : ILocationService
         existing.Phone = entity.Phone;
         existing.Address = entity.Address;
         existing.IntakeConfig = entity.IntakeConfig;
+        existing.EnabledCapabilities = entity.EnabledCapabilities;
         existing.MarkAsUpdated(_userContext.UserId);
 
         return await _locationRepository.UpdateAsync(existing, cancellationToken);

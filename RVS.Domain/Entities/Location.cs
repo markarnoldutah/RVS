@@ -43,6 +43,13 @@ public class Location : EntityBase
     /// </summary>
     [JsonProperty("intakeConfig")]
     public IntakeFormConfigEmbedded IntakeConfig { get; set; } = new();
+
+    /// <summary>
+    /// Capability codes (from <see cref="TenantCapabilityEmbedded.Code"/>) that this
+    /// location actively supports. Empty list means no capabilities have been configured.
+    /// </summary>
+    [JsonProperty("enabledCapabilities")]
+    public List<string> EnabledCapabilities { get; set; } = [];
 }
 
 // ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ public static class LocationMapper
             Phone = entity.Phone,
             Address = entity.Address.ToDto(),
             IntakeConfig = entity.IntakeConfig.ToDto(),
+            EnabledCapabilities = [.. entity.EnabledCapabilities],
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
@@ -63,7 +64,8 @@ public static class LocationMapper
             Slug = dto.Slug.Trim().ToLowerInvariant(),
             Phone = dto.Phone?.Trim(),
             Address = dto.Address is not null ? dto.Address.ToEmbedded() : new AddressEmbedded(),
-            IntakeConfig = dto.IntakeConfig is not null ? dto.IntakeConfig.ToEmbedded() : new IntakeFormConfigEmbedded()
+            IntakeConfig = dto.IntakeConfig is not null ? dto.IntakeConfig.ToEmbedded() : new IntakeFormConfigEmbedded(),
+            EnabledCapabilities = dto.EnabledCapabilities is not null ? [.. dto.EnabledCapabilities] : []
         };
     }
 
@@ -95,6 +97,11 @@ public static class LocationMapper
         if (dto.IntakeConfig is not null)
         {
             entity.IntakeConfig = dto.IntakeConfig.ToEmbedded();
+        }
+
+        if (dto.EnabledCapabilities is not null)
+        {
+            entity.EnabledCapabilities = [.. dto.EnabledCapabilities];
         }
 
         entity.MarkAsUpdated(updatedByUserId);
