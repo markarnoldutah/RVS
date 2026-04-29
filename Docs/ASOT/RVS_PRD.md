@@ -156,7 +156,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 
 - **FR-011: Dealership and location management** (Priority: High)
   - Corporate admins and owners can view and update their dealership (corporation) record: corporate name and logo.
-  - Admins can create and manage physical locations: display name, address, service email, phone, logo, intake form config (accepted file types, max file size), region tag.
+  - Admins can create and manage physical locations: display name, address, service email, phone, logo, intake form config (accepted file types, max file size), region tag, and the set of service capabilities enabled at that location (see FR-023).
   - Each location has a globally unique slug used in intake URLs and QR codes.
   - A `slugLookup` container provides O(1) slug → `tenantId` + `locationId` resolution at intake time.
 
@@ -229,6 +229,15 @@ The platform is designed as the intake layer that sits in front of existing Deal
   - A `GET /api/tenants/billing/usage` endpoint returns current billing status (plan tier, SR count, limit, period start, trial status, location count) for the authenticated dealer dashboard.
   - Platform admins can manually extend `trialEndsAtUtc` as a sales concession lever.
 
+- **FR-023: Service capabilities — tenant master list, per-location enablement, and intake assessment** (Priority: High)
+  - **Tenant master list:** Each tenant's `TenantConfig` carries an `AvailableCapabilities` collection — the master list of service capabilities offered across the corporation. Each capability has a stable `Code` (e.g., `diesel-service`, `electrical`, `plumbing`, `hvac`, `body-repair`, `roof-repair`, `slide-out-repair`, `rv-refrigerator`, `generator`, `warranty-service`, `mobile-service`, `winterization`, `safety-inspection`, `tire-service`), a display `Name`, an optional description, a `SortOrder`, and an `IsActive` flag. New tenants are seeded with a reasonable default starter list; tenant admins (with `tenant-config:update` permission) may add, rename, soft-deactivate, or reorder entries. `Code` values are immutable once created.
+  - **Per-location enablement:** Each `Location` carries an `EnabledCapabilities` list of capability codes drawn from the tenant master list. Service managers (with `locations:update` permission) can edit which capabilities a given location supports — e.g., a location that cannot service diesel motors leaves `diesel-service` off. An empty list means no capabilities have been configured and no capability-based filtering is applied to that location.
+  - **Intake capability assessment:** After the customer submits the issue description (Step 5 of the intake wizard) and proceeds to Step 6, the Intake app calls a server-side capability assessment endpoint with the issue description and the selected location slug. The API uses the existing AI categorization service to resolve an issue category, derives the set of capability codes typically required for that category (via a deterministic category → capabilities map), and compares them against the location's `EnabledCapabilities`. The endpoint returns `Matched`, the resolved `IssueCategory`, the `RequiredCapabilities`, the `MissingCapabilities` (if any), and the location's phone number for use in the alert. The endpoint always returns HTTP 200 — capability mismatch is a business outcome, not an error.
+  - **Customer feedback:**
+    - **Match (or no specific capabilities required):** No banner is shown; the wizard continues normally into Step 6.
+    - **Mismatch:** A non-blocking alert is rendered at the top of Step 6 reading: *"This location isn't typically able to help with this kind of issue. Please contact the service center directly to confirm at {service-center-phone}."* The customer is **not** prevented from continuing to submit the request — the alert is informational so the customer can self-route to a more appropriate location.
+  - **Privacy / safety:** The assessment never blocks submission, never persists customer-identifying data outside the standard intake flow, and reuses the same AI categorization fallback chain (rule-based fallback when Azure OpenAI is unavailable) so a degraded AI service does not break Step 5 → Step 6 navigation. When the resolved category has no mapped capability requirement (e.g., "General"), the assessment is treated as a match.
+
 ---
 
 ## 5. User experience
@@ -258,6 +267,7 @@ The platform is designed as the intake layer that sits in front of existing Deal
 - **File upload failure:** If an attachment upload fails mid-submission, the customer is notified per-file with a retry option. The service request is not blocked on attachment failure — the text submission is independent of attachment upload.
 - **No slug match:** If a customer navigates to an invalid or disabled location slug, a clear "This location is not found" message is returned with a link to search for participating dealers.
 - **Rate limit exceeded:** Customers exceeding the IP rate limit see a friendly "Please wait and try again" message with the retry time.
+- **Capability mismatch at selected location:** When the intake capability assessment (FR-023) determines that the selected location does not support the capabilities required for the customer's issue, Step 6 renders a non-blocking informational alert at the top of the page including the location's service-center phone number. The customer can still continue and submit the request.
 
 ### 5.4 UI/UX highlights
 
@@ -662,3 +672,28 @@ The MVP comprises three distinct front-end applications, each optimized for its 
   - When the trial expires with no active Stripe subscription, `TenantAccessGateMiddleware` returns HTTP 402. The intake portal renders a friendly error message (not the raw 402 body). The dealer dashboard redirects to an upgrade/payment page.
   - On `invoice.payment_failed` webhook, the platform emits an internal alert and enters a 3-day grace period. The tenant is not immediately disabled. After the grace period (Stripe dunning exhausted), the tenant access gate is set to disabled.
   - On `invoice.payment_succeeded`, the billing period is reset and normal access resumes immediately.
+
+### 9.22. Configure service capabilities at the tenant and location level
+
+- **ID:** RVS-022
+- **Description:** As a service manager, I want to choose which service capabilities each of my locations can perform — drawn from a tenant-level master list — so that customers and staff have an accurate picture of what each location can handle (for example, only some locations can service diesel motors).
+- **Acceptance criteria:**
+  - A new tenant is provisioned with a reasonable default starter list of RV service capabilities (e.g., diesel service, body & collision repair, RV refrigerator, slide-out repair, roof repair, electrical, plumbing, HVAC, generator, warranty work, mobile / on-site, winterization, safety inspection, tire & wheel) on `TenantConfig.AvailableCapabilities`.
+  - Tenant admins (with `tenant-config:update` permission) can add, rename, soft-deactivate (set `IsActive = false`), and reorder capabilities in the master list. Capability `Code` values are immutable once created.
+  - Service managers (with `locations:update` permission) can edit the `EnabledCapabilities` list on each `Location` by selecting from the tenant's active master list.
+  - The location edit UI displays the master list as a multi-select; only `IsActive = true` capabilities appear as new selectable options.
+  - Saving a location with an empty `EnabledCapabilities` list is allowed and means "no capability filtering applied" — the intake capability assessment treats such a location as a match for any issue.
+  - Capabilities are returned to the dealer dashboard via `GET /api/locations/{id}` and to tenant-config screens via `GET /api/tenants/config`.
+
+### 9.23. Be alerted at intake when the selected location may not handle my issue
+
+- **ID:** RVS-023
+- **Description:** As a customer submitting a service request, I want the intake form to let me know if the location I picked is unlikely to be able to help with the kind of issue I described, so that I can choose to call ahead and confirm before showing up — without being blocked from submitting the request.
+- **Acceptance criteria:**
+  - After the customer completes Step 5 (Issue Description) and proceeds to Step 6 (Review and Submit), the Intake app calls `POST /api/intake/{locationSlug}/assess-capabilities` with the issue description (and optional pre-resolved category) before rendering Step 6.
+  - The API uses the existing AI categorization service (with rule-based fallback) to determine the issue category and the set of capability codes typically required to address it, then compares those against the location's `EnabledCapabilities`.
+  - If every required capability is enabled at the location — **or** the resolved category has no specific capability requirement — Step 6 renders normally with no banner.
+  - If one or more required capabilities are missing, Step 6 renders a non-blocking informational alert at the top: *"This location isn't typically able to help with this kind of issue. Please contact the service center directly to confirm at {service-center-phone}."*
+  - The alert is informational only: the customer can still complete and submit the service request from Step 6.
+  - If the assessment endpoint fails or times out, no banner is shown and the wizard continues to Step 6 — capability assessment must never block intake.
+  - The endpoint is anonymous, rate-limited under the existing intake IP rate-limit policy, and never persists customer-identifying data outside the standard intake flow.
