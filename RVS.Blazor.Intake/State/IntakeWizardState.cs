@@ -119,6 +119,14 @@ public sealed class IntakeWizardState
     /// <summary>Smart suggestion from AI diagnostic (Step 6).</summary>
     public string? SmartSuggestion { get; set; }
 
+    /// <summary>
+    /// Result of the capability-match assessment performed at the boundary of Step 5 → Step 6.
+    /// When <c>null</c>, no assessment has been performed yet (or the call failed and the wizard
+    /// is silently continuing). When the result's <c>Matched</c> flag is <c>false</c>, Step 6
+    /// renders an alert at the top advising the customer to contact the service center directly.
+    /// </summary>
+    public CapabilityAssessmentResponseDto? CapabilityAssessment { get; set; }
+
     /// <summary>Uploaded attachment metadata (Step 7).</summary>
     public List<AttachmentFileInfo> Attachments { get; set; } = [];
 
@@ -321,6 +329,7 @@ public sealed class IntakeWizardState
             ApproxPurchaseDate = ApproxPurchaseDate,
             DiagnosticResponses = DiagnosticResponses,
             SmartSuggestion = SmartSuggestion,
+            CapabilityAssessment = CapabilityAssessment,
             IsSubmitted = IsSubmitted,
             CreatedServiceRequestId = CreatedServiceRequestId,
             SubmissionMagicLinkToken = SubmissionMagicLinkToken
@@ -366,6 +375,7 @@ public sealed class IntakeWizardState
             ApproxPurchaseDate = data.ApproxPurchaseDate;
             DiagnosticResponses = data.DiagnosticResponses;
             SmartSuggestion = data.SmartSuggestion;
+            CapabilityAssessment = data.CapabilityAssessment;
             IsSubmitted = data.IsSubmitted;
             CreatedServiceRequestId = data.CreatedServiceRequestId;
             SubmissionMagicLinkToken = data.SubmissionMagicLinkToken;
@@ -411,6 +421,7 @@ public sealed class IntakeWizardState
         DiagnosticQuestions = [];
         DiagnosticResponses = [];
         SmartSuggestion = null;
+        CapabilityAssessment = null;
         Attachments = [];
         IsSubmitted = false;
         CreatedServiceRequestId = null;
@@ -648,6 +659,7 @@ internal sealed class IntakeWizardStateData
     public string? ApproxPurchaseDate { get; set; }
     public List<DiagnosticResponseDto> DiagnosticResponses { get; set; } = [];
     public string? SmartSuggestion { get; set; }
+    public CapabilityAssessmentResponseDto? CapabilityAssessment { get; set; }
     public bool IsSubmitted { get; set; }
     public string? CreatedServiceRequestId { get; set; }
     public string? SubmissionMagicLinkToken { get; set; }

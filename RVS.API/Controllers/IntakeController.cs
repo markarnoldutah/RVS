@@ -495,6 +495,38 @@ public class IntakeController : ControllerBase
     }
 
     /// <summary>
+    /// Assesses whether the selected location's enabled service capabilities cover the
+    /// capabilities required to address the customer's issue, based on the issue description
+    /// (and optional pre-resolved category). Always returns HTTP 200 with the assessment result.
+    /// Used by the Intake wizard at the boundary of Step 5 → Step 6 to render a fallback
+    /// alert when the location is unlikely to be able to help.
+    /// </summary>
+    /// <param name="locationSlug">Location slug (route segment).</param>
+    /// <param name="request">Issue description and optional pre-resolved category.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpPost("assess-capabilities")]
+    public async Task<ActionResult<CapabilityAssessmentResponseDto>> AssessCapabilities(
+        string locationSlug, [FromBody] CapabilityAssessmentRequestDto request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (string.IsNullOrWhiteSpace(request.IssueDescription))
+        {
+            return BadRequest(new { message = "IssueDescription is required." });
+        }
+
+        if (request.IssueDescription.Length > 2000)
+        {
+            return BadRequest(new { message = "IssueDescription must not exceed 2,000 characters." });
+        }
+
+        var result = await _intakeService.AssessCapabilitiesAsync(
+            locationSlug, request.IssueDescription, request.IssueCategory, ct);
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Submits a new service request through the customer intake flow.
     /// Orchestrates customer account creation, profile resolution, and SR creation.
     /// </summary>

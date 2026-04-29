@@ -45,6 +45,35 @@ public interface IIntakeOrchestrationService
     Task<IntakeConfigResponseDto> GetIntakeConfigAsync(string slug, string? magicLinkToken = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Assesses whether the location identified by <paramref name="slug"/> has the service
+    /// capabilities typically required to address the customer's issue.
+    /// <para>
+    /// Resolves an issue category from the description via the AI categorization service
+    /// (or accepts an already-resolved category from <paramref name="issueCategory"/>),
+    /// looks up the required capability codes for that category, and compares them to the
+    /// location's <see cref="Entities.Location.EnabledCapabilities"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="slug">Location slug.</param>
+    /// <param name="issueDescription">Free-text description from Step 5 of the intake wizard.</param>
+    /// <param name="issueCategory">
+    /// Optional pre-resolved issue category. When supplied, the AI categorization step is skipped.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// Assessment result including whether the location matches, the resolved category,
+    /// the required capability codes, any missing capability codes, and the location phone
+    /// number for use in customer-facing fallback messages.
+    /// </returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="slug"/> or <paramref name="issueDescription"/> is null/whitespace.</exception>
+    /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
+    Task<CapabilityAssessmentResponseDto> AssessCapabilitiesAsync(
+        string slug,
+        string issueDescription,
+        string? issueCategory = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Resolves a location slug to the associated tenant identifier.
     /// </summary>
     /// <param name="slug">Location slug.</param>

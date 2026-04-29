@@ -8,6 +8,13 @@ public sealed record IntakeConfigResponseDto
     public string LocationName { get; init; } = default!;
     public string LocationSlug { get; init; } = default!;
     public string DealershipName { get; init; } = default!;
+
+    /// <summary>
+    /// Public-facing phone number for the location, surfaced so the customer-facing
+    /// intake UI can include it in fallback messages (e.g. when the selected location's
+    /// capabilities do not match the issue). Null when the location has no phone configured.
+    /// </summary>
+    public string? LocationPhone { get; init; }
     public List<string> AcceptedFileTypes { get; init; } = [];
     public int MaxFileSizeMb { get; init; }
     public int MaxAttachments { get; init; }
