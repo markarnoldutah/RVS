@@ -71,12 +71,23 @@
         </MudGrid>
     }
 
-    @* Create / Edit Dialog *@
-    <MudDialog @bind-Visible="_dialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
-        <TitleContent>
-            <MudText Typo="Typo.h6">@(_editingLocationId is null ? "Create Location" : "Edit Location")</MudText>
-        </TitleContent>
-        <DialogContent>
+    @* Create / Edit Drawer *@
+    <MudDrawer @bind-Open="_dialogOpen"
+               Anchor="Anchor.End"
+               Variant="DrawerVariant.Temporary"
+               Width="480px"
+               Elevation="0"
+               Style="border-left: 4px solid var(--mud-palette-primary);">
+        <MudDrawerHeader Style="border-bottom: 1px solid var(--mud-palette-divider);">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width: 100%;">
+                <MudText Typo="Typo.h6">@(_editingLocationId is null ? "Create Location" : "Edit Location")</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close"
+                               aria-label="Close"
+                               OnClick="CloseDialog" />
+            </MudStack>
+        </MudDrawerHeader>
+
+        <MudStack Style="flex: 1; overflow-y: auto; min-height: 0;" Class="pa-4" Spacing="0">
             <MudForm @ref="_form2">
                 <MudStack Spacing="3">
                     <MudStack Spacing="1">
@@ -91,17 +102,6 @@
                     </MudStack>
 
                     <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Slug</MudText>
-                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">URL-friendly identifier (e.g., 'salt-lake-city')</MudText>
-                        <MudTextField T="string" @bind-Value="_form.Slug"
-                                      Validation="@(new Func<string?, string?>(ValidateSlug))"
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      Placeholder="salt-lake-city"
-                                      autocomplete="off" />
-                    </MudStack>
-
-                    <MudStack Spacing="1">
                         <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Phone</MudText>
                         <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional — shown on intake landing page</MudText>
                         <MudTextField T="string" @bind-Value="_form.Phone"
@@ -111,8 +111,6 @@
                                       Placeholder="(555) 123-4567"
                                       autocomplete="tel" />
                     </MudStack>
-
-                    <MudText Typo="Typo.h6" Class="mt-2" Style="color: var(--mud-palette-text-primary);">Address</MudText>
 
                     <MudStack Spacing="1">
                         <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Address line 1</MudText>
@@ -167,8 +165,11 @@
                     </MudGrid>
                 </MudStack>
             </MudForm>
-        </DialogContent>
-        <DialogActions>
+        </MudStack>
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2"
+                  Class="pa-4"
+                  Style="border-top: 1px solid var(--mud-palette-divider);">
             <MudButton OnClick="CloseDialog" Style="text-transform: none;">Cancel</MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Primary"
                        OnClick="SaveLocationAsync" Disabled="_saving"
@@ -179,8 +180,8 @@
                 }
                 Save location
             </MudButton>
-        </DialogActions>
-    </MudDialog>
+        </MudStack>
+    </MudDrawer>
 </MudStack>
 
 @code {
@@ -197,8 +198,8 @@
     private string? ValidateName(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a location name" : null;
 
-    private string? ValidateSlug(string? value) =>
-        _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a URL slug" : null;
+    private static string GenerateSlug(string name) =>
+        System.Text.RegularExpressions.Regex.Replace(name.ToLowerInvariant().Trim(), @"[^a-z0-9]+", "-").Trim('-');
 
     protected override async Task OnInitializedAsync()
     {
@@ -280,10 +281,14 @@
 
         try
         {
+            var slug = _editingLocationId is not null
+                ? _form.Slug ?? string.Empty
+                : GenerateSlug(_form.Name ?? string.Empty);
+
             var request = new LocationCreateRequestDto
             {
                 Name = _form.Name ?? string.Empty,
-                Slug = _form.Slug ?? string.Empty,
+                Slug = slug,
                 Phone = _form.Phone,
                 Address = new AddressDto
                 {
