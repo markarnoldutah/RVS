@@ -167,6 +167,14 @@ The intake API MUST call the NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`) 
 - The suggested category MUST be treated as assistive only. The intake UI MUST allow customer override before submission.
 - Submit-time orchestration MUST still perform final categorization as a defense-in-depth check.
 
+**FR-INTAKE-08 — Capability assessment at Step 5 → Step 6 boundary**
+- `POST api/intake/{locationSlug}/assess-capabilities` MUST accept `CapabilityAssessmentRequestDto { issueDescription (1..2000 chars, required), issueCategory? }` and return `CapabilityAssessmentResponseDto { matched, issueCategory, requiredCapabilities[], missingCapabilities[], locationPhone? }`.
+- The endpoint MUST be `[AllowAnonymous]` and MUST be subject to the same per-IP rate-limit policy as the other anonymous intake AI endpoints.
+- The orchestration MUST: (a) resolve the location via `slugLookup`; (b) call `ICategorizationService` against `issueDescription` unless `issueCategory` is supplied; (c) translate the resolved category to a set of capability codes via the deterministic `IssueCategoryCapabilityMap`; (d) compare against `Location.EnabledCapabilities`; (e) return `matched = true` when every required code is enabled OR when `requiredCapabilities` is empty (unmapped category, e.g., "General"); (f) populate `locationPhone` from the location's contact info so the Intake UI can render it in the customer-facing alert.
+- The endpoint MUST always return `200 OK` with a populated `CapabilityAssessmentResponseDto`. Capability mismatch is a business outcome, not an error. AI categorization failures MUST fall back to the rule-based categorizer (already required by FR-INTAKE-05); if both fail, the response MUST set `matched = true` so capability assessment never blocks Step 6.
+- The endpoint MUST NOT persist any customer data, MUST NOT mutate Cosmos state, and MUST NOT log free-text issue descriptions.
+- The Intake wizard MUST call this endpoint between Step 5 (Issue Description) and Step 6 (Review and Submit). When `matched = false`, Step 6 MUST render a non-blocking alert at the top: *"This location isn't typically able to help with this kind of issue. Please contact the service center directly to confirm at {locationPhone}."* The alert MUST NOT prevent submission.
+
 **FR-INTAKE-06 — Returning customer prefill**
 On customer submission with a known email address, the intake API MUST:
 - Return `isReturningCustomer: true` and `priorRequestCount` in the 201 response
@@ -233,6 +241,13 @@ On `POST api/locations` or `PUT api/locations/{id}` (slug rename), `ILocationSer
 
 **FR-TENANT-04 — QR code generation**
 `GET api/locations/{id}/qr-code` MUST return a QR code image encoding `https://rvintake.com/{locationSlug}`. Acceptable response formats: `image/png` (default), `image/svg+xml`. QR code MUST encode the full HTTPS URL.
+
+**FR-TENANT-05 — Service capabilities (tenant master list and per-location enablement)**
+- `TenantConfig.AvailableCapabilities` is the master list of service capabilities offered by the tenant. Each entry MUST carry: `Code` (stable, immutable, slug-style — e.g., `diesel-service`, `electrical`, `hvac`), `Name` (display, max 100 chars), `Description?` (max 500 chars), `SortOrder` (int), and `IsActive` (bool, default `true`). New tenants MUST be seeded with a sensible default starter list (≈14 RV-service entries — diesel service, body & collision repair, RV refrigerator, slide-out repair, roof repair, electrical, plumbing, HVAC, generator, warranty work, mobile / on-site, winterization, safety inspection, tire & wheel — defined by `ConfigMapper.DefaultCapabilities()`).
+- `PUT api/tenants/config` MUST allow `tenant-config:update` callers to replace `availableCapabilities`. The service layer MUST reject changes that mutate an existing `Code` (codes are immutable). Soft-deletion MUST be performed by setting `IsActive = false`; hard removal of a code that is referenced by any `Location.EnabledCapabilities` MUST be rejected with `409 Conflict`.
+- `Location.EnabledCapabilities` is a list of capability codes opted into by that location. Each entry MUST exist in the tenant's `AvailableCapabilities` (validated server-side on `POST/PUT api/locations`). An empty list is allowed and means "no capability-based filtering applies to this location" — the intake capability assessment treats such a location as a match for any issue.
+- `LocationDetailDto` and `LocationSummaryDto` MUST surface `enabledCapabilities`. `TenantConfigResponseDto` MUST surface `availableCapabilities`.
+
 
 ---
 
@@ -370,6 +385,22 @@ Standard error codes:
 | `aiContext` | null | Optional; appended to Azure OpenAI system prompt; max 500 characters |
 | `allowAnonymousIntake` | true | If false, intake requires a specific tenant-issued token (Phase 2) |
 
+**Location — service capabilities**
+
+| Field | Type | Constraints |
+|---|---|---|
+| `enabledCapabilities` | array of string | Each value MUST be a `Code` from the owning tenant's `TenantConfig.AvailableCapabilities`; validated server-side on create/update; empty array allowed (means "no capability filtering") |
+
+**TenantConfig — `AvailableCapabilities` (master list)**
+
+| Field | Type | Constraints |
+|---|---|---|
+| `code` | string | Stable slug, immutable after create; unique within `availableCapabilities`; 1–60 chars; lowercase, kebab-case |
+| `name` | string | Display name; required; max 100 chars |
+| `description` | string? | Optional; max 500 chars |
+| `sortOrder` | int | Default 0; used to order the master list in admin and intake UIs |
+| `isActive` | bool | Default `true`; soft-delete by setting to `false`; inactive entries remain valid for existing `Location.EnabledCapabilities` references but are hidden from new selection |
+
 ### 7.2 Status Transition Rules
 
 Enforced by `StatusTransitions.cs`. Invalid transitions MUST return `409 Conflict`.
@@ -439,6 +470,7 @@ Customer-facing endpoints (`/intake/*`, `/status/*`) MUST be `[AllowAnonymous]`.
 | `POST` | `api/intake/{locationSlug}/ai/transcribe-issue` | Anonymous | — | `AiOperationResponseDto<IssueTranscriptionResultDto>` | Speech-to-text and cleaned draft |
 | `POST` | `api/intake/{locationSlug}/ai/refine-issue-text` | Anonymous | — | `AiOperationResponseDto<IssueTextRefinementResultDto>` | Cleanup endpoint for transcript/text |
 | `POST` | `api/intake/{locationSlug}/ai/extract-vin` | Anonymous | — | `AiOperationResponseDto<VinExtractionResultDto>` | VIN extraction from captured image |
+| `POST` | `api/intake/{locationSlug}/assess-capabilities` | Anonymous | — | `CapabilityAssessmentResponseDto` | Step 5 → Step 6 capability check (always 200) |
 | `POST` | `api/intake/{locationSlug}/service-requests` | Anonymous | — | `201 ServiceRequestSummaryDto` | Full 7-step orchestration |
 | `POST` | `api/intake/{locationSlug}/service-requests/{id}/attachments` | Anonymous | — | `201 AttachmentDto` | Customer photo upload |
 | `GET` | `api/status/{token}` | Anonymous | — | `CustomerStatusResponseDto` | Cross-dealer SR summary |
@@ -532,6 +564,41 @@ public record IssueCategorySuggestionRequestDto(
 public record IssueCategorySuggestionResultDto(
   string? IssueCategory
 );
+```
+
+#### `CapabilityAssessmentRequestDto` / `CapabilityAssessmentResponseDto`
+
+```csharp
+public sealed record CapabilityAssessmentRequestDto
+{
+    // Customer-supplied free-text issue description from Step 5. 1..2000 chars, required.
+    public string IssueDescription { get; init; } = string.Empty;
+
+    // Optional pre-resolved category. When supplied, the API skips the AI categorization
+    // step and uses this value directly.
+    public string? IssueCategory { get; init; }
+}
+
+public sealed record CapabilityAssessmentResponseDto
+{
+    // True when every required capability is enabled at the location, OR when no
+    // specific capabilities are required for the resolved category.
+    public bool Matched { get; init; }
+
+    // Resolved issue category used to derive the required capability list. Null when
+    // categorization could not produce a result (in which case Matched MUST be true).
+    public string? IssueCategory { get; init; }
+
+    // Capability codes considered necessary to service the issue.
+    public List<string> RequiredCapabilities { get; init; } = [];
+
+    // Required capability codes NOT enabled at the selected location. Empty when Matched.
+    public List<string> MissingCapabilities { get; init; } = [];
+
+    // Phone number of the selected location, surfaced so the Intake UI can render it
+    // in the Step 6 alert when capabilities are not satisfied. Null when unavailable.
+    public string? LocationPhone { get; init; }
+}
 ```
 
 #### `ServiceRequestAnalyticsResponseDto`
