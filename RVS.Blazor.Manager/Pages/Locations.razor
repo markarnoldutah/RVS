@@ -25,60 +25,73 @@
     }
     else
     {
-        <MudGrid Spacing="3">
-            @foreach (var loc in _locations)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudCard Elevation="2">
-                        <MudCardHeader>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary" />
-                                <MudText Typo="Typo.h6">@loc.Name</MudText>
-                            </MudStack>
-                        </MudCardHeader>
-                        <MudCardContent>
-                            <MudStack Spacing="1">
-                                <MudText Typo="Typo.body2"><strong>Slug:</strong> @loc.Slug</MudText>
-                                @if (!string.IsNullOrEmpty(loc.Phone))
-                                {
-                                    <MudText Typo="Typo.body2"><strong>Phone:</strong> @loc.Phone</MudText>
-                                }
-                                @if (loc.Address is not null)
-                                {
-                                    <MudText Typo="Typo.body2">
-                                        <strong>Address:</strong>
-                                        @FormatAddress(loc.Address)
-                                    </MudText>
-                                }
-                                @if (loc.EnabledCapabilities.Count > 0)
-                                {
-                                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
-                                        @foreach (var code in loc.EnabledCapabilities)
-                                        {
-                                            var label = GetCapabilityName(code);
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@label</MudChip>
-                                        }
-                                    </MudStack>
-                                }
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    Created: @loc.CreatedAtUtc.ToLocalTime().ToString("g")
-                                </MudText>
-                            </MudStack>
-                        </MudCardContent>
-                        <MudCardActions>
-                            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                                       OnClick="@(() => ShowEditDialog(loc))">
-                                Edit
-                            </MudButton>
-                            <MudButton Variant="Variant.Text" Color="Color.Secondary" Size="Size.Small"
-                                       OnClick="@(() => DownloadQrCodeAsync(loc.Id, loc.Slug))">
-                                QR Code
-                            </MudButton>
-                        </MudCardActions>
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
+        @* ───────────────────────── Locations table ─────────────────────────
+           Single network call returns LocationSummaryResponseDto rows containing
+           name, slug, phone, address, and capability badges. We only fetch the
+           full LocationDetailDto when a row is clicked (drawer opens).         *@
+        <MudTable Items="_summaries"
+                  Dense="true"
+                  Hover="true"
+                  Striped="true"
+                  Bordered="false"
+                  Elevation="1"
+                  OnRowClick="OnRowClickAsync"
+                  T="LocationSummaryResponseDto"
+                  RowStyle="cursor: pointer;">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Slug</MudTh>
+                <MudTh>Phone</MudTh>
+                <MudTh>Location</MudTh>
+                <MudTh Style="text-align: center;">Capabilities</MudTh>
+                <MudTh Style="text-align: right;">Created</MudTh>
+                <MudTh Style="text-align: right;">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><strong>@context.Name</strong></MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Slug">
+                    <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.Slug</MudText>
+                </MudTd>
+                <MudTd DataLabel="Phone">@(context.Phone ?? "—")</MudTd>
+                <MudTd DataLabel="Location">@FormatCityState(context.Address)</MudTd>
+                <MudTd DataLabel="Capabilities" Style="text-align: center;">
+                    @if (context.EnabledCapabilities.Count > 0)
+                    {
+                        <MudBadge Content="@context.EnabledCapabilities.Count"
+                                  Color="Color.Primary"
+                                  Overlap="false"
+                                  Bordered="true">
+                            <MudIcon Icon="@Icons.Material.Outlined.Build" Size="Size.Small" />
+                        </MudBadge>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">—</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Created" Style="text-align: right;">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @context.CreatedAtUtc.ToLocalTime().ToString("d")
+                    </MudText>
+                </MudTd>
+                <MudTd Style="text-align: right;">
+                    <div @onclick:stopPropagation="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.QrCode2"
+                                       Size="Size.Small"
+                                       aria-label="Download QR code"
+                                       OnClick="@(() => DownloadQrCodeAsync(context.LocationId, context.Slug))" />
+                    </div>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4" Color="Color.Secondary">No locations yet — click <strong>Add Location</strong> to create your first one.</MudText>
+            </NoRecordsContent>
+        </MudTable>
     }
 
     @* Create / Edit Drawer *@
@@ -220,7 +233,23 @@
 </MudStack>
 
 @code {
-    private List<LocationDetailDto> _locations = [];
+    // ──────────────────────────────────────────────────────────────────────────
+    //  Recommended additional metadata that should be editable per location
+    //  (placeholder — left for a future change as called out in the issue):
+    //   • Service capabilities (already supported via checkboxes below)
+    //   • Intake form configuration:
+    //       – AllowAnonymousIntake (toggle)
+    //       – MaxFileSizeMb / MaxAttachments (numeric inputs)
+    //       – AcceptedFileTypes (chip-list editor)
+    //       – AiContext (multiline text area for system-prompt augmentation)
+    //   • Operating hours / timezone
+    //   • Service email and dedicated SMS sender phone for ACS notifications
+    //   • Branding overrides (logo URL, accent color)
+    //   • Default service-advisor / round-robin queue assignment rules
+    //   • Tax / labor-rate codes per location (for downstream estimating)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private List<LocationSummaryResponseDto> _summaries = [];
     private List<TenantCapabilityDto> _tenantCapabilities = [];
     private bool _loading = true;
     private string? _error;
@@ -228,14 +257,12 @@
     private bool _saving;
     private bool _submitted;
     private string? _editingLocationId;
+    private string? _editingLocationSlug; // preserved on update; we do not change slugs from the UI
     private LocationForm _form = new();
     private MudForm? _form2;
 
     private string? ValidateName(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a location name" : null;
-
-    private static string GenerateSlug(string name) =>
-        System.Text.RegularExpressions.Regex.Replace(name.ToLowerInvariant().Trim(), @"[^a-z0-9]+", "-").Trim('-');
 
     private string GetCapabilityName(string code) =>
         _tenantCapabilities.FirstOrDefault(c => c.Code == code)?.Name ?? code;
@@ -266,9 +293,10 @@
 
         try
         {
-            var summaries = await LookupClient.GetLocationsAsync();
-            var detailTasks = summaries.Select(s => LookupClient.GetLocationByIdAsync(s.LocationId));
-            _locations = [.. await Task.WhenAll(detailTasks)];
+            // Single network call — the summary DTO now includes slug, phone, address,
+            // enabled capabilities, and createdAtUtc, so the table no longer needs a
+            // per-row detail fetch (was N+1 before).
+            _summaries = await LookupClient.GetLocationsAsync();
         }
         catch (AccessTokenNotAvailableException ex)
         {
@@ -301,19 +329,43 @@
     private void ShowCreateDialog()
     {
         _editingLocationId = null;
+        _editingLocationSlug = null;
         _form = new LocationForm();
         _submitted = false;
         _dialogOpen = true;
     }
 
+    private async Task OnRowClickAsync(TableRowClickEventArgs<LocationSummaryResponseDto> args)
+    {
+        if (args.Item is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // Detail call only happens when a row is clicked.
+            var detail = await LookupClient.GetLocationByIdAsync(args.Item.LocationId);
+            ShowEditDialog(detail);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load location details: {ex.Message}", Severity.Error);
+        }
+    }
+
     private void ShowEditDialog(LocationDetailDto location)
     {
         _editingLocationId = location.Id;
+        _editingLocationSlug = location.Slug;
         _submitted = false;
         _form = new LocationForm
         {
             Name = location.Name,
-            Slug = location.Slug,
             Phone = location.Phone,
             Address1 = location.Address?.Address1,
             Address2 = location.Address?.Address2,
@@ -348,14 +400,13 @@
 
         try
         {
-            var slug = _editingLocationId is not null
-                ? _form.Slug ?? string.Empty
-                : GenerateSlug(_form.Name ?? string.Empty);
-
+            // On create: leave Slug null so the API auto-generates {org-slug}-{name}.
+            // On update: pass back the existing slug so it is preserved (changing slugs
+            // from the UI is intentionally not supported here — the URL is sticky).
             var request = new LocationCreateRequestDto
             {
                 Name = _form.Name ?? string.Empty,
-                Slug = slug,
+                Slug = _editingLocationId is not null ? _editingLocationSlug : null,
                 Phone = _form.Phone,
                 Address = new AddressDto
                 {
@@ -407,20 +458,22 @@
         }
     }
 
-    private static string FormatAddress(AddressDto address)
+    private static string FormatCityState(AddressDto? address)
     {
+        if (address is null)
+        {
+            return "—";
+        }
+
         var parts = new List<string>();
-        if (!string.IsNullOrEmpty(address.Address1)) parts.Add(address.Address1);
-        if (!string.IsNullOrEmpty(address.City)) parts.Add(address.City);
-        if (!string.IsNullOrEmpty(address.State)) parts.Add(address.State);
-        if (!string.IsNullOrEmpty(address.PostalCode)) parts.Add(address.PostalCode);
+        if (!string.IsNullOrWhiteSpace(address.City)) parts.Add(address.City);
+        if (!string.IsNullOrWhiteSpace(address.State)) parts.Add(address.State);
         return parts.Count > 0 ? string.Join(", ", parts) : "—";
     }
 
     private sealed class LocationForm
     {
         public string? Name { get; set; }
-        public string? Slug { get; set; }
         public string? Phone { get; set; }
         public string? Address1 { get; set; }
         public string? Address2 { get; set; }
