@@ -2,6 +2,7 @@ using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Services;
 
@@ -443,6 +444,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             LocationName = slugLookup.LocationName,
             LocationSlug = slugLookup.Slug,
             DealershipName = slugLookup.DealershipName,
+            LocationPhone = location?.Phone,
             AcceptedFileTypes = intakeConfig.AcceptedFileTypes,
             MaxFileSizeMb = intakeConfig.MaxFileSizeMb,
             MaxAttachments = intakeConfig.MaxAttachments,
@@ -452,6 +454,60 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             PrefillAsset = prefillAsset,
             KnownAssets = knownAssets,
             TokenExpired = tokenExpired,
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<CapabilityAssessmentResponseDto> AssessCapabilitiesAsync(
+        string slug,
+        string issueDescription,
+        string? issueCategory = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slug);
+        ArgumentException.ThrowIfNullOrWhiteSpace(issueDescription);
+
+        var slugLookup = await _slugLookupRepository.GetBySlugAsync(slug.Trim().ToLowerInvariant(), cancellationToken)
+            ?? throw new KeyNotFoundException($"Location slug '{slug}' not found.");
+
+        var location = await _locationRepository.GetByIdAsync(slugLookup.TenantId, slugLookup.LocationId, cancellationToken);
+        var enabledCapabilities = location?.EnabledCapabilities ?? [];
+        var locationPhone = location?.Phone;
+
+        // Use the supplied category when present; otherwise derive one via the AI categorization service.
+        // A categorization failure is treated as "unknown" (no specific capability requirement → match).
+        string? resolvedCategory = string.IsNullOrWhiteSpace(issueCategory) ? null : issueCategory.Trim();
+        if (resolvedCategory is null)
+        {
+            try
+            {
+                resolvedCategory = await _categorizationService.CategorizeAsync(issueDescription, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex,
+                    "Capability assessment: categorization failed for slug={Slug}; treating as unknown category.", slug);
+            }
+        }
+
+        var requiredCapabilities = IssueCategoryCapabilityMap.GetRequiredCapabilities(resolvedCategory);
+        var missing = requiredCapabilities
+            .Where(req => !enabledCapabilities.Contains(req, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        var matched = missing.Count == 0;
+
+        _logger.LogInformation(
+            "Capability assessment: slug={Slug}, category={Category}, required=[{Required}], missing=[{Missing}], matched={Matched}",
+            slug, resolvedCategory ?? "(none)", string.Join(",", requiredCapabilities), string.Join(",", missing), matched);
+
+        return new CapabilityAssessmentResponseDto
+        {
+            Matched = matched,
+            IssueCategory = resolvedCategory,
+            RequiredCapabilities = [.. requiredCapabilities],
+            MissingCapabilities = missing,
+            LocationPhone = locationPhone
         };
     }
 

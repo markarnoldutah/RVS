@@ -555,6 +555,71 @@ public class IntakeApiClientTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    // ── AssessCapabilitiesAsync ──────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task AssessCapabilitiesAsync_WhenLocationSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.AssessCapabilitiesAsync(slug!, new CapabilityAssessmentRequestDto());
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenRequestIsNull_ShouldThrowArgumentNullException()
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.AssessCapabilitiesAsync("slug", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenApiReturns200_ShouldDeserializeResponseAndPostToCorrectUrl()
+    {
+        var expected = new CapabilityAssessmentResponseDto
+        {
+            Matched = false,
+            IssueCategory = "Electrical",
+            RequiredCapabilities = ["electrical"],
+            MissingCapabilities = ["electrical"],
+            LocationPhone = "(555) 123-4567"
+        };
+        var handler = new FakeHttpHandler(HttpStatusCode.OK, expected);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var request = new CapabilityAssessmentRequestDto { IssueDescription = "battery is dead" };
+        var result = await sut.AssessCapabilitiesAsync("my-slug", request);
+
+        result.Matched.Should().BeFalse();
+        result.IssueCategory.Should().Be("Electrical");
+        result.MissingCapabilities.Should().BeEquivalentTo(["electrical"]);
+        result.LocationPhone.Should().Be("(555) 123-4567");
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
+        handler.LastRequest.RequestUri!.ToString().Should().Contain("my-slug");
+        handler.LastRequest.RequestUri.ToString().Should().Contain("assess-capabilities");
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenApiReturnsError_ShouldThrowHttpRequestException()
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.BadRequest, new { message = "Bad request" });
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://test.local") };
+        var sut = CreateClient(httpClient);
+
+        var act = () => sut.AssessCapabilitiesAsync("slug",
+            new CapabilityAssessmentRequestDto { IssueDescription = "x" });
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
     // ── Test helper ──────────────────────────────────────────────────────
 
     private sealed class FakeHttpHandler : HttpMessageHandler

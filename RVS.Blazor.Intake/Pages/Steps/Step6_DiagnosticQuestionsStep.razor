@@ -1,5 +1,17 @@
 <MudPaper Elevation="2" Class="pa-6 rounded-lg wizard-step-card">
     <MudStack Spacing="4">
+        @* Capability-match fallback alert (issue #345 capabilities extension to Intake).
+           Rendered only when Step 5 ran an assessment and the location does NOT cover the
+           required capabilities. Otherwise no UI is rendered for this. *@
+        @if (State.CapabilityAssessment is { Matched: false })
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined"
+                      Icon="@Icons.Material.Filled.Warning">
+                This location isn't typically able to help with this kind of issue.
+                Please contact the service center directly to confirm@(string.IsNullOrWhiteSpace(GetFallbackPhone()) ? "." : $" at {GetFallbackPhone()}.")
+            </MudAlert>
+        }
+
         <MudStack Spacing="1">
             <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Diagnostics</MudText>
             <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
@@ -177,5 +189,19 @@
     {
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Returns the phone number used in the capability-match fallback alert.
+    /// Prefers the phone reported by the assessment response; falls back to the
+    /// location phone in the intake config so the message is still useful even
+    /// when the assessment endpoint omitted the field.
+    /// </summary>
+    private string? GetFallbackPhone()
+    {
+        var assessmentPhone = State.CapabilityAssessment?.LocationPhone;
+        if (!string.IsNullOrWhiteSpace(assessmentPhone)) return assessmentPhone;
+
+        return State.Config?.LocationPhone;
     }
 }

@@ -1165,6 +1165,189 @@ public class IntakeOrchestrationServiceTests
         result.TokenExpired.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenLocationHasPhone_ShouldIncludeLocationPhone()
+    {
+        SetupConfigHappyPath();
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                Phone = "(555) 123-4567",
+                CreatedByUserId = "admin",
+            });
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.LocationPhone.Should().Be("(555) 123-4567");
+    }
+
+    // ── AssessCapabilitiesAsync ──────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task AssessCapabilitiesAsync_WhenSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var act = () => _sut.AssessCapabilitiesAsync(slug!, "battery is dead");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task AssessCapabilitiesAsync_WhenIssueDescriptionIsNullOrWhiteSpace_ShouldThrowArgumentException(string? description)
+    {
+        var act = () => _sut.AssessCapabilitiesAsync("test-slug", description!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenSlugNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("unknown-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+
+        var act = () => _sut.AssessCapabilitiesAsync("unknown-slug", "battery is dead");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>().WithMessage("*unknown-slug*");
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenLocationCoversRequiredCapability_ShouldReturnMatched()
+    {
+        SetupConfigHappyPath();
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                Phone = "(555) 999-1111",
+                EnabledCapabilities = ["electrical", "plumbing"],
+                CreatedByUserId = "admin",
+            });
+        _categorizationMock.Setup(c => c.CategorizeAsync("battery is dead", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Electrical");
+
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "battery is dead");
+
+        result.Matched.Should().BeTrue();
+        result.IssueCategory.Should().Be("Electrical");
+        result.RequiredCapabilities.Should().BeEquivalentTo(["electrical"]);
+        result.MissingCapabilities.Should().BeEmpty();
+        result.LocationPhone.Should().Be("(555) 999-1111");
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenLocationMissesRequiredCapability_ShouldReturnNotMatchedWithMissing()
+    {
+        SetupConfigHappyPath();
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                Phone = "(555) 999-1111",
+                EnabledCapabilities = ["plumbing"],
+                CreatedByUserId = "admin",
+            });
+        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Electrical");
+
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "battery is dead");
+
+        result.Matched.Should().BeFalse();
+        result.IssueCategory.Should().Be("Electrical");
+        result.RequiredCapabilities.Should().BeEquivalentTo(["electrical"]);
+        result.MissingCapabilities.Should().BeEquivalentTo(["electrical"]);
+        result.LocationPhone.Should().Be("(555) 999-1111");
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenCategoryHasNoMappedCapabilities_ShouldReturnMatchedWithEmptyRequired()
+    {
+        SetupConfigHappyPath();
+        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("General");
+
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "general issue");
+
+        result.Matched.Should().BeTrue();
+        result.IssueCategory.Should().Be("General");
+        result.RequiredCapabilities.Should().BeEmpty();
+        result.MissingCapabilities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenIssueCategorySupplied_ShouldSkipCategorization()
+    {
+        SetupConfigHappyPath();
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                EnabledCapabilities = ["hvac"],
+                CreatedByUserId = "admin",
+            });
+
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "anything", "HVAC");
+
+        result.Matched.Should().BeTrue();
+        result.IssueCategory.Should().Be("HVAC");
+        result.RequiredCapabilities.Should().BeEquivalentTo(["hvac"]);
+        _categorizationMock.Verify(
+            c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenCategorizationThrows_ShouldTreatAsUnknownAndMatch()
+    {
+        SetupConfigHappyPath();
+        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("ai down"));
+
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "something is broken");
+
+        result.Matched.Should().BeTrue();
+        result.IssueCategory.Should().BeNull();
+        result.RequiredCapabilities.Should().BeEmpty();
+        result.MissingCapabilities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenStructuralCategoryAndPartialMatch_ShouldReportOnlyMissing()
+    {
+        SetupConfigHappyPath();
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                // Has body-repair and roof-repair but is MISSING slide-out-repair
+                EnabledCapabilities = ["body-repair", "roof-repair"],
+                CreatedByUserId = "admin",
+            });
+        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Structural");
+
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "slide-out is stuck");
+
+        result.Matched.Should().BeFalse();
+        result.MissingCapabilities.Should().BeEquivalentTo(["slide-out-repair"]);
+        result.RequiredCapabilities.Should().BeEquivalentTo(["body-repair", "roof-repair", "slide-out-repair"]);
+    }
+
     private static GlobalCustomerAcct BuildGlobalAcctWithMagicLink(bool expired, List<string> assetIds)
     {
         return new GlobalCustomerAcct
