@@ -95,7 +95,7 @@ public class LocationsControllerTests
     }
 
     [Fact]
-    public async Task GetQrCode_ShouldReturnOkWithConfiguredBaseUrlAndIntakePath()
+    public async Task GetQrCode_ShouldReturnPngFileResult()
     {
         var location = BuildLocation();
         _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
@@ -103,10 +103,28 @@ public class LocationsControllerTests
 
         var result = await _sut.GetQrCode(location.Id, CancellationToken.None);
 
-        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        var payload = okResult.Value.Should().NotBeNull().And.Subject;
-        var intakeUrlProp = payload!.GetType().GetProperty("intakeUrl")!.GetValue(payload) as string;
-        intakeUrlProp.Should().Be($"{IntakeBaseUrl}/{location.Slug}");
+        var fileResult = result.Should().BeOfType<FileContentResult>().Subject;
+        fileResult.ContentType.Should().Be("image/png");
+        fileResult.FileDownloadName.Should().Be($"qr-{location.Slug}.png");
+        fileResult.FileContents.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task GetQrCode_PngBytes_ShouldEncodeIntakeUrl()
+    {
+        var location = BuildLocation();
+        _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.GetQrCode(location.Id, CancellationToken.None);
+
+        var fileResult = result.Should().BeOfType<FileContentResult>().Subject;
+        // PNG signature: first 8 bytes are 137 80 78 71 13 10 26 10
+        fileResult.FileContents.Should().HaveCountGreaterThan(8);
+        fileResult.FileContents[0].Should().Be(137); // PNG magic byte
+        fileResult.FileContents[1].Should().Be(80);  // 'P'
+        fileResult.FileContents[2].Should().Be(78);  // 'N'
+        fileResult.FileContents[3].Should().Be(71);  // 'G'
     }
 
     [Fact]
@@ -121,10 +139,9 @@ public class LocationsControllerTests
 
         var result = await sut.GetQrCode(location.Id, CancellationToken.None);
 
-        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        var payload = okResult.Value!;
-        var intakeUrlProp = payload.GetType().GetProperty("intakeUrl")!.GetValue(payload) as string;
-        intakeUrlProp.Should().Be($"https://rvintake.com/{location.Slug}");
+        var fileResult = result.Should().BeOfType<FileContentResult>().Subject;
+        fileResult.FileDownloadName.Should().Be($"qr-{location.Slug}.png");
+        fileResult.FileContents.Should().NotBeEmpty();
     }
 
     private static Location BuildLocation(string id = "loc_test", string name = "Test Location") => new()
