@@ -402,6 +402,26 @@
         await _form.Validate();
         if (!_form.IsValid) return;
 
+        // Capability assessment for the boundary of Step 5 → Step 6.
+        // Best-effort: any failure leaves CapabilityAssessment unchanged so the wizard
+        // continues without a fallback alert.
+        try
+        {
+            var assessment = await IntakeApi.AssessCapabilitiesAsync(
+                State.Slug,
+                new CapabilityAssessmentRequestDto
+                {
+                    IssueDescription = State.IssueDescription,
+                    IssueCategory = string.IsNullOrWhiteSpace(State.IssueCategory) ? null : State.IssueCategory
+                });
+            State.CapabilityAssessment = assessment;
+        }
+        catch (Exception)
+        {
+            // Silent fallback — do not block the user from continuing the wizard.
+            State.CapabilityAssessment = null;
+        }
+
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
     }

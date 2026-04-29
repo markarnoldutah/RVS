@@ -321,6 +321,34 @@ public sealed class IntakeApiClient
     }
 
     /// <summary>
+    /// Assesses whether the selected location's enabled capabilities can satisfy the
+    /// capabilities typically required for the customer's issue (per the description and
+    /// optional resolved category). Always returns a populated assessment envelope.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="request">Issue description and optional resolved issue category.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task<CapabilityAssessmentResponseDto> AssessCapabilitiesAsync(
+        string locationSlug,
+        CapabilityAssessmentRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"api/intake/{Uri.EscapeDataString(locationSlug)}/assess-capabilities",
+            request,
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<CapabilityAssessmentResponseDto>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize capability assessment response.");
+    }
+
+    /// <summary>
     /// Gets the customer status page data using a magic-link token.
     /// </summary>
     public async Task<CustomerStatusResponseDto> GetStatusAsync(
