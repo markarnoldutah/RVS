@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using QRCoder;
 using RVS.API.Mappers;
 using RVS.API.Options;
 using RVS.API.Services;
@@ -105,7 +106,7 @@ public class LocationsController : ControllerBase
     }
 
     /// <summary>
-    /// Generates a QR code URL for the location's intake form.
+    /// Generates and returns a QR code PNG image for the location's intake form URL.
     /// </summary>
     /// <param name="id">Location identifier.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -119,6 +120,11 @@ public class LocationsController : ControllerBase
         var baseUrl = _intakeUrlOptions.BaseUrl.TrimEnd('/');
         var intakeUrl = $"{baseUrl}/{entity.Slug}";
 
-        return Ok(new { intakeUrl, slug = entity.Slug });
+        using var qrGenerator = new QRCodeGenerator();
+        using var qrData = qrGenerator.CreateQrCode(intakeUrl, QRCodeGenerator.ECCLevel.Q);
+        using var qrCode = new PngByteQRCode(qrData);
+        var pngBytes = qrCode.GetGraphic(20);
+
+        return File(pngBytes, "image/png", $"qr-{entity.Slug}.png");
     }
 }
