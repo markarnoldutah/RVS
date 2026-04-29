@@ -910,7 +910,7 @@
     {
         if (_sr is null) return;
         _allowedStatuses = ["New", "InProgress", "WaitingOnCustomer", "WaitingOnParts", "Completed", "Cancelled"];
-        _selectedStatus = null;
+        _selectedStatus = _sr.Status;
     }
 
     private async Task OnStatusChangeAsync(string newStatus)

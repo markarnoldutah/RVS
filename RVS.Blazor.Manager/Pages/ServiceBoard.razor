@@ -192,13 +192,12 @@
                                                     @boardItem.Summary.IssueCategory
                                                 </MudChip>
                                             }
-                                                    @if (!string.IsNullOrWhiteSpace(boardItem.Summary.AssignedTechnicianId))
+                                                    @if (boardItem.Status is "WaitingOnParts" or "WaitingOnCustomer" or "Completed" or "Cancelled")
                                                     {
                                                         <MudChip T="string" Size="Size.Small"
                                                                  Variant="Variant.Outlined"
-                                                                 Icon="@Icons.Material.Filled.Person"
                                                                  Style="@($"color: {ChipFontColor};")">
-                                                            @boardItem.Summary.AssignedTechnicianId
+                                                            @GetStatusLabel(boardItem.Status)
                                                         </MudChip>
                                                     }
                                                 </MudStack>
@@ -239,10 +238,10 @@
 
     private static readonly BoardColumn[] _columns =
     [
-        new("New",         "New",             Icons.Material.Filled.FiberNew,     Color.Info,    "SRs that haven't been started"),
-        new("In Progress", "InProgress",      Icons.Material.Filled.Autorenew,    Color.Warning, "SRs being actively worked"),
-        new("Waiting",     "WaitingOnParts",  Icons.Material.Filled.HourglassEmpty, Color.Warning, "SRs waiting on parts, customer, etc"),
-        new("Done",        "Completed",       Icons.Material.Filled.CheckCircle,  Color.Success, "SRs that are completed or cancelled"),
+        new("New",         "New",             Icons.Material.Filled.FiberNew,     Color.Info,    "Items that haven't been started"),
+        new("In Progress", "InProgress",      Icons.Material.Filled.Autorenew,    Color.Warning, "Items being actively worked"),
+        new("Waiting",     "WaitingOnParts",  Icons.Material.Filled.HourglassEmpty, Color.Warning, "Items waiting on parts, customer, etc"),
+        new("Done",        "Completed",       Icons.Material.Filled.CheckCircle,  Color.Success, "Items that are completed or cancelled"),
     ];
 
     protected override async Task OnInitializedAsync()
@@ -648,6 +647,15 @@
     }
 
     private sealed record BoardColumn(string Title, string Status, string Icon, Color Color, string Description);
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "WaitingOnParts"    => "Waiting on Parts",
+        "WaitingOnCustomer" => "Waiting on Customer",
+        "Completed"         => "Complete",
+        "Cancelled"         => "Cancelled",
+        _                   => status,
+    };
 
     private static string GetZoneForStatus(string status) => status switch
     {

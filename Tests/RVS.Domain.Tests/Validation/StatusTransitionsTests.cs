@@ -10,22 +10,32 @@ public class StatusTransitionsTests
     [InlineData("New", "Completed")]
     [InlineData("New", "Cancelled")]
     [InlineData("New", "WaitingOnParts")]
+    [InlineData("New", "WaitingOnCustomer")]
     [InlineData("InProgress", "New")]
     [InlineData("InProgress", "Completed")]
     [InlineData("InProgress", "Cancelled")]
     [InlineData("InProgress", "WaitingOnParts")]
+    [InlineData("InProgress", "WaitingOnCustomer")]
     [InlineData("WaitingOnParts", "New")]
     [InlineData("WaitingOnParts", "InProgress")]
     [InlineData("WaitingOnParts", "Completed")]
     [InlineData("WaitingOnParts", "Cancelled")]
+    [InlineData("WaitingOnParts", "WaitingOnCustomer")]
+    [InlineData("WaitingOnCustomer", "New")]
+    [InlineData("WaitingOnCustomer", "InProgress")]
+    [InlineData("WaitingOnCustomer", "Completed")]
+    [InlineData("WaitingOnCustomer", "Cancelled")]
+    [InlineData("WaitingOnCustomer", "WaitingOnParts")]
     [InlineData("Completed", "New")]
     [InlineData("Completed", "InProgress")]
     [InlineData("Completed", "Cancelled")]
     [InlineData("Completed", "WaitingOnParts")]
+    [InlineData("Completed", "WaitingOnCustomer")]
     [InlineData("Cancelled", "New")]
     [InlineData("Cancelled", "InProgress")]
     [InlineData("Cancelled", "Completed")]
     [InlineData("Cancelled", "WaitingOnParts")]
+    [InlineData("Cancelled", "WaitingOnCustomer")]
     public void IsValid_AllowedTransition_ReturnsTrue(string from, string to)
     {
         StatusTransitions.IsValid(from, to).Should().BeTrue();
@@ -35,6 +45,7 @@ public class StatusTransitionsTests
     [InlineData("New", "New")]
     [InlineData("InProgress", "InProgress")]
     [InlineData("WaitingOnParts", "WaitingOnParts")]
+    [InlineData("WaitingOnCustomer", "WaitingOnCustomer")]
     [InlineData("Completed", "Completed")]
     [InlineData("Cancelled", "Cancelled")]
     public void IsValid_SameStatus_ReturnsFalse(string from, string to)
@@ -67,7 +78,7 @@ public class StatusTransitionsTests
     {
         var targets = StatusTransitions.GetAllowedTargets("New");
 
-        targets.Should().BeEquivalentTo(["InProgress", "Completed", "Cancelled", "WaitingOnParts"]);
+        targets.Should().BeEquivalentTo(["InProgress", "Completed", "Cancelled", "WaitingOnParts", "WaitingOnCustomer"]);
     }
 
     [Fact]
@@ -75,7 +86,15 @@ public class StatusTransitionsTests
     {
         var targets = StatusTransitions.GetAllowedTargets("Completed");
 
-        targets.Should().BeEquivalentTo(["New", "InProgress", "Cancelled", "WaitingOnParts"]);
+        targets.Should().BeEquivalentTo(["New", "InProgress", "Cancelled", "WaitingOnParts", "WaitingOnCustomer"]);
+    }
+
+    [Fact]
+    public void GetAllowedTargets_WaitingOnCustomer_ReturnsAllOtherStatuses()
+    {
+        var targets = StatusTransitions.GetAllowedTargets("WaitingOnCustomer");
+
+        targets.Should().BeEquivalentTo(["New", "InProgress", "Completed", "Cancelled", "WaitingOnParts"]);
     }
 
     [Fact]
