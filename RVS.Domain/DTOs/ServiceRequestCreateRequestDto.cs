@@ -26,4 +26,12 @@ public sealed record ServiceRequestCreateRequestDto
     /// Default is <c>false</c> (both channels active).
     /// </summary>
     public bool EmailOptOut { get; init; }
+
+    /// <summary>
+    /// System-generated note to prepend to the technician summary when the intake
+    /// capability assessment detected that the selected location does not offer the
+    /// capability required for the chosen issue category.
+    /// Null when the assessment matched or was not performed.
+    /// </summary>
+    public string? CapabilityMismatchNote { get; init; }
 }

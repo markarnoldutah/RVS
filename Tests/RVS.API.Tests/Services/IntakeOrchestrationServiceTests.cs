@@ -527,6 +527,33 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenNoCapabilityMismatchNote_TechnicianSummaryShouldStartWithIssue()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.TechnicianSummary.Should().StartWith("Issue:");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenCapabilityMismatchNoteProvided_ShouldPrependNoteToTechnicianSummary()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with
+        {
+            CapabilityMismatchNote = "Capability 'diesel-service' was requested but is not available at this location. User was advised to contact the location directly."
+        };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.TechnicianSummary.Should()
+            .StartWith("Capability 'diesel-service' was requested");
+        result.ServiceRequest.TechnicianSummary.Should()
+            .Contain("Slide won't retract");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ShouldIncludeDiagnosticResponsesInServiceRequest()
     {
         SetupFullHappyPath();

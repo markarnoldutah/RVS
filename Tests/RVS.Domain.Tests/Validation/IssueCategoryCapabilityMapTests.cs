@@ -6,10 +6,14 @@ namespace RVS.Domain.Tests.Validation;
 public class IssueCategoryCapabilityMapTests
 {
     [Theory]
-    [InlineData("Electrical", new[] { "electrical" })]
-    [InlineData("Plumbing", new[] { "plumbing" })]
-    [InlineData("HVAC", new[] { "hvac" })]
-    [InlineData("Appliance", new[] { "rv-refrigerator" })]
+    [InlineData("Electrical",  new[] { "electrical" })]
+    [InlineData("Plumbing",    new[] { "plumbing" })]
+    [InlineData("HVAC",        new[] { "hvac" })]
+    [InlineData("Appliance",   new[] { "rv-refrigerator" })]
+    [InlineData("Appliances",  new[] { "rv-refrigerator" })]
+    [InlineData("Slides",      new[] { "slide-out-repair" })]
+    [InlineData("Roof",        new[] { "roof-repair" })]
+    [InlineData("DieselMotor", new[] { "diesel-service" })]
     public void GetRequiredCapabilities_KnownCategory_ReturnsExpectedCodes(string category, string[] expected)
     {
         var result = IssueCategoryCapabilityMap.GetRequiredCapabilities(category);
@@ -50,6 +54,8 @@ public class IssueCategoryCapabilityMapTests
     [InlineData("   ")]
     [InlineData("General")]
     [InlineData("UnknownCategory")]
+    [InlineData("GasMotor")]
+    [InlineData("DriveTrain")]
     public void GetRequiredCapabilities_NullEmptyOrUnknownCategory_ReturnsEmpty(string? category)
     {
         var result = IssueCategoryCapabilityMap.GetRequiredCapabilities(category);

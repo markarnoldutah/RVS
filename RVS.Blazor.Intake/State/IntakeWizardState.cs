@@ -295,8 +295,19 @@ public sealed class IntakeWizardState
             EmailOptOut = EmailOptOut,
             HasExtendedWarranty = string.IsNullOrWhiteSpace(HasExtendedWarranty) ? null : HasExtendedWarranty.Trim(),
             ApproxPurchaseDate = string.IsNullOrWhiteSpace(ApproxPurchaseDate) ? null : ApproxPurchaseDate.Trim(),
-            DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null
+            DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null,
+            CapabilityMismatchNote = BuildCapabilityMismatchNote()
         };
+    }
+
+    private string? BuildCapabilityMismatchNote()
+    {
+        if (CapabilityAssessment is not { Matched: false } ca || ca.MissingCapabilities.Count == 0)
+            return null;
+
+        var caps = string.Join(", ", ca.MissingCapabilities.Select(c => $"'{c}'"));
+        var plural = ca.MissingCapabilities.Count > 1;
+        return $"Capabilit{(plural ? "ies" : "y")} {caps} {(plural ? "were" : "was")} requested but {(plural ? "are" : "is")} not available at this location. User was advised to contact the location directly.";
     }
 
     /// <summary>

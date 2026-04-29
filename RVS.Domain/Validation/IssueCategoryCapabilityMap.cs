@@ -19,12 +19,18 @@ public static class IssueCategoryCapabilityMap
     private static readonly Dictionary<string, IReadOnlyList<string>> CategoryToCapabilities =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Electrical"] = ["electrical"],
-            ["Plumbing"] = ["plumbing"],
-            ["HVAC"] = ["hvac"],
-            ["Structural"] = ["body-repair", "roof-repair", "slide-out-repair"],
-            ["Appliance"] = ["rv-refrigerator"],
-            ["Exterior"] = ["body-repair", "tire-service"],
+            // Lookup-code entries (user-selected in the intake wizard)
+            ["Electrical"]  = ["electrical"],
+            ["Plumbing"]    = ["plumbing"],
+            ["HVAC"]        = ["hvac"],
+            ["Slides"]      = ["slide-out-repair"],
+            ["Roof"]        = ["roof-repair"],
+            ["Appliances"]  = ["rv-refrigerator"],
+            ["Exterior"]    = ["body-repair", "tire-service"],
+            ["DieselMotor"] = ["diesel-service"],
+            // AI-returned aliases (may differ from lookup codes)
+            ["Appliance"]   = ["rv-refrigerator"],
+            ["Structural"]  = ["body-repair", "roof-repair", "slide-out-repair"],
         };
 
     /// <summary>

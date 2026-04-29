@@ -319,7 +319,15 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     /// </summary>
     private static string BuildTechnicianSummary(ServiceRequestCreateRequestDto request)
     {
-        var parts = new List<string> { $"Issue: {request.IssueDescription.Trim()}" };
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(request.CapabilityMismatchNote))
+        {
+            parts.Add(request.CapabilityMismatchNote.Trim());
+            parts.Add(string.Empty);
+        }
+
+        parts.Add($"Issue: {request.IssueDescription.Trim()}");
 
         if (request.DiagnosticResponses is { Count: > 0 })
         {

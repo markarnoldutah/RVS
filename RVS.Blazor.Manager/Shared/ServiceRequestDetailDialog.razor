@@ -29,41 +29,9 @@
                 else if (_sr is not null)
                 {
                     <MudStack Spacing="1" Style="min-width: 0; flex-grow: 1;">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            @if (_editingTitle)
-                            {
-                                <MudTextField T="string" @bind-Value="_editTitleText"
-                                              Variant="Variant.Outlined" Margin="Margin.Dense"
-                                              Style="flex-grow: 1; max-width: 600px;"
-                                              Disabled="_titleSaving" />
-                                @if (_titleSaving)
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                }
-                                else
-                                {
-                                    <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Primary"
-                                                   Class="section-icon-btn"
-                                                   aria-label="Save title" OnClick="SaveTitleAsync" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                                   Class="section-icon-btn"
-                                                   aria-label="Cancel editing title" OnClick="CancelEditTitle" />
-                                }
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.h5" Style="font-weight: 600;">
-                                    @FormatTitleLine(_sr)
-                                </MudText>
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                               Class="section-icon-btn"
-                                               aria-label="Edit title" OnClick="BeginEditTitle" />
-                            }
-                        </MudStack>
-                        @if (_titleError is not null)
-                        {
-                            <MudAlert Severity="Severity.Error" Dense="true">@_titleError</MudAlert>
-                        }
+                        <MudText Typo="Typo.h5" Style="font-weight: 600;">
+                            @FormatTitleLine(_sr)
+                        </MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <StatusBadge Status="@_sr.Status" />
                             @if (!string.IsNullOrEmpty(_sr.Priority))
@@ -292,13 +260,6 @@
                             </MudGrid>
                         </MudStack>
 
-                        @if (_sr.DiagnosticResponses.Count > 0)
-                        {
-                            <MudDivider Class="my-5" />
-                            <MudText Typo="Typo.body2" Style="font-weight: 700;" Class="mb-2">Diagnostic Responses</MudText>
-                            <DiagnosticResponseView Responses="@_sr.DiagnosticResponses" />
-                        }
-
                         @if (_sr.Attachments.Count > 0)
                         {
                             <MudDivider Class="my-5" />
@@ -433,6 +394,67 @@
                             <MudDivider Class="my-4" />
                         }
 
+                        @* Assigned Tech *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Assigned Tech</MudText>
+                            <MudSpacer />
+                            @if (_techSaving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                            else if (_editingTech)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Primary"
+                                               Class="section-icon-btn"
+                                               aria-label="Save assigned tech" OnClick="SaveTechAsync" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Cancel editing assigned tech" OnClick="CancelEditTech" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Settings" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Edit assigned tech" OnClick="BeginEditTech" />
+                            }
+                        </MudStack>
+                        @if (_editingTech)
+                        {
+                            <MudStack Spacing="3">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Technician</MudText>
+                                    <MudTextField T="string" @bind-Value="_editTechId"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Placeholder="Unassigned"
+                                                  Class="compact-field" />
+                                </MudStack>
+                                @if (_techError is not null)
+                                {
+                                    <MudAlert Severity="Severity.Error" Dense="true">@_techError</MudAlert>
+                                }
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.body2" Style="@ValueStyle">@(_sr.AssignedTechnicianId ?? "Unassigned")</MudText>
+                                @if (_sr.RequiredSkills.Count > 0)
+                                {
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="@LabelStyle" Class="mb-1">Required Skills</MudText>
+                                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                            @foreach (var skill in _sr.RequiredSkills)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@skill</MudChip>
+                                            }
+                                        </MudStack>
+                                    </div>
+                                }
+                            </MudStack>
+                        }
+
+                        <MudDivider Class="my-4" />
+
                         @* Customer *@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
                             <MudText Typo="Typo.body2" Style="font-weight: 700;">Customer</MudText>
@@ -452,7 +474,7 @@
                             }
                             else
                             {
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                <MudIconButton Icon="@Icons.Material.Filled.Settings" Size="Size.Small"
                                                Class="section-icon-btn"
                                                aria-label="Edit customer" OnClick="BeginEditCustomer" />
                             }
@@ -525,7 +547,7 @@
                             }
                             else
                             {
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                <MudIconButton Icon="@Icons.Material.Filled.Settings" Size="Size.Small"
                                                Class="section-icon-btn"
                                                aria-label="Edit asset" OnClick="BeginEditAsset" />
                             }
@@ -572,67 +594,6 @@
                                     <MudText Typo="Typo.body2" Style="@ValueStyle">@AssetYearMakeModel(_sr)</MudText>
                                 }
                                 <MudText Typo="Typo.body2" Style="@ValueStyleBreak">@_sr.Asset.AssetId</MudText>
-                            </MudStack>
-                        }
-
-                        <MudDivider Class="my-4" />
-
-                        @* Assigned Tech *@
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
-                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Assigned Tech</MudText>
-                            <MudSpacer />
-                            @if (_techSaving)
-                            {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                            }
-                            else if (_editingTech)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Primary"
-                                               Class="section-icon-btn"
-                                               aria-label="Save assigned tech" OnClick="SaveTechAsync" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                               Class="section-icon-btn"
-                                               aria-label="Cancel editing assigned tech" OnClick="CancelEditTech" />
-                            }
-                            else
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                               Class="section-icon-btn"
-                                               aria-label="Edit assigned tech" OnClick="BeginEditTech" />
-                            }
-                        </MudStack>
-                        @if (_editingTech)
-                        {
-                            <MudStack Spacing="3">
-                                <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Technician</MudText>
-                                    <MudTextField T="string" @bind-Value="_editTechId"
-                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                  Placeholder="Unassigned"
-                                                  Class="compact-field" />
-                                </MudStack>
-                                @if (_techError is not null)
-                                {
-                                    <MudAlert Severity="Severity.Error" Dense="true">@_techError</MudAlert>
-                                }
-                            </MudStack>
-                        }
-                        else
-                        {
-                            <MudStack Spacing="2">
-                                <MudText Typo="Typo.body2" Style="@ValueStyle">@(_sr.AssignedTechnicianId ?? "Unassigned")</MudText>
-                                @if (_sr.RequiredSkills.Count > 0)
-                                {
-                                    <div>
-                                        <MudText Typo="Typo.body2" Style="@LabelStyle" Class="mb-1">Required Skills</MudText>
-                                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
-                                            @foreach (var skill in _sr.RequiredSkills)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@skill</MudChip>
-                                            }
-                                        </MudStack>
-                                    </div>
-                                }
                             </MudStack>
                         }
 

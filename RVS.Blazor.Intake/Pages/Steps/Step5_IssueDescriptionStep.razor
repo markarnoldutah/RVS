@@ -324,6 +324,7 @@
     {
         State.IssueCategory = value ?? string.Empty;
         State.IsCategorySuggestedByAi = false;
+        State.CapabilityAssessment = null; // stale result; will re-assess on next Continue
     }
 
     private void OnUrgencyChanged(string? value)
