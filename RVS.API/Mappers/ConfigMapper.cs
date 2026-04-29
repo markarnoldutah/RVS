@@ -22,7 +22,8 @@ public static class ConfigMapper
             TenantId = tenantId,
             CreatedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow,
-            CreatedByUserId = createdByUserId
+            CreatedByUserId = createdByUserId,
+            AvailableCapabilities = DefaultCapabilities()
         };
     }
 
@@ -47,6 +48,17 @@ public static class ConfigMapper
                 DisabledAtUtc = config.AccessGate?.DisabledAtUtc
             },
 
+            AvailableCapabilities = config.AvailableCapabilities
+                .Select(c => new TenantCapabilityDto
+                {
+                    Code = c.Code,
+                    Name = c.Name,
+                    Description = c.Description,
+                    SortOrder = c.SortOrder,
+                    IsActive = c.IsActive
+                })
+                .ToList(),
+
             CreatedAtUtc = config.CreatedAtUtc,
             UpdatedAtUtc = config.UpdatedAtUtc
         };
@@ -60,7 +72,42 @@ public static class ConfigMapper
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(dto);
 
+        if (dto.AvailableCapabilities is not null)
+        {
+            entity.AvailableCapabilities = dto.AvailableCapabilities
+                .Select(c => new TenantCapabilityEmbedded
+                {
+                    Code = c.Code.Trim().ToLowerInvariant(),
+                    Name = c.Name.Trim(),
+                    Description = c.Description?.Trim(),
+                    SortOrder = c.SortOrder,
+                    IsActive = c.IsActive
+                })
+                .ToList();
+        }
+
         // Note: UpdatedAtUtc and UpdatedByUserId are set by MarkAsUpdated() in the service layer
     }
+
+    /// <summary>
+    /// Returns the default starter list of RV service capabilities seeded into every new tenant config.
+    /// </summary>
+    public static List<TenantCapabilityEmbedded> DefaultCapabilities() =>
+    [
+        new() { Code = "diesel-service",    Name = "Diesel Engine Service",         SortOrder = 10 },
+        new() { Code = "body-repair",       Name = "Body & Collision Repair",        SortOrder = 20 },
+        new() { Code = "rv-refrigerator",   Name = "RV Refrigerator Service",        SortOrder = 30 },
+        new() { Code = "slide-out-repair",  Name = "Slide-Out Repair & Leveling",   SortOrder = 40 },
+        new() { Code = "roof-repair",       Name = "Roof Repair & Resealing",        SortOrder = 50 },
+        new() { Code = "electrical",        Name = "Electrical Systems",             SortOrder = 60 },
+        new() { Code = "plumbing",          Name = "Plumbing & Water Systems",       SortOrder = 70 },
+        new() { Code = "hvac",              Name = "HVAC (Heating & Cooling)",       SortOrder = 80 },
+        new() { Code = "generator",         Name = "Generator Service",              SortOrder = 90 },
+        new() { Code = "warranty-service",  Name = "Warranty Work",                 SortOrder = 100 },
+        new() { Code = "mobile-service",    Name = "Mobile / On-Site Service",       SortOrder = 110 },
+        new() { Code = "winterization",     Name = "Winterization & De-Winterization", SortOrder = 120 },
+        new() { Code = "safety-inspection", Name = "Safety Inspection",              SortOrder = 130 },
+        new() { Code = "tire-service",      Name = "Tire & Wheel Service",           SortOrder = 140 },
+    ];
 }
 

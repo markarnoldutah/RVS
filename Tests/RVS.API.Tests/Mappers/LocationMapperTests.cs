@@ -337,6 +337,91 @@ public class LocationMapperTests
         act.Should().Throw<ArgumentNullException>();
     }
 
+    // ── Capabilities ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ToDetailDto_ShouldMapEnabledCapabilities()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Salt Lake Service Center",
+            EnabledCapabilities = ["diesel-service", "hvac", "warranty-service"]
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.EnabledCapabilities.Should().BeEquivalentTo(["diesel-service", "hvac", "warranty-service"]);
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenNoCapabilities_ShouldReturnEmptyList()
+    {
+        var entity = new Location { TenantId = "ten_1", Name = "Test Location" };
+
+        var dto = entity.ToDetailDto();
+
+        dto.EnabledCapabilities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ToEntity_ShouldMapEnabledCapabilities()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            EnabledCapabilities = ["diesel-service", "hvac"]
+        };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.EnabledCapabilities.Should().BeEquivalentTo(["diesel-service", "hvac"]);
+    }
+
+    [Fact]
+    public void ToEntity_WhenCapabilitiesNull_ShouldUseEmptyList()
+    {
+        var dto = BuildValidCreateRequest() with { EnabledCapabilities = null };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.EnabledCapabilities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenCapabilitiesProvided_ShouldReplaceList()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Old Name",
+            EnabledCapabilities = ["old-cap"]
+        };
+        var dto = BuildValidCreateRequest() with
+        {
+            EnabledCapabilities = ["diesel-service", "hvac"]
+        };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.EnabledCapabilities.Should().BeEquivalentTo(["diesel-service", "hvac"]);
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenCapabilitiesNull_ShouldLeaveExistingCapabilitiesUnchanged()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Old Name",
+            EnabledCapabilities = ["diesel-service"]
+        };
+        var dto = BuildValidCreateRequest() with { EnabledCapabilities = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.EnabledCapabilities.Should().BeEquivalentTo(["diesel-service"]);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static LocationCreateRequestDto BuildValidCreateRequest() =>
