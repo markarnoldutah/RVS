@@ -90,7 +90,7 @@
                 <MudDropContainer T="BoardItem"
                                   @ref="_dropContainer"
                                   Items="_filteredBoardItems"
-                                  ItemsSelector="@((item, zone) => item.Status == zone)"
+                                  ItemsSelector="@((item, zone) => GetZoneForStatus(item.Status) == zone)"
                                   ItemDropped="OnItemDroppedAsync"
                                   ApplyDropClassesOnDragStarted="true"
                                   CanDropClass="mud-border-success"
@@ -98,37 +98,38 @@
                                   Class="flex-grow-1"
                                   Style="min-height: 0; overflow-x: auto;">
                     <ChildContent>
-                        <div style="display: grid; grid-template-columns: repeat(4, minmax(316px, 1fr)); gap: 16px; height: 100%; min-width: 100%;">
+                        <div style="display: grid; grid-template-columns: repeat(4, minmax(316px, 1fr)); gap: 8px; height: 100%; min-width: 100%;">
                             @foreach (var column in _columns)
                             {
-                                var columnItems = _filteredBoardItems.Where(i => i.Status == column.Status).ToList();
+                                var columnItems = _filteredBoardItems.Where(i => GetZoneForStatus(i.Status) == column.Status).ToList();
                                 var columnStatus = column.Status;
                                 <div class="board-column" style="@($"display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: {ColumnBackground}; border-radius: 4px;")">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="pa-2">
-                                        <MudText Typo="Typo.subtitle2">@column.Title</MudText>
-                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
-                                                 Color="Color.Default"
-                                                 Style="font-weight: 700; min-height: 24px;">
-                                            @columnItems.Count
-                                        </MudChip>
+                                    <MudStack Spacing="0" Class="pa-2">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                <MudText Typo="Typo.subtitle2">@column.Title</MudText>
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                                         Color="Color.Default"
+                                                         Style="font-weight: 700; min-height: 24px;">
+                                                    @columnItems.Count
+                                                </MudChip>
+                                            </MudStack>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                                           Size="Size.Small"
+                                                           Class="column-header-add"
+                                                           Style="@($"color: {AddButtonColor};")"
+                                                           OnClick="@(() => OpenCreateDialog(columnStatus))"
+                                                           aria-label="@($"Add to {column.Title}")" />
+                                        </MudStack>
+                                        <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary); padding-left: 2px;">@column.Description</MudText>
                                     </MudStack>
 
                                     <div class="board-column-scroll">
                                         <MudDropZone T="BoardItem"
                                                      Identifier="@column.Status"
                                                      Class="d-flex flex-column gap-2"
-                                                     Style="min-height: 64px;"
+                                                     Style="flex-grow: 1; min-height: 0; border: none; outline: none; box-shadow: none;"
                                                      AllowReorder="true" />
-                                        <div class="board-column-add">
-                                            <MudButton Variant="Variant.Text"
-                                                       Style="@($"color: {AddButtonColor};")"
-                                                       EndIcon="@Icons.Material.Filled.Add"
-                                                       Size="Size.Small"
-                                                       FullWidth="true"
-                                                       OnClick="@(() => OpenCreateDialog(columnStatus))">
-                                                Add
-                                            </MudButton>
-                                        </div>
                                     </div>
                                 </div>
                             }
@@ -157,6 +158,13 @@
                                                     @FormatCustomerAssetLine(boardItem.Summary)
                                                 </MudLink>
                                             </span>
+                                            @if (!string.IsNullOrWhiteSpace(boardItem.Summary.AssignedTechnicianId))
+                                            {
+                                                <MudAvatar Color="Color.Primary"
+                                                           Style="flex-shrink: 0; width: 26px; height: 26px; font-size: 0.6rem; font-weight: 700;">
+                                                    @GetTechInitials(boardItem.Summary.AssignedTechnicianId)
+                                                </MudAvatar>
+                                            }
                                         </MudStack>
 
                                         @* Advisor notes (first line) *@
@@ -231,14 +239,11 @@
 
     private static readonly BoardColumn[] _columns =
     [
-        new("New", "New", Icons.Material.Filled.FiberNew, Color.Info),
-        new("In Progress", "InProgress", Icons.Material.Filled.Autorenew, Color.Warning),
-        new("Completed", "Completed", Icons.Material.Filled.CheckCircle, Color.Success),
-        new("Blocked", "WaitingOnParts", Icons.Material.Filled.Block, Color.Error),
+        new("New",         "New",             Icons.Material.Filled.FiberNew,     Color.Info,    "SRs that haven't been started"),
+        new("In Progress", "InProgress",      Icons.Material.Filled.Autorenew,    Color.Warning, "SRs being actively worked"),
+        new("Waiting",     "WaitingOnParts",  Icons.Material.Filled.HourglassEmpty, Color.Warning, "SRs waiting on parts, customer, etc"),
+        new("Done",        "Completed",       Icons.Material.Filled.CheckCircle,  Color.Success, "SRs that are completed or cancelled"),
     ];
-
-    // Board-visible statuses — Cancelled is managed via the SR table, not the board
-    private static readonly HashSet<string> _boardStatuses = _columns.Select(c => c.Status).ToHashSet();
 
     protected override async Task OnInitializedAsync()
     {
@@ -324,7 +329,6 @@
             var result = await SrClient.SearchAsync(_dealershipId, request);
             var items = result.Results?.Items ?? [];
             _boardItems = items
-                .Where(sr => _boardStatuses.Contains(sr.Status))
                 .OrderBy(sr => sr.BoardSequence)
                 .ThenByDescending(sr => sr.CreatedAtUtc)
                 .Select(sr => new BoardItem(sr))
@@ -350,20 +354,22 @@
     private async Task OnItemDroppedAsync(MudItemDropInfo<BoardItem> dropInfo)
     {
         var item = dropInfo.Item;
-        var newStatus = dropInfo.DropzoneIdentifier;
+        var newZone = dropInfo.DropzoneIdentifier;
 
         if (item is null) return;
 
-        var statusChanged = !string.Equals(item.Status, newStatus, StringComparison.Ordinal);
+        var currentZone = GetZoneForStatus(item.Status);
+        var zoneChanged = !string.Equals(currentZone, newZone, StringComparison.Ordinal);
         var previousStatus = item.Status;
         var previousSequence = item.Sequence;
 
-        // Optimistic update — move the card immediately
-        item.Status = newStatus;
+        // Optimistic update — only change status when moving to a different column
+        if (zoneChanged)
+            item.Status = newZone;
 
         // Update sequence numbers for all items in the target column
         var targetColumnItems = _boardItems
-            .Where(i => i.Status == newStatus)
+            .Where(i => GetZoneForStatus(i.Status) == newZone)
             .ToList();
 
         // Determine the new index from MudBlazor drop info
@@ -371,42 +377,35 @@
         if (newIndex < 0 || newIndex > targetColumnItems.Count)
             newIndex = targetColumnItems.Count;
 
-        // Remove item from its current position in the target list (if it's already there)
         targetColumnItems.Remove(item);
-        // Insert at the new position
         if (newIndex > targetColumnItems.Count)
             newIndex = targetColumnItems.Count;
         targetColumnItems.Insert(newIndex, item);
 
-        // Reassign sequence numbers for the target column
         for (var i = 0; i < targetColumnItems.Count; i++)
-        {
             targetColumnItems[i].Sequence = i;
-        }
 
-        // If the item moved out of a column, also renumber the source column
-        if (statusChanged)
+        // Renumber the source column when the card moved out of it
+        if (zoneChanged)
         {
             var sourceColumnItems = _boardItems
-                .Where(i => i.Status == previousStatus)
+                .Where(i => GetZoneForStatus(i.Status) == currentZone && i != item)
                 .OrderBy(i => i.Sequence)
                 .ToList();
             for (var i = 0; i < sourceColumnItems.Count; i++)
-            {
                 sourceColumnItems[i].Sequence = i;
-            }
         }
 
         if (_dealershipId is null) return;
 
         try
         {
-            // Persist the updated sequence for the dropped item
             var detail = await SrClient.GetByIdAsync(_dealershipId, item.Summary.Id);
 
             var updateRequest = new ServiceRequestUpdateRequestDto
             {
-                Status = newStatus,
+                // Preserve original status on reorder; use zone identifier when column changes
+                Status = zoneChanged ? newZone : previousStatus,
                 IssueDescription = detail.IssueDescription,
                 Priority = detail.Priority ?? "Medium",
                 IssueCategory = detail.IssueCategory,
@@ -425,7 +424,6 @@
 
             await SrClient.UpdateAsync(_dealershipId, item.Summary.Id, updateRequest);
 
-            // Persist reordered siblings in the target column (fire-and-forget style, but awaited)
             foreach (var sibling in targetColumnItems.Where(i => i.Summary.Id != item.Summary.Id))
             {
                 var siblingDetail = await SrClient.GetByIdAsync(_dealershipId, sibling.Summary.Id);
@@ -450,12 +448,11 @@
                 await SrClient.UpdateAsync(_dealershipId, sibling.Summary.Id, siblingUpdate);
             }
 
-            var columnTitle = _columns.FirstOrDefault(c => c.Status == newStatus)?.Title ?? newStatus;
-            Snackbar.Add(statusChanged ? $"Moved to {columnTitle}." : "Card reordered.", Severity.Success);
+            var columnTitle = _columns.FirstOrDefault(c => c.Status == newZone)?.Title ?? newZone;
+            Snackbar.Add(zoneChanged ? $"Moved to {columnTitle}." : "Card reordered.", Severity.Success);
         }
         catch (Exception ex)
         {
-            // Revert on failure
             item.Status = previousStatus;
             item.Sequence = previousSequence;
             _dropContainer?.Refresh();
@@ -587,6 +584,15 @@
         return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(value.ToLowerInvariant());
     }
 
+    private static string GetTechInitials(string? techId)
+    {
+        if (string.IsNullOrWhiteSpace(techId)) return string.Empty;
+        var parts = techId.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 1
+            ? parts[0][0].ToString().ToUpperInvariant()
+            : $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant();
+    }
+
     private static string GetPriorityDotStyle(string? priority) => priority?.Trim().ToLowerInvariant() switch
     {
         "critical" => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--mud-palette-error);",
@@ -641,5 +647,14 @@
         public MudDynamicDropItem<BoardItem>? DropItemRef { get; set; }
     }
 
-    private sealed record BoardColumn(string Title, string Status, string Icon, Color Color);
+    private sealed record BoardColumn(string Title, string Status, string Icon, Color Color, string Description);
+
+    private static string GetZoneForStatus(string status) => status switch
+    {
+        "New"         => "New",
+        "InProgress"  => "InProgress",
+        "Completed"
+        or "Cancelled" => "Completed",
+        _              => "WaitingOnParts"
+    };
 }

@@ -4,46 +4,89 @@
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject ThemeService ThemeService
+@inject AuthenticationStateProvider AuthProvider
+@implements IDisposable
 
 <MudDrawer Open="Visible" OpenChanged="OnDrawerOpenChanged"
            Anchor="Anchor.End"
            Variant="@DrawerVariant.Temporary"
            Fixed="true"
-           Elevation="6"
-           Width="min(720px, 100vw)"
-           Overlay="true">
-    <div class="d-flex flex-column" style="height: 100vh;">
-        @* Sticky header *@
-        <MudPaper Elevation="0" Square="true" Class="pa-4"
-                  Style="position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--mud-palette-divider); background: var(--mud-palette-surface);">
+           Elevation="0"
+           Width="min(1000px, 100vw)"
+           Overlay="true"
+           Style="@($"border-left: 1px solid {DrawerBorderColor};")">
+    <div class="d-flex flex-column" style="@($"height: 100vh; background: {ColumnBackground};")">
+        @* Sticky title header — full width *@
+        <MudPaper Elevation="0" Square="true" Class="px-4 py-3"
+                  Style="@HeaderFooterStyle">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="width: 100%;">
                 @if (_mode == DialogMode.Create)
                 {
                     <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Primary" />
-                    <MudText Typo="Typo.h6">New Service Request</MudText>
+                    <MudText Typo="Typo.h5" Style="font-weight: 600;">New Service Request</MudText>
                 }
                 else if (_sr is not null)
                 {
-                    <MudText Typo="Typo.h6">Service Request</MudText>
-                    <StatusBadge Status="@_sr.Status" />
-                    @if (!string.IsNullOrEmpty(_sr.Priority))
-                    {
-                        <PriorityBadge Priority="@_sr.Priority" />
-                    }
+                    <MudStack Spacing="1" Style="min-width: 0; flex-grow: 1;">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            @if (_editingTitle)
+                            {
+                                <MudTextField T="string" @bind-Value="_editTitleText"
+                                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                                              Style="flex-grow: 1; max-width: 600px;"
+                                              Disabled="_titleSaving" />
+                                @if (_titleSaving)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Primary"
+                                                   Class="section-icon-btn"
+                                                   aria-label="Save title" OnClick="SaveTitleAsync" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   Class="section-icon-btn"
+                                                   aria-label="Cancel editing title" OnClick="CancelEditTitle" />
+                                }
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.h5" Style="font-weight: 600;">
+                                    @FormatTitleLine(_sr)
+                                </MudText>
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Edit title" OnClick="BeginEditTitle" />
+                            }
+                        </MudStack>
+                        @if (_titleError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true">@_titleError</MudAlert>
+                        }
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <StatusBadge Status="@_sr.Status" />
+                            @if (!string.IsNullOrEmpty(_sr.Priority))
+                            {
+                                <PriorityBadge Priority="@_sr.Priority" />
+                            }
+                        </MudStack>
+                    </MudStack>
                 }
                 else
                 {
-                    <MudText Typo="Typo.h6">Service Request</MudText>
+                    <MudText Typo="Typo.h5" Style="font-weight: 600;">Service Request</MudText>
                 }
                 <MudSpacer />
                 <MudIconButton Icon="@Icons.Material.Filled.Close"
+                               Class="section-icon-btn"
                                aria-label="Close"
                                OnClick="CloseDialog" />
             </MudStack>
         </MudPaper>
 
         @* Scrollable body *@
-        <div class="flex-grow-1 pa-4" style="overflow-y: auto;">
+        <div class="flex-grow-1 px-4 py-4" style="overflow-y: auto;">
         @if (_loading)
         {
             <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -54,7 +97,7 @@
         }
         else if (_mode == DialogMode.Create)
         {
-            @* Create form *@
+            @* Create form — single column, unchanged *@
             <MudForm @ref="_createFormRef">
                 <MudStack Spacing="4">
                     <MudStack Spacing="1">
@@ -217,256 +260,411 @@
         }
         else if (_sr is not null)
         {
-            @* Detail view *@
-            <MudStack Spacing="3">
-                @* Status Update *@
-                @if (_allowedStatuses.Count > 0)
-                {
-                    <MudPaper Elevation="1" Class="pa-4">
-                        <MudStack Spacing="1">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Status</MudText>
+            @* Detail view — 70/30 two-column layout, GitHub-issue style *@
+            <MudGrid Spacing="6">
+                @* Left column — 70% — issue body *@
+                <MudItem xs="12" md="8">
+                    <MudStack Spacing="0">
+                        @* Issue Details *@
+                        <MudText Typo="Typo.body2" Style="font-weight: 700;" Class="mb-2">Issue Details</MudText>
+                        <MudStack Spacing="3">
+                            <div>
+                                <MudText Typo="Typo.caption" Color="Color.Info">Description</MudText>
+                                <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@_sr.IssueDescription</MudText>
+                            </div>
+                            <MudGrid Spacing="2">
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Info">Category</MudText>
+                                    <MudText Typo="Typo.body2">@_sr.IssueCategory</MudText>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Info">Urgency</MudText>
+                                    <MudText Typo="Typo.body2">@(_sr.Urgency ?? "—")</MudText>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Info">RV Usage</MudText>
+                                    <MudText Typo="Typo.body2">@(_sr.RvUsage ?? "—")</MudText>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Info">Scheduled</MudText>
+                                    <MudText Typo="Typo.body2">@(_sr.ScheduledDateUtc?.ToLocalTime().ToString("g") ?? "—")</MudText>
+                                </MudItem>
+                            </MudGrid>
+                        </MudStack>
+
+                        @if (_sr.DiagnosticResponses.Count > 0)
+                        {
+                            <MudDivider Class="my-5" />
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;" Class="mb-2">Diagnostic Responses</MudText>
+                            <DiagnosticResponseView Responses="@_sr.DiagnosticResponses" />
+                        }
+
+                        @if (_sr.Attachments.Count > 0)
+                        {
+                            <MudDivider Class="my-5" />
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;" Class="mb-2">
+                                Attachments (@_sr.Attachments.Count)
+                            </MudText>
+                            <MudGrid Spacing="2">
+                                @foreach (var att in _sr.Attachments)
+                                {
+                                    <MudItem xs="6" sm="4" md="3">
+                                        <div class="text-center">
+                                            <MudIcon Icon="@GetAttachmentIcon(att.ContentType)"
+                                                     Size="Size.Large" Color="Color.Info" />
+                                            <MudText Typo="Typo.caption" Class="d-block text-truncate">
+                                                @att.FileName
+                                            </MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Info">
+                                                @FormatFileSize(att.SizeBytes)
+                                            </MudText>
+                                            <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
+                                                       OnClick="@(() => ViewAttachmentAsync(att))">
+                                                View
+                                            </MudButton>
+                                        </div>
+                                    </MudItem>
+                                }
+                            </MudGrid>
+                        }
+
+                        <MudDivider Class="my-5" />
+
+                        @* Advisor Notes *@
+                        <MudText Typo="Typo.body2" Style="font-weight: 700;" Class="mb-2">Advisor Notes</MudText>
+                        @if (!string.IsNullOrWhiteSpace(_sr.TechnicianSummary))
+                        {
+                            <MudText Typo="Typo.body2" Style="white-space: pre-wrap;" Class="mb-3">
+                                @_sr.TechnicianSummary
+                            </MudText>
+                        }
+
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                            <MudAvatar Color="Color.Secondary"
+                                       Style="width: 26px; height: 26px; font-size: 0.7rem; font-weight: 700;">
+                                @_userInitials
+                            </MudAvatar>
+                            <MudText Typo="Typo.body2">Add a comment</MudText>
+                        </MudStack>
+                        <MudTextField T="string" @bind-Value="_commentText"
+                                      Lines="3"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Type a comment…"
+                                      FullWidth="true"
+                                      Disabled="_commentSaving" />
+                        @if (_commentError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@_commentError</MudAlert>
+                        }
+                        <MudStack Row="true" Justify="Justify.FlexStart" Class="mt-2">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                       OnClick="AddCommentAsync"
+                                       Disabled="@(_commentSaving || string.IsNullOrWhiteSpace(_commentText))">
+                                @if (_commentSaving)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                }
+                                Comment
+                            </MudButton>
+                        </MudStack>
+
+                        <MudDivider Class="my-5" />
+
+                        @* Customer Communications — UI stub *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Customer Communications</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                Preview
+                            </MudChip>
+                        </MudStack>
+                        <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
+                            @foreach (var evt in BuildCommsStub(_sr))
+                            {
+                                <MudTimelineItem Color="@evt.Color" Size="Size.Small">
+                                    <ItemContent>
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudIcon Icon="@evt.Icon" Size="Size.Small" Color="@evt.Color" />
+                                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@evt.Title</MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Info">
+                                                @evt.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")
+                                            </MudText>
+                                        </MudStack>
+                                        <MudText Typo="Typo.body2" Color="Color.Info">@evt.Preview</MudText>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-2">
+                            Customer communication tracking is a UI stub — full email/SMS history is coming in a later story.
+                        </MudAlert>
+                    </MudStack>
+                </MudItem>
+
+                @* Right column — 30% — sidebar metadata *@
+                <MudItem xs="12" md="4">
+                    <MudStack Spacing="0">
+                        @if (_allowedStatuses.Count > 0)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                                <MudText Typo="Typo.body2" Style="font-weight: 700;">Status</MudText>
                                 @if (_statusUpdating)
                                 {
                                     <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                                 }
                             </MudStack>
-                            <div style="width: fit-content;">
-                                <MudSelect T="string" Variant="Variant.Outlined"
-                                           Margin="Margin.Dense"
-                                           Value="@_selectedStatus"
-                                           ValueChanged="OnStatusChangeAsync"
-                                           AnchorOrigin="Origin.BottomCenter"
-                                           TransformOrigin="Origin.TopCenter">
-                                    @foreach (var status in _allowedStatuses)
-                                    {
-                                        <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
-                                    }
-                                </MudSelect>
-                            </div>
-                        </MudStack>
-                        @if (_statusError is not null)
-                        {
-                            <MudAlert Severity="Severity.Error" Class="mt-2">@_statusError</MudAlert>
+                            <MudSelect T="string" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       FullWidth="true"
+                                       Value="@_selectedStatus"
+                                       ValueChanged="OnStatusChangeAsync"
+                                       AnchorOrigin="Origin.BottomCenter"
+                                       TransformOrigin="Origin.TopCenter"
+                                       Placeholder="Change status…">
+                                @foreach (var status in _allowedStatuses)
+                                {
+                                    <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
+                                }
+                            </MudSelect>
+                            @if (_statusError is not null)
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_statusError</MudAlert>
+                            }
+                            <MudDivider Class="my-4" />
                         }
-                    </MudPaper>
-                }
 
-                <MudGrid Spacing="3">
-                    @* Customer Info *@
-                    <MudItem xs="12" md="6">
-                        <MudCard Elevation="2">
-                            <MudCardHeader>
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
-                                    <MudText Typo="Typo.subtitle2">Customer</MudText>
-                                </MudStack>
-                            </MudCardHeader>
-                            <MudCardContent>
+                        @* Customer *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Customer</MudText>
+                            <MudSpacer />
+                            @if (_customerSaving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                            else if (_editingCustomer)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Primary"
+                                               Class="section-icon-btn"
+                                               aria-label="Save customer" OnClick="SaveCustomerAsync" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Cancel editing customer" OnClick="CancelEditCustomer" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Edit customer" OnClick="BeginEditCustomer" />
+                            }
+                        </MudStack>
+                        @if (_editingCustomer)
+                        {
+                            <MudStack Spacing="3">
                                 <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body2">@_sr.Customer.FirstName @_sr.Customer.LastName</MudText>
-                                    <MudText Typo="Typo.body2">@_sr.Customer.Email</MudText>
-                                    @if (!string.IsNullOrEmpty(_sr.Customer.Phone))
-                                    {
-                                        <MudText Typo="Typo.body2">@_sr.Customer.Phone</MudText>
-                                    }
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">First name</MudText>
+                                    <MudTextField T="string" @bind-Value="_editCustomerFirstName"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="compact-field" />
                                 </MudStack>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-
-                    @* Asset Info *@
-                    <MudItem xs="12" md="6">
-                        <MudCard Elevation="2">
-                            <MudCardHeader>
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" Color="Color.Primary" />
-                                    <MudText Typo="Typo.subtitle2">Asset / Vehicle</MudText>
-                                </MudStack>
-                            </MudCardHeader>
-                            <MudCardContent>
                                 <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body2"><strong>VIN / Asset ID:</strong> @_sr.Asset.AssetId</MudText>
-                                    @if (_sr.Asset.Year.HasValue)
-                                    {
-                                        <MudText Typo="Typo.body2"><strong>Year:</strong> @_sr.Asset.Year</MudText>
-                                    }
-                                    @if (!string.IsNullOrEmpty(_sr.Asset.Manufacturer))
-                                    {
-                                        <MudText Typo="Typo.body2"><strong>Make:</strong> @_sr.Asset.Manufacturer</MudText>
-                                    }
-                                    @if (!string.IsNullOrEmpty(_sr.Asset.Model))
-                                    {
-                                        <MudText Typo="Typo.body2"><strong>Model:</strong> @_sr.Asset.Model</MudText>
-                                    }
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Last name</MudText>
+                                    <MudTextField T="string" @bind-Value="_editCustomerLastName"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="compact-field" />
                                 </MudStack>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-
-                    @* Issue Details *@
-                    <MudItem xs="12">
-                        <MudCard Elevation="2">
-                            <MudCardHeader>
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudIcon Icon="@Icons.Material.Filled.Build" Color="Color.Primary" />
-                                    <MudText Typo="Typo.subtitle2">Issue Details</MudText>
-                                </MudStack>
-                            </MudCardHeader>
-                            <MudCardContent>
-                                <MudGrid Spacing="2">
-                                    <MudItem xs="12" sm="6" md="3">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Category</MudText>
-                                        <MudText Typo="Typo.body2">@_sr.IssueCategory</MudText>
-                                    </MudItem>
-                                    <MudItem xs="12" sm="6" md="3">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Urgency</MudText>
-                                        <MudText Typo="Typo.body2">@(_sr.Urgency ?? "—")</MudText>
-                                    </MudItem>
-                                    <MudItem xs="12" sm="6" md="3">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">RV Usage</MudText>
-                                        <MudText Typo="Typo.body2">@(_sr.RvUsage ?? "—")</MudText>
-                                    </MudItem>
-                                    <MudItem xs="12" sm="6" md="3">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Scheduled Date</MudText>
-                                        <MudText Typo="Typo.body2">@(_sr.ScheduledDateUtc?.ToLocalTime().ToString("g") ?? "—")</MudText>
-                                    </MudItem>
-                                    <MudItem xs="12">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Description</MudText>
-                                        <MudText Typo="Typo.body2">@_sr.IssueDescription</MudText>
-                                    </MudItem>
-                                </MudGrid>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-
-                    @* Assignment *@
-                    <MudItem xs="12" md="6">
-                        <MudCard Elevation="2">
-                            <MudCardHeader>
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudIcon Icon="@Icons.Material.Filled.Assignment" Color="Color.Primary" />
-                                    <MudText Typo="Typo.subtitle2">Assignment</MudText>
-                                </MudStack>
-                            </MudCardHeader>
-                            <MudCardContent>
                                 <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body2"><strong>Technician:</strong> @(_sr.AssignedTechnicianId ?? "Unassigned")</MudText>
-                                    <MudText Typo="Typo.body2"><strong>Bay:</strong> @(_sr.AssignedBayId ?? "Unassigned")</MudText>
-                                    @if (_sr.RequiredSkills.Count > 0)
-                                    {
-                                        <MudText Typo="Typo.body2"><strong>Required Skills:</strong></MudText>
-                                        <MudStack Row="true" Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Email</MudText>
+                                    <MudTextField T="string" @bind-Value="_editCustomerEmail"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  InputType="InputType.Email"
+                                                  Class="compact-field" />
+                                </MudStack>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Phone</MudText>
+                                    <MudTextField T="string" @bind-Value="_editCustomerPhone"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  InputType="InputType.Telephone"
+                                                  Class="compact-field" />
+                                </MudStack>
+                                @if (_customerError is not null)
+                                {
+                                    <MudAlert Severity="Severity.Error" Dense="true">@_customerError</MudAlert>
+                                }
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body2" Style="@ValueStyle">@_sr.Customer.FirstName @_sr.Customer.LastName</MudText>
+                                <MudText Typo="Typo.body2" Style="@ValueStyleBreak">@_sr.Customer.Email</MudText>
+                                @if (!string.IsNullOrEmpty(_sr.Customer.Phone))
+                                {
+                                    <MudText Typo="Typo.body2" Style="@ValueStyle">@_sr.Customer.Phone</MudText>
+                                }
+                            </MudStack>
+                        }
+
+                        <MudDivider Class="my-4" />
+
+                        @* Asset *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Asset / Vehicle</MudText>
+                            <MudSpacer />
+                            @if (_assetSaving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                            else if (_editingAsset)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Primary"
+                                               Class="section-icon-btn"
+                                               aria-label="Save asset" OnClick="SaveAssetAsync" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Cancel editing asset" OnClick="CancelEditAsset" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Edit asset" OnClick="BeginEditAsset" />
+                            }
+                        </MudStack>
+                        @if (_editingAsset)
+                        {
+                            <MudStack Spacing="3">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Year</MudText>
+                                    <MudNumericField T="int?" @bind-Value="_editAssetYear"
+                                                     Min="1950" Max="2100"
+                                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="compact-field" />
+                                </MudStack>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Manufacturer</MudText>
+                                    <MudTextField T="string" @bind-Value="_editAssetManufacturer"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="compact-field" />
+                                </MudStack>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Model</MudText>
+                                    <MudTextField T="string" @bind-Value="_editAssetModel"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="compact-field" />
+                                </MudStack>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">VIN / Asset ID</MudText>
+                                    <MudTextField T="string" @bind-Value="_editAssetId"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="compact-field" />
+                                </MudStack>
+                                @if (_assetError is not null)
+                                {
+                                    <MudAlert Severity="Severity.Error" Dense="true">@_assetError</MudAlert>
+                                }
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="1">
+                                @if (_sr.Asset.Year.HasValue || !string.IsNullOrEmpty(_sr.Asset.Manufacturer) || !string.IsNullOrEmpty(_sr.Asset.Model))
+                                {
+                                    <MudText Typo="Typo.body2" Style="@ValueStyle">@AssetYearMakeModel(_sr)</MudText>
+                                }
+                                <MudText Typo="Typo.body2" Style="@ValueStyleBreak">@_sr.Asset.AssetId</MudText>
+                            </MudStack>
+                        }
+
+                        <MudDivider Class="my-4" />
+
+                        @* Assigned Tech *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Assigned Tech</MudText>
+                            <MudSpacer />
+                            @if (_techSaving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                            else if (_editingTech)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Primary"
+                                               Class="section-icon-btn"
+                                               aria-label="Save assigned tech" OnClick="SaveTechAsync" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Cancel editing assigned tech" OnClick="CancelEditTech" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Edit assigned tech" OnClick="BeginEditTech" />
+                            }
+                        </MudStack>
+                        @if (_editingTech)
+                        {
+                            <MudStack Spacing="3">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Technician</MudText>
+                                    <MudTextField T="string" @bind-Value="_editTechId"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Placeholder="Unassigned"
+                                                  Class="compact-field" />
+                                </MudStack>
+                                @if (_techError is not null)
+                                {
+                                    <MudAlert Severity="Severity.Error" Dense="true">@_techError</MudAlert>
+                                }
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.body2" Style="@ValueStyle">@(_sr.AssignedTechnicianId ?? "Unassigned")</MudText>
+                                @if (_sr.RequiredSkills.Count > 0)
+                                {
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="@LabelStyle" Class="mb-1">Required Skills</MudText>
+                                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
                                             @foreach (var skill in _sr.RequiredSkills)
                                             {
                                                 <MudChip T="string" Size="Size.Small" Color="Color.Info">@skill</MudChip>
                                             }
                                         </MudStack>
-                                    }
-                                </MudStack>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-
-                    @* Advisor Notes *@
-                    <MudItem xs="12" md="6">
-                        <MudCard Elevation="2">
-                            <MudCardHeader>
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudIcon Icon="@Icons.Material.Filled.Notes" Color="Color.Primary" />
-                                    <MudText Typo="Typo.subtitle2">Advisor Notes</MudText>
-                                </MudStack>
-                            </MudCardHeader>
-                            <MudCardContent>
-                                <MudText Typo="Typo.body2">@(_sr.TechnicianSummary ?? "No notes yet.")</MudText>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-
-                    @* Diagnostic Responses *@
-                    @if (_sr.DiagnosticResponses.Count > 0)
-                    {
-                        <MudItem xs="12">
-                            <MudCard Elevation="2">
-                                <MudCardHeader>
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                        <MudIcon Icon="@Icons.Material.Filled.Quiz" Color="Color.Primary" />
-                                        <MudText Typo="Typo.subtitle2">Diagnostic Responses</MudText>
-                                    </MudStack>
-                                </MudCardHeader>
-                                <MudCardContent>
-                                    <DiagnosticResponseView Responses="@_sr.DiagnosticResponses" />
-                                </MudCardContent>
-                            </MudCard>
-                        </MudItem>
-                    }
-
-                    @* Attachments *@
-                    @if (_sr.Attachments.Count > 0)
-                    {
-                        <MudItem xs="12">
-                            <MudCard Elevation="2">
-                                <MudCardHeader>
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                        <MudIcon Icon="@Icons.Material.Filled.AttachFile" Color="Color.Primary" />
-                                        <MudText Typo="Typo.subtitle2">Attachments (@_sr.Attachments.Count)</MudText>
-                                    </MudStack>
-                                </MudCardHeader>
-                                <MudCardContent>
-                                    <MudGrid Spacing="2">
-                                        @foreach (var att in _sr.Attachments)
-                                        {
-                                            <MudItem xs="6" sm="4" md="3">
-                                                <MudPaper Elevation="1" Class="pa-2 text-center">
-                                                    <MudIcon Icon="@GetAttachmentIcon(att.ContentType)"
-                                                             Size="Size.Large" Color="Color.Secondary" />
-                                                    <MudText Typo="Typo.caption" Class="d-block text-truncate">
-                                                        @att.FileName
-                                                    </MudText>
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @FormatFileSize(att.SizeBytes)
-                                                    </MudText>
-                                                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
-                                                               OnClick="@(() => ViewAttachmentAsync(att))">
-                                                        View
-                                                    </MudButton>
-                                                </MudPaper>
-                                            </MudItem>
-                                        }
-                                    </MudGrid>
-                                </MudCardContent>
-                            </MudCard>
-                        </MudItem>
-                    }
-                </MudGrid>
-
-                @* Metadata footer *@
-                <MudPaper Elevation="0" Class="pa-2">
-                    <MudStack Row="true" Spacing="4">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            Created: @_sr.CreatedAtUtc.ToLocalTime().ToString("g")
-                        </MudText>
-                        @if (_sr.UpdatedAtUtc.HasValue)
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                Updated: @_sr.UpdatedAtUtc.Value.ToLocalTime().ToString("g")
-                            </MudText>
+                                    </div>
+                                }
+                            </MudStack>
                         }
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            ID: @_sr.Id
-                        </MudText>
+
+                        <MudDivider Class="my-4" />
+
+                        @* Metadata *@
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Color="Color.Info">
+                                Created @_sr.CreatedAtUtc.ToLocalTime().ToString("g")
+                            </MudText>
+                            @if (_sr.UpdatedAtUtc.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Info">
+                                    Updated @_sr.UpdatedAtUtc.Value.ToLocalTime().ToString("g")
+                                </MudText>
+                            }
+                            <MudText Typo="Typo.caption" Color="Color.Info" Style="word-break: break-all;">
+                                ID: @_sr.Id
+                            </MudText>
+                        </MudStack>
                     </MudStack>
-                </MudPaper>
-            </MudStack>
+                </MudItem>
+            </MudGrid>
         }
         </div>
 
-        @* Sticky footer *@
-        <MudPaper Elevation="0" Square="true" Class="pa-3"
-                  Style="position: sticky; bottom: 0; z-index: 2; border-top: 1px solid var(--mud-palette-divider); background: var(--mud-palette-surface);">
-            <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
-                @if (_mode == DialogMode.Create)
-                {
+        @* Sticky footer — create mode only *@
+        @if (_mode == DialogMode.Create)
+        {
+            <MudPaper Elevation="0" Square="true" Class="pa-3"
+                      Style="@FooterStyle">
+                <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
                     <MudButton OnClick="CloseDialog">Cancel</MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.Save"
@@ -477,18 +675,9 @@
                         }
                         Create
                     </MudButton>
-                }
-                else
-                {
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.Edit"
-                               OnClick="NavigateToEdit">
-                        Edit
-                    </MudButton>
-                    <MudButton OnClick="CloseDialog">Close</MudButton>
-                }
-            </MudStack>
-        </MudPaper>
+                </MudStack>
+            </MudPaper>
+        }
     </div>
 </MudDrawer>
 
@@ -537,6 +726,96 @@
     private bool _createSubmitted;
     private string? _previousServiceRequestId;
     private bool _previousVisible;
+    private string _userInitials = "?";
+    private string _userDisplayName = "User";
+    private string? _commentText;
+    private bool _commentSaving;
+    private string? _commentError;
+
+    private bool _editingCustomer;
+    private bool _customerSaving;
+    private string? _customerError;
+    private string? _editCustomerFirstName;
+    private string? _editCustomerLastName;
+    private string? _editCustomerEmail;
+    private string? _editCustomerPhone;
+
+    private bool _editingAsset;
+    private bool _assetSaving;
+    private string? _assetError;
+    private int? _editAssetYear;
+    private string? _editAssetManufacturer;
+    private string? _editAssetModel;
+    private string? _editAssetId;
+
+    private bool _editingTech;
+    private bool _techSaving;
+    private string? _techError;
+    private string? _editTechId;
+
+    private bool _editingTitle;
+    private bool _titleSaving;
+    private string? _titleError;
+    private string? _editTitleText;
+
+    protected override void OnInitialized()
+    {
+        ThemeService.OnThemeChanged += HandleThemeChanged;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            _userDisplayName = ResolveDisplayName(user);
+            _userInitials = ResolveInitials(_userDisplayName);
+        }
+    }
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
+    }
+
+    private void HandleThemeChanged() => InvokeAsync(StateHasChanged);
+
+    private string ColumnBackground => ThemeService.Mode == ThemeMode.Dark
+        ? "#181818"
+        : "var(--mud-palette-background)";
+
+    private string DrawerBorderColor => ThemeService.Mode switch
+    {
+        ThemeMode.Dark          => "rgba(255,255,255,0.12)",
+        ThemeMode.HighContrast  => "#FFFF00",
+        _                       => "rgba(0,0,0,0.12)"
+    };
+
+    private string LabelColor => ThemeService.Mode == ThemeMode.HighContrast
+        ? "#FFFF00"
+        : "#9198A1";
+
+    private string ValueColor => ThemeService.Mode switch
+    {
+        ThemeMode.Dark => "#FFFFFF",
+        ThemeMode.HighContrast => "#FFFF00",
+        _ => "var(--mud-palette-text-primary)"
+    };
+
+    private string HeaderFooterStyle =>
+        $"position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--mud-palette-divider); background: {ColumnBackground};";
+
+    private string FooterStyle =>
+        $"position: sticky; bottom: 0; z-index: 2; border-top: 1px solid var(--mud-palette-divider); background: {ColumnBackground};";
+
+    private string LabelStyle => $"font-weight: 700; color: {LabelColor};";
+
+    private string FieldLabelStyle => $"font-weight: 700; color: {ValueColor};";
+
+    private string ValueStyle => $"color: {ValueColor};";
+
+    private string ValueStyleBreak => $"color: {ValueColor}; word-break: break-all;";
 
     private string? ValidateFirstName(string? value) =>
         _createSubmitted && string.IsNullOrWhiteSpace(value) ? "Enter the customer's first name" : null;
@@ -630,7 +909,7 @@
     private void RefreshAllowedStatuses()
     {
         if (_sr is null) return;
-        _allowedStatuses = [.. StatusTransitions.GetAllowedTargets(_sr.Status)];
+        _allowedStatuses = ["New", "InProgress", "WaitingOnCustomer", "WaitingOnParts", "Completed", "Cancelled"];
         _selectedStatus = null;
     }
 
@@ -663,6 +942,230 @@
         {
             _statusUpdating = false;
         }
+    }
+
+    private async Task AddCommentAsync()
+    {
+        if (_sr is null || _dealershipId is null || string.IsNullOrWhiteSpace(_commentText)) return;
+
+        _commentSaving = true;
+        _commentError = null;
+        StateHasChanged();
+
+        try
+        {
+            var byline = $"[{_userDisplayName} — {DateTime.Now:MMM d, yyyy h:mm tt}]";
+            var newEntry = $"{byline}\n{_commentText.Trim()}";
+            var combined = string.IsNullOrWhiteSpace(_sr.TechnicianSummary)
+                ? newEntry
+                : $"{newEntry}\n\n{_sr.TechnicianSummary}";
+
+            var request = new ServiceRequestUpdateRequestDto
+            {
+                Status = _sr.Status,
+                IssueDescription = _sr.IssueDescription,
+                Priority = _sr.Priority ?? "Medium",
+                TechnicianSummary = combined
+            };
+
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            _commentText = null;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _commentError = ex.Message;
+        }
+        finally
+        {
+            _commentSaving = false;
+        }
+    }
+
+    private void BeginEditCustomer()
+    {
+        if (_sr is null) return;
+        _editCustomerFirstName = _sr.Customer.FirstName;
+        _editCustomerLastName  = _sr.Customer.LastName;
+        _editCustomerEmail     = _sr.Customer.Email;
+        _editCustomerPhone     = _sr.Customer.Phone;
+        _customerError = null;
+        _editingCustomer = true;
+    }
+
+    private void CancelEditCustomer()
+    {
+        _editingCustomer = false;
+        _customerError = null;
+    }
+
+    private async Task SaveCustomerAsync()
+    {
+        if (_sr is null || _dealershipId is null) return;
+        _customerSaving = true;
+        _customerError = null;
+        StateHasChanged();
+        try
+        {
+            var request = new ServiceRequestUpdateRequestDto
+            {
+                Status = _sr.Status,
+                IssueDescription = _sr.IssueDescription,
+                Priority = _sr.Priority ?? "Medium",
+                Customer = new CustomerInfoDto
+                {
+                    FirstName = _editCustomerFirstName ?? string.Empty,
+                    LastName  = _editCustomerLastName  ?? string.Empty,
+                    Email     = _editCustomerEmail     ?? string.Empty,
+                    Phone     = _editCustomerPhone
+                }
+            };
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            _editingCustomer = false;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) { _customerError = ex.Message; }
+        finally { _customerSaving = false; }
+    }
+
+    private void BeginEditAsset()
+    {
+        if (_sr is null) return;
+        _editAssetYear         = _sr.Asset.Year;
+        _editAssetManufacturer = _sr.Asset.Manufacturer;
+        _editAssetModel        = _sr.Asset.Model;
+        _editAssetId           = _sr.Asset.AssetId;
+        _assetError = null;
+        _editingAsset = true;
+    }
+
+    private void CancelEditAsset()
+    {
+        _editingAsset = false;
+        _assetError = null;
+    }
+
+    private async Task SaveAssetAsync()
+    {
+        if (_sr is null || _dealershipId is null) return;
+        _assetSaving = true;
+        _assetError = null;
+        StateHasChanged();
+        try
+        {
+            var request = new ServiceRequestUpdateRequestDto
+            {
+                Status = _sr.Status,
+                IssueDescription = _sr.IssueDescription,
+                Priority = _sr.Priority ?? "Medium",
+                Asset = new AssetInfoDto
+                {
+                    AssetId      = _editAssetId ?? string.Empty,
+                    Manufacturer = _editAssetManufacturer,
+                    Model        = _editAssetModel,
+                    Year         = _editAssetYear
+                }
+            };
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            _editingAsset = false;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) { _assetError = ex.Message; }
+        finally { _assetSaving = false; }
+    }
+
+    private void BeginEditTech()
+    {
+        if (_sr is null) return;
+        _editTechId = _sr.AssignedTechnicianId;
+        _techError = null;
+        _editingTech = true;
+    }
+
+    private void CancelEditTech()
+    {
+        _editingTech = false;
+        _techError = null;
+    }
+
+    private async Task SaveTechAsync()
+    {
+        if (_sr is null || _dealershipId is null) return;
+        _techSaving = true;
+        _techError = null;
+        StateHasChanged();
+        try
+        {
+            var request = new ServiceRequestUpdateRequestDto
+            {
+                Status = _sr.Status,
+                IssueDescription = _sr.IssueDescription,
+                Priority = _sr.Priority ?? "Medium",
+                AssignedTechnicianId = string.IsNullOrWhiteSpace(_editTechId) ? null : _editTechId,
+                RequiredSkills = _sr.RequiredSkills
+            };
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            _editingTech = false;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) { _techError = ex.Message; }
+        finally { _techSaving = false; }
+    }
+
+    private void BeginEditTitle()
+    {
+        if (_sr is null) return;
+        _editTitleText = FormatTitleLine(_sr);
+        _titleError = null;
+        _editingTitle = true;
+    }
+
+    private void CancelEditTitle()
+    {
+        _editingTitle = false;
+        _titleError = null;
+    }
+
+    private async Task SaveTitleAsync()
+    {
+        if (_sr is null || _dealershipId is null || string.IsNullOrWhiteSpace(_editTitleText)) return;
+        _titleSaving = true;
+        _titleError = null;
+        StateHasChanged();
+        try
+        {
+            var (firstName, lastName, year, manufacturer, model) = ParseTitle(_editTitleText);
+            if (string.IsNullOrWhiteSpace(firstName))
+            {
+                _titleError = "Enter at least a first name.";
+                return;
+            }
+            var request = new ServiceRequestUpdateRequestDto
+            {
+                Status = _sr.Status,
+                IssueDescription = _sr.IssueDescription,
+                Priority = _sr.Priority ?? "Medium",
+                Customer = new CustomerInfoDto
+                {
+                    FirstName = firstName,
+                    LastName  = lastName,
+                    Email     = _sr.Customer.Email,
+                    Phone     = _sr.Customer.Phone
+                },
+                Asset = new AssetInfoDto
+                {
+                    AssetId      = _sr.Asset.AssetId,
+                    Manufacturer = manufacturer,
+                    Model        = model,
+                    Year         = year
+                }
+            };
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            _editingTitle = false;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) { _titleError = ex.Message; }
+        finally { _titleSaving = false; }
     }
 
     private async Task CreateAsync()
@@ -742,12 +1245,6 @@
         }
     }
 
-    private void NavigateToEdit()
-    {
-        if (_sr is null) return;
-        Navigation.NavigateTo($"/service-requests/{_sr.Id}/edit");
-    }
-
     private async Task CloseDialog()
     {
         Visible = false;
@@ -763,10 +1260,104 @@
 
     private static string FormatStatus(string status) => status switch
     {
-        "InProgress" => "In Progress",
-        "WaitingOnParts" => "Waiting on Parts",
-        _ => status
+        "InProgress"        => "In Progress",
+        "WaitingOnCustomer" => "Waiting on Customer",
+        "WaitingOnParts"    => "Waiting on Parts",
+        "Completed"         => "Complete",
+        _                   => status
     };
+
+    private static string ShortId(string id) =>
+        string.IsNullOrEmpty(id) || id.Length <= 8 ? id : id[^8..];
+
+    private static string ResolveDisplayName(System.Security.Claims.ClaimsPrincipal user)
+    {
+        var name = user.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(name)) return name;
+        return user.FindFirst("name")?.Value
+            ?? user.FindFirst("email")?.Value
+            ?? user.FindFirst("preferred_username")?.Value
+            ?? "User";
+    }
+
+    private static string ResolveInitials(string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) return "?";
+        var parts = displayName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        if (parts.Length == 1)
+            return parts[0].Length >= 2
+                ? parts[0].Substring(0, 2).ToUpperInvariant()
+                : parts[0][0].ToString().ToUpperInvariant();
+        return $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant();
+    }
+
+    @* Parses a title of form "FirstName LastName, Year Manufacturer, Model" back into parts.
+       Tolerant of missing pieces; year detected only when the leading token is a 4-digit number 1950–2100. *@
+    private static (string FirstName, string LastName, int? Year, string? Manufacturer, string? Model) ParseTitle(string title)
+    {
+        var parts = (title ?? string.Empty).Split(',', 3, StringSplitOptions.TrimEntries);
+
+        var firstName = string.Empty;
+        var lastName = string.Empty;
+        if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]))
+        {
+            var nameTokens = parts[0].Split(' ', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            firstName = nameTokens.Length > 0 ? nameTokens[0] : string.Empty;
+            lastName  = nameTokens.Length > 1 ? nameTokens[1] : string.Empty;
+        }
+
+        int? year = null;
+        string? manufacturer = null;
+        if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
+        {
+            var seg = parts[1].Trim();
+            var spaceIdx = seg.IndexOf(' ');
+            if (spaceIdx > 0
+                && int.TryParse(seg[..spaceIdx], out var y) && y is >= 1950 and <= 2100)
+            {
+                year = y;
+                var rest = seg[(spaceIdx + 1)..].Trim();
+                manufacturer = string.IsNullOrWhiteSpace(rest) ? null : rest;
+            }
+            else if (int.TryParse(seg, out var yOnly) && yOnly is >= 1950 and <= 2100)
+            {
+                year = yOnly;
+            }
+            else
+            {
+                manufacturer = seg;
+            }
+        }
+
+        string? model = null;
+        if (parts.Length > 2 && !string.IsNullOrWhiteSpace(parts[2]))
+        {
+            model = parts[2].Trim();
+        }
+
+        return (firstName, lastName, year, manufacturer, model);
+    }
+
+    private static string FormatTitleLine(ServiceRequestDetailResponseDto sr)
+    {
+        var name = $"{sr.Customer.FirstName} {sr.Customer.LastName}".Trim();
+        var asset = AssetYearMakeModel(sr);
+        return string.IsNullOrWhiteSpace(asset) ? name : $"{name}, {asset}";
+    }
+
+    private static string AssetYearMakeModel(ServiceRequestDetailResponseDto sr)
+    {
+        var makeModel = new List<string>();
+        if (!string.IsNullOrEmpty(sr.Asset.Manufacturer)) makeModel.Add(sr.Asset.Manufacturer);
+        if (!string.IsNullOrEmpty(sr.Asset.Model)) makeModel.Add(sr.Asset.Model);
+        var makeModelStr = string.Join(", ", makeModel);
+        if (sr.Asset.Year.HasValue && makeModelStr.Length > 0)
+            return $"{sr.Asset.Year.Value} {makeModelStr}";
+        if (sr.Asset.Year.HasValue)
+            return sr.Asset.Year.Value.ToString();
+        return makeModelStr;
+    }
 
     private static string GetAttachmentIcon(string contentType)
     {
@@ -783,6 +1374,40 @@
         < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
         _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
     };
+
+    @* Stub data for the customer comms timeline — full email/SMS history wiring is a separate story. *@
+    private static IReadOnlyList<CommsEvent> BuildCommsStub(ServiceRequestDetailResponseDto sr)
+    {
+        var created = sr.CreatedAtUtc;
+        return
+        [
+            new CommsEvent(
+                "Intake confirmation sent",
+                $"Email to {sr.Customer.Email}: \"We've received your service request — we'll be in touch.\"",
+                created.AddMinutes(2),
+                Icons.Material.Filled.Email,
+                Color.Info),
+            new CommsEvent(
+                "SMS reply received",
+                "Customer: \"Thanks — when can I drop it off?\"",
+                created.AddHours(4),
+                Icons.Material.Filled.Sms,
+                Color.Success),
+            new CommsEvent(
+                "Status update sent",
+                "Email: Diagnosis complete, estimate attached.",
+                sr.UpdatedAtUtc ?? created.AddDays(1),
+                Icons.Material.Filled.Email,
+                Color.Info),
+        ];
+    }
+
+    private sealed record CommsEvent(
+        string Title,
+        string Preview,
+        DateTime TimestampUtc,
+        string Icon,
+        Color Color);
 
     private sealed class CreateForm
     {

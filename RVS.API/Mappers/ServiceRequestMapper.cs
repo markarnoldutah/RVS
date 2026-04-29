@@ -159,6 +159,29 @@ public static class ServiceRequestMapper
         entity.RequiredSkills = dto.RequiredSkills;
         entity.BoardSequence = dto.BoardSequence ?? entity.BoardSequence;
         entity.ServiceEvent = dto.ServiceEvent?.ToEmbedded();
+
+        if (dto.Customer is not null)
+        {
+            entity.CustomerSnapshot = new CustomerSnapshotEmbedded
+            {
+                FirstName = dto.Customer.FirstName.Trim(),
+                LastName = dto.Customer.LastName.Trim(),
+                Email = dto.Customer.Email.Trim(),
+                Phone = dto.Customer.Phone?.Trim()
+            };
+        }
+
+        if (dto.Asset is not null)
+        {
+            entity.AssetInfo = new AssetInfoEmbedded
+            {
+                AssetId = dto.Asset.AssetId.Trim(),
+                Manufacturer = dto.Asset.Manufacturer?.Trim(),
+                Model = dto.Asset.Model?.Trim(),
+                Year = dto.Asset.Year
+            };
+        }
+
         entity.MarkAsUpdated(updatedByUserId);
     }
 

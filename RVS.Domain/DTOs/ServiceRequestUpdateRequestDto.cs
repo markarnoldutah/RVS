@@ -11,6 +11,18 @@ public sealed record ServiceRequestUpdateRequestDto
     public string? IssueCategory { get; init; }
     public string? TechnicianSummary { get; init; }
     public required string Priority { get; init; }
+
+    /// <summary>
+    /// When non-null, replaces the embedded customer snapshot on the entity.
+    /// Null leaves the existing snapshot unchanged.
+    /// </summary>
+    public CustomerInfoDto? Customer { get; init; }
+
+    /// <summary>
+    /// When non-null, replaces the embedded asset info on the entity.
+    /// Null leaves the existing asset unchanged.
+    /// </summary>
+    public AssetInfoDto? Asset { get; init; }
     public string? Urgency { get; init; }
     public string? RvUsage { get; init; }
     public string? HasExtendedWarranty { get; init; }

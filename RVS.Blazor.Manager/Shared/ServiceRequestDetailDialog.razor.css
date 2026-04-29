@@ -1,0 +1,14 @@
+::deep .section-icon-btn {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+}
+
+::deep .compact-field input,
+::deep .compact-field .mud-input-slot,
+::deep .compact-field .mud-input-root {
+    font-size: 0.875rem !important;
+}

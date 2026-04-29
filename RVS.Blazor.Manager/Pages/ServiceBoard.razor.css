@@ -18,13 +18,16 @@
     min-height: 0;
 }
 
-.board-column-add {
-    opacity: 0;
-    transition: opacity 0.15s ease-in-out;
-    margin-top: 8px;
-    flex-shrink: 0;
+::deep .column-header-add {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
 }
 
-.board-column:hover .board-column-add {
-    opacity: 1;
+.board-column-scroll ::deep .mud-drop-zone {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
 }

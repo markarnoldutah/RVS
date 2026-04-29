@@ -201,6 +201,98 @@ public class ServiceRequestMapperApplyUpdateTests
         entity.BoardSequence.Should().Be(2);
     }
 
+    [Fact]
+    public void ApplyUpdate_WhenCustomerIsNull_ShouldPreserveExistingCustomerSnapshot()
+    {
+        var entity = BuildServiceRequest();
+        entity.CustomerSnapshot = new CustomerSnapshotEmbedded
+        {
+            FirstName = "Jane",
+            LastName = "Doe",
+            Email = "jane@example.com",
+            Phone = "555-1212"
+        };
+
+        var dto = BuildUpdateRequest() with { Customer = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.CustomerSnapshot.FirstName.Should().Be("Jane");
+        entity.CustomerSnapshot.LastName.Should().Be("Doe");
+        entity.CustomerSnapshot.Email.Should().Be("jane@example.com");
+        entity.CustomerSnapshot.Phone.Should().Be("555-1212");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenCustomerIsProvided_ShouldReplaceCustomerSnapshotAndTrimFields()
+    {
+        var entity = BuildServiceRequest();
+
+        var dto = BuildUpdateRequest() with
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "  John  ",
+                LastName = "  Smith  ",
+                Email = "  john@example.com  ",
+                Phone = "  555-9999  "
+            }
+        };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.CustomerSnapshot.FirstName.Should().Be("John");
+        entity.CustomerSnapshot.LastName.Should().Be("Smith");
+        entity.CustomerSnapshot.Email.Should().Be("john@example.com");
+        entity.CustomerSnapshot.Phone.Should().Be("555-9999");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenAssetIsNull_ShouldPreserveExistingAssetInfo()
+    {
+        var entity = BuildServiceRequest();
+        entity.AssetInfo = new AssetInfoEmbedded
+        {
+            AssetId = "VIN123",
+            Manufacturer = "Winnebago",
+            Model = "Vista",
+            Year = 2022
+        };
+
+        var dto = BuildUpdateRequest() with { Asset = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.AssetInfo.AssetId.Should().Be("VIN123");
+        entity.AssetInfo.Manufacturer.Should().Be("Winnebago");
+        entity.AssetInfo.Model.Should().Be("Vista");
+        entity.AssetInfo.Year.Should().Be(2022);
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenAssetIsProvided_ShouldReplaceAssetInfoAndTrimFields()
+    {
+        var entity = BuildServiceRequest();
+
+        var dto = BuildUpdateRequest() with
+        {
+            Asset = new AssetInfoDto
+            {
+                AssetId = "  VIN999  ",
+                Manufacturer = "  Thor  ",
+                Model = "  Aria  ",
+                Year = 2024
+            }
+        };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.AssetInfo.AssetId.Should().Be("VIN999");
+        entity.AssetInfo.Manufacturer.Should().Be("Thor");
+        entity.AssetInfo.Model.Should().Be("Aria");
+        entity.AssetInfo.Year.Should().Be(2024);
+    }
+
     private static ServiceRequest BuildServiceRequest() => new()
     {
         Id = "sr_test",

@@ -61,3 +61,22 @@ html, body {
     aspect-ratio: 1 / 1;
     min-width: unset;
 }
+
+/* Compact circular icon buttons for inline section actions (edit/save/cancel/close).
+   Overrides the global .mud-icon-button { min-height: 44px } WCAG rule above. */
+.section-icon-btn.mud-icon-button {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+}
+
+/* Compact text-input fields used in sidebar edit modes — match body2 (0.875rem)
+   so the input text matches the read-only display text size. */
+.compact-field input,
+.compact-field .mud-input-slot,
+.compact-field .mud-input-root {
+    font-size: 0.875rem !important;
+}
