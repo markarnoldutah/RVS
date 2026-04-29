@@ -7,8 +7,7 @@
         {
             <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined"
                       Icon="@Icons.Material.Filled.Warning">
-                This location isn't typically able to help with this kind of issue.
-                Please contact the service center directly to confirm@(string.IsNullOrWhiteSpace(GetFallbackPhone()) ? "." : $" at {GetFallbackPhone()}.")
+                @GetCapabilityFallbackMessage()
             </MudAlert>
         }
 
@@ -203,5 +202,17 @@
         if (!string.IsNullOrWhiteSpace(assessmentPhone)) return assessmentPhone;
 
         return State.Config?.LocationPhone;
+    }
+
+    /// <summary>
+    /// Builds the customer-facing fallback message for the capability-match alert.
+    /// Includes the location phone number when one is available; otherwise omits it
+    /// to avoid rendering "...confirm at ." with an empty placeholder.
+    /// </summary>
+    private string GetCapabilityFallbackMessage()
+    {
+        const string prefix = "This location isn't typically able to help with this kind of issue. Please contact the service center directly to confirm";
+        var phone = GetFallbackPhone();
+        return string.IsNullOrWhiteSpace(phone) ? $"{prefix}." : $"{prefix} at {phone}.";
     }
 }
