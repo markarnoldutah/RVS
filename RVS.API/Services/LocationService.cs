@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Services;
 
@@ -58,6 +59,23 @@ public sealed class LocationService : ILocationService
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentNullException.ThrowIfNull(entity);
 
+        // Auto-generate a unique slug from the dealership ("org") slug + location name when
+        // the caller did not supply one. This keeps slugs uniform, human-readable, and unique
+        // per tenant without requiring the UI to pick a slug.
+        if (string.IsNullOrWhiteSpace(entity.Slug))
+        {
+            entity.Slug = await GenerateUniqueSlugAsync(tenantId, entity.Name, cancellationToken);
+        }
+        else
+        {
+            // Caller supplied a slug — make sure it is not already taken.
+            var existing = await _slugLookupRepository.GetBySlugAsync(entity.Slug, cancellationToken);
+            if (existing is not null)
+            {
+                throw new ArgumentException($"Slug '{entity.Slug}' is already in use.", nameof(entity));
+            }
+        }
+
         // Step 1: Create slug lookup entry first to reserve the slug
         var slugLookup = new SlugLookup
         {
@@ -91,6 +109,41 @@ public sealed class LocationService : ILocationService
 
             throw;
         }
+    }
+
+    /// <summary>
+    /// Builds a slug shaped like <c>{dealership-slug}-{location-name}</c> and probes the slug-lookup
+    /// store for collisions, appending <c>-2</c>, <c>-3</c>, … until a free slug is found.
+    /// Falls back to just the location-name slug when the tenant has no dealership yet.
+    /// </summary>
+    private async Task<string> GenerateUniqueSlugAsync(string tenantId, string locationName, CancellationToken cancellationToken)
+    {
+        var dealerships = await _dealershipRepository.ListByTenantAsync(tenantId, cancellationToken);
+        var orgSlug = dealerships.FirstOrDefault()?.Slug;
+
+        var baseSlug = SlugGenerator.ForLocation(orgSlug, locationName);
+        if (string.IsNullOrEmpty(baseSlug))
+        {
+            // Defensive fallback: a location-id-derived slug is always non-empty and unique.
+            baseSlug = $"location-{Guid.NewGuid():N}"[..32];
+        }
+
+        // Cap the base so suffix variants stay within MaxSlugLength.
+        const int suffixReserve = 4; // supports up to "-9999"
+        if (baseSlug.Length > SlugGenerator.MaxSlugLength - suffixReserve)
+        {
+            baseSlug = baseSlug[..(SlugGenerator.MaxSlugLength - suffixReserve)].TrimEnd('-');
+        }
+
+        var candidate = baseSlug;
+        var suffix = 2;
+        while (await _slugLookupRepository.GetBySlugAsync(candidate, cancellationToken) is not null)
+        {
+            candidate = $"{baseSlug}-{suffix}";
+            suffix++;
+        }
+
+        return candidate;
     }
 
     /// <inheritdoc />
