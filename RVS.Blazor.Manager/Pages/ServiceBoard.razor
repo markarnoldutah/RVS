@@ -401,6 +401,15 @@
         {
             var detail = await SrClient.GetByIdAsync(_dealershipId, item.Summary.Id);
 
+            var updatedSummary = detail.TechnicianSummary;
+            if (zoneChanged)
+            {
+                var newColumnTitle = _columns.FirstOrDefault(c => c.Status == newZone)?.Title ?? newZone;
+                updatedSummary = ActivityLogFormatter.PrependSystemEntry(
+                    updatedSummary,
+                    $"Status changed to {newColumnTitle}");
+            }
+
             var updateRequest = new ServiceRequestUpdateRequestDto
             {
                 // Preserve original status on reorder; use zone identifier when column changes
@@ -408,7 +417,7 @@
                 IssueDescription = detail.IssueDescription,
                 Priority = detail.Priority ?? "Medium",
                 IssueCategory = detail.IssueCategory,
-                TechnicianSummary = detail.TechnicianSummary,
+                TechnicianSummary = updatedSummary,
                 Urgency = detail.Urgency,
                 RvUsage = detail.RvUsage,
                 HasExtendedWarranty = detail.HasExtendedWarranty,

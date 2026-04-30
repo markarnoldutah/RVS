@@ -233,31 +233,253 @@
                 @* Left column — 70% — issue body *@
                 <MudItem xs="12" md="8">
                     <MudStack Spacing="0">
-                        @* Issue Details *@
-                        <MudText Typo="Typo.body2" Style="font-weight: 700;" Class="mb-2">Issue Details</MudText>
-                        <MudStack Spacing="3">
-                            <div>
-                                <MudText Typo="Typo.caption" Color="Color.Info">Description</MudText>
-                                <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@_sr.IssueDescription</MudText>
-                            </div>
-                            <MudGrid Spacing="2">
-                                <MudItem xs="6" sm="3">
-                                    <MudText Typo="Typo.caption" Color="Color.Info">Category</MudText>
-                                    <MudText Typo="Typo.body2">@_sr.IssueCategory</MudText>
-                                </MudItem>
-                                <MudItem xs="6" sm="3">
-                                    <MudText Typo="Typo.caption" Color="Color.Info">Urgency</MudText>
-                                    <MudText Typo="Typo.body2">@(_sr.Urgency ?? "—")</MudText>
-                                </MudItem>
-                                <MudItem xs="6" sm="3">
-                                    <MudText Typo="Typo.caption" Color="Color.Info">RV Usage</MudText>
-                                    <MudText Typo="Typo.body2">@(_sr.RvUsage ?? "—")</MudText>
-                                </MudItem>
-                                <MudItem xs="6" sm="3">
-                                    <MudText Typo="Typo.caption" Color="Color.Info">Scheduled</MudText>
-                                    <MudText Typo="Typo.body2">@(_sr.ScheduledDateUtc?.ToLocalTime().ToString("g") ?? "—")</MudText>
-                                </MudItem>
-                            </MudGrid>
+                        @* Issue Details — summary metadata box *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Issue Details</MudText>
+                            <MudSpacer />
+                            @if (_issueSaving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                            else if (_editingIssue)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Primary"
+                                               Class="section-icon-btn"
+                                               aria-label="Save issue details" OnClick="SaveIssueAsync" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Cancel editing issue details" OnClick="CancelEditIssue" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.TwoTone.Settings" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Edit issue details" OnClick="BeginEditIssue" />
+                            }
+                        </MudStack>
+                        @if (_editingIssue)
+                        {
+                            <MudStack Spacing="3">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Description</MudText>
+                                    <MudTextField T="string" @bind-Value="_editIssueDescription"
+                                                  Lines="3"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="compact-field" />
+                                </MudStack>
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12" sm="6">
+                                        <MudStack Spacing="1">
+                                            <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Category</MudText>
+                                            <MudSelect T="string" @bind-Value="_editIssueCategory"
+                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                       Dense="true"
+                                                       Class="compact-field"
+                                                       AnchorOrigin="Origin.BottomCenter"
+                                                       TransformOrigin="Origin.TopCenter">
+                                                @if (_issueCategories is not null)
+                                                {
+                                                    @foreach (var cat in _issueCategories)
+                                                    {
+                                                        <MudSelectItem T="string" Value="@cat.Code">
+                                                            <span style="font-size: 0.875rem;">@cat.Name</span>
+                                                        </MudSelectItem>
+                                                    }
+                                                }
+                                            </MudSelect>
+                                        </MudStack>
+                                    </MudItem>
+                                    <MudItem xs="12" sm="6">
+                                        <MudStack Spacing="1">
+                                            <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Urgency</MudText>
+                                            <MudSelect T="string" @bind-Value="_editIssueUrgency"
+                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                       Dense="true"
+                                                       Class="compact-field"
+                                                       AnchorOrigin="Origin.BottomCenter"
+                                                       TransformOrigin="Origin.TopCenter">
+                                                @foreach (var opt in _urgencyOptions)
+                                                {
+                                                    <MudSelectItem T="string" Value="@opt">
+                                                        <span style="font-size: 0.875rem;">@opt</span>
+                                                    </MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudStack>
+                                    </MudItem>
+                                    <MudItem xs="12" sm="6">
+                                        <MudStack Spacing="1">
+                                            <MudText Typo="Typo.caption" Style="@IssueLabelStyle">RV Usage</MudText>
+                                            <MudSelect T="string" @bind-Value="_editIssueRvUsage"
+                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                       Dense="true"
+                                                       Class="compact-field"
+                                                       AnchorOrigin="Origin.BottomCenter"
+                                                       TransformOrigin="Origin.TopCenter">
+                                                @foreach (var opt in _rvUsageOptions)
+                                                {
+                                                    <MudSelectItem T="string" Value="@opt">
+                                                        <span style="font-size: 0.875rem;">@opt</span>
+                                                    </MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudStack>
+                                    </MudItem>
+                                    <MudItem xs="12" sm="6">
+                                        <MudStack Spacing="1">
+                                            <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Scheduled</MudText>
+                                            <MudDatePicker @bind-Date="_editIssueScheduled"
+                                                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                           Class="compact-field"
+                                                           Clearable="true" />
+                                        </MudStack>
+                                    </MudItem>
+                                </MudGrid>
+                                @if (_issueError is not null)
+                                {
+                                    <MudAlert Severity="Severity.Error" Dense="true">@_issueError</MudAlert>
+                                }
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="3">
+                                <div>
+                                    <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Description</MudText>
+                                    <MudText Typo="Typo.body2" Style="@($"white-space: pre-wrap; color: {ValueColor};")">@_sr.IssueDescription</MudText>
+                                </div>
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="6" sm="3">
+                                        <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Category</MudText>
+                                        <MudText Typo="Typo.body2" Style="@ValueStyle">@FormatCategoryName(_sr.IssueCategory)</MudText>
+                                    </MudItem>
+                                    <MudItem xs="6" sm="3">
+                                        <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Urgency</MudText>
+                                        <MudText Typo="Typo.body2" Style="@ValueStyle">@(_sr.Urgency ?? "—")</MudText>
+                                    </MudItem>
+                                    <MudItem xs="6" sm="3">
+                                        <MudText Typo="Typo.caption" Style="@IssueLabelStyle">RV Usage</MudText>
+                                        <MudText Typo="Typo.body2" Style="@ValueStyle">@(_sr.RvUsage ?? "—")</MudText>
+                                    </MudItem>
+                                    <MudItem xs="6" sm="3">
+                                        <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Scheduled</MudText>
+                                        <MudText Typo="Typo.body2" Style="@ValueStyle">@(_sr.ScheduledDateUtc?.ToLocalTime().ToString("g") ?? "—")</MudText>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudStack>
+                        }
+
+                        <MudDivider Class="my-5" />
+
+                        @* Activity timeline *@
+                        <MudText Typo="Typo.body2" Style="font-weight: 700;" Class="mb-3">Activity</MudText>
+                        <MudTimeline TimelinePosition="TimelinePosition.Start"
+                                     TimelineOrientation="TimelineOrientation.Vertical">
+                            @foreach (var entry in BuildTimelineEntries(_sr))
+                            {
+                                <MudTimelineItem Size="Size.Small"
+                                                 Variant="Variant.Filled"
+                                                 Color="@DotColor(entry.Dot)">
+                                    <ItemDot>
+                                        @switch (entry.Dot)
+                                        {
+                                            case TimelineDot.System:
+                                                <MudAvatar Color="@SystemDotColor"
+                                                           Style="width: 22px; height: 22px;">
+                                                    <MudIcon Icon="@Icons.Material.Filled.MiscellaneousServices"
+                                                             Style="font-size: 0.95rem;" />
+                                                </MudAvatar>
+                                                break;
+                                            case TimelineDot.Customer:
+                                                <MudAvatar Color="Color.Info"
+                                                           Style="width: 22px; height: 22px;">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Person"
+                                                             Style="font-size: 0.95rem;" />
+                                                </MudAvatar>
+                                                break;
+                                            case TimelineDot.CurrentUser:
+                                                <MudAvatar Color="Color.Secondary"
+                                                           Style="width: 22px; height: 22px; font-size: 0.6rem; font-weight: 700;">
+                                                    @entry.AuthorInitials
+                                                </MudAvatar>
+                                                break;
+                                            case TimelineDot.OtherPerson:
+                                                <MudAvatar Color="Color.Primary"
+                                                           Style="width: 22px; height: 22px; font-size: 0.6rem; font-weight: 700;">
+                                                    @entry.AuthorInitials
+                                                </MudAvatar>
+                                                break;
+                                        }
+                                    </ItemDot>
+                                    <ItemContent>
+                                        @if (entry.Dot == TimelineDot.System)
+                                        {
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                                <MudText Typo="Typo.body2" Style="@TimelineTitleStyle">@entry.Title</MudText>
+                                                <MudText Typo="Typo.caption" Style="@TimelineTimestampStyle">
+                                                    @entry.TimestampUtc.ToLocalTime().ToString("MMM d, yyyy h:mm:ss tt")
+                                                </MudText>
+                                            </MudStack>
+                                            @if (!string.IsNullOrWhiteSpace(entry.Body))
+                                            {
+                                                <MudText Typo="Typo.body2" Style="@TimelineBodyStyle" Class="mt-1">@entry.Body</MudText>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <MudCard Outlined="true" Elevation="0">
+                                                <MudCardContent Class="pa-3">
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                                        <MudText Typo="Typo.body2" Style="@TimelineTitleStyle">@entry.Title</MudText>
+                                                        <MudText Typo="Typo.caption" Style="@TimelineTimestampStyle">
+                                                            @entry.TimestampUtc.ToLocalTime().ToString("MMM d, yyyy h:mm:ss tt")
+                                                        </MudText>
+                                                    </MudStack>
+                                                    @if (!string.IsNullOrWhiteSpace(entry.Body))
+                                                    {
+                                                        <MudText Typo="Typo.body2" Style="@TimelineBodyStyle" Class="mt-1">@entry.Body</MudText>
+                                                    }
+                                                </MudCardContent>
+                                            </MudCard>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+
+                        @* Add a comment — anchored at bottom of timeline *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-4 mb-2">
+                            <MudAvatar Color="Color.Secondary"
+                                       Style="width: 26px; height: 26px; font-size: 0.7rem; font-weight: 700;">
+                                @_userInitials
+                            </MudAvatar>
+                            <MudText Typo="Typo.body2">Add a comment</MudText>
+                        </MudStack>
+                        <MudTextField T="string" @bind-Value="_commentText"
+                                      Lines="3"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Placeholder="Type a comment… (Enter to send, Shift+Enter for new line)"
+                                      FullWidth="true"
+                                      Immediate="true"
+                                      OnKeyDown="HandleCommentKeyDown"
+                                      Class="compact-field"
+                                      Disabled="_commentSaving" />
+                        @if (_commentError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@_commentError</MudAlert>
+                        }
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                       Size="Size.Small"
+                                       OnClick="AddCommentAsync"
+                                       Disabled="@(_commentSaving || string.IsNullOrWhiteSpace(_commentText))">
+                                @if (_commentSaving)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                }
+                                Comment
+                            </MudButton>
                         </MudStack>
 
                         @if (_sr.Attachments.Count > 0)
@@ -288,77 +510,6 @@
                                 }
                             </MudGrid>
                         }
-
-                        <MudDivider Class="my-5" />
-
-                        @* Advisor Notes *@
-                        <MudText Typo="Typo.body2" Style="font-weight: 700;" Class="mb-2">Advisor Notes</MudText>
-                        @if (!string.IsNullOrWhiteSpace(_sr.TechnicianSummary))
-                        {
-                            <MudText Typo="Typo.body2" Style="white-space: pre-wrap;" Class="mb-3">
-                                @_sr.TechnicianSummary
-                            </MudText>
-                        }
-
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-                            <MudAvatar Color="Color.Secondary"
-                                       Style="width: 26px; height: 26px; font-size: 0.7rem; font-weight: 700;">
-                                @_userInitials
-                            </MudAvatar>
-                            <MudText Typo="Typo.body2">Add a comment</MudText>
-                        </MudStack>
-                        <MudTextField T="string" @bind-Value="_commentText"
-                                      Lines="3"
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      Placeholder="Type a comment…"
-                                      FullWidth="true"
-                                      Disabled="_commentSaving" />
-                        @if (_commentError is not null)
-                        {
-                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@_commentError</MudAlert>
-                        }
-                        <MudStack Row="true" Justify="Justify.FlexStart" Class="mt-2">
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                                       OnClick="AddCommentAsync"
-                                       Disabled="@(_commentSaving || string.IsNullOrWhiteSpace(_commentText))">
-                                @if (_commentSaving)
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                                }
-                                Comment
-                            </MudButton>
-                        </MudStack>
-
-                        <MudDivider Class="my-5" />
-
-                        @* Customer Communications — UI stub *@
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Customer Communications</MudText>
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
-                                Preview
-                            </MudChip>
-                        </MudStack>
-                        <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
-                            @foreach (var evt in BuildCommsStub(_sr))
-                            {
-                                <MudTimelineItem Color="@evt.Color" Size="Size.Small">
-                                    <ItemContent>
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                            <MudIcon Icon="@evt.Icon" Size="Size.Small" Color="@evt.Color" />
-                                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@evt.Title</MudText>
-                                            <MudText Typo="Typo.caption" Color="Color.Info">
-                                                @evt.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")
-                                            </MudText>
-                                        </MudStack>
-                                        <MudText Typo="Typo.body2" Color="Color.Info">@evt.Preview</MudText>
-                                    </ItemContent>
-                                </MudTimelineItem>
-                            }
-                        </MudTimeline>
-                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-2">
-                            Customer communication tracking is a UI stub — full email/SMS history is coming in a later story.
-                        </MudAlert>
                     </MudStack>
                 </MudItem>
 
@@ -381,10 +532,14 @@
                                        ValueChanged="OnStatusChangeAsync"
                                        AnchorOrigin="Origin.BottomCenter"
                                        TransformOrigin="Origin.TopCenter"
-                                       Placeholder="Change status…">
+                                       Placeholder="Change status…"
+                                       Dense="true"
+                                       Class="compact-field">
                                 @foreach (var status in _allowedStatuses)
                                 {
-                                    <MudSelectItem T="string" Value="@status">@FormatStatus(status)</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@status">
+                                        <span style="font-size: 0.875rem;">@FormatStatus(status)</span>
+                                    </MudSelectItem>
                                 }
                             </MudSelect>
                             @if (_statusError is not null)
@@ -719,6 +874,19 @@
     private string? _titleError;
     private string? _editTitleText;
 
+    private bool _editingIssue;
+    private bool _issueSaving;
+    private string? _issueError;
+    private string? _editIssueDescription;
+    private string? _editIssueCategory;
+    private string? _editIssueUrgency;
+    private string? _editIssueRvUsage;
+    private DateTime? _editIssueScheduled;
+    private List<LookupItemDto>? _issueCategories;
+
+    private static readonly string[] _urgencyOptions = ["Low", "Medium", "High", "Critical"];
+    private static readonly string[] _rvUsageOptions = ["Full-Time", "Part-Time", "Seasonal", "Occasional"];
+
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
@@ -763,6 +931,14 @@
         ThemeMode.HighContrast => "#FFFF00",
         _ => "var(--mud-palette-text-primary)"
     };
+
+    private Color SystemDotColor => ThemeService.Mode == ThemeMode.Dark ? Color.Dark : Color.Default;
+
+    private string TimelineTitleStyle => $"font-weight: 600; color: {ValueColor};";
+    private string TimelineBodyStyle => $"white-space: pre-wrap; color: {ValueColor};";
+    private string TimelineTimestampStyle => "color: var(--mud-palette-text-secondary);";
+
+    private string IssueLabelStyle => "color: var(--mud-palette-text-secondary);";
 
     private string HeaderFooterStyle =>
         $"position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--mud-palette-divider); background: {ColumnBackground};";
@@ -844,7 +1020,10 @@
                 return;
             }
 
-            _sr = await SrClient.GetByIdAsync(_dealershipId, ServiceRequestId);
+            var srTask = SrClient.GetByIdAsync(_dealershipId, ServiceRequestId);
+            var categoriesTask = EnsureIssueCategoriesAsync();
+            _sr = await srTask;
+            await categoriesTask;
             RefreshAllowedStatuses();
         }
         catch (AccessTokenNotAvailableException ex)
@@ -867,6 +1046,34 @@
         return dealerships.FirstOrDefault()?.Id;
     }
 
+    private async Task EnsureIssueCategoriesAsync()
+    {
+        if (_issueCategories is not null) return;
+        try
+        {
+            // The lookup endpoint partition-keys on Category (e.g. "IssueCategory"),
+            // not the document slug ("issue-categories"). See seed at
+            // RVS.Data.Cosmos.Seed/Program.cs (BuildLookupSets).
+            var lookup = await LookupClient.GetLookupAsync("IssueCategory");
+            _issueCategories = lookup.Items
+                .Where(i => i.IsSelectable)
+                .OrderBy(i => i.SortOrder)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _issueCategories = [];
+            Snackbar.Add($"Failed to load issue categories: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private string FormatCategoryName(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return "—";
+        return _issueCategories?.FirstOrDefault(c =>
+            string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase))?.Name ?? code;
+    }
+
     private void RefreshAllowedStatuses()
     {
         if (_sr is null) return;
@@ -877,6 +1084,7 @@
     private async Task OnStatusChangeAsync(string newStatus)
     {
         if (_sr is null || _dealershipId is null || string.IsNullOrEmpty(newStatus)) return;
+        if (string.Equals(newStatus, _sr.Status, StringComparison.OrdinalIgnoreCase)) return;
 
         _statusUpdating = true;
         _statusError = null;
@@ -884,11 +1092,16 @@
 
         try
         {
+            var combinedSummary = ActivityLogFormatter.PrependSystemEntry(
+                _sr.TechnicianSummary,
+                $"Status changed to {FormatStatus(newStatus)}");
+
             var request = new ServiceRequestUpdateRequestDto
             {
                 Status = newStatus,
                 IssueDescription = _sr.IssueDescription,
-                Priority = _sr.Priority ?? "Medium"
+                Priority = _sr.Priority ?? "Medium",
+                TechnicianSummary = combinedSummary
             };
 
             _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
@@ -915,11 +1128,9 @@
 
         try
         {
-            var byline = $"[{_userDisplayName} — {DateTime.Now:MMM d, yyyy h:mm tt}]";
+            var byline = ActivityLogFormatter.BuildBylineHeader(_userDisplayName);
             var newEntry = $"{byline}\n{_commentText.Trim()}";
-            var combined = string.IsNullOrWhiteSpace(_sr.TechnicianSummary)
-                ? newEntry
-                : $"{newEntry}\n\n{_sr.TechnicianSummary}";
+            var combined = ActivityLogFormatter.PrependEntry(_sr.TechnicianSummary, newEntry);
 
             var request = new ServiceRequestUpdateRequestDto
             {
@@ -973,6 +1184,7 @@
                 Status = _sr.Status,
                 IssueDescription = _sr.IssueDescription,
                 Priority = _sr.Priority ?? "Medium",
+                TechnicianSummary = _sr.TechnicianSummary,
                 Customer = new CustomerInfoDto
                 {
                     FirstName = _editCustomerFirstName ?? string.Empty,
@@ -1019,6 +1231,7 @@
                 Status = _sr.Status,
                 IssueDescription = _sr.IssueDescription,
                 Priority = _sr.Priority ?? "Medium",
+                TechnicianSummary = _sr.TechnicianSummary,
                 Asset = new AssetInfoDto
                 {
                     AssetId      = _editAssetId ?? string.Empty,
@@ -1033,6 +1246,63 @@
         }
         catch (Exception ex) { _assetError = ex.Message; }
         finally { _assetSaving = false; }
+    }
+
+    private void BeginEditIssue()
+    {
+        if (_sr is null) return;
+        _editIssueDescription = _sr.IssueDescription;
+        _editIssueCategory    = _sr.IssueCategory;
+        _editIssueUrgency     = _sr.Urgency;
+        _editIssueRvUsage     = _sr.RvUsage;
+        _editIssueScheduled   = _sr.ScheduledDateUtc?.ToLocalTime();
+        _issueError = null;
+        _editingIssue = true;
+    }
+
+    private void CancelEditIssue()
+    {
+        _editingIssue = false;
+        _issueError = null;
+    }
+
+    private async Task SaveIssueAsync()
+    {
+        if (_sr is null || _dealershipId is null) return;
+        if (string.IsNullOrWhiteSpace(_editIssueDescription))
+        {
+            _issueError = "Description is required.";
+            return;
+        }
+
+        _issueSaving = true;
+        _issueError = null;
+        StateHasChanged();
+        try
+        {
+            var scheduledUtc = _editIssueScheduled?.ToUniversalTime();
+            var request = new ServiceRequestUpdateRequestDto
+            {
+                Status = _sr.Status,
+                IssueDescription = _editIssueDescription!.Trim(),
+                IssueCategory = string.IsNullOrWhiteSpace(_editIssueCategory) ? null : _editIssueCategory.Trim(),
+                Priority = _sr.Priority ?? "Medium",
+                TechnicianSummary = _sr.TechnicianSummary,
+                Urgency = string.IsNullOrWhiteSpace(_editIssueUrgency) ? null : _editIssueUrgency.Trim(),
+                RvUsage = string.IsNullOrWhiteSpace(_editIssueRvUsage) ? null : _editIssueRvUsage.Trim(),
+                HasExtendedWarranty = _sr.HasExtendedWarranty,
+                ApproxPurchaseDate = _sr.ApproxPurchaseDate,
+                AssignedTechnicianId = _sr.AssignedTechnicianId,
+                AssignedBayId = _sr.AssignedBayId,
+                ScheduledDateUtc = scheduledUtc,
+                RequiredSkills = _sr.RequiredSkills
+            };
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            _editingIssue = false;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) { _issueError = ex.Message; }
+        finally { _issueSaving = false; }
     }
 
     private void BeginEditTech()
@@ -1057,12 +1327,25 @@
         StateHasChanged();
         try
         {
+            var newTechId = string.IsNullOrWhiteSpace(_editTechId) ? null : _editTechId.Trim();
+            var techChanged = !string.Equals(newTechId ?? "", _sr.AssignedTechnicianId ?? "", StringComparison.Ordinal);
+
+            var summary = _sr.TechnicianSummary;
+            if (techChanged)
+            {
+                var description = newTechId is null
+                    ? "Technician unassigned"
+                    : $"Technician assigned: {newTechId}";
+                summary = ActivityLogFormatter.PrependSystemEntry(summary, description);
+            }
+
             var request = new ServiceRequestUpdateRequestDto
             {
                 Status = _sr.Status,
                 IssueDescription = _sr.IssueDescription,
                 Priority = _sr.Priority ?? "Medium",
-                AssignedTechnicianId = string.IsNullOrWhiteSpace(_editTechId) ? null : _editTechId,
+                TechnicianSummary = summary,
+                AssignedTechnicianId = newTechId,
                 RequiredSkills = _sr.RequiredSkills
             };
             _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
@@ -1106,6 +1389,7 @@
                 Status = _sr.Status,
                 IssueDescription = _sr.IssueDescription,
                 Priority = _sr.Priority ?? "Medium",
+                TechnicianSummary = _sr.TechnicianSummary,
                 Customer = new CustomerInfoDto
                 {
                     FirstName = firstName,
@@ -1336,39 +1620,167 @@
         _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
     };
 
-    @* Stub data for the customer comms timeline — full email/SMS history wiring is a separate story. *@
-    private static IReadOnlyList<CommsEvent> BuildCommsStub(ServiceRequestDetailResponseDto sr)
+    @* Builds the activity timeline from the SR. Intake-derived events anchor at CreatedAtUtc.
+       Status / tech changes are persisted as bylined entries inside TechnicianSummary at the
+       time of the change, so each event keeps its own real-second-precision timestamp and the
+       timeline can sort them correctly even when several happen close together. *@
+    private IReadOnlyList<TimelineEntry> BuildTimelineEntries(ServiceRequestDetailResponseDto sr)
     {
+        var entries = new List<TimelineEntry>();
         var created = sr.CreatedAtUtc;
-        return
-        [
-            new CommsEvent(
-                "Intake confirmation sent",
-                $"Email to {sr.Customer.Email}: \"We've received your service request — we'll be in touch.\"",
-                created.AddMinutes(2),
-                Icons.Material.Filled.Email,
-                Color.Info),
-            new CommsEvent(
-                "SMS reply received",
-                "Customer: \"Thanks — when can I drop it off?\"",
-                created.AddHours(4),
-                Icons.Material.Filled.Sms,
-                Color.Success),
-            new CommsEvent(
-                "Status update sent",
-                "Email: Diagnosis complete, estimate attached.",
-                sr.UpdatedAtUtc ?? created.AddDays(1),
-                Icons.Material.Filled.Email,
-                Color.Info),
-        ];
+        var customerName = $"{sr.Customer.FirstName} {sr.Customer.LastName}".Trim();
+
+        entries.Add(new TimelineEntry(
+            TimestampUtc: created,
+            Dot: TimelineDot.System,
+            AuthorName: null,
+            AuthorInitials: null,
+            Title: "Issue Received",
+            Body: BuildIntakeSummary(sr)));
+
+        if (!string.IsNullOrWhiteSpace(sr.IssueDescription))
+        {
+            entries.Add(new TimelineEntry(
+                TimestampUtc: created.AddSeconds(1),
+                Dot: TimelineDot.Customer,
+                AuthorName: customerName,
+                AuthorInitials: null,
+                Title: "Issue Description",
+                Body: sr.IssueDescription));
+        }
+
+        if (sr.DiagnosticResponses.Count > 0)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var dr in sr.DiagnosticResponses)
+            {
+                sb.AppendLine($"Q: {dr.QuestionText}");
+                if (dr.SelectedOptions.Count > 0)
+                {
+                    sb.AppendLine($"A: {string.Join(", ", dr.SelectedOptions)}");
+                }
+                if (!string.IsNullOrWhiteSpace(dr.FreeTextResponse))
+                {
+                    sb.AppendLine($"   {dr.FreeTextResponse.Trim()}");
+                }
+                sb.AppendLine();
+            }
+            entries.Add(new TimelineEntry(
+                TimestampUtc: created.AddSeconds(2),
+                Dot: TimelineDot.Customer,
+                AuthorName: customerName,
+                AuthorInitials: null,
+                Title: "Diagnostic Responses",
+                Body: sb.ToString().TrimEnd()));
+        }
+
+        foreach (var parsed in ParseTechnicianSummary(sr.TechnicianSummary, created, _userDisplayName))
+        {
+            entries.Add(parsed);
+        }
+
+        return entries.OrderBy(e => e.TimestampUtc).ToList();
     }
 
-    private sealed record CommsEvent(
-        string Title,
-        string Preview,
+
+    private static string BuildIntakeSummary(ServiceRequestDetailResponseDto sr)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(sr.IssueCategory)) parts.Add($"Category: {sr.IssueCategory}");
+        if (!string.IsNullOrWhiteSpace(sr.Priority))      parts.Add($"Priority: {sr.Priority}");
+        if (!string.IsNullOrWhiteSpace(sr.Urgency))       parts.Add($"Urgency: {sr.Urgency}");
+        if (!string.IsNullOrWhiteSpace(sr.RvUsage))       parts.Add($"RV Usage: {sr.RvUsage}");
+        return string.Join(" • ", parts);
+    }
+
+    @* Comments are stored in TechnicianSummary as `[Name — MMM d, yyyy h:mm tt]\nBody`, separated
+       by `\n\n`. Any block without that byline (legacy intake-generated summary) is skipped to
+       avoid a redundant "Initial Advisor Notes" entry alongside the Issue Description / Diagnostics. *@
+    private static IReadOnlyList<TimelineEntry> ParseTechnicianSummary(
+        string? summary,
+        DateTime fallbackUtc,
+        string currentUserName)
+    {
+        if (string.IsNullOrWhiteSpace(summary)) return [];
+
+        var entries = new List<TimelineEntry>();
+        var blocks = summary.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+
+        for (var i = 0; i < blocks.Length; i++)
+        {
+            var block = blocks[i];
+            var match = System.Text.RegularExpressions.Regex.Match(
+                block,
+                @"^\[(?<name>.+?)\s+—\s+(?<date>.+?)\]\r?\n(?<body>.*)$",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+
+            if (!match.Success) continue;
+
+            var name = match.Groups["name"].Value.Trim();
+            var dateStr = match.Groups["date"].Value.Trim();
+            var body = match.Groups["body"].Value.Trim();
+
+            DateTime ts;
+            if (DateTime.TryParse(dateStr, out var parsedLocal))
+            {
+                ts = DateTime.SpecifyKind(parsedLocal, DateTimeKind.Local).ToUniversalTime();
+            }
+            else
+            {
+                ts = fallbackUtc.AddSeconds(blocks.Length - i + 10);
+            }
+
+            if (string.Equals(name, ActivityLogFormatter.SystemAuthor, StringComparison.OrdinalIgnoreCase))
+            {
+                entries.Add(new TimelineEntry(
+                    TimestampUtc: ts,
+                    Dot: TimelineDot.System,
+                    AuthorName: null,
+                    AuthorInitials: null,
+                    Title: body,
+                    Body: null));
+            }
+            else
+            {
+                var isCurrentUser = string.Equals(name, currentUserName, StringComparison.OrdinalIgnoreCase);
+                entries.Add(new TimelineEntry(
+                    TimestampUtc: ts,
+                    Dot: isCurrentUser ? TimelineDot.CurrentUser : TimelineDot.OtherPerson,
+                    AuthorName: name,
+                    AuthorInitials: ResolveInitials(name),
+                    Title: $"{name} commented",
+                    Body: body));
+            }
+        }
+
+        return entries;
+    }
+
+    private Color DotColor(TimelineDot dot) => dot switch
+    {
+        TimelineDot.System      => SystemDotColor,
+        TimelineDot.Customer    => Color.Info,
+        TimelineDot.CurrentUser => Color.Secondary,
+        TimelineDot.OtherPerson => Color.Primary,
+        _                       => Color.Default
+    };
+
+    private async Task HandleCommentKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || e.ShiftKey) return;
+        if (_commentSaving || string.IsNullOrWhiteSpace(_commentText)) return;
+        await AddCommentAsync();
+    }
+
+    private enum TimelineDot { System, Customer, CurrentUser, OtherPerson }
+
+    private sealed record TimelineEntry(
         DateTime TimestampUtc,
-        string Icon,
-        Color Color);
+        TimelineDot Dot,
+        string? AuthorName,
+        string? AuthorInitials,
+        string Title,
+        string? Body);
 
     private sealed class CreateForm
     {

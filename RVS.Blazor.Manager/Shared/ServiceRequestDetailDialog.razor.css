@@ -8,7 +8,10 @@
 }
 
 ::deep .compact-field input,
+::deep .compact-field textarea,
 ::deep .compact-field .mud-input-slot,
-::deep .compact-field .mud-input-root {
+::deep .compact-field .mud-input-root,
+::deep .compact-field .mud-select-input {
     font-size: 0.875rem !important;
 }
+
