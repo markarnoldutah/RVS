@@ -2,22 +2,12 @@
 @implements IDisposable
 @inject RVS.Blazor.Manager.State.ManagerAppState AppState
 @inject ThemeService ThemeService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <MudThemeProvider Theme="ThemeService.CurrentTheme" IsDarkMode="ThemeService.IsDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
-
-<CascadingAuthenticationState>
-    <AuthorizeView>
-        <Authorized>
-            @{ _isAuthorized = true; }
-        </Authorized>
-        <NotAuthorized>
-            @{ _isAuthorized = false; }
-        </NotAuthorized>
-    </AuthorizeView>
-</CascadingAuthenticationState>
 
 <MudLayout Style="@GetLayoutStyle()">
     <MudAppBar Elevation="2"
@@ -92,12 +82,20 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
     private bool _drawerOpen = true;
     private bool _isAuthorized;
 
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += StateHasChanged;
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await UpdateAuthorizedAsync(AuthenticationStateTask);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -109,9 +107,27 @@
         }
     }
 
+    private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        _ = InvokeAsync(() => UpdateAuthorizedAsync(task));
+    }
+
+    private async Task UpdateAuthorizedAsync(Task<AuthenticationState>? task)
+    {
+        if (task is null) return;
+        var state = await task;
+        var authorized = state.User.Identity?.IsAuthenticated == true;
+        if (authorized != _isAuthorized)
+        {
+            _isAuthorized = authorized;
+            StateHasChanged();
+        }
+    }
+
     public void Dispose()
     {
         ThemeService.OnThemeChanged -= StateHasChanged;
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     }
 
     private void ToggleDrawer()
