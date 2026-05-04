@@ -65,7 +65,11 @@ builder.Services.AddOidcAuthentication(options =>
     // PKCE: Use authorization code flow
     options.ProviderOptions.ResponseType = "code";
 
-    // Standard OIDC scopes
+    // Standard OIDC scopes — `offline_access` triggers Auth0 to issue a
+    // refresh_token, which RefreshingAccessTokenProvider exchanges for a new
+    // access_token at the /oauth/token endpoint when the cached token is
+    // expired/expiring. Without it, Microsoft's library falls back to an
+    // iframe SSO check that browsers increasingly block.
     options.ProviderOptions.DefaultScopes.Add("openid");
     options.ProviderOptions.DefaultScopes.Add("profile");
     options.ProviderOptions.DefaultScopes.Add("email");
@@ -85,6 +89,26 @@ builder.Services.AddOidcAuthentication(options =>
     options.UserOptions.RoleClaim = "roles";
     options.UserOptions.NameClaim = "name";
 });
+
+// Dedicated HttpClient for the Auth0 token endpoint — separate from the
+// API client so the bearer-attaching AuthorizationMessageHandler does not
+// run on token-refresh requests (which authenticate via refresh_token, not
+// the access token we are trying to renew).
+builder.Services.AddHttpClient("Auth0.Token");
+
+// Decorate the default IAccessTokenProvider with refresh_token-backed renewal
+// so users stay signed in for the full 15-day rolling refresh-token lifetime
+// (RVS_Technical_PRD.md §10.1) instead of being bounced to login when the
+// iframe silent-renewal path fails. The concrete RemoteAuthenticationService<>
+// registered by AddOidcAuthentication is resolved directly to avoid a circular
+// IAccessTokenProvider lookup.
+builder.Services.AddScoped<IAccessTokenProvider>(sp =>
+    new RefreshingAccessTokenProvider(
+        sp.GetRequiredService<RemoteAuthenticationService<RemoteAuthenticationState, RemoteUserAccount, OidcProviderOptions>>(),
+        sp.GetRequiredService<IHttpClientFactory>(),
+        sp.GetRequiredService<IJSRuntime>(),
+        builder.Configuration,
+        sp.GetRequiredService<ILogger<RefreshingAccessTokenProvider>>()));
 
 // Add cascading authentication state
 builder.Services.AddCascadingAuthenticationState();

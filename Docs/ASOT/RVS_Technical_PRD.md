@@ -727,7 +727,7 @@ Search input validation: reject any `Keyword` containing `<`, `>`, `;`, `'`, `"`
 | Custom claims namespace | `https://rvserviceflow.com/` |
 | MVP claim injection | Login Action injects `tenantId`, `orgName`, `locationIds`, `regionTag` from `app_metadata` |
 | Tenant scoping | `app_metadata.tenantId` per user; no Auth0 Organizations |
-| Token lifetime | Access token: 1 hour; Refresh token: 30 days (rolling) |
+| Token lifetime | Access token: 1 hour; Refresh token: 15 days (rolling) |
 
 ### 10.2 Azure Cosmos DB
 
