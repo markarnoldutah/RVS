@@ -1,699 +1,472 @@
-# PRD: RV Service Flow (RVS) — MVP
+# PRD: RV Service Flow (RVS) — Solo + Professional Tiers
 
-## 1. Product overview
+## 1. Product Overview
 
-### 1.1 Document title and version
+**Document version:** 3.4
+**Date:** April 30, 2026
+**Status:** Draft (post-pivot, v3.4 — version sync only, no substantive change to Solo/Pro requirements)
+**Supersedes:** v3.3 (earlier same-day), v3.0 (earlier same-day), v2.0 (MVP-Free), v1.2
 
-- PRD: RV Service Flow (RVS) — MVP
-- Version: 1.2
-- Date: April 16, 2026
+### 1.1 Scope
 
-### 1.2 Product summary
+This PRD describes **the Solo and Professional tiers of RVS** — the Phase 1 deliverables that ship together as the initial commercial product. Premium and Enterprise Scale tier requirements are in [`RVS_Premium_PRD.md`](RVS_Premium_PRD.md). Strategic context for the four-tier model is in [`RVS_Context.md`](RVS_Context.md) and [`RVS_Competitive_Strategy.md`](RVS_Competitive_Strategy.md).
 
-RV Service Flow (RVS) is a multi-tenant SaaS platform that digitizes the service intake workflow at RV dealerships and independent RV repair shops. The core problem is that service departments rely on phone calls, emails, and manual notes to collect repair information before an RV arrives, resulting in incomplete diagnostics, wasted technician time, and extended Repair Event Cycle Times (RECT).
+### 1.2 What Changed From v3.3 (Same-Day Refinement)
 
-The MVP delivers three integrated surfaces: a frictionless, mobile-first customer intake portal (`Blazor.Intake`) that captures structured repair information (including photos, video, VIN, and an AI-guided issue wizard) before the RV arrives; a manager and advisor dashboard (`Blazor.Manager`) where service advisors and managers manage, triage, and act on incoming service requests from a desktop browser; and a technician mobile app (`MAUI.Tech`) purpose-built for service bay use with offline-first job access, native barcode scanning, voice notes, and a 3–5 second interaction target. Customers are never required to create an account — a magic-link token gives them passive status visibility across all their dealerships.
+v3.4 makes no substantive change to the Solo or Professional tier requirements documented here. The v3.4 changes are entirely Enterprise Scale-tier additions documented in `RVS_Premium_PRD.md` v1.2: dedicated solutions engineer FTE commitment (FR-ES-011), custom SLA negotiation (FR-ES-012), and documented OEM revenue-share clause (FR-ES-007 rewritten). The version bump on this document is for set consistency only.
 
-The platform is designed as the intake layer that sits in front of existing Dealer Management Systems (DMS), not a DMS replacement. A simple SFTP-based DMS export makes it easy for dealers to pull structured service request data into their existing workflow on day one.
+### 1.3 What Changed From v3.0 (Earlier Same-Day) → v3.3
+
+- **Pure per-location pricing with volume bands** replaces the v3.0 flat-fee + per-location-surcharge model. Solo flat $39/loc; Pro $79/$69/$59 per 1-9/10-24/25-49 loc; Premium $119/$109/$99 per same bands.
+- **Per-user pricing eliminated entirely.** All tiers, all roles, unlimited users (including non-technicians at Premium and Enterprise Scale, which were previously per-user metered).
+- **Pro SR cap reduced** from 1,000/loc/mo to 600/loc/mo to create a clear upgrade signal to Premium.
+- **Trial structure clarified:** prospects can choose Solo or Pro trial at signup with separate 30-day trials; Premium and Enterprise Scale are sales-led pilots, not self-serve trials.
+- **Volume-banded billing logic** added to Phase 1 Stripe billing infrastructure (Sprint 13-14, ~minor addition; per-user metering removed from Phase 2 scope, ~1 sprint saved).
+
+### 1.4 What Changed From v2.0 (Earlier Today)
+
+The v2.0 PRD targeted a Free + Enterprise model with Free as a dataset-feeding distribution channel. v3.0 (and now v3.3) restructures into four tiers with paid revenue from day one:
+
+- **Free tier eliminated.** Replaced with 30-day Solo or Pro trial, credit card required at signup.
+- **Stripe billing infrastructure** required from Phase 1 (not deferred).
+- **Self-service user provisioning** required from Phase 1 (Auth0 Management API integration).
+- **Anti-corpus-theft protections** added throughout (verification gates, audit logs, rate limits).
+- **Industry benchmarking deferred to Phase 2** when anonymization pipeline is operational.
+- **Phase 1 engineering scope** is ~25 sprints to accommodate Pro features and billing.
+
+The v1.2 PRD's deprecated features list (no scheduling, no payments, no two-way SMS, no broadcast, etc.) remains fully in force.
+
+### 1.5 The Product in One Paragraph
+
+RVS Solo is a single-tenant, multi-location-capable structured intake and technician workflow product for RV dealerships and independent shops, priced at $39/location/month with no per-user pricing. The customer submits a service request through a web form on their phone. AI categorizes the issue. The advisor sees a triaged queue. The technician sees a pre-diagnosed job, captures structured Section 10A outcome data via mobile app, and the platform writes a structured event to the asset ledger. RVS Professional ($79/loc/mo for 1-9 loc, decreasing to $69 at 10-24 loc and $59 at 25-49 loc) adds multi-location coordination, cross-location asset history, regional manager dashboards, warranty leakage analytics, and advanced benchmarking — the layer that makes RVS commercially viable for the 5–15 location dealer group.
 
 ---
 
 ## 2. Goals
 
-### 2.1 Business goals
+### 2.1 Strategic Goals
 
-- Reach an initial paying customer base of 10–20 RV dealerships to validate the subscription model.
-- Target $50K ARR milestone through a $199–$499/month tiered subscription.
-- Establish a structured service event dataset (Section 10A data moat) from day one, accumulating proprietary cross-dealer asset intelligence that increases acquisition value.
-- Position RVS as the intake layer that integrates with existing DMS tools, minimizing displacement risk and sales resistance.
-- Recruit 5 design partner dealerships before general availability to validate flow and co-develop the product.
+- Land **15–25 paying Solo customers** in the first 4 months after Phase 1 ship
+- Land **3–5 paying Professional customers** within 6 months after Phase 1 ship
+- Reach **month 12 ARR of $50K–$150K** from combined Solo + Professional
+- Accumulate **≥10,000 structured Section 10A service events** in the asset ledger by month 12
+- Achieve **≥95% Section 10A taxonomy adherence** across all submitted events
+- Cover **at least 3 major OEMs** with meaningful event counts (≥500 per OEM by month 12)
+- Validate the dataset thesis well enough to support Premium tier sales pitches and an initial OEM exploratory conversation
 
-### 2.2 User goals
+### 2.2 User Goals (by persona)
 
-- **Customers:** Submit a service request from a phone in under 3 minutes without creating an account; describe issues using speech-to-text and photo/video; check request status at any time via a magic link.
-- **Service advisors:** Replace the phone intake process with a structured queue; see AI-generated technician summaries for every request; update request status and communicate with customers through the dashboard.
-- **Technicians:** See an organized, AI-categorized queue with pre-diagnosis information and photos before the RV arrives; access job data offline in service bays with poor connectivity; log repair actions and parts used via a glove-friendly native app in 3–5 seconds per job completion.
-- **Dealership managers and owners:** Monitor service request volume, status distribution, and technician workload across all locations from one dashboard.
+- **RV owner:** Submit a structured service request from phone in under 3 minutes, with photos and voice description, no account required. Check status anytime via magic-link.
+- **Service advisor:** Replace phone intake with a triaged, AI-categorized queue with technician-ready summaries.
+- **Technician:** Open jobs by VIN/QR scan, see customer photos and structured wizard answers, capture repair outcome via Section 10A controlled vocabularies in 3–5 seconds per job.
+- **Dealership owner / single-location operator (Solo customer):** Use a $39/location service intake tool that makes the operation more efficient and provides industry benchmarking insights.
+- **Multi-location dealer manager (Professional customer):** Coordinate service operations across 5–15 locations with cross-location queue, regional manager hierarchy, and warranty leakage analytics that can pay for the platform multiple times over.
 
-### 2.3 Non-goals
+### 2.3 Non-Goals
 
-- Replacement of existing DMS systems (Lightspeed, IDS Astra, EverLogic, Motility). RVS sits in front of them.
-- Service appointment scheduling and bay assignment (Phase 2).
-- Technician skill routing and assignment algorithms (Phase 3).
-- Parts ordering integration or backorder tracking (Phase 4).
-- Customer Auth0 accounts and full customer login (Phase 2+); the MVP uses anonymous intake plus magic-link.
-- Warranty claim processing or warranty data lookups.
-- OEM or manufacturer data integrations.
-- Customer-facing native mobile apps (iOS/Android app store distribution); customer intake is browser-based (Blazor WASM) requiring zero install. The `MAUI.Tech` technician app is a MAUI Blazor Hybrid native app distributed to employer-provisioned devices — not a consumer app store release.
+The following are explicitly out of scope for Solo and Professional tiers:
 
----
-
-## 3. User personas
-
-### 3.1 Key user types
-
-- RV owner / customer (unauthenticated)
-- Service advisor (authenticated dealer staff)
-- Technician (authenticated dealer staff)
-- Service manager (authenticated dealer staff)
-- Dealership owner / corporate admin (authenticated dealer staff)
-- Platform administrator (RVS internal operations)
-
-### 3.2 Basic persona details
-
-- **Alex (RV Owner):** Owns a 2023 Grand Design fifth-wheel. Has limited patience for phone tag. Wants to describe the problem once, upload a short video of the noise, and know when his rig is ready without calling the dealer.
-- **Maria (Service Advisor):** Handles 15–25 intake calls per day at a mid-size dealership. Spends significant time collecting incomplete repair descriptions and managing a paper waitlist. Wants a structured queue that eliminates repeat callbacks.
-- **Jordan (Technician):** Diagnoses 5–10 units per week. Arrives at units cold with minimal pre-diagnosis context. Wants to know the issue category, component, and see customer photos before opening the bay door.
-- **Sam (Service Manager):** Manages a 10-technician department across one location. Needs visibility into queue depth, status distribution, and which requests are stalled.
-- **Chris (Dealership Owner / Corporate Admin):** Owns a 3-location dealer group. Wants cross-location service visibility and the ability to export intake data to their existing DMS.
-- **Pat (Platform Admin):** RVS internal operator. Provisions new tenants, manages global lookup sets, and monitors platform health.
-
-### 3.3 Role-based access
-
-- **`platform:admin`:** Global cross-tenant access. Manages all tenant configurations, access gates, and platform-wide lookup sets. Not scoped to any dealership.
-- **`dealer:corporate-admin`:** Full access across all locations within the corporation. Manages users, settings, all service requests, and analytics. Equivalent to owner for multi-location groups.
-- **`dealer:owner`:** Same as `corporate-admin` for single-location dealers. Full control of their corporation's config, users, analytics, and all service requests.
-- **`dealer:regional-manager`:** Cross-location visibility limited to locations matching their assigned `regionTag` claim. Can view and manage SRs across their geographic region.
-- **`dealer:manager`:** Location-scoped. Full SR management, analytics, and location settings for their specific service site.
-- **`dealer:advisor`:** Location-scoped. Creates, searches, and updates service requests. Primary daily user of the dealer dashboard.
-- **`dealer:technician`:** Location-scoped. Views assigned service requests and updates Section 10A fields (repair action, parts used, labor hours). Cannot modify status or customer data.
-- **`dealer:readonly`:** Location-scoped. Read-only access to service requests and analytics (e.g., accounting, external auditors).
-- **Customer (anonymous):** No Auth0 account. Accesses intake form via direct URL, QR code, or dealer deep link. Accesses status page via magic-link token.
+- IT-grade compliance features (SAML, SCIM, audit log, IP allowlisting) — Premium tier
+- Bidirectional DMS integration — Premium tier (Solo/Pro use CSV download)
+- Per-user pricing or seat-based licensing — Premium tier
+- Custom analytics builder, custom report exports — Enterprise Scale
+- Service appointment scheduling, bay assignment, technician routing
+- Parts ordering, inventory integration, warranty claim filing
+- Persistent customer Auth0 accounts (anonymous intake only)
+- Two-way SMS conversations, broadcast messaging, in-dashboard message composition
+- Voice AI, inbound call handling
+- Invoicing, payments, ESC approval workflows
+- Marine, heavy equipment, agricultural verticals
 
 ---
 
-## 4. Functional requirements
+## 3. User Personas
 
-- **FR-001: Multi-tenant, multi-location data isolation** (Priority: Critical)
-  - Each dealer corporation is a separate tenant. The `tenantId` serves as the partition key in Cosmos DB.
-  - A corporation may have one or many physical service locations. A single-location independent has exactly one location.
-  - All data reads and writes are scoped by `tenantId`. Cross-tenant data access is impossible by design.
-  - Location-scoped roles filter within the tenant partition; they do not cross tenant boundaries.
+### 3.1 Primary Personas
 
-- **FR-002: Anonymous customer intake** (Priority: Critical)
-  - The intake form is accessible at a location-specific URL: `https://rvintake.com/{locationSlug}`.
-  - No customer account or login is required to submit a service request.
-  - The form collects: first name, last name, email, phone, VIN (manual entry or camera scan), make, model, year, issue description (text or speech-to-text), photo/video attachments, urgency level (routine, urgent, emergency), full-time or part-time RV use, extended warranty status, and approximate purchase date.
-  - On submission, the API automatically creates or updates a tenant-scoped `CustomerProfile` and a cross-dealer `GlobalCustomerAcct` (resolved by email).
-  - The customer receives a confirmation email containing their magic-link status URL.
-  - After submission, the customer is prompted (not required) to create a full profile for easier future submissions.
+- **Alex** — RV owner, anonymous intake user
+- **Maria** — Service advisor at a Solo or Professional tier dealer
+- **Jordan** — Technician at any tier
+- **Sam** — Owner / GM of a single-location dealer (Solo customer)
+- **Chris** — Multi-location dealer GM (Professional customer)
+- **Pat** — RVS platform admin (internal operations)
 
-- **FR-003: VIN scan and lookup** (Priority: High)
-  - The intake form provides a VIN camera scanner that uses the device camera to capture and parse a VIN from a photo.
-  - Captured VIN is decoded to pre-populate make, manufacturer, model year, and asset details.
-  - Manual VIN entry is available as a fallback.
-  - The decoded VIN is stored in the structured `AssetInfoEmbedded.AssetId` field as the raw VIN value (no prefix).
+### 3.2 Persona Roles by Tier
 
-- **FR-004: AI-guided issue wizard** (Priority: High)
-  - The intake flow supports description-first capture: after the customer enters or records issue description text, AI suggests a top-level issue category (e.g., Slide System, Electrical, Plumbing, HVAC).
-  - The suggested category is pre-selected in the category dropdown and clearly marked as AI-suggested.
-  - The category dropdown remains editable so the customer can override the AI suggestion before continuing.
-  - After category is set (AI-suggested or user-selected), the wizard presents contextual follow-up questions specific to that category.
-  - Examples: for Refrigerator → ask absorption or residential type, error codes visible, shore power connected; for Slide-out → which slide number, manual override attempted; for Generator → runtime hours, last service date.
-  - Follow-up answers are captured as structured `ServiceEventEmbedded` fields alongside the free-text description.
+**Solo tier:**
+- `dealer:owner` — full access (typical for single-location operator)
+- `dealer:advisor` — SR creation, search, status updates
+- `dealer:technician` — Section 10A capture only (unlimited)
+- `dealer:readonly` — read-only
 
-- **FR-005: Speech-to-text issue description** (Priority: High)
-  - The issue description field supports voice input via the browser's Web Speech API (or a native device microphone prompt on mobile).
-  - After recording, AI cleans up and reformats the raw transcript into a coherent description.
-  - After cleanup, the Intake app calls `POST /api/intake/{locationSlug}/ai/suggest-category` with the reviewed description to prefill issue category.
-  - The customer reviews and edits the AI-cleaned description before submission.
+**Professional tier (Solo roles + multi-location additions):**
+- `dealer:regional-manager` — `regionTag`-scoped subset of locations
+- `dealer:manager` — single-location full access
+- Cross-location queue, asset history, and analytics accessible to owners and regional managers
+- Bulk user provisioning via CSV import
 
-- **FR-006: AI issue categorization and technician summary** (Priority: High)
-  - On intake submission, the API runs AI-powered issue categorization (Azure OpenAI for MVP) against the issue description and AI wizard answers to assign an `IssueCategory` and `ComponentType`. A rule-based keyword-matching engine serves as a fallback if the AI service is unavailable.
-  - The API generates a structured, technician-ready summary that includes: issue category, component, customer-reported symptoms, wizard-captured structured fields, and attachment count.
-  - Both `IssueCategory` and `TechnicianSummary` are written to the `ServiceRequest` document and surfaced on the dealer dashboard.
-  - The categorization service interface (`ICategorizationService`) supports both an Azure OpenAI implementation (primary for MVP) and a rule-based fallback implementation behind the same interface.
+**Premium and Enterprise Scale roles** (documented in `RVS_Premium_PRD.md`).
 
-- **FR-007: Photo and video upload** (Priority: High)
-  - The intake form accepts up to 10 file attachments per service request.
-  - Accepted file types: `.jpg`, `.jpeg`, `.png`, `.mp4` (configurable per location via `IntakeFormConfigEmbedded`).
-  - Maximum file size: 25 MB per file (configurable per location).
-  - Files are uploaded directly to Azure Blob Storage in a tenant-scoped container path: `{tenantId}/{serviceRequestId}/{attachmentId}_{filename}`.
-  - Attachment metadata is embedded within the `ServiceRequest` document as `Attachments` list.
-  - Dealer dashboard photo/video viewing uses time-limited SAS URLs (1-hour expiry) generated on demand.
-
-- **FR-008: Magic-link customer status page** (Priority: High)
-  - Each customer receives a magic-link token in their submission confirmation email, embedded in a status URL: `https://rvintake.com/status/{token}`.
-  - The token is stored on the `GlobalCustomerAcct` with an expiry. Token format encodes an email-hash prefix so the lookup is a single-partition point read (no cross-partition scan).
-  - The status page shows all active service requests for that customer across all dealerships where they have submitted.
-  - Each request shows: location name, status, issue summary, last updated date.
-  - **TBD:** The status page may also include a chat dialog and any dealer notes added to the service request.
-  - Expired or invalid tokens return a 404 with a "request a new link" prompt.
-  - The status endpoint is `[AllowAnonymous]` and rate-limited per IP.
-
-- **FR-009: Dealer service request dashboard** (Priority: Critical)
-  - Authenticated dealer staff access a dashboard scoped to their location (or all locations for corporate/owner roles).
-  - The dashboard displays: service request queue with status, customer name, VIN/asset, issue category, technician summary, submission date, attachment count.
-  - Supported actions: search and filter (by status, category, date range, location), view detail, update status (`New` → `InProgress` → `Completed` / `Cancelled`), add advisor notes, view/download photo and video attachments, delete a service request.
-  - **TBD:** The dashboard may also include the ability to manually initiate an SMS to the customer.
-  - The detail view renders: all structured intake fields, embedded customer snapshot, AI-generated technician summary, structured service event fields, and attachment previews.
-
-- **FR-010: Section 10A structured service event fields** (Priority: High)
-  - Each service request embeds a `ServiceEventEmbedded` document for structured repair data: `ComponentType`, `FailureMode`, `RepairAction`, `PartsUsed` (list), `LaborHours`, `ServiceDateUtc`.
-  - Technicians can update Section 10A fields via the dashboard (requires `service-requests:update-service-event` permission).
-  - On intake submission, `IssueCategory` and `ComponentType` are pre-populated from the AI categorization step. All other Section 10A fields default to null and are completed post-repair.
-  - Each service request submission also writes an append-only `AssetLedgerEntry` to the `assetLedger` container, partitioned by `assetId`. This is the strategic data moat that accumulates cross-dealer service event history per asset.
-
-- **FR-011: Dealership and location management** (Priority: High)
-  - Corporate admins and owners can view and update their dealership (corporation) record: corporate name and logo.
-  - Admins can create and manage physical locations: display name, address, service email, phone, logo, intake form config (accepted file types, max file size), region tag, and the set of service capabilities enabled at that location (see FR-023).
-  - Each location has a globally unique slug used in intake URLs and QR codes.
-  - A `slugLookup` container provides O(1) slug → `tenantId` + `locationId` resolution at intake time.
-
-- **FR-012: QR code generation** (Priority: Medium)
-  - The dealer dashboard exposes a `GET /api/locations/{id}/qr-code` endpoint that returns a QR code image encoding the intake URL for that location.
-  - The QR code can be downloaded and printed for physical placement at the dealership service drive.
-
-- **FR-013: SFTP-based DMS export** (Priority: High)
-  - Dealers can trigger a structured CSV export of service requests for a given date range from the dashboard.
-  - The export is also available on a scheduled daily basis via SFTP push to a dealer-configured SFTP endpoint.
-  - Exported fields: service request ID, status, submission date, customer name, customer email, customer phone, VIN, make, model, year, issue category, component type, issue description, technician summary, repair action, parts used, labor hours, service date, location name, attachment count.
-  - SFTP credentials (host, port, username, private key path, remote directory) are configured per tenant in `TenantConfig`.
-  - The export is formatted as a standard CSV with a header row. A PDF summary per service request is also available as an alternative for DMS systems that accept document upload.
-
-- **FR-014: Lookup sets** (Priority: High)
-  - Issue categories, component types, and failure modes are managed as `LookupSet` documents in Cosmos DB, partitioned by `/category`.
-  - The platform admin can manage global lookup sets. Dealer admins can customize lookup sets for their tenant.
-  - Lookup data is returned to the intake form and dealer dashboard via `GET /api/lookups/{category}`.
-
-- **FR-015: Tenant provisioning and access gate** (Priority: Critical)
-  - New tenants are provisioned via the platform admin. Each tenant has a `TenantConfig` document and a `TenantAccessGateEmbedded` flag.
-  - The `TenantAccessGateMiddleware` checks the access gate on every authenticated request. Disabled tenants receive a structured 403 response.
-  - Tenant provisioning bootstraps a Cosmos `TenantConfig`, a `Dealership`, a default `Location`, and an Auth0 `app_metadata` entry for the initial admin user.
-
-- **FR-016: Notifications** (Priority: Medium)
-  - On service request submission, the customer receives both an email and an SMS. The email contains the magic-link status URL plus any dealer-specific information. The SMS contains the magic-link status URL.
-  - After the initial submission notifications, all subsequent communications (status updates, advisor notes) are delivered via **SMS only** — no further emails are sent.
-  - Notification dispatch is abstracted behind `INotificationService` (email) and `ISmsNotificationService` (SMS), orchestrated by `INotificationOrchestrator`. The production implementation uses **Azure Communication Services (ACS)** for both email and SMS — a single Azure-native provider with managed identity authentication.
-  - Customers do not choose a notification preference — the platform determines the channel automatically as described above.
-  - SMS opt-in is explicit and timestamped for TCPA compliance.
-  - No marketing, reminder, or re-engagement messages are supported — all notifications are transactional only.
-
-- **FR-017: Rate limiting** (Priority: High)
-  - Anonymous intake and status endpoints are rate-limited per IP address.
-  - Default limits: 10 intake submissions per IP per hour, 30 status lookups per IP per hour.
-  - Rate limiting uses ASP.NET Core's built-in `RateLimiter` with a sliding window policy.
-  - Exceeded limits return `429 Too Many Requests` with a `Retry-After` header.
-
-- **FR-018: Private labeling** (Priority: Medium)
-  - The intake form renders with the dealership's logo (location-specific if configured, otherwise corporate).
-  - The intake URL uses the dealer's location slug, creating a dealership-branded experience without requiring a custom domain in the MVP.
-  - Future: custom domain support per dealership (Phase 2+).
-
-- **FR-019: Subscription plan tiers** (Priority: Critical)
-  - RVS offers three subscription tiers: **Starter** ($199/month, 500 SRs/month, 1 location), **Pro** ($349/month, 2,000 SRs/month, 5 locations), **Enterprise** ($499/month, unlimited SRs, unlimited locations).
-  - All tiers include the intake portal, dealer dashboard, service board, and asset ledger.
-  - SFTP export is available on Pro and Enterprise only.
-  - Each tenant's plan tier is stored in `TenantConfig.BillingConfig.PlanTier` and drives limit enforcement and feature gating.
-  - Enterprise tenants are exempt from all SR and location count enforcement.
-
-- **FR-020: Monthly service request limit enforcement** (Priority: Critical)
-  - On each service request submission, the platform increments an atomic per-tenant SR counter (`TenantConfig.BillingConfig.CurrentPeriodSrCount`) for billing period tracking.
-  - If a Starter or Pro tenant's counter equals or exceeds their plan limit, the intake endpoint returns HTTP 402 with a customer-friendly message ("This dealership has reached its monthly service request limit. Please contact your service manager.").
-  - The 402 response does not expose plan tier, limit count, or upgrade URL to anonymous customers.
-  - At 80% of the monthly limit, the platform emits a warning event; the dealer dashboard displays an upgrade banner ("You've used X% of your monthly service requests. Upgrade to avoid interruption.").
-  - When the limit is reached, the dashboard displays a blocking error banner.
-  - The SR counter resets to 0 at the start of each new billing period.
-
-- **FR-021: Location limit enforcement** (Priority: High)
-  - Starter tenants are limited to 1 active location; Pro tenants to 5; Enterprise tenants are unlimited.
-  - Attempting to create a location beyond the plan limit returns HTTP 402 with an upgrade prompt: "Your plan allows a maximum of N location(s). Upgrade to Pro or Enterprise to add more locations."
-  - Location limit enforcement applies to the authenticated dealer-facing location creation endpoint only (not to the intake portal).
-
-- **FR-022: Billing lifecycle and Stripe integration** (Priority: Critical)
-  - New tenants receive a 30-day free trial on the Starter plan tier. No credit card is required during the trial.
-  - Trial meter: SR limits and enforcement apply during the trial period.
-  - Trial expiry: when the trial period ends and no Stripe subscription is active, `TenantAccessGateMiddleware` returns HTTP 402. The intake portal renders a friendly error. The dealer dashboard redirects to an upgrade page.
-  - Subscription management is handled via Stripe. Tenant provisioning creates a Stripe Customer object and an initial Stripe Subscription linked to the selected plan tier.
-  - Stripe webhook events update `TenantConfig.BillingConfig` on subscription changes: plan upgrades/downgrades update limits immediately; subscription cancellation disables the tenant access gate.
-  - A `GET /api/tenants/billing/usage` endpoint returns current billing status (plan tier, SR count, limit, period start, trial status, location count) for the authenticated dealer dashboard.
-  - Platform admins can manually extend `trialEndsAtUtc` as a sales concession lever.
-
-- **FR-023: Service capabilities — tenant master list, per-location enablement, and intake assessment** (Priority: High)
-  - **Tenant master list:** Each tenant's `TenantConfig` carries an `AvailableCapabilities` collection — the master list of service capabilities offered across the corporation. Each capability has a stable `Code` (e.g., `diesel-service`, `electrical`, `plumbing`, `hvac`, `body-repair`, `roof-repair`, `slide-out-repair`, `rv-refrigerator`, `generator`, `warranty-service`, `mobile-service`, `winterization`, `safety-inspection`, `tire-service`), a display `Name`, an optional description, a `SortOrder`, and an `IsActive` flag. New tenants are seeded with a reasonable default starter list; tenant admins (with `tenant-config:update` permission) may add, rename, soft-deactivate, or reorder entries. `Code` values are immutable once created.
-  - **Per-location enablement:** Each `Location` carries an `EnabledCapabilities` list of capability codes drawn from the tenant master list. Service managers (with `locations:update` permission) can edit which capabilities a given location supports — e.g., a location that cannot service diesel motors leaves `diesel-service` off. An empty list means no capabilities have been configured and no capability-based filtering is applied to that location.
-  - **Intake capability assessment:** After the customer submits the issue description (Step 5 of the intake wizard) and proceeds to Step 6, the Intake app calls a server-side capability assessment endpoint with the issue description and the selected location slug. The API uses the existing AI categorization service to resolve an issue category, derives the set of capability codes typically required for that category (via a deterministic category → capabilities map), and compares them against the location's `EnabledCapabilities`. The endpoint returns `Matched`, the resolved `IssueCategory`, the `RequiredCapabilities`, the `MissingCapabilities` (if any), and the location's phone number for use in the alert. The endpoint always returns HTTP 200 — capability mismatch is a business outcome, not an error.
-  - **Customer feedback:**
-    - **Match (or no specific capabilities required):** No banner is shown; the wizard continues normally into Step 6.
-    - **Mismatch:** A non-blocking alert is rendered at the top of Step 6 reading: *"This location isn't typically able to help with this kind of issue. Please contact the service center directly to confirm at {service-center-phone}."* The customer is **not** prevented from continuing to submit the request — the alert is informational so the customer can self-route to a more appropriate location.
-  - **Privacy / safety:** The assessment never blocks submission, never persists customer-identifying data outside the standard intake flow, and reuses the same AI categorization fallback chain (rule-based fallback when Azure OpenAI is unavailable) so a degraded AI service does not break Step 5 → Step 6 navigation. When the resolved category has no mapped capability requirement (e.g., "General"), the assessment is treated as a match.
+Customers remain anonymous in all tiers.
 
 ---
 
-## 5. User experience
+## 4. Functional Requirements (Solo Tier)
 
-### 5.1 Entry points and first-time user flow
+### 4.1 Core Intake and Workflow
 
-- A customer receives the intake URL via the dealer's website, email, or a QR code displayed at the service drive.
-- Scanning the QR code or clicking the link opens the intake form pre-scoped to that location (no dealer search needed).
-- If no link or QR code is available, the customer can search for a participating dealer by name or ZIP code on the platform landing page.
-- The form opens immediately — no sign-in, no account creation, no app installation.
+**FR-001: Single-tenant data model with multi-location support**
+The architecture supports multi-tenancy and multi-location from day one. Solo tenants have no architectural location limit but use single-location features in the dashboard UI. Adding location 5+ on Solo is allowed and works architecturally; the customer is prompted that Professional tier features (cross-location queue, regional manager hierarchy, multi-location analytics) become available with a Professional upgrade.
 
-### 5.2 Core experience
+**FR-002: Anonymous customer intake**
+Identical to v2.0 FR-002. The intake form at `https://rvintake.com/{locationSlug}` requires no customer login. On submission, the API runs the seven-step orchestration (identity resolution, profile upsert, asset ownership check, asset ledger write, AI categorization, magic-link generation, fire-and-forget notification).
 
-- **Step 1 — Contact info:** First name, last name, email, phone. If the customer has submitted before (email matched), their contact fields are pre-filled from their `GlobalCustomerAcct`.
-- **Step 2 — VIN and vehicle details:** VIN field with camera scan button. On scan or manual entry, the VIN is decoded and make/model/year fields are pre-populated. If the customer's `GlobalCustomerAcct` has prior assets, their known VINs are offered as one-tap options.
-- **Step 3 — Issue description + category assist:** The issue description text area appears first and supports speech-to-text input. After voice capture (or typed entry), AI cleans the transcript and suggests a top-level issue category. The category dropdown is pre-filled, visibly marked as AI-suggested, and remains editable. The AI-guided wizard then renders contextual follow-up questions for the selected category.
-- **Step 4 — Photos and videos:** A file upload area that accepts camera capture (on mobile) or file selection. Progress indicators shown per file. Files exceeding the configured size limit are rejected with a clear error message before submission.
-- **Step 5 — Urgency and usage:** A simple selector for urgency (routine, urgent, emergency) and whether the RV is a full-time or part-time residence.
-- **Step 6 — Review and submit:** A summary card showing all entered data. The customer can edit any section before submitting. On submit, the API runs the 6-step orchestration (identity resolution, profile upsert, VIN ownership check, asset ledger write, categorization, notification dispatch) and returns a 201.
-- **Confirmation:** The customer sees a confirmation screen with a summary and their magic-link status URL. They are offered (but not required) to save a profile for faster future submissions.
+**FR-003: VIN scan and lookup**
+Camera-based VIN extraction via Azure OpenAI vision endpoint, plus NHTSA vPIC decode. Manual entry remains available as fallback.
 
-### 5.3 Advanced features and edge cases
+**FR-004: Description-first AI category suggestion + structured wizard**
+Customer enters or speaks issue description. AI suggests a top-level category. Customer can override. Contextual follow-up questions render based on selected category. Wizard answers populate `ServiceEventEmbedded` structured fields.
 
-- **VIN ownership transfer:** If a customer submits for a VIN that is currently active under a different customer profile in the same tenant, the previous owner's `AssetsOwnedEmbedded` record is set to `Inactive` and the new submission is recorded as the current owner. No manual intervention required.
-- **Returning customer cross-dealer prefill:** A returning customer submitting to a new dealership for the first time receives their contact information and active asset VINs pre-filled from their `GlobalCustomerAcct`. No account login required.
-- **Magic-link expiry:** If a customer tries to access a status page with an expired token, they are directed to re-submit their email address to receive a fresh magic link.
-- **File upload failure:** If an attachment upload fails mid-submission, the customer is notified per-file with a retry option. The service request is not blocked on attachment failure — the text submission is independent of attachment upload.
-- **No slug match:** If a customer navigates to an invalid or disabled location slug, a clear "This location is not found" message is returned with a link to search for participating dealers.
-- **Rate limit exceeded:** Customers exceeding the IP rate limit see a friendly "Please wait and try again" message with the retry time.
-- **Capability mismatch at selected location:** When the intake capability assessment (FR-023) determines that the selected location does not support the capabilities required for the customer's issue, Step 6 renders a non-blocking informational alert at the top of the page including the location's service-center phone number. The customer can still continue and submit the request.
+**FR-005: Speech-to-text + AI cleanup for issue description**
+Browser-native Web Speech API (or device microphone on mobile). AI cleans transcript. Customer reviews edited text before submission. After review, description is sent to category suggestion endpoint.
 
-### 5.4 UI/UX highlights
+**FR-006: Photo and video upload**
+Up to 10 attachments per SR. Direct-to-blob via SAS upload URL. Configured size and type constraints. Tenant-scoped blob path.
 
-- Mobile-first layout with large tap targets throughout the intake form.
-- VIN camera scan is the prominent default; manual entry is clearly accessible but secondary.
-- Speech-to-text is surfaced as a microphone icon on the issue description field — no instruction needed.
-- AI category suggestion appears inline as a subtle "AI suggested" indicator, and the category dropdown remains editable.
-- The dealer dashboard is a desktop-primary layout with a responsive fallback for tablet/mobile use.
-- Status badges on the dealer queue use consistent color coding: New (blue), In Progress (amber), Completed (green), Cancelled (grey).
-- Attachment previews render inline on the service request detail page; video attachments autoplay muted on hover.
-- The `MAUI.Tech` technician app is glove-friendly with extra-large tap targets throughout the job list and outcome entry form.
-- QR/VIN scanning is the primary job access method in `MAUI.Tech` — one scan opens the assigned job immediately.
-- Outcome entries in `MAUI.Tech` store locally when the device goes offline and sync automatically when connectivity returns; no data is lost in poor-signal bays.
-- The `Blazor.Manager` Service Board uses drag-and-drop status columns; long polling refreshes the board at a configurable interval (default 5 min). **vNEXT:** A dedicated SignalR hub will push real-time status changes to all connected sessions.
+**FR-007: Magic-link customer status page**
+Anonymous, rate-limited, magic-link-token-validated. Shows the customer's active service requests at this corporation across all locations within the tenant.
+
+**FR-008: Service Manager dashboard — single-location queue (Solo)**
+Single-location queue table view: customer name, VIN, issue category, AI-generated technician summary (truncated), status badge, submission date, attachment count. Search and filter (status, category, date range, asset). Detail view, status updates, advisor notes, attachment viewing. **No drag-and-drop Service Board in Solo** — Professional tier feature.
+
+**FR-009: Technician mobile app — `RVS.MAUI.Tech`**
+Offline-first, VIN/QR scan, photo capture, voice notes, Section 10A capture. Local SQLite queue, sequential PUT replay on reconnect. Optimistic concurrency on `updatedAtUtc`. **Technicians are unlimited at all tiers** — no per-user pricing affects this app.
+
+**FR-010: Section 10A structured outcome capture (strict taxonomy)**
+Section 10A fields (`componentType`, `failureMode`, `repairAction`) must conform to controlled vocabularies sourced from `lookupSets`. The technician app and dashboard render dropdowns. Submissions with invalid or missing taxonomy values are rejected at the API layer with HTTP 400. Taxonomy is versioned. Each `AssetLedgerEntry` records the taxonomy version under which it was captured.
+
+**FR-011: Asset ledger writes are mandatory and non-blocking**
+Every service request submission writes an `AssetLedgerEntry` to the ledger container. Async write within 60 seconds of SR creation. Persistent failure raises P1 alert.
+
+**FR-012: AI-generated technician summary**
+On SR creation, AI generates a structured technician-ready summary from the issue description, wizard answers, and asset metadata. Summary is stored on the SR document and displayed prominently in advisor and technician views.
+
+**FR-013: Basic industry benchmarking dashboard (read-only)**
+Solo tier customers have read access to pre-built benchmarking dashboard views. Includes:
+- "How does my RECT compare to industry P50?"
+- "Top 5 industry-wide failure categories vs my distribution"
+- "How does my month-over-month service volume compare to industry trends?"
+
+Restrictions on Solo benchmarking access:
+- Pre-built dashboard views only (no custom queries)
+- Single-dimension comparisons
+- No drill-down beyond category level
+- No date range narrower than 90 days
+- No geographic filtering finer than US-region level
+- No model-year-specific data
+- 20 dashboard refreshes per month
+- **Verification gate** (FR-024) must be cleared before benchmarking unlocks
+
+Benchmarking ships in **Phase 2** alongside the anonymization pipeline; not available in Phase 1 launch. Solo customers in Phase 1 see "available [date]" placeholder.
+
+### 4.2 Notification and Integration
+
+**FR-014: Notification provider abstraction**
+`TenantConfig.NotificationConfig.Provider` enum: `RvsNative` | `KenectWebhook` | `Disabled`. Default `RvsNative`. Available at all tiers.
+
+**FR-015: Outbound integration webhook**
+On SR submission, status change, advisor note (customer-facing), and SR completion, the platform fires an outbound webhook to `TenantConfig.NotificationConfig.WebhookUrl` (when configured). Available at all tiers.
+
+**FR-016: Transactional notifications via ACS**
+Email + SMS on intake submission (with magic-link). SMS only for status changes. No two-way SMS, no broadcast, no marketing.
+
+**FR-017: CSV download for DMS export (manual)**
+Solo and Professional tier customers can download a CSV of their SRs filtered by date range and other parameters via dashboard UI. No SFTP scheduled push, no bidirectional API integration (Premium tier features).
+
+### 4.3 Identity, Tenants, Onboarding, and Billing
+
+**FR-018: Auth0 authentication (Free plan; `app_metadata` tenant scoping)**
+Solo and Professional tier tenants use Auth0 Free with `app_metadata` tenant scoping. Login Action injects `tenantId`, `locationIds`, and roles. Migration to Auth0 Organizations occurs at Premium tier upgrade.
+
+**FR-019: Self-serve tenant signup with credit card**
+`POST api/signup` accepts `TenantSignupRequestDto { corporationName, ownerEmail, ownerFirstName, ownerLastName, locationName, locationAddress, locationPhone, requestedSlug, paymentMethodToken }` and:
+1. Validates slug uniqueness against `slugLookup`
+2. Creates Stripe Customer and stores payment method
+3. Initiates 30-day trial
+4. Creates Auth0 user with verification-pending email
+5. Creates `Dealership` document with `Tier = Solo`
+6. Creates initial `Location` with provided info
+7. Creates `TenantConfig` with Solo defaults, `AccessGate.Status = Active`
+8. Sends welcome email with verification link and dashboard URL
+
+The endpoint is `[AllowAnonymous]` and rate-limited to 5 requests/IP/hour.
+
+**FR-020: 30-day self-serve trial with auto-conversion (Solo or Professional)**
+At signup, the prospect can choose Solo trial or Professional trial. The signup flow asks for location count and recommends the appropriate tier (1-4 loc → Solo recommended; 5+ loc → Pro recommended), but does not force the choice.
+
+Common to both:
+- Trial begins on signup
+- Credit card required at signup; payment method captured but not charged during trial
+- 7 days before trial end: dashboard banner reminding of upcoming charge; email notification
+- Customer can cancel anytime during trial; no charge if cancelled before trial end
+- Customer can downgrade Pro trial → Solo at trial end (downgrade processes at conversion, not mid-trial)
+- Failed payment at trial end: 3-day grace period with dashboard alerts; tenant moves to disabled access gate after grace
+
+Trial-end conversion:
+- Solo trial → Solo subscription at $39/location/month (based on locations active at trial end)
+- Pro trial → Pro subscription at the band-applicable rate per FR-P-006 (1-9 loc: $79/loc; 10-24 loc: $69/loc; 25-49 loc: $59/loc)
+
+Premium and Enterprise Scale do NOT have self-serve trials. Premium and Enterprise Scale evaluations are sales-led pilots negotiated as part of contract conversations (typically 30-60 days for Premium, 60-90 for Enterprise Scale; pilot terms specified per contract).
+
+**FR-021: Solo tier billing enforcement**
+`TenantConfig.BillingConfig` tracks: Stripe customer ID, subscription ID, plan tier (Solo/Professional/Premium/EnterpriseScale), billing period dates, location count for billing, current month SR count.
+
+`TenantAccessGateMiddleware` returns HTTP 402 when:
+- Subscription is past_due beyond grace period
+- Trial expired without payment method capture (cannot occur given signup flow)
+- Tenant manually disabled by platform admin
+
+Solo tier monthly SR cap: 300/location/month. At cap, intake submissions return HTTP 402 with customer-friendly message: *"This dealership is temporarily unable to accept new requests. Please contact the service center directly."*
+
+**FR-022: Self-serve user provisioning (Auth0 Management API)**
+Owners and managers can add staff users via dashboard:
+- Enter email, name, role, location assignment
+- System creates Auth0 user via Management API
+- System sends invitation email with verification + password setup link
+- User completes setup and gains access per assigned role
+
+User deactivation through dashboard removes Auth0 access and updates audit trail. Technicians (`dealer:technician` role) are unlimited at all tiers and do not affect Premium tier per-user billing.
+
+**FR-023: Capability assessment at intake**
+Carried forward from v2.0 FR-021. The intake wizard calls `POST /api/intake/{locationSlug}/assess-capabilities` between Step 5 and Step 6, and renders a non-blocking advisory banner if the location's `EnabledCapabilities` does not match the inferred required capabilities for the issue.
+
+**FR-024: Dealer verification gate for benchmarking access**
+Before unlocking industry benchmarking access, every tenant must clear a verification step:
+- During signup or first benchmarking access attempt, customer submits dealer claim form: DOT number, business EIN, dealer license number (state + license #), business address
+- Submitted info routed to verification queue (manual review)
+- Verification typically completes 24–72 hours
+- Cross-checks against state dealer license registries (where available)
+- Verified tenants get `TenantConfig.BenchmarkingAccess.Verified = true` and benchmarking unlocks
+- Verification failure surfaces a "verification incomplete — please contact support" message; tenant can still use all other features
+
+This protects the dataset against scraping by competitors, aggregators, or OEM end-runs. Detailed in `RVS_data_moat.md` §6.
+
+**FR-025: Tenant access gate**
+Standard `TenantAccessGateMiddleware`. Disabled tenants receive HTTP 403. Tenants past trial without payment receive HTTP 402.
+
+### 4.4 Data Moat Foundations
+
+**FR-026: Section 10A taxonomy versioning**
+Every `AssetLedgerEntry` records the taxonomy version under which it was captured. Taxonomy stored in `lookupSets` with version metadata. Cross-version analysis uses explicit migration tooling.
+
+**FR-027: Anonymization-ready data model**
+Asset ledger schema separates strictly-identifying fields (tenantId, customer email, dealer notes) from anonymizable fields (asset metadata, failure mode, repair action, parts, geographic region). Anonymization pipeline ships in Phase 2.
+
+**FR-028: Asset ID format enforcement**
+Asset IDs follow `{AssetType}:{Identifier}` (e.g., `RV:1ABC234567`). Format enforced at write time.
+
+**FR-029: Data retention and deletion semantics**
+Tenant data in the asset ledger is retained indefinitely. The dealer's dashboard view is a rolling 90-day window plus current month. Tenant deletion does not remove asset ledger entries — dealer-identifying fields are anonymized but the structured service event remains in the dataset. Disclosed in ToS.
 
 ---
 
-## 6. Narrative
+## 5. Functional Requirements (Professional Tier)
 
-Alex, a Grand Design owner, notices his slide-out making a grinding noise on a Thursday evening. He scans the QR code on a card the dealership handed him at his last purchase. The intake form opens on his phone instantly — no login, no app. He taps the camera icon, holds his phone up to the VIN plate, and the year, make, and model fill in automatically. He taps the microphone, describes the grinding noise in his own words, and the AI cleans it up into a professional description that he confirms in two seconds. The form then auto-suggests "Slide System" as the issue category; Alex keeps the suggested value and answers three quick follow-up questions about which slide is affected and whether he tried the manual override. He records a 20-second video of the noise, uploads it, selects "Urgent," and hits submit. Thirty seconds later he has a confirmation email with a link to check his status anytime.
+Professional tier inherits all Solo FRs (FR-001 through FR-029) and adds the following. Pricing is **volume-banded per-location** ($79/$69/$59 per location/mo by 1-9/10-24/25-49 location bands per FR-P-006). No per-user pricing.
 
-Maria, the service advisor, opens her dealer dashboard the next morning to find Alex's request already categorized as "Slide System — Hydraulic," with a technician summary that reads: "Customer reports grinding noise from rear slide-out during extension/retraction. Manual override not attempted. Video of noise included (1 attachment). Recommend hydraulic pump inspection prior to intake." She moves it to "In Progress," assigns a bay, and the customer gets an automatic email update. Jordan, the technician, walks up to Alex's unit with the symptom summary and video already on his tablet. He opens the bay knowing exactly what he needs to check.
+### 5.1 Multi-Location Coordination
+
+**FR-P-001: Multi-location queue and search**
+`POST api/dealerships/{id}/service-requests/search` supports `locationId[]` filter as multi-select. Pro UI surfaces this prominently. Regional managers (`dealer:regional-manager` role with `regionTag` claim) have search results auto-filtered to permitted locations.
+
+**FR-P-002: Drag-and-drop Service Board**
+Kanban-style status columns (`New` → `InProgress` → `Completed` → `Cancelled`). Drag-and-drop transitions call the existing PUT API. Long polling (default 5 min, configurable) refreshes the board. Available at Professional tier and above; Solo tier uses simple table queue (FR-008).
+
+**FR-P-003: Cross-location asset history**
+For any asset (VIN), Professional+ users can view the full service history across every location in the corporation. Aggregates `AssetLedgerEntry` documents partitioned by `assetId` but filtered to only show entries belonging to the requesting tenant. Sorted by `serviceDateUtc` descending.
+
+**FR-P-004: Regional manager hierarchy**
+The `dealer:regional-manager` role activates with a `regionTag` claim. Regional managers see only locations matching their `regionTag`. Corporate admin assigns `regionTag` values to locations and users. Enforced server-side in `IServiceRequestService.SearchAsync` via `ClaimsService.GetRegionTag()`.
+
+**FR-P-005: Multi-location onboarding tools**
+- Bulk location import via CSV (validates all rows before insert)
+- Location templates (intake form config, capabilities, branding, default settings) — new locations clone from a template
+- Bulk user import via CSV with location and role assignments
+
+**FR-P-006: Volume-banded per-location pricing**
+Professional tier pricing is per-location with three volume bands tracked in `TenantConfig.BillingConfig`:
+- 1–9 locations: $79/loc/mo
+- 10–24 locations: $69/loc/mo
+- 25–49 locations: $59/loc/mo
+
+The applicable rate is determined by `TenantConfig.BillingConfig.LocationCountForBilling` at billing period start. ALL locations are billed at the band-applicable rate (not graduated — a 12-location customer pays 12 × $69, not 9 × $79 + 3 × $69). Band transitions happen on monthly billing boundaries; mid-month location additions or removals adjust at next period start. Billing job submits per-location quantity to Stripe at the band-determined unit price.
+
+Pro tenants exceeding 49 locations are nudged toward Enterprise Scale; system permits operation at 50+ locations on Pro pricing for up to 30 days while sales engagement converts the contract, then tier transition is required.
+
+### 5.2 Cross-Location Analytics
+
+**FR-P-007: Cross-location operational analytics dashboard**
+Dashboard answers, at minimum:
+- RECT by location, by region, by month
+- Service request volume by location, by category, by month
+- Top failure modes by location and by region
+- Technician productivity (SRs completed per tech per week, by location)
+- Warranty vs. customer-pay job mix, by location
+- Outliers and anomalies (locations exceeding RECT thresholds)
+
+Drill-down from corporate → region → location → individual SR. Date range filtering, period comparison, CSV export.
+
+**FR-P-008: Warranty leakage analytics**
+Specialized analytics view identifies potentially-mislabeled service requests:
+- SRs marked customer-pay where the asset is within likely warranty window
+- SRs where failure mode + asset age suggest warranty-eligibility but billed customer-pay
+- Technician-by-technician variance in warranty-vs-customer-pay mix
+
+This is an "alert candidates for review" tool, not automatic re-classification. The dealer's accounting team makes final determinations. **This is the load-bearing ROI feature for Professional tier** — the warranty recovery this enables typically pays for the Professional subscription multiple times over.
+
+**FR-P-009: Advanced industry benchmarking (custom queries)**
+Professional tier customers can run custom benchmarking queries beyond the Solo dashboard limits:
+- Custom queries via predefined templates
+- Model-year-specific data
+- State-level geography
+- 30-day date ranges
+- 200 queries/month
+
+Same verification gate (FR-024) applies. Tier-gated query depth detailed in `RVS_data_moat.md` §6.
+
+**FR-P-010: Service throughput SLA dashboards**
+Configurable per-tenant SLAs (RECT thresholds, intake-to-first-action time, status-staleness durations). Dashboard surfaces breaches and trends. Alert routing to managers (basic — full alerting is Premium).
+
+### 5.3 Professional Tier Capacity
+
+**FR-P-011: Per-location SR cap**
+Professional tier SR cap is 600/loc/mo (raised from Solo's 300/loc/mo). At cap, intake submissions return HTTP 402 with the same customer-friendly message as Solo. The 600 cap creates a clear upgrade signal to Premium for high-volume customers.
 
 ---
 
-## 7. Technical considerations
+## 6. User Experience
 
-### 7.1 Integration points
+### 6.1 Intake Flow (Unchanged)
 
-- **Auth0:** Identity provider for all authenticated dealer staff. Uses `app_metadata` to inject `tenantId`, `locationIds`, and role claims via a Login Action.
-- **Azure Cosmos DB:** Nine containers covering service requests, customer profiles, global customer identities, asset ledger, dealerships, locations, tenant configs, lookup sets, and slug lookup. MVP uses **serverless** capacity mode. Provisioned throughput settings (autoscale RU, manual 400 RU) referenced in other architecture documents may not reflect the current MVP configuration — refer to the Bicep IaC files in `Docs/ASOT/Infra/Bicep.IaC/` for the authoritative container settings.
-- **Azure Blob Storage:** Tenant-scoped, location-scoped path hierarchy for all photo and video attachments. SAS URL generation for time-limited read access.
-- **Azure Table Storage:** Lightweight append-only store for analytics counters and audit log caching.
-- **Notifications (email + SMS):** Azure Communication Services (ACS) provides both transactional email and SMS behind `INotificationService` (email) and `ISmsNotificationService` (SMS). Managed identity authentication — no API keys. On submission, the customer receives both an email (with magic link and dealer-specific information) and an SMS (with magic link). All subsequent notifications (status updates, advisor notes) are delivered via **SMS only** — there is no customer channel choice.
-- **SFTP / DMS export:** ASP.NET Core background service or Azure Function triggered on schedule or on demand. Uses `SSH.NET` (or equivalent) for SFTP push. Per-tenant SFTP configuration stored in `TenantConfig`.
-- **AI categorization:** `ICategorizationService` abstraction. MVP uses **Azure OpenAI** (chat completions API) as the primary categorization engine. A rule-based keyword-matching fallback is available if the AI service is unavailable. Used both for pre-submit category suggestion (`POST /api/intake/{locationSlug}/ai/suggest-category`) and final submit-time categorization.
-- **VIN decoding:** NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`) for VIN decode (free, public). No API key required. VIN camera scanning uses the browser's `BarcodeDetector` API or a lightweight JavaScript barcode library (e.g., `zxing-js`) for client-side decode before sending to the API.
+The 6-step wizard is unchanged: Contact → VIN → Description+Category → Photos → Urgency → Review/Submit. Capability assessment runs between steps 5 and 6.
 
-### 7.2 Data storage and privacy
+### 6.2 Dashboard Flow (Tier-Differentiated)
 
-- All tenant data is partitioned by `tenantId`. Cross-tenant queries are structurally impossible in the Cosmos DB access patterns used.
-- Customer email addresses are normalized (lowercased, trimmed) before storage and used as the partition key for `GlobalCustomerAcct`. No plaintext passwords are ever stored — customers use anonymous intake only in the MVP.
-- `GlobalCustomerAcct` cross-dealer records are partitioned by `/email`. Only the platform admin has cross-tenant read access to this container.
-- Magic-link tokens are cryptographically random, time-limited (configurable expiry, default 30 days), and stored hashed if the implementation requires additional security hardening.
-- Blob storage paths are tenant-scoped. SAS URLs are time-limited (1-hour expiry) and generated per request, never embedded permanently.
-- SFTP private keys are stored in Azure Key Vault and referenced by name in `TenantConfig`. Keys are never written to the database directly.
-- No PII is logged in application telemetry. Structured logging captures `tenantId`, `locationId`, and anonymized request identifiers only.
+**Solo:**
+- Single-location queue table view
+- Search and filter (status, category, date range, asset)
+- Detail view with attachments, advisor notes, status updates
+- Section 10A view (strict taxonomy dropdowns)
+- Settings: tenant + location config, intake form config, user management, notification provider, webhook URL, billing
+- Basic benchmarking dashboard (Phase 2)
 
-### 7.3 Scalability and performance
+**Professional adds:**
+- Cross-location queue with multi-select location filter
+- Drag-and-drop Service Board
+- Cross-location asset history view
+- Regional manager dashboard with `regionTag` scoping
+- Cross-location analytics with drill-down
+- Warranty leakage analytics view
+- Advanced benchmarking custom queries
+- Multi-location onboarding tools (bulk imports, templates)
 
-- Cosmos DB autoscale 400–4,000 RU on `serviceRequests` and `locations` containers handles burst intake volume without manual scaling.
-- `slugLookup` container is a point-read-only container with `slug` as both the partition key and the document `id`, ensuring O(1) intake routing at < 1 RU per request.
-- Magic-link token lookup encodes an email-hash prefix in the token, enabling single-partition point reads on `GlobalCustomerAcct` without a cross-partition query.
-- All multi-location queries within a dealership (e.g., corporate admin viewing all SRs) are single-partition operations because all locations share the same `tenantId` partition key.
-- Attachment uploads route directly to Azure Blob Storage from the client — the API issues a pre-authorized SAS upload URL so binary data never passes through the API tier.
+### 6.3 Technician Mobile Flow (Unchanged)
 
-### 7.4 Potential challenges
+VIN/QR scan opens job. Outcome entry uses Section 10A dropdowns. Offline queue, sync on reconnect. Identical at all tiers; technicians are unlimited.
 
-- **AI wizard content coverage:** The question trees for each issue category must be authored and maintained. Starting with the 8–10 most common RV issue categories (slide systems, electrical, plumbing, HVAC, generator, appliances, roof/seals, chassis) reduces the initial authoring burden.
-- **VIN scanner accuracy on phone cameras:** Low-light or worn VIN plates reduce barcode scan reliability. The form must always offer a clean manual entry fallback with a clear affordance.
-- **SFTP compatibility:** Dealer DMS SFTP configurations vary widely in authentication type (password vs. key), port, and directory structure. The initial implementation should support both key-based and password-based auth, with well-documented configuration.
-- **Magic-link token abuse:** Anonymous endpoints that validate tokens require IP rate limiting and token expiry enforcement to prevent enumeration attacks.
+---
 
-### 7.5 Front-end architecture
+## 7. Non-Functional Requirements
 
-The MVP comprises three distinct front-end applications, each optimized for its user class and device context, all sharing a common `RVS.Domain` library and a `RVS.UI.Shared` Razor Class Library.
+Carried forward from `RVS_Technical_PRD.md` v3.0. Performance targets, availability SLAs, Cosmos RU budgets, and security requirements apply to Solo and Professional tiers.
 
-| Application | Framework | Rationale |
-|---|---|---|
-| **Blazor.Intake** | Blazor WebAssembly (Standalone PWA) | Zero install friction; customer accesses via dealer-specific URL. The entire app — landing page, guided intake wizard, submission confirmation, and magic-link status page — runs as a single WASM SPA. A service worker caches the WASM runtime after first load, eliminating the download penalty on repeat visits. No SSR, no SignalR, no per-page render-mode handoffs. |
-| **Blazor.Manager** | Blazor WebAssembly (Standalone) | Desktop browser on reliable office network. Long polling (configurable interval, default 5 min) for near-real-time Service Board updates. **vNEXT:** SignalR hub for real-time push. Deployed to Azure Static Web Apps — same hosting model as Blazor.Intake. |
-| **MAUI.Tech** | MAUI Blazor Hybrid (iOS + Android) | Offline-first mode is critical — service bays have poor connectivity. Outcome entries are queued locally and synced on reconnect. Native barcode SDK provides the fast, reliable VIN/QR scanning required for the 3–5 second interaction target. MAUI Essentials provides device speech-to-text for voice notes. Employer-provisioned install eliminates consumer app store friction. |
+**SLA:** 99.5% monthly uptime for both Solo and Professional. (Premium tier upgrades to 99.9%.)
 
-**Code reuse strategy:**
+---
 
-| Shared asset | Blazor.Intake | Blazor.Manager | MAUI.Tech |
+## 8. Implementation Sequencing (Solo + Professional)
+
+Detailed in [`RVS_Implementation_Plan_v2.md`](RVS_Implementation_Plan_v2.md). Summary:
+
+| Sprint | Focus |
+|---|---|
+| 1–2 | Solution scaffold, Cosmos schema, Auth0, ClaimsService, middleware |
+| 3–4 | Tenant/location services, slug routing, taxonomy enforcement |
+| 5–7 | Intake API + AI Wave 1 + asset ledger writes |
+| 8–9 | Solo manager dashboard (queue, detail, attachments) |
+| 10 | Magic-link customer status |
+| 11 | Technician mobile app (offline sync, Section 10A capture) |
+| 12 | Notification webhook + ACS + capability assessment |
+| 13–14 | Self-serve signup + Stripe billing infrastructure + 30-day trial |
+| 15 | Self-service user provisioning (Auth0 Management API) |
+| 16–17 | Multi-location data model exposed in UI; cross-location queue and search |
+| 18 | Drag-and-drop Service Board |
+| 19 | Cross-location asset history view |
+| 20 | Regional manager role + `regionTag` enforcement |
+| 21–22 | Cross-location analytics dashboard |
+| 23 | Warranty leakage analytics |
+| 24 | Multi-location onboarding tools (bulk import, templates) |
+| 25 | Polish, design partner onboarding, telemetry, deployment |
+
+**Total: ~25 sprints.** Phase 2 (Premium tier) begins after Phase 1 ship criteria met.
+
+---
+
+## 9. Success Criteria
+
+**Phase 1 ships when:**
+- 5 design partners actively using Solo or Professional
+- Asset ledger contains ≥1,000 structured Section 10A events
+- Taxonomy adherence rate ≥95%
+- ≥80% of submitted intakes complete in <3 minutes
+- ≥75% of submitted intakes include at least one photo or video
+- P95 intake API latency <3 seconds
+- Stripe billing flows tested end-to-end (trial signup, trial-end conversion, payment failure, cancellation)
+- Self-service user provisioning works end-to-end
+- Anti-corpus-theft verification gate operational (manual queue functional even if benchmarking is not yet shipping)
+- Zero P1 incidents (data loss, security breach) in last 30 days
+
+These criteria gate the start of Premium tier work.
+
+---
+
+## 10. Deprecated From v1.2 — Reasons
+
+For future-self reference (carried forward from v2):
+
+| v1.2 Feature | Removed Because |
+|---|---|
+| Tiered subscription pricing ($199/$349/$499) | Replaced by Solo/Pro/Premium/Enterprise Scale model |
+| SFTP DMS export | Premium tier feature; Solo/Pro use CSV download |
+| Two-way SMS, ad-hoc messaging, broadcast | Kenect / ServiceNomad territory |
+| Customer chat dialog on status page | Same — coexistence via webhook |
+| In-dashboard SMS composition | Same — coexistence via webhook |
+| Free-text Section 10A | Required strict taxonomy for OEM data thesis |
+| Customer Auth0 accounts | Anonymous + magic-link sufficient |
+| Per-tenant customizable lookup sets | Taxonomy must be platform-managed |
+| Private labeling (custom domains) | Premium / Enterprise Scale feature |
+
+Removed in v3 specifically:
+
+| v2.0 Feature | Removed Because |
+|---|---|
+| Free tier (no charge) | Cash runway constraint requires revenue from day one |
+| 50 SR/month Free cap | No longer applicable; Solo at 300 SR/loc/mo |
+
+---
+
+## 11. Open Questions
+
+| # | Question | Owner | Due |
 |---|---|---|---|
-| `RVS.Domain` (DTOs, entities, validation) | ✅ | ✅ | ✅ |
-| `RVS.UI.Shared` Razor component library | ✅ | ✅ | ✅ |
-| CSS / design tokens | ✅ | ✅ | ✅ |
-| API client (typed `HttpClient` services) | ✅ | ✅ | ✅ + offline queue |
-| MAUI Essentials (camera, speech, local storage) | ❌ | ❌ | ✅ |
+| OQ-01 | Solo tier monthly SR cap value (currently 300/loc) — pressure-test against design partner usage | GTM | After 3 design partners active |
+| OQ-02 | Should magic-link tokens be stored hashed in Cosmos? | Engineering | Before Phase 1 ship |
+| OQ-03 | Section 10A taxonomy v1 — final controlled vocabulary list | Domain SME | Sprint 4 |
+| OQ-04 | ToS language for cross-dealer aggregation, OEM licensing, liquidated damages for benchmarking misuse | Legal counsel | Phase 0 (before any design partner signs) |
+| OQ-05 | Verification queue staffing — initially founder, eventually success engineer | Operations | Sprint 18+ |
+| OQ-06 | Pro→Premium transition discount mechanics — how is the 50%-off-first-6-months applied in Stripe | Engineering | Phase 2 design |
+| OQ-07 | Should benchmarking queries that return "insufficient data" (k-anon suppressed) count against monthly query quotas? | Engineering | Phase 2 |
 
 ---
 
-## 8. Milestones and sequencing
-
-### 8.1 Project estimate
-
-- **Size:** Medium (solo developer, full-stack)
-- **Time estimate:** 8–10 weeks to production-ready MVP
-
-### 8.2 Team size and composition
-
-- **Team size:** 1 developer
-- **Roles:** Full-stack developer (ASP.NET Core API, Blazor WebAssembly, MAUI Blazor Hybrid, Azure infrastructure)
-
-### 8.3 Suggested phases
-
-- **Phase 1: Solution scaffold and domain foundation** (Week 1)
-  - Create solution, all projects, `EntityBase`, all domain entities, DTOs, and interfaces.
-  - Zero infrastructure dependencies. Validates: `dotnet build` green.
-
-- **Phase 2: Infrastructure — Cosmos DB and Blob Storage** (Week 2)
-  - All repository implementations, Cosmos containers and indexing, Blob storage, seed data.
-  - Validates: CRUD against Cosmos Emulator, all partition key patterns verified.
-
-- **Phase 3: API bootstrap — Program.cs, middleware, auth** (Week 2–3)
-  - Full middleware pipeline, Auth0 JWT validation, `ClaimsService`, `TenantAccessGateMiddleware`, `ExceptionHandlingMiddleware`.
-  - Validates: API starts, `/health` returns 200, auth/tenant gate returns correct 401/403.
-
-- **Phase 4: Dealer dashboard — lookups, dealerships, tenants, locations** (Week 3)
-  - `TenantService`, `DealershipService`, `LocationService`, `LookupService`, all corresponding controllers.
-  - Validates: Authenticated call to `GET /api/dealerships` returns seeded data; location CRUD works.
-
-- **Phase 5: Core intake flow** (Week 4–5)
-  - `IntakeController`, full 6-step orchestration (identity resolution → profile upsert → VIN ownership → asset ledger → categorization → notification), VIN scan endpoint, AI wizard, speech-to-text pipeline.
-  - Validates: End-to-end intake submission creates all documents correctly; VIN ownership transfer scenarios pass.
-
-- **Phase 6: Dealer dashboard — service request CRUD and attachments** (Week 5–6)
-  - `ServiceRequestsController` (search, detail, update, delete), `AttachmentsController` (SAS URL, delete), `AnalyticsController` (basic counts by status).
-  - Validates: Full dealer workflow — search, open detail, update status, view attachment.
-
-- **Phase 7: Customer status page and magic link** (Week 6)
-  - `CustomerStatusController`, token validation, cross-dealer SR summary.
-  - Validates: Post intake → use magic-link token → see SR summary; expired token returns 404.
-
-- **Phase 8: SFTP DMS export** (Week 7)
-  - CSV export endpoint, scheduled SFTP push, SFTP config in TenantConfig, Azure Key Vault integration for SFTP keys.
-  - Validates: Export generates correct CSV; SFTP push delivers file to configured endpoint.
-
-- **Phase 9: Front-end applications** (Week 7–9)
-  - **Blazor.Intake (Blazor WASM Standalone PWA):** Dealer landing page, 5-step guided intake wizard (VIN scan, AI wizard, speech-to-text, photo/video upload), submission confirmation, and magic-link status page — all routes within a single WASM SPA. Service worker caches the WASM runtime after first load. No SSR, no SignalR.
-  - **Blazor.Manager (Blazor WASM Standalone):** Service request queue, drag-and-drop Service Board, search/filter, service request detail view, status update, attachment viewer, analytics dashboard, dealer settings (location management, QR code download). Long polling for near-real-time updates (MVP); SignalR hub for real-time push (vNEXT).
-  - **MAUI.Tech (MAUI Blazor Hybrid):** Assigned job list, QR/VIN native barcode scan to open job, outcome entry form (offline queue + sync), voice notes via MAUI speech-to-text, photo capture, glove-friendly tap targets.
-
-- **Phase 10: QR codes, seed data, polish, and deployment** (Week 9–10)
-  - QR code generation endpoint, comprehensive seed data (multi-tenant, VIN transfers), rate limiting fine-tuning, Swagger/OpenAPI documentation, structured logging, Azure App Service deployment.
-
----
-
-## 9. User stories
-
-### 9.1. Submit a service request without an account
-
-- **ID:** RVS-001
-- **Description:** As an RV owner, I want to submit a service request without creating an account so that I can report a problem quickly from my phone.
-- **Acceptance criteria:**
-  - The intake form is accessible via a public URL requiring no login.
-  - The form collects first name, last name, email, phone, VIN, make, model, year, issue description, and urgency.
-  - Submission creates a `ServiceRequest`, a `CustomerProfile`, a `GlobalCustomerAcct`, and an `AssetLedgerEntry` within a single API call.
-  - A confirmation email is sent to the customer within 60 seconds of submission.
-  - The API returns `201 Created` with a service request summary and the customer's magic-link status URL.
-  - Duplicate email detection correctly links the new request to the existing `GlobalCustomerAcct`.
-
-### 9.2. Scan a VIN with a phone camera
-
-- **ID:** RVS-002
-- **Description:** As an RV owner, I want to scan my VIN plate with my phone camera so that I don't have to manually type a 17-character code.
-- **Acceptance criteria:**
-  - A camera scan button is present on the VIN field on mobile and desktop browsers that support `BarcodeDetector` or the fallback JS library.
-  - A successful scan populates the VIN field with the decoded value.
-  - The VIN is sent to the API which calls the NHTSA vPIC endpoint to decode make, manufacturer, model year, and asset type.
-  - Decoded values pre-populate the corresponding form fields.
-  - Manual entry remains available if the scan fails or is not supported.
-  - An invalid VIN (wrong check digit or length) surfaces a validation error before submission.
-
-### 9.3. Use the AI-guided issue wizard
-
-- **ID:** RVS-003
-- **Description:** As an RV owner, I want to answer a few guided questions about my issue so that the service advisor and technician have structured context before my RV arrives.
-- **Acceptance criteria:**
-  - After entering or recording issue description, the form auto-suggests a top-level issue category.
-  - The suggested category is pre-selected and clearly marked as AI-suggested.
-  - The customer can override the category before follow-up questions load.
-  - After category is set (suggested or overridden), contextual follow-up questions appear inline within the form.
-  - At minimum, the following categories have distinct question trees: Slide System, Electrical, Plumbing, HVAC, Generator, Appliances, Roof/Seals, Chassis.
-  - Wizard answers are submitted as structured key-value pairs alongside the free-text description.
-  - Structured wizard fields populate the corresponding `ServiceEventEmbedded` fields in the `ServiceRequest`.
-  - If the customer skips follow-up questions, submission proceeds without error.
-
-### 9.4. Describe an issue using speech-to-text
-
-- **ID:** RVS-004
-- **Description:** As an RV owner, I want to speak my issue description instead of typing it so that I can quickly explain the problem while standing next to my RV.
-- **Acceptance criteria:**
-  - A microphone button is present on the issue description field.
-  - Pressing the button activates the browser's Web Speech API (or native device microphone on mobile).
-  - After recording ends, the captured transcript is sent to the AI cleanup endpoint.
-  - The AI-cleaned description is displayed for customer review and editing before submission.
-  - After review, the cleaned description is sent to `POST /api/intake/{locationSlug}/ai/suggest-category` to prefill issue category.
-  - If category suggestion fails or confidence is low, the category dropdown remains empty/manual and submission still proceeds.
-  - If speech recognition is unsupported by the browser, the microphone button is hidden and the text field remains primary.
-  - The raw transcript is discarded after AI cleanup; only the reviewed text is submitted.
-
-### 9.5. Upload photos and videos at intake
-
-- **ID:** RVS-005
-- **Description:** As an RV owner, I want to attach photos and videos of the problem so that the technician can see the issue before my appointment.
-- **Acceptance criteria:**
-  - The form supports up to 10 file attachments per service request.
-  - Accepted file types: `.jpg`, `.jpeg`, `.png`, `.mp4`. Files of other types are rejected with a clear error message before upload.
-  - Files exceeding the location's configured maximum size (default 25 MB) are rejected before upload.
-  - Each accepted file is uploaded directly to Azure Blob Storage using a pre-authorized SAS upload URL.
-  - Upload progress is displayed per file.
-  - Failed uploads surface a per-file retry option without blocking submission of the text data.
-  - Attachment metadata (blob URI, filename, content type, size) is embedded in the `ServiceRequest`.
-
-### 9.6. Check service request status via magic link
-
-- **ID:** RVS-006
-- **Description:** As an RV owner, I want to check my service request status without logging in so that I can stay informed without calling the dealership.
-- **Acceptance criteria:**
-  - The confirmation email contains a magic-link URL in the format `https://rvintake.com/status/{token}`.
-  - The status page shows all active service requests for that customer across all dealerships, each showing: dealership name, location name, status, issue category, submission date, last updated date.
-  - Expired or invalid tokens return a message prompting the customer to request a new link by email.
-  - The status endpoint is rate-limited to 30 requests per IP per hour.
-  - Accessing the page does not require any login or account creation.
-
-### 9.7. Receive pre-filled contact and asset data as a returning customer
-
-- **ID:** RVS-007
-- **Description:** As a returning RV owner, I want my contact information and known vehicles to be pre-filled when I submit a new service request so that I don't have to re-enter information I've already provided.
-- **Acceptance criteria:**
-  - When a customer enters an email that matches an existing `GlobalCustomerAcct`, their first name, last name, and phone are pre-filled.
-  - If the `GlobalCustomerAcct` has active asset VINs, they are offered as a selectable list above the VIN entry field.
-  - Selecting a known VIN pre-fills the VIN, make, model, and year fields.
-  - The customer can still enter a different VIN if needed.
-  - Pre-fill data is fetched client-side after the email field loses focus; no page reload required.
-
-### 9.8. View and manage the service request queue
-
-- **ID:** RVS-008
-- **Description:** As a service advisor, I want to see all incoming service requests in a structured queue so that I can triage and act on them without searching through emails or voicemails.
-- **Acceptance criteria:**
-  - Authenticated dealer staff see a dashboard with all service requests for their authorized locations.
-  - The queue displays: customer full name, VIN, issue category, AI-generated technician summary (truncated), status badge, submission date, and attachment count.
-  - The queue defaults to sorting by submission date descending.
-  - Clicking a row opens the full service request detail.
-  - Status badge colors are consistent: New (blue), In Progress (amber), Completed (green), Cancelled (grey).
-  - The queue refreshes automatically or on demand (manual refresh button).
-
-- **Design rationale — drag-and-drop Service Board vs. simple table:**
-
-  The `Blazor.Manager` dashboard provides **two complementary views** of service requests: a searchable **table queue** (section 9.9) and a drag-and-drop **Service Board** with Kanban-style status columns (see FR-DASH-03 in the Technical PRD). Both are required. A simple table alone is insufficient for the following reasons:
-
-  1. **Status-centric workflow.** A service advisor's primary action is moving requests through status stages (`New` → `In Progress` → `Completed`). A Kanban board makes the current status distribution visible at a glance — advisors see how many requests are stuck in each stage without reading individual rows or applying filters. A table requires scanning a status column and mentally grouping rows; the board externalizes that grouping.
-
-  2. **Rapid status transitions.** Drag-and-drop lets an advisor move a request from one status to another in a single gesture. In a table, the same action requires: click row → open detail → change status dropdown → save → navigate back. For a service department processing 20–50 requests per day, the board eliminates dozens of round-trips into and out of detail views.
-
-  3. **Operational visibility for managers.** Dealership managers and owners (section 2.2) need to monitor workload distribution across all locations from one screen. A board with status columns is a natural operational dashboard — it immediately answers "How many jobs are waiting?", "Where is the bottleneck?", and "Is anything stuck?" A table answers those questions only after the user applies filters and counts rows.
-
-  4. **Physical board replacement.** Many RV service departments already use physical dispatch boards (whiteboards, magnetic boards, or paper card systems) to track active jobs. A Kanban-style Service Board maps directly to that existing mental model, reducing training time and adoption friction. A table is a database tool; a board is an operations tool.
-
-  5. **Table is still essential for search and bulk operations.** The table view remains the right tool for searching by keyword, filtering by date range or category, exporting to CSV, and performing batch outcome entry (FR-DASH-02). The two views serve different tasks: the board is for triage and flow management; the table is for lookup, search, and reporting.
-
-  6. **Implementation cost is proportional to value.** MudBlazor 9.x provides `MudDropZone` and `MudDropContainer` components that handle drag-and-drop with minimal custom code. The backend already supports status updates via `PUT` on the service request — the board simply calls the same API endpoint on drop. The incremental frontend cost is small compared to the productivity gain for advisors and the operational visibility gain for managers.
-
-  **Summary:** The drag-and-drop Service Board is a deliberate UX choice that matches how service departments actually work — visually, spatially, and in real time. The table queue complements it for search, filter, and export workflows. Both views share the same API endpoints and data model; the distinction is purely a frontend concern driven by user task analysis.
-
-### 9.9. Search and filter service requests
-
-- **ID:** RVS-009
-- **Description:** As a service advisor, I want to search and filter service requests so that I can quickly find a specific customer's request or review all requests with a given status.
-- **Acceptance criteria:**
-  - The search endpoint `POST /api/service-requests/search` accepts: keyword (customer name, VIN, description snippet), status filter, issue category filter, location filter (multi-location roles only), date range filter, and page/pageSize.
-  - Results are returned as a `PagedResult<ServiceRequestSummaryResponseDto>`.
-  - Page size is capped at 100 records per request.
-  - Search input is validated to block dangerous characters (`<`, `>`, `;`, `'`, `"`, `\`, `\0`).
-  - The UI renders a search bar and filter panel above the queue.
-
-### 9.10. Update service request status and add notes
-
-- **ID:** RVS-010
-- **Description:** As a service advisor, I want to update a service request's status and add notes so that the customer and my team know the current state of the repair.
-- **Acceptance criteria:**
-  - Each service request detail page has a status selector showing allowed transitions: `New` → `InProgress`, `InProgress` → `Completed` or `Cancelled`.
-  - On status change to `InProgress` or `Completed`, the customer receives an email notification.
-  - Advisors can add free-text advisor notes stored on the service request.
-  - All status changes and note additions are stamped with the updating user's ID and timestamp via `MarkAsUpdated`.
-  - Technicians cannot change status (requires `service-requests:update` permission, not granted to `dealer:technician`).
-
-### 9.11. Update Section 10A structured repair data
-
-- **ID:** RVS-011
-- **Description:** As a technician, I want to record the repair action, parts used, and labor hours against a service request so that a structured record of the work is captured.
-- **Acceptance criteria:**
-  - The service request detail view shows an editable Section 10A panel for users with `service-requests:update-service-event` permission.
-  - Editable fields: `ComponentType`, `FailureMode`, `RepairAction`, `PartsUsed` (add/remove list), `LaborHours`, `ServiceDateUtc`.
-  - The technician can save Section 10A fields without changing the service request's overall status.
-  - Saved values are reflected on the corresponding `AssetLedgerEntry` (updated via patch on the ledger entry).
-  - Advisors and managers also have access to update Section 10A fields, not technicians only.
-
-### 9.12. View and download service request attachments
-
-- **ID:** RVS-012
-- **Description:** As a technician, I want to view photos and videos attached to a service request so that I can understand the issue before the RV arrives.
-- **Acceptance criteria:**
-  - The service request detail page renders inline thumbnail previews for image attachments.
-  - Video attachments are represented with a play icon preview; tapping/clicking opens a lightbox or inline player.
-  - Each attachment is accessed via a time-limited SAS URL (1-hour expiry) generated by `GET /api/service-requests/{id}/attachments/{attachmentId}`.
-  - The SAS URL fetch fails gracefully if the blob is missing (returns 404 with a clear message).
-  - Users require `attachments:read` permission to access SAS URLs.
-
-### 9.13. Manage dealership locations and intake configuration
-
-- **ID:** RVS-013
-- **Description:** As a dealership manager or owner, I want to configure my service locations and their intake form settings so that each location presents a branded, correctly configured experience to customers.
-- **Acceptance criteria:**
-  - Authorized users can create a new location with: display name, address, service email, phone, and region tag.
-  - Authorized users can update location settings: display name, contact info, logo, `IntakeFormConfig` (accepted file types, max file size).
-  - Each location is assigned a unique slug that generates the intake URL: `https://rvintake.com/{slug}`.
-  - The slug is immutable after creation (changing it would break existing QR codes and links).
-  - Creating a location automatically writes a corresponding `slugLookup` document.
-
-### 9.14. Download a QR code for the service intake form
-
-- **ID:** RVS-014
-- **Description:** As a dealership manager, I want to download a QR code that links directly to my location's intake form so that I can print and display it in the service drive.
-- **Acceptance criteria:**
-  - `GET /api/locations/{id}/qr-code` returns a QR code image encoding `https://rvintake.com/{locationSlug}`.
-  - The QR code is returned as a PNG image.
-  - The dealer dashboard provides a download button that triggers the endpoint.
-  - Users require `locations:read` permission to access the QR code endpoint.
-
-### 9.15. Export service requests to CSV for DMS import
-
-- **ID:** RVS-015
-- **Description:** As a dealership owner or manager, I want to export service request data as a CSV so that I can import it into our existing Dealer Management System.
-- **Acceptance criteria:**
-  - An export action in the dashboard triggers `POST /api/service-requests/export` with an optional date range and location filter.
-  - The response streams a CSV file with a header row and one row per service request.
-  - CSV fields include: service request ID, status, submission date, customer name, email, phone, VIN, make, model, year, issue category, component type, issue description, technician summary, repair action, parts used (semicolon-separated), labor hours, service date, location name, attachment count.
-  - Users require `service-requests:read` permission to access the export endpoint.
-  - CSV values containing commas or quotes are correctly RFC 4180-escaped.
-
-### 9.16. Configure SFTP push for automated DMS delivery
-
-- **ID:** RVS-016
-- **Description:** As a dealership owner, I want my service request data pushed automatically to our DMS SFTP endpoint on a daily schedule so that our systems stay synchronized without manual effort.
-- **Acceptance criteria:**
-  - SFTP configuration (host, port, username, private key reference, remote directory, schedule) is stored in `TenantConfig`.
-  - The SFTP private key is stored in Azure Key Vault; only the Key Vault secret name is persisted in the database.
-  - A daily scheduled job pushes a CSV of the prior day's service requests to the configured SFTP endpoint.
-  - Both key-based and password-based SFTP authentication are supported.
-  - Connection failures are logged with tenant context and surface as an alert in the dealer dashboard.
-  - An on-demand "push now" action is available for testing the SFTP configuration.
-
-### 9.17. Authenticate as dealer staff with role-based access
-
-- **ID:** RVS-017
-- **Description:** As a dealer staff member, I want to log in with my work credentials and have access scoped to my role and location so that I only see and can do what is appropriate for my job.
-- **Acceptance criteria:**
-  - Authentication is handled by Auth0. All dealer staff authenticate via the Auth0-hosted login page or SSO if configured.
-  - The JWT contains custom claims: `tenantId`, `locationIds`, `role`, injected via an Auth0 Login Action from the user's `app_metadata`.
-  - `ClaimsService.GetTenantIdOrThrow()` throws `UnauthorizedAccessException` (→ HTTP 401) if the `tenantId` claim is missing.
-  - `TenantAccessGateMiddleware` returns HTTP 403 if the tenant's access gate is disabled.
-  - Location-scoped roles (`dealer:advisor`, `dealer:technician`, `dealer:manager`, `dealer:readonly`) can only access service requests for locations in their `locationIds` claim.
-  - Corporate-scoped roles (`dealer:owner`, `dealer:corporate-admin`) can access all locations within their `tenantId` partition.
-  - All unauthorized access attempts are logged with the requesting `tenantId`, user ID, and request path.
-
-### 9.18. Provision a new tenant
-
-- **ID:** RVS-018
-- **Description:** As a platform administrator, I want to provision a new dealership tenant so that they can begin onboarding their staff and configuring their intake form.
-- **Acceptance criteria:**
-  - The platform admin can create a new tenant via `POST /api/platform/tenants`.
-  - Provisioning creates: a `TenantConfig` (with access gate enabled), a `Dealership` document, a default `Location`, and an Auth0 `app_metadata` entry for the initial admin user.
-  - Provisioning also creates a Stripe Customer object and a Stripe Subscription (Starter tier by default) with a 30-day trial period. `TenantConfig.BillingConfig.StripeCustomerId`, `StripeSubscriptionId`, and `TrialEndsAtUtc` are stored on the config.
-  - The provisioning endpoint requires the `platform:tenants:manage` permission.
-  - A tenant can be disabled via `PUT /api/platform/tenants/{id}/access-gate`, which sets the `TenantAccessGateEmbedded.IsEnabled` flag. All subsequent authenticated requests from that tenant receive HTTP 403.
-  - Tenant IDs are immutable once created.
-
-### 9.19. Monitor and respond to monthly usage limits
-
-- **ID:** RVS-019
-- **Description:** As a service manager, I want to see how many service requests my dealership has used this month so that I can plan for peak periods and avoid unexpected intake interruptions.
-- **Acceptance criteria:**
-  - The dealer dashboard calls `GET /api/tenants/billing/usage` and displays current billing status: plan tier, SR count, monthly limit, usage percentage, billing period start, trial status.
-  - When usage reaches or exceeds 80% of the monthly limit, the dashboard header renders a warning banner with the current usage percentage and an upgrade prompt.
-  - When usage reaches 100%, the dashboard renders a blocking error banner: "Monthly limit reached. New service requests are paused until {nextResetDate}."
-  - Banner updates reflect within one dashboard refresh cycle (no WebSocket required).
-  - Enterprise tenants do not see usage limit banners (no limit applies).
-
-### 9.20. Upgrade subscription plan
-
-- **ID:** RVS-020
-- **Description:** As a dealer owner or corporate admin, I want to upgrade my subscription plan so that I can accommodate higher service request volumes or add more locations.
-- **Acceptance criteria:**
-  - The dealer dashboard includes an upgrade call-to-action on the billing usage banner and on the settings/billing page.
-  - Plan upgrades are processed via the Stripe Customer Portal (hosted by Stripe) or an upgrade flow within the dashboard.
-  - On upgrade, the Stripe `customer.subscription.updated` webhook fires and the API updates `TenantConfig.BillingConfig.PlanTier`, `MaxMonthlyServiceRequests`, `MaxLocations`, and `IsSftpEnabled` immediately.
-  - After a plan upgrade, the SR limit enforcement threshold reflects the new plan limits on the next intake submission.
-  - Downgrade is available but requires confirmation that current usage is within the lower tier's limits. Attempting to downgrade while over the new tier's limit displays an error.
-
-### 9.21. Handle trial expiry and payment failure
-
-- **ID:** RVS-021
-- **Description:** As a dealer admin approaching the end of my free trial, I want to receive timely notice so that I can add a payment method before intake is interrupted.
-- **Acceptance criteria:**
-  - When `trialEndsAtUtc` is within 7 days, the dealer dashboard shows an info banner: "Your free trial ends in N days. Add a payment method to continue."
-  - When the trial expires with no active Stripe subscription, `TenantAccessGateMiddleware` returns HTTP 402. The intake portal renders a friendly error message (not the raw 402 body). The dealer dashboard redirects to an upgrade/payment page.
-  - On `invoice.payment_failed` webhook, the platform emits an internal alert and enters a 3-day grace period. The tenant is not immediately disabled. After the grace period (Stripe dunning exhausted), the tenant access gate is set to disabled.
-  - On `invoice.payment_succeeded`, the billing period is reset and normal access resumes immediately.
-
-### 9.22. Configure service capabilities at the tenant and location level
-
-- **ID:** RVS-022
-- **Description:** As a service manager, I want to choose which service capabilities each of my locations can perform — drawn from a tenant-level master list — so that customers and staff have an accurate picture of what each location can handle (for example, only some locations can service diesel motors).
-- **Acceptance criteria:**
-  - A new tenant is provisioned with a reasonable default starter list of RV service capabilities (e.g., diesel service, body & collision repair, RV refrigerator, slide-out repair, roof repair, electrical, plumbing, HVAC, generator, warranty work, mobile / on-site, winterization, safety inspection, tire & wheel) on `TenantConfig.AvailableCapabilities`.
-  - Tenant admins (with `tenant-config:update` permission) can add, rename, soft-deactivate (set `IsActive = false`), and reorder capabilities in the master list. Capability `Code` values are immutable once created.
-  - Service managers (with `locations:update` permission) can edit the `EnabledCapabilities` list on each `Location` by selecting from the tenant's active master list.
-  - The location edit UI displays the master list as a multi-select; only `IsActive = true` capabilities appear as new selectable options.
-  - Saving a location with an empty `EnabledCapabilities` list is allowed and means "no capability filtering applied" — the intake capability assessment treats such a location as a match for any issue.
-  - Capabilities are returned to the dealer dashboard via `GET /api/locations/{id}` and to tenant-config screens via `GET /api/tenants/config`.
-
-### 9.23. Be alerted at intake when the selected location may not handle my issue
-
-- **ID:** RVS-023
-- **Description:** As a customer submitting a service request, I want the intake form to let me know if the location I picked is unlikely to be able to help with the kind of issue I described, so that I can choose to call ahead and confirm before showing up — without being blocked from submitting the request.
-- **Acceptance criteria:**
-  - After the customer completes Step 5 (Issue Description) and proceeds to Step 6 (Review and Submit), the Intake app calls `POST /api/intake/{locationSlug}/assess-capabilities` with the issue description (and optional pre-resolved category) before rendering Step 6.
-  - The API uses the existing AI categorization service (with rule-based fallback) to determine the issue category and the set of capability codes typically required to address it, then compares those against the location's `EnabledCapabilities`.
-  - If every required capability is enabled at the location — **or** the resolved category has no specific capability requirement — Step 6 renders normally with no banner.
-  - If one or more required capabilities are missing, Step 6 renders a non-blocking informational alert at the top: *"This location isn't typically able to help with this kind of issue. Please contact the service center directly to confirm at {service-center-phone}."*
-  - The alert is informational only: the customer can still complete and submit the service request from Step 6.
-  - If the assessment endpoint fails or times out, no banner is shown and the wizard continues to Step 6 — capability assessment must never block intake.
-  - The endpoint is anonymous, rate-limited under the existing intake IP rate-limit policy, and never persists customer-identifying data outside the standard intake flow.
+*End of RVS_PRD.md v3.0 (Solo + Professional tiers).*

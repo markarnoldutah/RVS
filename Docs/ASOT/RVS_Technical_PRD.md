@@ -1,9 +1,31 @@
 # RV Service Flow (RVS) — Technical PRD
 
-**Version:** 1.0
-**Date:** March 20, 2026
-**Status:** Draft
+**Version:** 3.4
+**Date:** April 30, 2026
+**Status:** Draft (post-pivot, v3.4 — Enterprise Scale technical foundations)
+**Supersedes:** v3.3 (April 30, 2026, earlier same-day), v3.0 (same-day), v2.0 (same-day), v1.0 (March 20, 2026)
 **Derived from:** RVS_Core_Architecture_Version3.1.md (ASOT)
+
+> **What changed in v3.4 (same-day refinement of v3.3):** Two new FR sections added to the Functional Requirements (§5.8 and §5.9) covering Enterprise Scale technical foundations introduced in `RVS_Premium_PRD.md` v1.2 (FR-ES-007, FR-ES-011, FR-ES-012):
+> - **§5.8 OEM Revenue-Share Calculation** — six new FRs (FR-OEM-01 through FR-OEM-06): aggregate definition and contribution measurement, quarterly calculation job, revenue-share approval workflow, customer-facing dashboard, cancellation/forfeiture handling, anti-gaming measures
+> - **§5.9 Custom SLA Monitoring** — six new FRs (FR-SLA-01 through FR-SLA-06): per-tenant SLA configuration, uptime measurement methodology, automatic service credit calculation, P1 incident escalation chain, post-incident review obligation, quarterly conformance reporting
+> - Existing §5.8 (Self-Service User Provisioning) renumbered to §5.10; existing §5.9 (Verification Gate) renumbered to §5.11
+> - **§3.4 Phase 3 Ship Criteria updated** to include FR-SLA-01 through FR-SLA-06 framework operational, FR-OEM-01 through FR-OEM-06 conditional on OEM pilot revenue-share clause, and backend engineer #2 onboarded for solutions engineer FTE allocation
+> - Phase 3 timing unchanged (months 13-18); the new FRs ship alongside first ES customer onboarding
+
+> **What changed in v3.3 (same-day refinement of v3.0):** Pricing model restructured. Material changes from v3.0:
+> - **FR-BILL-04 rewritten** for volume-banded per-location billing (Pro: $79/$69/$59 by 1-9/10-24/25-49 loc; Premium: $119/$109/$99 by same bands; Solo flat $39; Enterprise Scale custom $150-$300/loc)
+> - **FR-BILL-05 removed** — per-user surcharge metering eliminated (no per-user pricing at any tier in v3.3)
+> - **FR-BILL-07 added** — support tier add-on billing (Priority $500/mo opt-in for Pro and Premium)
+> - **FR-BILL-08 added** — transition discount mechanics (50% off first 3 months for Pro→Premium and Premium→Enterprise Scale upgrades; subscription only, not implementation fees)
+> - **FR-BILL-09 added** — implementation fee billing infrastructure with banded fees ($5K/$7.5K/$10K Premium; $15K/$25K/$40K Enterprise Scale)
+> - **FR-USER-03 reworded** — user activity tracking now optional/observability-only (no longer feeds per-user billing)
+> - **FR-USER-04 removed** — technician role exemption no longer needed
+> - **FR-TENANT-06 updated** to reflect banded billing logic (no surcharge concept)
+> - **Phase 1 ship criteria updated** to reflect Pro SR cap of 600/loc/mo and banded billing requirements
+> - Engineering scope: ~1 sprint saved on per-user metering removal; ~1 sprint added on support tier infrastructure (Phase 2); banded billing logic is minor addition to Sprint 13-14
+
+> **What changed in v3.0 (earlier same-day):** v2.0 was written under a Free + Enterprise pricing model. v3.0 reflected the four-tier model — Solo / Professional / Premium / Enterprise Scale — plus the OEM Data Licensing track. Core architecture (Cosmos schema, Auth0 model, middleware, AI patterns, performance targets) was unchanged. Stripe billing endpoints reintroduced; self-service user provisioning added; verification gate added; benchmarking rate-limiting middleware added.
 
 ---
 
@@ -11,11 +33,14 @@
 
 | Document | Purpose |
 |---|---|
-| [RVS_Core_Architecture_Version3.1.md](../Obsolete/RVS_Core_Architecture_Version3.1.md) | Domain model, data layer, orchestration flows, API surface |
+| [RVS_Context.md](RVS_Context.md) | Platform overview, four-tier business model, strategic context (v3.0) |
+| [RVS_Competitive_Strategy.md](RVS_Competitive_Strategy.md) | Competitive positioning, Yes/No filter, sales objection handling (v3.0) |
+| [RVS_PRD.md](RVS_PRD.md) | Solo + Professional tier product requirements (v3.0) |
+| [RVS_Premium_PRD.md](RVS_Premium_PRD.md) | Premium + Enterprise Scale tier product requirements |
+| [RVS_data_moat.md](RVS_data_moat.md) | Asset ledger, taxonomy, anonymization, anti-corpus-theft architecture, ToS language (v3.0) |
+| [RVS_OEM_GoToMarket.md](RVS_OEM_GoToMarket.md) | OEM strategy, target accounts, deal structures |
+| [RVS_Implementation_Plan_v2.md](RVS_Implementation_Plan_v2.md) | Three-phase execution plan (Solo+Pro → Premium → Enterprise Scale + OEM) |
 | [RVS_Auth0_Identity_Version2.md](Auth0/RVS_Auth0_Identity_Version2.md) | RBAC model, JWT structure, ClaimsService, `app_metadata` tenant scoping |
-| [RVS_Context.md](RVS_Context.md) | Platform overview, business model, investor/partner context |
-| [RVS_PRD.md](RVS_PRD.md) | Product goals, user personas, user stories (v1.1) |
-| [RVS_implementation_plan.md](RVS_implementation_plan.md) | 8-phase build roadmap |
 | [.github/copilot-instructions.md](../../.github/copilot-instructions.md) | Coding conventions, project patterns |
 
 ---
@@ -92,12 +117,60 @@ Customer = Anonymous (MVP); no Auth0 account required
 | AI category suggestion latency | < 1.0 seconds (P95) | APM trace on `POST api/intake/{slug}/ai/suggest-category` |
 | Attachment upload (25 MB file) | < 10 seconds (P95; direct-to-blob via SAS) | Client telemetry |
 
-### 3.2 MVP Ship Criteria
+### 3.2 Phase 1 Ship Criteria (Solo + Professional tiers)
 
-- 5 design partner dealerships complete full intake → advisor dashboard → technician update cycle without bugs
+- 5 design partner dealerships across Solo and Professional tiers complete full intake → advisor dashboard → technician update cycle without bugs
+- At least 2 of the 5 design partners are operating Professional tier on multi-location coordination features (cross-location queue, regional manager, cross-loc analytics)
 - Intake form usable on Safari iOS, Chrome Android, Chrome/Edge Windows
-- Zero `platform:admin` intervention required to onboard a new dealership
+- Zero `platform:admin` intervention required to onboard a new dealership (self-serve Solo signup with Stripe live)
+- 30-day trial converts to paid Stripe subscription cleanly with no manual intervention
+- Self-service user provisioning via Auth0 Management API works end-to-end (invitation, password setup, role activation, deactivation)
 - All OWASP Top 10 vectors addressed (see Section 9)
+- **Asset ledger writes happen on every intake submission with structured Section 10A taxonomy enforced**
+- **Section 10A taxonomy adherence rate ≥ 95% across submitted entries**
+- **Outbound notification webhook delivers within 30s P99 of triggering event**
+- **Solo tier monthly SR cap (300/loc/mo) enforced, returning HTTP 402 on breach**
+- **Professional tier monthly SR cap (600/loc/mo) enforced, returning HTTP 402 on breach**
+- **Volume-banded per-location billing (FR-BILL-04) operational for Solo (flat $39/loc) and Pro (banded $79/$69/$59 by 1-9/10-24/25-49 loc); each Stripe invoice reflects correct band-applicable rate**
+- **Verification gate workflow operational with manual review queue functional and documented SLA (24-72 hours)**
+- **Audit log infrastructure capturing required event types** even in Phase 1, ahead of benchmarking ship in Phase 2
+- Industry benchmarking deferred to Phase 2 (no API surface in Phase 1; placeholder UI only)
+
+### 3.3 Phase 2 Ship Criteria (Premium tier and anonymization)
+
+- Cross-location analytics dashboard in production with positive design partner feedback (carries from Pro tier; refines for Premium use)
+- SAML SSO validated with at least 2 different IdPs (Okta + Entra ID, ideally) via Auth0 Organizations
+- SCIM provisioning validated end-to-end (user create, update, deactivate from upstream IdP)
+- IP allowlisting enforced via middleware with bypass for anonymous intake endpoints
+- Audit log captures all required event types with passing manual audit (every API call to a `[Authorize]` endpoint produces an audit entry)
+- DMS bidirectional integration with at least one partner (IDS or Lightspeed) in production at a Premium design partner
+- DMS reconciliation dashboard surfaces real discrepancies and supports manual resolution
+- Anonymization pipeline operational with variable k-anonymity enforced (k=5 generic up to k=25 OEM-relevant)
+- Tiered industry benchmarking (basic at Solo, advanced at Pro, full custom at Premium) live with rate limiting enforced
+- Verification gate fully operational with verification queue averaging <72 hour completion time
+- Premium tier banded per-location billing operational ($119/$109/$99 by 1-9/10-24/25-49 loc) with each Stripe invoice reflecting correct band-applicable rate
+- Premium tier monthly SR cap (1,000/loc/mo) enforced, returning HTTP 402 on breach
+- Premium banded implementation fees billed correctly at contract signing ($5K/$7.5K/$10K by location band)
+- Priority support tier add-on operational ($500/mo opt-in for Pro and Premium customers via dashboard)
+- Pro→Premium transition discount mechanic (50% off first 3 months, subscription only) functional via Stripe coupon
+- Auth0 Free → Auth0 Organizations migration tested and documented for Solo/Pro → Premium upgrade path
+- ToS, MSA, and DPA templates with liquidated damages clauses reviewed by counsel
+- 1 paying Premium customer signed
+- Asset ledger ≥ 10,000 events with ≥ 95% taxonomy adherence
+
+### 3.4 Phase 3 Ship Criteria (Enterprise Scale tier and OEM pilot readiness)
+
+- 3+ paying Premium customers
+- Multi-DMS support (both IDS and Lightspeed) validated at a Premium customer
+- Custom analytics builder in production
+- 24/7 support model operational (Critical support tier active for ES customers)
+- SOC 2 Type I attestation obtained
+- First Enterprise Scale customer signed (sales-led)
+- First OEM pilot under contract
+- Asset ledger ≥ 50,000 events with ≥ 5% installed-base coverage of one major OEM
+- **Per-tenant SLA configuration framework operational (FR-SLA-01 through FR-SLA-06) with first ES customer's custom SLA terms enforced and quarterly conformance reporting delivered**
+- **OEM aggregate definition and contribution measurement system operational (FR-OEM-01 through FR-OEM-06) — required if OEM pilot includes revenue-share clause; deferred if first OEM pilot does not trigger revenue-share threshold**
+- **Backend engineer #2 onboarded and absorbing dedicated solutions engineer FTE allocation per ES customer (FR-ES-011)**
 
 ---
 
@@ -105,15 +178,17 @@ Customer = Anonymous (MVP); no Auth0 account required
 
 ### 4.1 Personas
 
-| Persona | Auth | Primary Surface | Key Actions |
-|---|---|---|---|
-| RV Owner | Anonymous (magic-link only) | `Blazor.Intake` WASM | Submit intake, check status |
-| Service Advisor | Auth0 JWT | `Blazor.Manager` | Search/filter SRs, update status, add notes |
-| Service Manager | Auth0 JWT | `Blazor.Manager` | Service Board drag-drop, batch outcomes, analytics |
-| Regional Manager | Auth0 JWT | `Blazor.Manager` | Cross-location SR view, regional analytics |
-| Corporate Admin | Auth0 JWT | `Blazor.Manager` | User management, all locations, all analytics |
-| Technician | Auth0 JWT | `MAUI.Tech` | View assigned jobs, record Section 10A, photo capture |
-| Platform Admin | Auth0 JWT | Direct API / future admin UI | Tenant provisioning, global lookups |
+| Persona | Auth | Primary Surface | Key Actions | Tier |
+|---|---|---|---|---|
+| RV Owner | Anonymous (magic-link only) | `Blazor.Intake` WASM | Submit intake, check status | All tiers |
+| Service Advisor | Auth0 JWT | `Blazor.Manager` | Search/filter SRs, update status, add notes | All tiers |
+| Service Manager | Auth0 JWT | `Blazor.Manager` | Queue management, batch outcomes (Service Board UI is Pro+) | All tiers |
+| Regional Manager | Auth0 JWT | `Blazor.Manager` | `regionTag`-scoped cross-location view, regional analytics | **Professional+** |
+| Corporate Admin | Auth0 JWT | `Blazor.Manager` | User management, all locations, all analytics, audit log query | **Premium+** (Solo/Pro use `dealer:owner` for similar duties) |
+| Technician | Auth0 JWT | `MAUI.Tech` | View assigned jobs, record Section 10A, photo capture | All tiers (unlimited at every tier) |
+| Platform Admin | Auth0 JWT | Direct API / future admin UI | Tenant provisioning, verification queue, anomaly review, Enterprise Scale contract setup, global lookups | Internal |
+
+The role data model (Auth0 roles, ClaimsService) is unchanged across tiers. The difference is which roles can be *assigned* and which UI surfaces are *exposed* per tenant tier.
 
 ### 4.2 Intake URL Structure
 
@@ -138,11 +213,14 @@ On receipt of a valid `ServiceRequestCreateRequestDto`, the API MUST execute the
 2. Resolve or create `CustomerProfile` within `tenantId`
 3. Resolve asset ownership (deactivate prior owner if VIN transferred)
 4. Create `ServiceRequest` with embedded customer snapshot, AI categorization, and technician summary
-5. Append `AssetLedgerEntry` (write-once, non-blocking on failure)
+5. Append `AssetLedgerEntry` (write-once, mandatory; persistent failure is a P1 alert per FR-LEDGER-01)
 6. Update linkages (increment request count, stable magic-link token — generated once, reused; regenerated only when absent or expired)
-7. Fire-and-forget confirmation email via `INotificationService`
+7. Fire-and-forget customer notifications: (a) ACS email/SMS via `INotificationService` if `NotificationConfig.Provider = RvsNative`; (b) outbound webhook fire if `NotificationConfig.WebhookUrl` is configured (regardless of provider)
 
 Steps 1–6 MUST complete before returning `201`. Step 7 MUST NOT block the response.
+
+**FR-INTAKE-02A — Tier-based intake quota enforcement**
+Before Step 1, the API MUST check `TenantConfig.BillingConfig.CurrentMonthSrCount` against the per-location cap derived from tier (Solo: 300/loc/mo, Pro: 1,000/loc/mo, Premium and Enterprise Scale: unlimited). If the cap is reached for a Solo or Pro tenant, the API MUST return `402` with `ProblemDetails` body `{ type: "rvs:tier-quota-exceeded", title: "Monthly intake limit reached", status: 402, detail: "This dealership is temporarily unable to accept new requests. Please contact the service center directly." }`. The customer-facing message MUST NOT mention pricing or tiers. On successful intake, the counter MUST increment atomically (Cosmos patch on `TenantConfig`). Counter resets on the first day of each calendar month via scheduled function.
 
 **FR-INTAKE-03 — VIN decoding**
 The intake API MUST call the NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`) to decode make, manufacturer, model year, and asset type from a submitted VIN. Decoded values MUST be stored in `AssetInfoEmbedded`. On NHTSA API failure or invalid VIN, the intake submission MUST still succeed with partial asset info (customer-supplied make/model/year).
@@ -222,8 +300,15 @@ The `MAUI.Tech` app MUST queue failed `PUT api/dealerships/{id}/service-requests
 **FR-TECH-02 — VIN/QR scan to job open**
 Scanning a VIN barcode or QR code MUST resolve to the matching `ServiceRequest` via `POST api/dealerships/{id}/service-requests/search` with `assetId` filter. The first matching open SR MUST open automatically.
 
-**FR-TECH-03 — Section 10A fields**
+**FR-TECH-03 — Section 10A fields with strict taxonomy enforcement**
 The `PUT api/dealerships/{id}/service-requests/{srId}` endpoint MUST accept `ServiceEventEmbedded` fields: `ComponentType`, `FailureMode`, `RepairAction`, `PartsUsed`, `LaborHours`, `ServiceDateUtc`. Technicians with `dealer:technician` role MUST be able to update Section 10A fields without changing SR status.
+
+**Strict taxonomy enforcement (v2.0 change):** `ComponentType`, `FailureMode`, and `RepairAction` MUST be validated against the active taxonomy version stored in `lookupSets`. Submissions containing values not present in the active controlled vocabulary MUST be rejected with `400 Bad Request` and a `ProblemDetails` body identifying the offending field(s) and the closest valid alternatives. Free-text override is NOT permitted. Technicians encountering uncategorizable cases MUST select `other-uncategorized` and supply a free-text supplement; the supplement is queued for taxonomy review and does NOT enter the structured ledger fields.
+
+**Taxonomy versioning:** Each `AssetLedgerEntry` MUST record the `TaxonomyVersion` under which Section 10A was captured. The active version is published platform-wide; rolling forward a tenant to a new version MUST be an explicit operation (not automatic).
+
+**FR-TECH-03A — AI-assisted Section 10A classification (Wave 2, Enterprise)**
+For Enterprise tenants, `POST api/service-requests/{srId}/ai/suggest-section10a` MUST call an AI provider (`ICategorizationService.SuggestSection10AAsync`) to recommend `ComponentType`, `FailureMode`, and `RepairAction` values from the active taxonomy. The endpoint MUST return `AiOperationResponseDto<Section10ASuggestionResultDto>` with confidence per field. Suggestions are advisory only — the technician's chosen taxonomy values are what the ledger records.
 
 **FR-TECH-04 — Authenticated attachment upload**
 `POST api/dealerships/{id}/service-requests/{srId}/attachments` MUST accept authenticated (Bearer) multipart uploads from dealer staff. The same file type and size constraints defined in FR-INTAKE-04 apply.
@@ -247,6 +332,417 @@ On `POST api/locations` or `PUT api/locations/{id}` (slug rename), `ILocationSer
 - `PUT api/tenants/config` MUST allow `tenant-config:update` callers to replace `availableCapabilities`. The service layer MUST reject changes that mutate an existing `Code` (codes are immutable). Soft-deletion MUST be performed by setting `IsActive = false`; hard removal of a code that is referenced by any `Location.EnabledCapabilities` MUST be rejected with `409 Conflict`.
 - `Location.EnabledCapabilities` is a list of capability codes opted into by that location. Each entry MUST exist in the tenant's `AvailableCapabilities` (validated server-side on `POST/PUT api/locations`). An empty list is allowed and means "no capability-based filtering applies to this location" — the intake capability assessment treats such a location as a match for any issue.
 - `LocationDetailDto` and `LocationSummaryDto` MUST surface `enabledCapabilities`. `TenantConfigResponseDto` MUST surface `availableCapabilities`.
+
+**FR-TENANT-06 — Tier location surcharge tracking**
+There is NO architectural location limit per tier (Solo, Pro, Premium, Enterprise Scale all support unlimited locations architecturally). However, `POST api/locations` MUST update `TenantConfig.BillingConfig.LocationCountForBilling` atomically. The banded billing job (FR-BILL-04) uses `LocationCountForBilling` to determine the applicable per-location rate at the start of each billing period. Pro band breakpoints: 1-9 / 10-24 / 25-49 loc. Premium band breakpoints: 1-9 / 10-24 / 25-49 loc. Enterprise Scale uses contract-negotiated per-location rate. Solo is flat $39/loc across all sizes.
+
+**FR-TENANT-07 — Self-serve tenant signup**
+`POST api/signup` MUST accept `TenantSignupRequestDto { corporationName, ownerEmail, ownerFirstName, ownerLastName, locationName, locationAddress, locationPhone, requestedSlug }` and:
+1. Validate slug uniqueness against `slugLookup` (return `409` on conflict; suggest alternative slugs in response)
+2. Create Auth0 user with verification-pending email (using Auth0 Management API)
+3. Create `Dealership` document with `Tier = Free`
+4. Create initial `Location` with provided info
+5. Create `TenantConfig` with Solo tier defaults, `AccessGate.Status = Active`, `NotificationConfig.Provider = RvsNative`, `BillingConfig.Tier = Solo`, `BillingConfig.TrialEndUtc` set 30 days out
+6. Create `slugLookup` entry mapping slug → tenantId/locationId
+7. Send welcome email via ACS with verification link and dashboard URL
+
+The endpoint MUST be `[AllowAnonymous]` and rate-limited to 5 requests/IP/hour (signup is rare; abuse is concerning). On any step failure, all completed steps MUST be rolled back (best-effort; use compensating writes since Cosmos has no multi-container transactions).
+
+**FR-TENANT-08 — Notification provider configuration**
+`TenantConfig.NotificationConfig` MUST contain:
+- `Provider: NotificationProvider` enum — `RvsNative` (default), `KenectWebhook`, `Disabled`
+- `WebhookUrl: string?` — optional outbound webhook target
+- `WebhookSecret: string?` — HMAC signing secret (stored in Key Vault, not in Cosmos)
+- `SuppressOutboundCustomerMessages: bool` — when true, RVS sends no customer-facing email/SMS regardless of provider; webhook still fires
+
+`PUT api/tenants/config/notifications` MUST allow `tenant-config:update` callers to update these settings. Webhook URL changes MUST trigger a verification call (`POST` with `event: "verification"` payload; expects `200 OK` within 10s) before being persisted.
+
+**FR-TENANT-09 — Outbound integration webhook**
+On the following events, the API MUST fire a webhook POST to `TenantConfig.NotificationConfig.WebhookUrl` if configured:
+- `serviceRequest.created` — at the end of intake orchestration
+- `serviceRequest.statusChanged` — on PUT to SR with status delta
+- `serviceRequest.advisorNoteAdded` — when a customer-facing note is added
+- `serviceRequest.completed` — when status transitions to `completed` or `delivered`
+
+Payload schema (JSON):
+```json
+{
+  "event": "serviceRequest.created",
+  "tenantId": "org_xxx",
+  "locationId": "loc_xxx",
+  "serviceRequestId": "guid",
+  "occurredAtUtc": "2026-04-30T...",
+  "customer": { "firstName": "Alex", "phoneE164": "+1...", "email": "..." },
+  "magicLinkUrl": "https://rvintake.com/status/...",
+  "templatedMessageBody": "string",
+  "metadata": { "issueCategory": "slide-system", "assetSummary": "..." }
+}
+```
+
+Each request MUST include header `X-RVS-Signature: sha256=<hmac>` computed over the raw body using `WebhookSecret`. Delivery MUST be fire-and-forget with retry-on-failure (3 retries with exponential backoff: 30s, 5min, 30min). Failures after final retry are logged and surfaced in the audit log (Enterprise) but MUST NOT block the originating action. Webhook delivery latency MUST be < 30s P99 for first-attempt success.
+
+**FR-LEDGER-01 — Asset ledger write discipline**
+Every successful intake submission MUST result in an `AssetLedgerEntry` write within the same orchestration. The write MAY be async (Step 5 of orchestration may queue rather than write inline if Cosmos throttling is encountered), but the entry MUST be persisted within 60 seconds of SR creation under normal conditions. Persistent ledger write failure (3 consecutive retry attempts fail) MUST raise a P1 alert and surface in App Insights as `AssetLedgerWriteFailed` event with full SR context.
+
+The asset ledger schema MUST follow `RVS_data_moat.md` §2.3. Required fields at SR creation: `assetId`, `tenantId`, `serviceRequestId`, `assetType`, `manufacturer`, `model`, `modelYear`, `serviceDateUtc`, `issueCategory`, `dealerLocationId`, `geoState`, `taxonomyVersion`, `createdAtUtc`. Section 10A fields (`componentType`, `failureMode`, `repairAction`, `partsUsed`, `laborHours`) MAY be null at creation and MUST be populated via a dedicated "complete entry" path when the technician completes the work.
+
+**FR-LEDGER-02 — Asset ledger enrichment endpoint**
+`PATCH api/asset-ledger/{ledgerEntryId}/section10a` MUST accept Section 10A enrichment from authenticated technicians or advisors. Strict taxonomy enforcement (per FR-TECH-03) applies. The endpoint MUST be idempotent (multiple submissions of the same payload result in a single state). On enrichment, the entry's `updatedAtUtc` is set; the entry's `taxonomyVersion` MUST match the version active at enrichment time (not creation time) — this allows ledger entries to span taxonomy versions.
+
+**FR-LEDGER-03 — No general-purpose update API**
+The asset ledger is logically append-only. There MUST NOT be a general `PUT api/asset-ledger/{id}` endpoint that allows arbitrary mutation. Corrections to ledger entries MUST be expressed as new entries with `correctsLedgerEntryId` populated. The platform admin role has direct Cosmos access for emergency corrections; this is logged in the audit log.
+
+### 5.6 Premium-Tier Functional Requirements
+
+These FRs activate when `TenantConfig.Tier = Premium`. They are documented in detail in `RVS_Premium_PRD.md`; this section catalogs the API surface they introduce.
+
+> Enterprise Scale tier (50+ locations, sales-led custom contracts) inherits all Premium FRs and adds: multi-DMS support, custom analytics builder endpoints, custom data export endpoints, and OEM data partnership coordination. Enterprise Scale endpoints are catalogued in `RVS_Premium_PRD.md` §5; the Technical PRD treats Enterprise Scale as a configuration superset of Premium for implementation purposes.
+
+**FR-ENT-01 — Multi-location activation (Pro and above)**
+Professional and Premium tenants have no location count limit. `POST api/locations` is unrestricted. Bulk import via `POST api/locations/bulk-import` (CSV body) MUST validate all rows before inserting any. Solo tier tenants are not architecturally limited but the dashboard does not surface multi-location UI.
+
+**FR-ENT-02 — Cross-location queue**
+`POST api/dealerships/{id}/service-requests/search` already supports `locationId[]` filter (FR-DASH-01). Enterprise UI surfaces this as a multi-select. Regional managers (`dealer:regional-manager` role with `regionTag` claim) MUST have their search results automatically filtered to permitted locations — enforced server-side in `IServiceRequestService.SearchAsync` via `ClaimsService.GetRegionTag()`.
+
+**FR-ENT-03 — Cross-location asset history**
+`GET api/assets/{assetId}/history` MUST return all `AssetLedgerEntry` documents for the given asset where `tenantId = caller's tenantId`. MUST NOT return entries from other tenants. Sorted by `serviceDateUtc` descending. Supports `?from`, `?to` query params.
+
+**FR-ENT-04 — Audit log writes**
+All authenticated requests MUST emit an audit event to the `auditLog` container via `IAuditLogService`. Event taxonomy:
+- `auth.*` — login, logout, mfa-challenge, failed-login
+- `authorization.*` — permission-denied
+- `data.read.*` — sr-view, asset-ledger-query, attachment-access, analytics-query, benchmarking-query
+- `data.write.*` — sr-create, sr-status-change, section10a-update, user-create, user-role-change, settings-change
+- `admin.*` — location-create, location-delete, integration-config-change
+
+Entry shape: `{ id, tenantId, userId, eventType, resourceType, resourceId, action, timestamp, ipAddress, userAgent, correlationId, metadata }`. Partition key `/tenantId`. Retention: 7 years (configurable per tenant). Writes MUST be async and non-blocking; failure MUST log but not break the request.
+
+**FR-ENT-05 — Audit log query**
+`POST api/audit-log/search` MUST allow `dealer:corporate-admin` to query the audit log with filters on `eventType`, `userId`, `dateFrom`, `dateTo`, `resourceType`. Page size capped at 200. Export available via `POST api/audit-log/export` returning a SAS URL to a generated CSV/JSON archive (60-minute expiry).
+
+**FR-ENT-06 — IP allowlisting**
+`TenantConfig.AccessControl.IpAllowlist: string[]` (CIDR notation). When non-empty, authenticated requests from IPs outside the allowlist MUST return `403` with type `tenant-ip-restricted`. Anonymous intake endpoints (`api/intake/*`, `api/status/*`) MUST be excluded from allowlisting. Configuration via `PUT api/tenants/config/access-control`.
+
+**FR-ENT-07 — SAML SSO (Auth0 Organizations)**
+Enterprise tenants are provisioned as Auth0 Organizations. Per-organization SAML connection configuration is performed in Auth0 Dashboard or via Auth0 Management API. The RVS API does NOT implement SAML directly; ClaimsService is unchanged from Free. The `tenantId` claim is sourced from the Auth0 Organization ID (`org_xxx`) when the user authenticates via an Organization-scoped login.
+
+**FR-ENT-08 — SCIM provisioning**
+Enterprise tenants configure SCIM via Auth0's SCIM 2.0 endpoint exposed per-Organization. RVS does NOT implement SCIM directly. Group-to-role mapping is configured at the Auth0 Organization level.
+
+**FR-ENT-09 — DMS bidirectional integration**
+For Enterprise tenants with `TenantConfig.DmsIntegration` configured, the platform MUST sync SRs bidirectionally. Architecture:
+- Implementation behind `IDmsIntegrationProvider` interface with `IdsAstraIntegrationProvider` and `LightspeedIntegrationProvider` implementations
+- RVS → DMS push: outbound on SR create/status-change, queued via Azure Storage Queue, processed by `DmsSyncBackgroundService`
+- DMS → RVS pull: inbound webhook (where DMS supports) or scheduled pull (where it doesn't); writes to SR with `dmsLastSyncUtc` updated
+- Per-location configuration (some dealer groups have mixed DMS); `Location.DmsIntegration` overrides tenant-level
+
+The DMS reconciliation dashboard (`GET api/dms/reconciliation`) MUST surface drift between RVS and DMS state with manual resolution UI.
+
+**FR-ENT-10 — Industry benchmarking API (tier-gated query depth + variable k-anonymity)**
+`POST api/benchmarking/query` MUST accept benchmarking queries against the `industryDataset` container. The endpoint MUST:
+1. Validate caller has appropriate role and tier (Solo: `dealer:owner` for pre-built dashboards only; Pro: custom queries via predefined templates; Premium: full custom query API; Enterprise Scale: full firehose per contract)
+2. Validate `TenantConfig.BenchmarkingAccess.Verified = true` (verification gate per FR-VG-01) — if not verified, return `403` with type `tenant-not-verified`
+3. Apply variable k-anonymity threshold per `RVS_data_moat.md` §4.3 (k=5 generic, up to k=25 for OEM-relevant queries) — if query result would expose data from fewer than the threshold k tenants, return aggregate-only or suppress with "insufficient data"
+4. Audit-log the query to `auditLog` per FR-RATE-02 (queryParameters, kAnonymityThresholdApplied, resultRowCount, etc.)
+5. Rate-limit per tier (Solo: 20/mo dashboard refreshes; Pro: 200/mo queries; Premium: 2,000/mo queries; Enterprise Scale: negotiated)
+6. Reject queries that violate tier-specific depth restrictions (Solo: no custom queries, no drill-down beyond category, no model-year, no geographic finer than region, no date range narrower than 90 days)
+
+Supported query types (initial): `rectComparison`, `topFailureModes`, `laborHoursDistribution`, `seasonalPatterns`. Phase 2 ship adds Premium tier `componentFailureRateByModel`, `failureCorrelations`, `warrantyClaimsBenchmark`. Each returns aggregated statistics with variable k-anonymity guarantees enforced at the query engine layer.
+
+### 5.7 Billing, Trial, and Subscription Management (new in v3)
+
+**FR-BILL-01 — Stripe customer and subscription provisioning**
+`POST api/signup` (per FR-019 in PRD) MUST create a Stripe Customer and store payment method during signup, and create a Subscription with `trial_end` set to 30 days from signup. `TenantConfig.BillingConfig` MUST persist:
+- `StripeCustomerId`
+- `StripeSubscriptionId`
+- `Tier: Solo | Professional | Premium | EnterpriseScale`
+- `BillingPeriodStart`, `BillingPeriodEnd`
+- `TrialEndUtc`
+- `LocationCountForBilling`
+- `IncludedUsers` (Premium only; default 10)
+- `ActiveUserCount` (Premium only; non-technician only)
+- `CurrentMonthSrCount`
+
+**FR-BILL-02 — Tier transition endpoints**
+- `POST api/billing/upgrade-to-professional` — transitions Stripe subscription from Solo flat $39/loc to Pro banded pricing ($79/$69/$59 by 1-9/10-24/25-49 loc per FR-BILL-04); applies Solo→Pro upgrade with no transition discount (Solo→Pro is the standard upgrade path, not a discounted transition)
+- `POST api/billing/upgrade-to-premium` — requires Pro tier active; transitions Stripe subscription to Premium banded pricing ($119/$109/$99 by 1-9/10-24/25-49 loc per FR-BILL-04); kicks off Auth0 Free → Auth0 Organizations migration job; applies Pro→Premium transition discount (50% off first 3 months per FR-BILL-08); generates implementation fee invoice per FR-BILL-09 banded by location count
+- `POST api/billing/downgrade` — applies on next billing period boundary, never mid-period; downgrade Premium → Pro removes Auth0 Organizations identity and reverts to `app_metadata` scoping (one-way migration documented; advise customers to consider data implications)
+- `POST api/billing/upgrade-to-enterprise-scale` — sales-led; not self-serve; admin-gated endpoint that records the negotiated contract terms ($150-$300/loc range; Critical support bundled), generates implementation fee invoice per FR-BILL-09, applies Premium→Enterprise Scale transition discount (50% off first 3 months per FR-BILL-08)
+- `POST api/billing/support-tier-upgrade` — Pro and Premium tenants opt into Priority support ($500/mo); proration handled per FR-BILL-07; takes effect on next billing period boundary
+
+**FR-BILL-03 — Trial end conversion**
+A scheduled job runs daily checking for trials ending within 7 days, 1 day, and trials that have ended. Notifications:
+- T-7 days: dashboard banner + email reminder
+- T-1 day: dashboard banner + email reminder
+- T-0: trial ends; first invoice generated by Stripe; payment captured
+- T+1 to T+3: failed-payment grace period (dashboard alert, email retry); tenant stays accessible
+- T+4: tenant moves to disabled access gate; HTTP 402 returned for all authenticated requests except billing settings
+
+**FR-BILL-04 — Volume-banded per-location billing**
+Monthly billing job computes per-location subscription charges using volume bands per `RVS_PRD.md` FR-P-006 and `RVS_Premium_PRD.md` FR-PR-012:
+
+- **Solo:** flat $39/loc, all sizes. Stripe submits `LocationCount × $39`.
+- **Professional:** banded by `LocationCount`:
+  - 1–9 loc: $79/loc
+  - 10–24 loc: $69/loc
+  - 25–49 loc: $59/loc
+- **Premium:** banded by `LocationCount`:
+  - 1–9 loc: $119/loc
+  - 10–24 loc: $109/loc
+  - 25–49 loc: $99/loc
+- **Enterprise Scale:** custom per-contract per-location rate stored in `TenantConfig.BillingConfig.NegotiatedPerLocationRate` (range $150–$300); Stripe submits `LocationCount × NegotiatedPerLocationRate`.
+
+Bands are NOT graduated — a 12-location Pro customer pays 12 × $69, not (9 × $79) + (3 × $69). Band assignment uses `LocationCountForBilling` snapshot at billing period start. Mid-period location additions/removals adjust at next period boundary.
+
+Tenant tier transitions (Solo→Pro, Pro→Premium, Premium→Enterprise Scale) propagate to the next monthly Stripe invoice; current period bills at prior tier.
+
+**FR-BILL-05 — (removed in v3.3)**
+Per-user surcharge metering for Premium tier was specified in v3.0 but removed in v3.3 with the elimination of per-user pricing. All users (technicians, advisors, managers, owners) are unlimited at every tier per `RVS_Context.md` §2.1 and `RVS_Premium_PRD.md` FR-PR-013.
+
+**FR-BILL-06 — Tier access gate enforcement**
+`TenantAccessGateMiddleware` MUST return `HTTP 402` when:
+- Subscription is `past_due` beyond the 3-day grace period
+- Trial ended without successful payment capture
+- Tenant manually disabled by `platform:admin`
+
+For Solo and Pro tier specifically, MUST return `HTTP 402` on intake submission when the tenant has reached its monthly SR cap (Solo: 300/loc/mo; Pro: 600/loc/mo). For Premium, return `HTTP 402` at 1,000/loc/mo cap. Customer-friendly message: *"This dealership is temporarily unable to accept new requests. Please contact the service center directly."* Enterprise Scale has no SR cap.
+
+**FR-BILL-07 — Support tier add-on billing (Phase 2)**
+Pro and Premium tenants may opt into Priority support tier via dashboard self-service. Selection writes to `TenantConfig.BillingConfig.SupportTier` (`Standard | Priority | Critical`). Monthly billing job adds:
+- Priority: $500/mo (line item: "Priority Support")
+- Critical: bundled with Enterprise Scale; no separate line item; not available as Pro/Premium add-on
+
+Toggle of support tier mid-period prorates per Stripe metered usage. Tenant downgrade from Priority to Standard takes effect at end of billing period (no mid-period refund).
+
+**FR-BILL-08 — Transition discount mechanics**
+Pro→Premium and Premium→Enterprise Scale upgrades trigger a 50%-off-first-3-months promotional discount applied via Stripe coupon. Implementation:
+- Discount applies to subscription line items only (per-location subscription); NOT to support add-ons, NOT to implementation fees
+- Coupon auto-generated at upgrade time; expires after 3 monthly billing cycles
+- Customer dashboard shows "Promotional pricing through [date]"
+- Discount is internal sales lever; not in published pricing
+- Cannot be combined with other promotional discounts; replaces any prior promotional discount
+
+Implementation detail: Stripe coupon with `percent_off=50` and `duration=repeating, duration_in_months=3` applied at subscription update.
+
+**FR-BILL-09 — Implementation fee billing (Phase 2)**
+Premium and Enterprise Scale tenants pay one-time implementation fee at contract signing per `RVS_Premium_PRD.md` FR-PR-014 and FR-ES-008. Stripe invoice generated separately from subscription; due net 30. Fees:
+
+| Tier | Locations | Fee |
+|---|---|---|
+| Premium | 1–9 | $5,000 |
+| Premium | 10–24 | $7,500 |
+| Premium | 25–49 | $10,000 |
+| Enterprise Scale | 50–99 | $15,000 |
+| Enterprise Scale | 100–249 | $25,000 |
+| Enterprise Scale | 250+ | $40,000 |
+
+Implementation add-ons (additional DMS, custom data migration, custom analytics) priced separately on the same invoice. Implementation fees are NOT subject to transition discounts (FR-BILL-08) or annual prepay discount (15% off applies to subscription only).
+
+### 5.8 OEM Revenue-Share Calculation (Enterprise Scale, Phase 3+)
+
+Implements `RVS_Premium_PRD.md` FR-ES-007 — documented OEM revenue-share clause for Enterprise Scale customers whose data represents ≥15% of an OEM-licensed aggregate. All requirements in this section apply ONLY when (a) at least one OEM data licensing contract is active, AND (b) at least one Enterprise Scale tenant has the revenue-share clause activated in their MSA. Until both conditions are met, this section's requirements are deferred but the data foundations (FR-OEM-01) MAY be implemented earlier to avoid retroactive backfill.
+
+**FR-OEM-01 — OEM aggregate definition and contribution measurement**
+The platform MUST support defining named OEM-licensed aggregates as queries over `assetLedger` and `serviceRequests`. Each aggregate definition MUST capture:
+- `aggregateId` (e.g., `oem_grand_design_2024`)
+- `oemContractId` (links to the OEM contract record)
+- Asset filter (e.g., `manufacturer = 'Grand Design'`, optionally narrowed by model year, model, region)
+- Time window (e.g., trailing 12 months)
+- Effective date range of the licensing contract
+- Annual contract value (for revenue-share calculation)
+
+Contribution measurement methodology MUST be a **count of unique SRs** within the aggregate's filter and time window, attributable to a tenant via the SR's `tenantId`. The methodology is fixed at contract signing and stored in the OEM aggregate definition; changes mid-contract require both customer and OEM written consent.
+
+**FR-OEM-02 — Quarterly contribution calculation job**
+A scheduled job MUST run on the first business day after each calendar quarter end. For each active OEM aggregate:
+1. Compute the SR count contributed by each ES tenant during the quarter (filter applied)
+2. Compute total SRs in the aggregate during the quarter
+3. Compute each tenant's `contributionPercentage = tenantSrCount / totalAggregateSrCount`
+4. For each tenant whose `contributionPercentage >= 0.15`, calculate `quarterlyShare = (annualContractValue / 4) × tenantRevenueSharePercent` (where `tenantRevenueSharePercent` is a per-tenant value in the 0.05–0.10 range stored in the ES contract record)
+5. Persist results in a new `oemRevenueShareEntries` Cosmos container, partitioned by `/tenantId`, with documents shape `{ tenantId, oemAggregateId, quarter, srCount, contributionPercentage, quarterlyShareAmount, status: pending|approved|paid|disputed }`
+
+The job MUST log all calculations with full audit trail (input SRs by ID, methodology version, contract version) sufficient for customer dispute resolution.
+
+**FR-OEM-03 — Revenue-share approval workflow**
+Calculated revenue-share entries MUST be reviewed by `platform:admin` before payment. The platform MUST surface a `GET api/platform/oem-revenue-share/pending` endpoint listing all `pending` entries with full audit detail. Admin actions:
+- `POST api/platform/oem-revenue-share/{id}/approve` — marks entry approved, queues payment
+- `POST api/platform/oem-revenue-share/{id}/dispute` — marks entry disputed, requires written explanation, blocks payment until resolution
+- `POST api/platform/oem-revenue-share/{id}/adjust` — admin override of calculated amount with audit trail (requires written justification)
+
+Approved entries MUST trigger a Stripe invoice or ACH payment from RVS to the customer (mechanism TBD, recorded as accounts-payable to the customer; final mechanism decided in Phase 3 based on operational considerations and dispute-handling requirements).
+
+**FR-OEM-04 — Customer-facing revenue-share dashboard**
+ES tenants MUST have access to a dashboard surface showing:
+- Active OEM aggregates their tenant contributes to
+- Their contribution percentage by quarter (current quarter estimate, prior quarter actual)
+- Pending and paid revenue-share amounts by quarter
+- Anonymized aggregate-level metrics (total aggregate SR count, top-3 contributors by anonymized rank — never naming other tenants)
+- Methodology documentation and contract reference
+
+Endpoint: `GET api/dealerships/{tenantId}/oem-revenue-share/summary` (Bearer auth, requires ES tier and revenue-share clause active).
+
+**FR-OEM-05 — Cancellation/forfeiture handling**
+Per FR-ES-007, revenue-share clause is contingent on continuous active subscription. On ES subscription cancellation:
+- Already-earned amounts in `approved` or `paid` status are paid out under contract terms (no clawback)
+- Amounts in `pending` status as of cancellation date follow contract MSA exhibit (default: paid out at next quarterly run if attributable to pre-cancellation activity; not paid for any period after cancellation effective date)
+- Future revenue-share accrual stops at cancellation effective date
+
+**FR-OEM-06 — Anti-gaming measures**
+The platform MUST flag for admin review any tenant whose SR submission rate increases >2.5× over their trailing 6-month baseline within 30 days of a major OEM contract event (signing, renewal, expansion). Flagged tenants are surfaced in the admin dashboard for manual review. Per FR-ES-007 contract language, RVS reserves the right to exclude SRs that appear to be artificially generated; this FR provides the operational mechanism to identify candidate cases.
+
+### 5.9 Custom SLA Monitoring (Enterprise Scale, Phase 3+)
+
+Implements `RVS_Premium_PRD.md` FR-ES-012 — custom SLA negotiation for Enterprise Scale customers including higher uptime targets, service credits, named incident response procedures, and custom maintenance windows.
+
+**FR-SLA-01 — Per-tenant SLA configuration**
+The platform MUST support per-ES-tenant SLA configuration stored in `TenantConfig.SlaConfig` with fields:
+- `uptimeTargetPercent` (default 99.9; ES contracts may negotiate up to 99.99)
+- `serviceCreditsEnabled` (bool)
+- `serviceCreditTiers` (list of `{ thresholdBelowTargetPercent, creditPercentOfMonthlyFee }`; default for ES contracts: `[(0.1, 5), (0.5, 25), (1.0, 50)]`, capped at 50% — negotiable up to 100%)
+- `maintenanceWindow` (cron-style schedule; default: Sunday 2-6am customer local time; ES may negotiate alternative windows)
+- `p1ContactEscalationChain` (ordered list of named RVS engineering contacts for P1 incidents)
+- `postIncidentReviewSlaBusinessDays` (default 5 for ES contracts)
+
+`SlaConfig` is read-only via the customer-facing dashboard; modifications require `platform:admin` approval and contract amendment.
+
+**FR-SLA-02 — Uptime measurement methodology**
+The platform MUST compute monthly uptime per tenant using the existing `/health` endpoint availability test data (per RVS Technical PRD §6.4) plus tenant-specific availability checks. Uptime calculation:
+```
+uptime_percent = (total_minutes_in_month - downtime_minutes) / total_minutes_in_month × 100
+```
+Downtime is defined as: any 5-minute window during which `/health` returns 503 OR any tenant-specific synthetic transaction (intake submission, dashboard load, technician app sync) fails for >50% of attempts. Maintenance-window outages within the contracted maintenance window are EXCLUDED from downtime calculation.
+
+**FR-SLA-03 — Service credit calculation and issuance**
+A scheduled job MUST run on the 5th business day of each month to compute prior-month uptime per ES tenant. For each tenant whose `uptime_percent` is below `uptimeTargetPercent`:
+1. Calculate `breachAmount = uptimeTargetPercent - uptime_percent`
+2. Apply `serviceCreditTiers` step function to determine credit percentage
+3. Compute `creditAmount = monthlySubscriptionFee × creditPercent`
+4. Generate Stripe credit memo for that amount applied to next month's invoice
+5. Email tenant's primary billing contact + dedicated success manager + dedicated solutions engineer with breach summary, credit amount, and remediation steps
+
+Service credit issuance is automatic and does not require admin approval; admin override is available via `POST api/platform/sla/{tenantId}/credit-adjust` for cases where the breach was caused by customer-side issues.
+
+**FR-SLA-04 — P1 incident response and escalation**
+For ES tenants with `p1ContactEscalationChain` configured, the platform's incident management system MUST:
+- Auto-page the configured escalation chain for any P1 incident affecting that tenant
+- Surface incident details in a dedicated ES incident channel (separate from general support tier escalation)
+- Track time-to-acknowledge, time-to-mitigate, and time-to-resolve per incident
+- Flag any P1 incident exceeding the `Critical support` 1-hour response SLA for executive review
+
+P1 incident definition: any production-impacting incident affecting service availability OR data integrity. Severity assignment is initial responder responsibility, reviewable by dedicated solutions engineer.
+
+**FR-SLA-05 — Post-incident review obligation**
+Within `postIncidentReviewSlaBusinessDays` of any P1 incident affecting an ES tenant, RVS MUST deliver:
+- Written incident summary (timeline, root cause, mitigation, prevention)
+- Joint review meeting with customer's named technical contact (customer's option)
+- Mutual NDA-protected document (confidential customer-specific details, not published in public post-mortems)
+- Formal corrective action plan with target completion dates
+
+The dedicated solutions engineer (per `RVS_Premium_PRD.md` FR-ES-011) owns delivery of this output.
+
+**FR-SLA-06 — Quarterly SLA conformance reporting**
+The platform MUST produce a quarterly SLA conformance report per ES tenant including:
+- Monthly uptime by month
+- Service credits issued (count, total amount)
+- P1 incident summary (count, types, resolution times)
+- Maintenance window adherence
+- Trend vs. prior quarters
+
+Report delivered as a downloadable PDF and reviewed in the quarterly business review (per FR-PR-017 / FR-ES-005).
+
+### 5.10 Self-Service User Provisioning (new in v3)
+
+**FR-USER-01 — Auth0 Management API integration**
+The platform MUST integrate with Auth0 Management API for self-service user lifecycle:
+- `POST api/users` — create user with email, name, role, location assignments; calls Auth0 `POST /api/v2/users` and sends Auth0 invitation email
+- `PUT api/users/{userId}` — update role, location assignments, name; updates Auth0 user `app_metadata` and `roles` accordingly
+- `DELETE api/users/{userId}` — deactivate user; revokes Auth0 access; logs deactivation to audit log
+
+The `dealer:owner`, `dealer:corporate-admin`, and `dealer:manager` (within their location only) roles MAY invoke these endpoints. Other roles MUST receive `403`.
+
+**FR-USER-02 — Bulk user import (Pro+)**
+`POST api/users/bulk-import` accepts a CSV body with columns: email, firstName, lastName, role, locationIds (semicolon-separated). Validates all rows before any insert. Sends individual Auth0 invitations per row. Failure on any row reports per-row error but does not roll back successful inserts.
+
+**FR-USER-03 — User activity tracking (audit/observability only)**
+The platform MAY track `User.LastLoginUtc` (updated on authenticated requests, throttled to once per hour per user to avoid Cosmos write storm) for audit and observability purposes. **No longer used for per-user billing as of v3.3** — all users are unlimited at every tier. The field remains in the data model for: dormant-user identification (success engineer outreach), audit log enrichment, and potential future analytics. Implementation is OPTIONAL in Phase 1; can be deferred to Phase 2 if Phase 1 schedule pressure demands.
+
+**FR-USER-04 — (removed in v3.3)**
+Technician role exemption from per-user billing was specified in v3.0 but removed in v3.3 with the elimination of per-user pricing. All roles (including `dealer:technician`) are unlimited at every tier; no role-specific billing logic exists.
+
+### 5.11 Verification Gate (new in v3)
+
+**FR-VG-01 — Dealer verification submission**
+`POST api/verification/submit` accepts dealer claim form payload:
+```json
+{
+  "dotNumber": "string (optional)",
+  "businessEin": "string",
+  "dealerLicenseNumber": "string",
+  "dealerLicenseState": "string (US state code)",
+  "businessAddress": {
+    "street1": "string",
+    "city": "string",
+    "state": "string",
+    "postalCode": "string"
+  },
+  "supportingDocumentUrl": "string (optional, blob SAS URL)"
+}
+```
+
+Creates a `VerificationRequest` document with status `pending` in a new `verificationQueue` Cosmos container (partition key `/tenantId`). Triggers internal admin notification.
+
+**FR-VG-02 — Admin verification review**
+`GET api/admin/verification-queue` (platform:admin only) lists pending verifications. `POST api/admin/verification-queue/{id}/approve` and `POST api/admin/verification-queue/{id}/reject` finalize the decision. On approval, sets `TenantConfig.BenchmarkingAccess.Verified = true` and `BenchmarkingAccess.VerifiedAtUtc` to now. On rejection, surfaces reason to tenant via dashboard banner.
+
+**FR-VG-03 — Benchmarking gate enforcement**
+All benchmarking endpoints (per FR-ENT-10) MUST check `TenantConfig.BenchmarkingAccess.Verified` and return `403 tenant-not-verified` if false. The check is via dedicated middleware applied to the `/api/benchmarking/*` route group.
+
+**FR-VG-04 — Verification expiry and re-verification**
+Verification status remains valid indefinitely under normal operations. Re-verification MAY be triggered by:
+- Tenant ownership transfer
+- Material change in business address or licensing
+- Anomaly detection flag (per FR-ANOM-01)
+
+### 5.10 Benchmarking Rate Limiting and Audit (new in v3)
+
+**FR-RATE-01 — Per-tier monthly query quota**
+A new `benchmarkingQueryCount` field on `TenantConfig.BillingConfig` tracks queries this billing period. On every `POST api/benchmarking/query`:
+1. Increment the counter
+2. Check against tier limit (Solo: 20, Pro: 200, Premium: 2,000, Enterprise Scale: per-contract)
+3. If over limit, return `429 too-many-requests` with `Retry-After` header set to next billing period start
+4. Counter resets at billing period rollover
+
+**FR-RATE-02 — Benchmarking query audit log**
+Every benchmarking query MUST emit an audit log entry per `RVS_data_moat.md` §6.4:
+```json
+{
+  "id": "guid",
+  "tenantId": "...",
+  "userId": "...",
+  "eventType": "data.read.benchmarking-query",
+  "queryParameters": { /* full param object */ },
+  "kAnonymityThresholdApplied": 5,
+  "resultRowCount": 42,
+  "queryRejectionReason": null,
+  "timestamp": "...",
+  "ipAddress": "...",
+  "userAgent": "...",
+  "correlationId": "..."
+}
+```
+
+These entries are queryable by `dealer:corporate-admin` for their tenant (via FR-ENT-05) and by `platform:admin` for cross-tenant anomaly investigation.
+
+**FR-ANOM-01 — Anomaly detection on benchmarking query patterns**
+A scheduled job runs hourly against the benchmarking audit log applying detection rules per `RVS_data_moat.md` §6.5:
+- Volume spike (10× tenant's 30-day baseline)
+- Parametric scanning (sequential queries varying one parameter)
+- Profile mismatch (queries about manufacturers/regions outside tenant's operational profile)
+- Re-identification probes (narrow combined filters in sequence)
+- Account-cluster patterns (multiple tenants with similar query signatures)
+- Zero-or-low SR submissions but high benchmarking volume
+
+Flagged tenants surface in admin review queue (`GET api/admin/anomaly-queue`). Manual investigation determines action: no-action, ToS reminder, throttle, suspend benchmarking, terminate per ToS, escalate to legal.
 
 
 ---
@@ -416,17 +912,32 @@ Cancelled  → (immutable — no further transitions in MVP)
 
 ### 7.3 Cosmos Container Configuration
 
-| Container | Partition Key | RU Mode | Unique Keys | TTL |
-|---|---|---|---|---|
-| `serviceRequests` | `/tenantId` | Autoscale 400–4,000 | — | None |
-| `customerProfiles` | `/tenantId` | Autoscale 400–1,000 | `[/tenantId, /email]` | None |
-| `globalCustomerAccts` | `/email` | Manual 400 | — | None |
-| `assetLedger` | `/assetId` | Autoscale 400–1,000 | `[/assetId, /serviceRequestId]` | None |
-| `dealerships` | `/tenantId` | Manual 400 | — | None |
-| `locations` | `/tenantId` | Autoscale 400–1,000 | `[/tenantId, /slug]` | None |
-| `tenantConfigs` | `/tenantId` | Manual 400 | — | None |
-| `lookupSets` | `/category` | Manual 400 | — | None |
-| `slugLookup` | `/slug` | Autoscale 400–1,000 | — | None |
+| Container | Partition Key | RU Mode | Unique Keys | TTL | Tier |
+|---|---|---|---|---|---|
+| `serviceRequests` | `/tenantId` | Autoscale 400–4,000 | — | None | All |
+| `customerProfiles` | `/tenantId` | Autoscale 400–1,000 | `[/tenantId, /email]` | None | All |
+| `globalCustomerAccts` | `/email` | Manual 400 | — | None | All |
+| `assetLedger` | `/assetId` | Autoscale 400–1,000 | `[/assetId, /serviceRequestId]` | None | All |
+| `dealerships` | `/tenantId` | Manual 400 | — | None | All |
+| `locations` | `/tenantId` | Autoscale 400–1,000 | `[/tenantId, /slug]` | None | All |
+| `tenantConfigs` | `/tenantId` | Manual 400 | — | None | All |
+| `lookupSets` | `/category` | Manual 400 | — | None | All |
+| `slugLookup` | `/slug` | Autoscale 400–1,000 | — | None | All |
+| `auditLog` | `/tenantId` | Autoscale 400–4,000 | — | 7 years (configurable) | Enterprise |
+| `industryDataset` | `/datasetVersion` | Autoscale 400–4,000 | — | None | Platform-internal |
+
+**`auditLog` notes:**
+- Provisioned at Enterprise tenant onboarding; not present for Free tenants
+- Append-only by convention; no API surface for delete or update
+- Indexed on `eventType`, `userId`, `timestamp` (custom indexing policy to limit RU on writes)
+- Per-tenant TTL configured via `TenantConfig.AuditLogRetentionDays` (default 7 years)
+
+**`industryDataset` notes:**
+- Written exclusively by the anonymization pipeline (Azure Function with change feed lease on `assetLedger`)
+- Read access via `IBenchmarkingService` only; no direct API surface
+- Partitioned by `datasetVersion` so taxonomy version migrations can produce parallel datasets
+- All tenant-identifying fields stripped at write time (see `RVS_data_moat.md` §4.4)
+- K-anonymity enforced at query time, not at write time (allows raw aggregation; suppression at query response)
 
 **SDK connection mode:** `ConnectionMode.Gateway` for all reads. Enables Cosmos server-side caching on stable point-read containers (`slugLookup`, `tenantConfigs`, `lookupSets`). No application-layer cache required.
 
@@ -462,41 +973,66 @@ Customer-facing endpoints (`/intake/*`, `/status/*`) MUST be `[AllowAnonymous]`.
 
 ### 8.2 Full Route Inventory
 
-| Method | Route | Auth | Policy | Return | Notes |
-|---|---|---|---|---|---|
-| `GET` | `api/intake/{locationSlug}/config` | Anonymous | — | `IntakeConfigResponseDto` | Optional `?token=` for prefill |
-| `POST` | `api/intake/{locationSlug}/diagnostic-questions` | Anonymous | — | `DiagnosticQuestionsResponseDto` | AI or fallback questions |
-| `POST` | `api/intake/{locationSlug}/ai/suggest-category` | Anonymous | — | `AiOperationResponseDto<IssueCategorySuggestionResultDto>` | Assistive category prefill from description |
-| `POST` | `api/intake/{locationSlug}/ai/transcribe-issue` | Anonymous | — | `AiOperationResponseDto<IssueTranscriptionResultDto>` | Speech-to-text and cleaned draft |
-| `POST` | `api/intake/{locationSlug}/ai/refine-issue-text` | Anonymous | — | `AiOperationResponseDto<IssueTextRefinementResultDto>` | Cleanup endpoint for transcript/text |
-| `POST` | `api/intake/{locationSlug}/ai/extract-vin` | Anonymous | — | `AiOperationResponseDto<VinExtractionResultDto>` | VIN extraction from captured image |
-| `POST` | `api/intake/{locationSlug}/assess-capabilities` | Anonymous | — | `CapabilityAssessmentResponseDto` | Step 5 → Step 6 capability check (always 200) |
-| `POST` | `api/intake/{locationSlug}/service-requests` | Anonymous | — | `201 ServiceRequestSummaryDto` | Full 7-step orchestration |
-| `POST` | `api/intake/{locationSlug}/service-requests/{id}/attachments` | Anonymous | — | `201 AttachmentDto` | Customer photo upload |
-| `GET` | `api/status/{token}` | Anonymous | — | `CustomerStatusResponseDto` | Cross-dealer SR summary |
-| `GET` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | `CanReadServiceRequests` | `ServiceRequestDetailDto` | |
-| `POST` | `api/dealerships/{id}/service-requests/search` | Bearer | `CanSearchServiceRequests` | `PagedResult<ServiceRequestSummaryDto>` | |
-| `PUT` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | `CanUpdateServiceRequests` | `200 ServiceRequestDetailDto` | Status + Section 10A + notes |
-| `PATCH` | `api/dealerships/{id}/service-requests/batch-outcome` | Bearer | `CanUpdateServiceRequests` | `200 BatchOutcomeResponseDto` | Max 25 SRs |
-| `DELETE` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | `CanDeleteServiceRequests` | `204` | |
-| `POST` | `api/dealerships/{id}/service-requests/{srId}/attachments` | Bearer | `CanUploadAttachments` | `201 AttachmentDto` | Authenticated upload |
-| `GET` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | `CanReadAttachments` | `AttachmentSasDto` | SAS URL, 1-hour expiry |
-| `DELETE` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | `CanDeleteAttachments` | `204` | |
-| `GET` | `api/dealerships` | Bearer | `CanReadDealerships` | `List<DealershipSummaryDto>` | Tenant-scoped list |
-| `GET` | `api/dealerships/{id}` | Bearer | `CanReadDealerships` | `DealershipDetailDto` | |
-| `PUT` | `api/dealerships/{id}` | Bearer | `CanUpdateDealerships` | `200 DealershipDetailDto` | |
-| `GET` | `api/locations` | Bearer | `CanReadLocations` | `List<LocationSummaryDto>` | Filtered by `locationIds` claim |
-| `GET` | `api/locations/{id}` | Bearer | `CanReadLocations` | `LocationDetailDto` | |
-| `POST` | `api/locations` | Bearer | `CanCreateLocations` | `201 LocationDetailDto` | Creates slug entry atomically |
-| `PUT` | `api/locations/{id}` | Bearer | `CanUpdateLocations` | `200 LocationDetailDto` | Renames slug atomically |
-| `GET` | `api/locations/{id}/qr-code` | Bearer | `CanReadLocations` | `image/png` | Encodes intake URL |
-| `GET` | `api/dealerships/{id}/analytics/service-requests/summary` | Bearer | `CanReadAnalytics` | `ServiceRequestAnalyticsResponseDto` | `?from`, `?to`, `?locationId` |
-| `POST` | `api/tenants/config` | Bearer | `CanManageTenantConfig` | `201 TenantConfigDto` | Bootstrap only |
-| `GET` | `api/tenants/config` | Bearer | `CanManageTenantConfig` | `TenantConfigDto` | |
-| `PUT` | `api/tenants/config` | Bearer | `CanManageTenantConfig` | `200 TenantConfigDto` | |
-| `GET` | `api/tenants/access-gate` | Bearer | `CanManageTenantConfig` | `AccessGateStatusDto` | |
-| `GET` | `api/lookups/{lookupSetId}` | Bearer | `CanReadLookups` | `LookupSetDto` | |
-| `GET` | `/health` | None | — | `200 / 503` | Dependency health check |
+**Tier legend:** F = Free, E = Enterprise, P = Platform admin, A = All
+
+| Method | Route | Auth | Policy | Return | Notes | Tier |
+|---|---|---|---|---|---|---|
+| `GET` | `api/intake/{locationSlug}/config` | Anonymous | — | `IntakeConfigResponseDto` | Optional `?token=` for prefill | A |
+| `POST` | `api/intake/{locationSlug}/diagnostic-questions` | Anonymous | — | `DiagnosticQuestionsResponseDto` | AI or fallback questions | A |
+| `POST` | `api/intake/{locationSlug}/ai/suggest-category` | Anonymous | — | `AiOperationResponseDto<IssueCategorySuggestionResultDto>` | Assistive category prefill from description | A |
+| `POST` | `api/intake/{locationSlug}/ai/transcribe-issue` | Anonymous | — | `AiOperationResponseDto<IssueTranscriptionResultDto>` | Speech-to-text and cleaned draft | A |
+| `POST` | `api/intake/{locationSlug}/ai/refine-issue-text` | Anonymous | — | `AiOperationResponseDto<IssueTextRefinementResultDto>` | Cleanup endpoint for transcript/text | A |
+| `POST` | `api/intake/{locationSlug}/ai/extract-vin` | Anonymous | — | `AiOperationResponseDto<VinExtractionResultDto>` | VIN extraction from captured image | A |
+| `POST` | `api/intake/{locationSlug}/assess-capabilities` | Anonymous | — | `CapabilityAssessmentResponseDto` | Step 5 → Step 6 capability check (always 200) | A |
+| `POST` | `api/intake/{locationSlug}/service-requests` | Anonymous | — | `201 ServiceRequestSummaryDto` / `402` | Full 7-step orchestration; Solo and Pro tiers return 402 if quota exceeded | A |
+| `POST` | `api/intake/{locationSlug}/service-requests/{id}/attachments` | Anonymous | — | `201 AttachmentDto` | Customer photo upload | A |
+| `GET` | `api/status/{token}` | Anonymous | — | `CustomerStatusResponseDto` | Cross-dealer SR summary | A |
+| `POST` | `api/signup` | Anonymous | rate-limited 5/IP/hr | `201 TenantSignupResponseDto` | Self-serve Solo tier signup with Stripe trial (FR-TENANT-07) | A |
+| `GET` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | `CanReadServiceRequests` | `ServiceRequestDetailDto` | | A |
+| `POST` | `api/dealerships/{id}/service-requests/search` | Bearer | `CanSearchServiceRequests` | `PagedResult<ServiceRequestSummaryDto>` | Cross-location filter for Enterprise | A |
+| `PUT` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | `CanUpdateServiceRequests` | `200 ServiceRequestDetailDto` / `400` | Status + Section 10A (strict taxonomy) + notes | A |
+| `PATCH` | `api/dealerships/{id}/service-requests/batch-outcome` | Bearer | `CanUpdateServiceRequests` | `200 BatchOutcomeResponseDto` | Max 25 SRs | A |
+| `DELETE` | `api/dealerships/{id}/service-requests/{srId}` | Bearer | `CanDeleteServiceRequests` | `204` | | A |
+| `POST` | `api/dealerships/{id}/service-requests/{srId}/attachments` | Bearer | `CanUploadAttachments` | `201 AttachmentDto` | Authenticated upload | A |
+| `GET` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | `CanReadAttachments` | `AttachmentSasDto` | SAS URL, 1-hour expiry | A |
+| `DELETE` | `api/dealerships/{id}/service-requests/{srId}/attachments/{attId}` | Bearer | `CanDeleteAttachments` | `204` | | A |
+| `GET` | `api/dealerships` | Bearer | `CanReadDealerships` | `List<DealershipSummaryDto>` | Tenant-scoped list | A |
+| `GET` | `api/dealerships/{id}` | Bearer | `CanReadDealerships` | `DealershipDetailDto` | | A |
+| `PUT` | `api/dealerships/{id}` | Bearer | `CanUpdateDealerships` | `200 DealershipDetailDto` | | A |
+| `GET` | `api/locations` | Bearer | `CanReadLocations` | `List<LocationSummaryDto>` | Filtered by `locationIds` claim and `regionTag` | A |
+| `GET` | `api/locations/{id}` | Bearer | `CanReadLocations` | `LocationDetailDto` | | A |
+| `POST` | `api/locations` | Bearer | `CanCreateLocations` | `201 LocationDetailDto` / `402` | Free returns 402 if 1 location exists | A |
+| `POST` | `api/locations/bulk-import` | Bearer | `CanCreateLocations` | `201 BulkLocationImportResultDto` | CSV body; validates all rows before insert | E |
+| `PUT` | `api/locations/{id}` | Bearer | `CanUpdateLocations` | `200 LocationDetailDto` | Renames slug atomically | A |
+| `GET` | `api/locations/{id}/qr-code` | Bearer | `CanReadLocations` | `image/png` | Encodes intake URL | A |
+| `GET` | `api/dealerships/{id}/analytics/service-requests/summary` | Bearer | `CanReadAnalytics` | `ServiceRequestAnalyticsResponseDto` | `?from`, `?to`, `?locationId` | A |
+| `GET` | `api/dealerships/{id}/analytics/cross-location` | Bearer | `CanReadAnalytics` | `CrossLocationAnalyticsResponseDto` | Multi-location dashboard data | E |
+| `GET` | `api/dealerships/{id}/analytics/warranty-leakage` | Bearer | `CanReadAnalytics` | `WarrantyLeakageAnalysisDto` | Candidate flags for review | E |
+| `GET` | `api/dealerships/{id}/analytics/sla` | Bearer | `CanReadAnalytics` | `SlaMonitoringDto` | Threshold breach status by location | E |
+| `GET` | `api/assets/{assetId}/history` | Bearer | `CanReadAssetHistory` | `AssetHistoryResponseDto` | Cross-location asset history within tenant | E |
+| `POST` | `api/benchmarking/query` | Bearer | `CanQueryBenchmarking` | `BenchmarkingQueryResponseDto` | Industry benchmarking against `industryDataset` (k-anonymity enforced) | E |
+| `POST` | `api/audit-log/search` | Bearer | `CanReadAuditLog` | `PagedResult<AuditLogEntryDto>` | Page size capped at 200 | E |
+| `POST` | `api/audit-log/export` | Bearer | `CanExportAuditLog` | `AuditLogExportSasDto` | SAS URL to CSV/JSON archive (60-min expiry) | E |
+| `POST` | `api/dms/sync/{srId}` | Bearer | `CanManageDmsIntegration` | `200 DmsSyncResultDto` | Manual force-sync of single SR | E |
+| `GET` | `api/dms/reconciliation` | Bearer | `CanManageDmsIntegration` | `DmsReconciliationDto` | Drift report between RVS and DMS | E |
+| `POST` | `api/tenants/config` | Bearer | `CanManageTenantConfig` | `201 TenantConfigDto` | Bootstrap only | P |
+| `GET` | `api/tenants/config` | Bearer | `CanManageTenantConfig` | `TenantConfigDto` | | A |
+| `PUT` | `api/tenants/config` | Bearer | `CanManageTenantConfig` | `200 TenantConfigDto` | | A |
+| `PUT` | `api/tenants/config/notifications` | Bearer | `CanManageTenantConfig` | `200 NotificationConfigDto` | Provider, webhook URL, secret | A |
+| `PUT` | `api/tenants/config/access-control` | Bearer | `CanManageTenantConfig` | `200 AccessControlConfigDto` | IP allowlist | E |
+| `GET` | `api/tenants/access-gate` | Bearer | `CanManageTenantConfig` | `AccessGateStatusDto` | | A |
+| `GET` | `api/lookups/{lookupSetId}` | Bearer | `CanReadLookups` | `LookupSetDto` | | A |
+| `GET` | `api/lookups/section10a/active-version` | Bearer | `CanReadLookups` | `Section10ATaxonomyDto` | Active taxonomy version + codes for technician app | A |
+| `PATCH` | `api/asset-ledger/{ledgerEntryId}/section10a` | Bearer | `CanUpdateServiceRequests` | `200 AssetLedgerEntryDto` | Section 10A enrichment with strict taxonomy | A |
+| `POST` | `api/admin/tenants/{id}/upgrade-to-enterprise-scale` | Bearer | `CanManagePlatform` | `200 TenantConfigDto` | Sales-led: configures Enterprise Scale contract terms (50+ loc) | P |
+| `GET` | `api/admin/tenants/usage` | Bearer | `CanManagePlatform` | `TenantUsageReportDto` | Per-tenant usage metrics for invoicing | P |
+| `GET` | `/health` | None | — | `200 / 503` | Dependency health check | A |
+
+**Removed from v1.0 (do not re-introduce):**
+- `POST /api/billing/checkout-session` — no Stripe billing in MVP
+- `POST /api/billing/webhook` — no Stripe webhook
+- `GET /api/billing/status` — returns current tier, billing period, location count, user count, trial status
+- `POST /api/dms/sftp-export` (manual trigger) — Solo and Pro tiers use CSV download UI; Premium and Enterprise Scale use scheduled SFTP via `DmsSyncBackgroundService`
 
 ### 8.3 Key Request/Response Shapes
 
@@ -725,9 +1261,14 @@ Search input validation: reject any `Keyword` containing `<`, `>`, `;`, `'`, `"`
 | JWT audience | `https://api.rvserviceflow.com` |
 | Algorithm | RS256 |
 | Custom claims namespace | `https://rvserviceflow.com/` |
-| MVP claim injection | Login Action injects `tenantId`, `orgName`, `locationIds`, `regionTag` from `app_metadata` |
-| Tenant scoping | `app_metadata.tenantId` per user; no Auth0 Organizations |
+| Solo / Pro tier claim injection | Login Action injects `tenantId`, `orgName`, `locationIds`, `regionTag` from `app_metadata` |
+| Solo / Pro tier tenant scoping | `app_metadata.tenantId` per user; no Auth0 Organizations (Auth0 Free plan) |
+| **Premium tier identity** | Auth0 Organizations (Essentials B2B plan or higher); `tenantId` claim sourced from Organization ID (`org_xxx`) when login is Organization-scoped |
+| **Premium tier SSO** | Per-Organization SAML connections (Okta, Entra ID, Google Workspace, OneLogin, Ping); RVS does not implement SAML directly |
+| **Premium tier SCIM** | SCIM 2.0 via Auth0 per-Organization endpoint; group-to-role mapping at Organization level |
 | Token lifetime | Access token: 1 hour; Refresh token: 15 days (rolling) |
+
+**Migration note:** Solo or Pro tier tenants upgrading to Premium transition from `app_metadata` scoping to Auth0 Organization scoping. Triggered by `POST api/billing/upgrade-to-premium` (FR-BILL-02). The migration job: (1) creates an Auth0 Organization for the tenant, (2) re-creates each user inside the Organization (or links existing user via Auth0 connection), (3) updates `TenantConfig.IdentityModel = Organizations`, (4) updates `app_metadata.tenantId` to match the Organization ID for backward-compat during cutover. Existing JWTs remain valid until expiry; new logins use Organization-scoped flow. The ClaimsService implementation MUST handle both sources transparently during the cutover window. Post-migration, SAML and SCIM are configurable per Auth0 Organization.
 
 ### 10.2 Azure Cosmos DB
 
@@ -775,9 +1316,12 @@ Search input validation: reject any `Keyword` containing `<`, `>`, `;`, `'`, `"`
 
 ### 10.6 Azure Communication Services (Email + SMS Notifications)
 
+ACS is the default provider when `TenantConfig.NotificationConfig.Provider = RvsNative`. Per-tenant override (FR-TENANT-08) routes through webhook instead. Both modes can coexist with the outbound integration webhook (FR-TENANT-09); webhook fires regardless of provider.
+
 | Requirement | Spec |
 |---|---|
-| Injection | Via `INotificationService` (email) and `ISmsNotificationService` (SMS) — swappable providers |
+| Injection | Via `INotificationService` (email) and `ISmsNotificationService` (SMS) |
+| Provider routing | `NotificationProvider` enum on `TenantConfig`: `RvsNative` (ACS), `KenectWebhook` (no ACS, webhook only), `Disabled` (no customer messaging from RVS) |
 | Authentication | Azure Managed Identity via `DefaultAzureCredential` — no API keys |
 | Email templates | Intake confirmation, status update (in-progress, completed) — code-managed HTML |
 | SMS templates | Intake confirmation, magic-link delivery, status update |
@@ -785,16 +1329,98 @@ Search input validation: reject any `Keyword` containing `<`, `>`, `;`, `'`, `"`
 | From address (email) | `noreply@notifications.rvserviceflow.com` |
 | From number (SMS) | Shared toll-free number (configured in `AzureCommunicationServices:Sms:FromPhoneNumber`) |
 | Customer preference | `email` (default) or `sms` — either/or choice during intake |
+| Suppression flag | `TenantConfig.NotificationConfig.SuppressOutboundCustomerMessages` — when true, no ACS sends regardless of provider; webhook still fires |
 
-### 10.7 DMS Export (SFTP)
+**Removed from MVP scope (per RVS_Competitive_Strategy.md §4):**
+- Two-way SMS / inbound conversation handling
+- Broadcast / bulk messaging
+- Marketing or re-engagement automation
+- Review request automation
+- In-dashboard SMS composition
+
+These features are Kenect / ServiceNomad territory. RVS coexists via the outbound webhook; integration partners handle two-way conversation.
+
+### 10.6A Outbound Integration Webhook
+
+Implementation requirement for FR-TENANT-09.
 
 | Requirement | Spec |
 |---|---|
-| Trigger | Scheduled (configurable cron in `TenantConfig`) or on-demand (`POST api/tenants/export`) |
-| Format | CSV; column schema mirrors `ServiceRequestCreateRequestDto` + status + advisor notes |
+| Trigger events | `serviceRequest.created`, `serviceRequest.statusChanged`, `serviceRequest.advisorNoteAdded`, `serviceRequest.completed` |
+| Method | `POST` |
+| Target | `TenantConfig.NotificationConfig.WebhookUrl` |
+| Headers | `Content-Type: application/json`, `X-RVS-Signature: sha256=<hmac>`, `X-RVS-Event: <event-name>`, `X-RVS-Delivery: <guid>` |
+| HMAC | SHA-256 over raw request body using `WebhookSecret` (Key Vault-stored) |
+| Timeout | 10 seconds per attempt |
+| Retry policy | 3 retries with exponential backoff: 30s, 5min, 30min |
+| Verification | Webhook URL changes trigger a verification call (`event: "verification"`); persists only on `200 OK` within 10s |
+| Audit | Failed deliveries after final retry surface in `auditLog` (Enterprise) and App Insights as `WebhookDeliveryFailed` |
+| Latency target | First-attempt success < 30s P99 |
+
+### 10.7 DMS Integration (Reframed for Free vs Enterprise)
+
+The v1.0 Technical PRD specified SFTP-only DMS export. v2.0 splits this:
+
+**Solo and Professional tiers — Manual CSV download:**
+| Requirement | Spec |
+|---|---|
+| Trigger | User-initiated via `Blazor.Manager` UI |
+| Endpoint | `GET api/dealerships/{id}/service-requests/export?format=csv&from=...&to=...` |
+| Format | CSV; column schema mirrors `ServiceRequestCreateRequestDto` + status + advisor notes + Section 10A |
+| Delivery | Browser download (file streamed in response) |
+
+**Premium and Enterprise Scale tiers — Bidirectional integration via `IDmsIntegrationProvider`:**
+| Requirement | Spec |
+|---|---|
+| Architecture | Provider abstraction: `IDmsIntegrationProvider` with `IdsAstraIntegrationProvider`, `LightspeedIntegrationProvider` implementations |
+| RVS → DMS push | Outbound on SR `created` and `statusChanged` events; queued via Azure Storage Queue; processed by `DmsSyncBackgroundService` |
+| DMS → RVS pull | Inbound webhook (where DMS supports) or scheduled pull (where it doesn't); writes to SR with `dmsLastSyncUtc` updated |
+| Per-location config | `Location.DmsIntegration` overrides tenant-level config — supports mixed-DMS dealer groups (FR-ENT-09) |
+| Reconciliation | Daily reconciliation job; drift report at `GET api/dms/reconciliation` |
+| Auth | DMS partner-program credentials in Key Vault |
+| Failure handling | Failed sync logged; retry per provider config; surfaced in reconciliation dashboard |
+
+**Premium and Enterprise Scale — SFTP fallback for unsupported DMS:**
+| Requirement | Spec |
+|---|---|
+| Trigger | Scheduled (configurable cron in `TenantConfig.DmsIntegration.SftpSchedule`) |
+| Format | Same CSV as Solo / Pro tier export |
 | Auth | Key-based and password-based SFTP; credentials in Key Vault |
-| Config | Per-tenant SFTP host, port, remote path, key vault reference stored in `TenantConfig` |
-| Error handling | Failed export logged; retry next scheduled run; no customer-visible impact |
+| Config | Per-tenant SFTP host, port, remote path stored in `TenantConfig.DmsIntegration.Sftp` |
+| Use case | Dealer groups whose DMS is not yet supported by a partner integration |
+
+**Partnership status note:** As of v2.0, RVS is pursuing IDS Astra and Lightspeed Technology Partner programs concurrently. Whichever admits us first becomes the first bidirectional integration. The provider abstraction is designed so adding a second DMS integration is incremental, not architectural.
+
+### 10.8 Anonymization Pipeline (Phase 2)
+
+Architectural commitment, not future enhancement. Detailed design in `RVS_data_moat.md` §4.
+
+| Requirement | Spec |
+|---|---|
+| Implementation | Azure Function (consumption or premium plan) with Cosmos DB Change Feed Trigger on `assetLedger` container |
+| Lease container | Dedicated `assetLedgerLeases` Cosmos container, partition key `/id`, manual 400 RU |
+| Trigger mode | Continuous (low-latency) or scheduled (cost-optimized); MVP starts with scheduled nightly batch |
+| Anonymization steps | (1) Strip strict-identifying fields; (2) Aggregate geography to state level; (3) Aggregate temporal to date-only; (4) Apply differential privacy noise (Phase 3+) |
+| Output | Write to `industryDataset` container, partition key `/datasetVersion` |
+| Versioning | Each batch tagged with `datasetVersion` matching the active Section 10A taxonomy version |
+| Audit trail | Lineage from `industryDataset` entry back to source `assetLedger` entry preserved internally; never exposed in commercial outputs |
+| Failure handling | Pipeline failure raises P1 alert; retry from last successful lease; no data loss |
+| Cost target | < $50/month at 50K events/month |
+
+### 10.9 Section 10A Taxonomy Enforcement
+
+Implementation requirement supporting FR-TECH-03 and FR-LEDGER-01.
+
+| Requirement | Spec |
+|---|---|
+| Storage | `lookupSets` container, `category` = `section10a-component`, `section10a-failure-mode`, `section10a-repair-action`, `section10a-issue-category`, `section10a-part-number` |
+| Active version | `TenantConfig.ActiveSection10ATaxonomyVersion` references the active `lookupSet` document for that tenant; defaults to platform-active version on tenant creation |
+| Validation | `ITaxonomyValidator` service called from `ServiceRequestService.UpdateSection10AAsync` and `AssetLedgerService.EnrichAsync` |
+| Error response | Invalid code → `400 ProblemDetails { type: "rvs:taxonomy-violation", invalidCodes: [...], suggestedAlternatives: [...] }` |
+| Versioning | Adding a code = minor version bump; deprecating = minor version bump (deprecated codes remain valid for historical entries); semantic restructuring = major version bump |
+| Per-entry tracking | `AssetLedgerEntry.taxonomyVersion` records the version under which the entry was captured; never silently re-mapped |
+| Cross-version migration | Explicit operation; mapping table stored in `lookupSets` with category `section10a-version-mapping` |
+| Tenant customization | NOT permitted in MVP; taxonomy is platform-managed (per `RVS_data_moat.md` §3.2). Per-tenant extensions are a future Enterprise consideration but break the dataset thesis if mishandled. |
 
 ---
 
@@ -928,43 +1554,89 @@ Secret values (API keys, connection strings) MUST be injected from Key Vault at 
 
 | ID | Description | Target Phase | Priority |
 |---|---|---|---|
-| GAP-01 | SFTP private keys stored in `TenantConfig` (Cosmos) — MUST move to Key Vault | Before MVP launch | Critical |
-| GAP-02 | `AssetLedgerEntry` Section 10A fields null at intake; enrichment via change feed not built | Phase 5–6 | Required for analytics |
-| GAP-03 | Customer Auth0 account (persistent login, preference saving) not supported | Phase 2 | High |
-| GAP-04 | Follow-up request endpoint (`POST .../follow-ups`) not implemented; advisors use phone | Phase 2 | Important |
-| GAP-05 | Analytics counters run against Cosmos directly; no Azure Tables pre-aggregation | Phase 2 | Performance risk at scale |
+| GAP-01 | SFTP private keys stored in `TenantConfig` (Cosmos) — MUST move to Key Vault | Before Enterprise launch | Critical |
+| GAP-02 | `AssetLedgerEntry` Section 10A enrichment via change feed not built; v2.0 specifies dedicated `PATCH api/asset-ledger/{id}/section10a` endpoint instead | Phase 1 (FR-LEDGER-02) | Required |
+| GAP-03 | Customer Auth0 account (persistent login, preference saving) not supported | Deferred indefinitely | Low (anonymous + magic-link sufficient) |
+| GAP-04 | Follow-up request endpoint not implemented; advisors use phone | Phase 2+ | Low |
+| GAP-05 | Analytics counters run against Cosmos directly; no Azure Tables pre-aggregation | Phase 2 (Enterprise scale) | Performance risk at scale |
 | GAP-06 | Batch SR update endpoint (`POST batch-update`) for high-scale offline sync | Future | Low (sequential PUT sufficient for MVP) |
-| GAP-07 | Labor time prediction API | Phase 5–6 | Future |
-| GAP-08 | MVP uses long polling for Service Board updates; vNEXT introduces a dedicated SignalR hub (requires Azure SignalR Service at scale) | vNEXT | Medium |
+| GAP-07 | Labor time prediction API | Deferred | Future |
+| GAP-08 | MVP uses long polling for Service Board updates; vNEXT introduces a dedicated SignalR hub | Phase 3+ | Medium |
+| **GAP-09** | **Anonymization pipeline (FR-ENT-10 dependency) — production-grade k-anonymity enforcement, differential privacy** | **Phase 2** | **Critical for Enterprise launch** |
+| **GAP-10** | **`auditLog` container provisioning automation when tenant upgrades to Enterprise** | **Phase 2** | **Required for Enterprise launch** |
+| **GAP-11** | **Auth0 Organization migration tooling for Free → Enterprise tenant upgrades** | **Phase 2** | **Required for Enterprise launch** |
+| **GAP-12** | **Section 10A taxonomy v1 final controlled vocabulary list** | **Phase 1, Sprint 4** | **Critical (blocks all 10A enforcement)** |
+| **GAP-13** | **`IDmsIntegrationProvider` abstraction with first concrete implementation (IDS or Lightspeed)** | **Phase 2** | **Required for first Enterprise customer** |
+| **GAP-14** | **ToS / DPA / MSA template language for cross-dealer aggregation and OEM licensing** | **Phase 0** | **Critical (blocks first design partner)** |
 
 ---
 
-## 16. Out of Scope (MVP)
+## 16. Out of Scope (Phase 1 Solo + Pro and Phase 2+ Premium + Enterprise Scale)
 
-The following are explicitly deferred and MUST NOT be implemented without a new architecture review:
+Per `RVS_Competitive_Strategy.md` §7 (the Yes/No filter), the following are explicitly out of scope and MUST NOT be implemented without a strategic review:
 
-- Dealer Management System (DMS) replacement features (accounting, warranty, parts inventory)
-- Customer Auth0 accounts / persistent login
-- Appointment scheduling calendar or bay reservation
-- Technician skill-based routing algorithm
-- Parts ordering or inventory integrations
-- Predictive maintenance or cross-dealer benchmarking
-- Change feed consumers (all deferred to Phase 2+)
-- Azure SignalR Service (beyond single-instance SignalR)
-- Marine, heavy equipment, or agricultural vertical-specific features
+**Always out of scope (Free and Enterprise both):**
+- Dealer Management System (DMS) replacement features (accounting, warranty claim filing, parts inventory)
+- Two-way SMS conversation, broadcast messaging, marketing automation, in-dashboard message composition
+- Voice AI / inbound call handling
+- Customer-facing iOS or Android native app
+- Service appointment scheduling, bay reservation, technician routing algorithm
+- Invoicing, payments, credit card processing, ESC approval workflows
+- Marine, heavy equipment, or agricultural vertical-specific features (deferred until OEM thesis validates)
+- (No longer applicable — Stripe billing is now in scope from Phase 1; see FR-BILL-01 through FR-BILL-06)
+- Operator-couple / mobile tech specialized workflow features
+- Per-tenant Section 10A taxonomy customization (breaks the dataset; if required by Enterprise customer, becomes a contract negotiation point, not a product feature)
+
+**Phase 1 (Solo + Pro) out of scope (planned for Phase 2 Premium tier):**
+- Multi-location features in UI (architecture supports them)
+- Cross-location analytics, cross-location asset history
+- Drag-and-drop Service Board (single-location queue table only)
+- SAML SSO, SCIM provisioning, IP allowlisting
+- `auditLog` container and audit log query/export
+- Bidirectional DMS integration (CSV download only in Free)
+- Industry benchmarking access
+- Predictive maintenance suggestions
+- Warranty leakage analytics
+
+**Phase 3+ out of scope (planned for OEM track):**
+- OEM data licensing API surfaces
+- Differential privacy beyond k-anonymity
+- Per-OEM custom analytics products (those become consulting engagements, not product features)
 
 ---
 
 ## 17. Open Questions
 
-| # | Question | Owner | Due |
-|---|---|---|---|
-| OQ-01 | ~~What is the Auth0 plan tier at commercialization?~~ **Resolved:** Using Auth0 Free plan with `app_metadata` tenant scoping. No Organizations. | Business | Resolved |
-| OQ-02 | Should the magic-link token be stored hashed or plaintext in Cosmos? (Security hardening) | Engineering | Before MVP launch |
-| OQ-03 | ~~What email template tool for SendGrid templates — managed in code or SendGrid Dynamic Templates UI?~~ **Resolved:** SendGrid replaced by ACS Email. Templates are code-managed HTML in the `AcsEmailNotificationService` implementation. Styled templates are a Phase 2+ enhancement. | Engineering | Resolved |
-| OQ-04 | When is Azure SignalR Service required vs. single-instance App Service sticky sessions sufficient? | Engineering | Before first multi-instance deploy |
-| OQ-05 | Confirm NHTSA vPIC rate limit behavior under burst intake — implement client-side throttle if needed | Engineering | Phase 1 load test |
+| # | Question | Owner | Due | Status |
+|---|---|---|---|---|
+| OQ-01 | ~~What is the Auth0 plan tier at commercialization?~~ | Business | Resolved | Free for Free tenants (`app_metadata`); Organizations (Essentials B2B+) for Enterprise |
+| OQ-02 | Should the magic-link token be stored hashed or plaintext in Cosmos? | Engineering | Before Phase 1 launch | Open |
+| OQ-03 | When is Azure SignalR Service required vs. single-instance App Service sticky sessions sufficient? | Engineering | Phase 3+ | Deferred (long polling sufficient through Phase 3) |
+| OQ-04 | NHTSA vPIC rate limit behavior under burst intake — implement client-side throttle if needed | Engineering | Phase 1 load test | Open |
+| **OQ-05** | **Section 10A taxonomy v1 final controlled vocabulary list — domain expert workshop output** | **Domain SME + Engineering** | **Phase 1, Sprint 4** | **Open (gating)** |
+| **OQ-06** | **ToS / DPA language for cross-dealer aggregation and OEM licensing — counsel review** | **Legal counsel + Founder** | **Phase 0 (before first design partner)** | **Open (gating)** |
+| **OQ-07** | **Anonymization k-anonymity threshold for `industryDataset` queries — initial value k=5; pressure-test with first benchmarking queries** | **Engineering + Legal** | **Phase 2 design** | **Open** |
+| **OQ-08** | **Should any tier dealers be able to opt out of cross-dealer anonymized aggregation?** | **GTM + Legal** | **Phase 0** | **Decided: NO; documented in `RVS_data_moat.md` §5.3** |
+| **OQ-09** | **First DMS partner — IDS or Lightspeed?** | **GTM + Engineering** | **Phase 2 kickoff** | **Open (pursue both partner programs concurrently; whichever admits first wins)** |
+| **OQ-10** | **SOC 2 audit timing — Type I before first Enterprise customer, or Type II after first 3 customers?** | **Compliance + GTM** | **Before first Enterprise pitch** | **Open** |
+| **OQ-11** | **Solo tier monthly SR cap value — currently 300/loc; pressure-test against design partner usage** | **GTM** | **After 3 design partners active** | **Open** |
+| **OQ-12** | **Webhook payload schema final — pressure-test against Kenect's expected inbound shape before locking** | **Engineering + GTM** | **Phase 1 Sprint 13** | **Open** |
+| **OQ-13** | **Enterprise pricing — fixed Standard/Plus/Premium tiers or fully custom per contract?** | **GTM** | **Before first Enterprise sales conversation** | **Recommendation: fully custom for first 5; introduce tiers after observed deal patterns** |
 
 ---
 
-*Last updated: March 20, 2026. Derived from RVS_Core_Architecture_Version3.1.md. For questions, contact the RVS platform team.*
+## 18. Document Status
+
+This Technical PRD v3.0 reflects the four-tier pricing model (Solo / Professional / Premium / Enterprise Scale) plus the OEM Data Licensing track. Companion documents:
+
+- Strategic context: `RVS_Context.md` v3.0, `RVS_Competitive_Strategy.md` v3.0
+- Product requirements: `RVS_PRD.md` v3.0 (Solo + Pro), `RVS_Premium_PRD.md` v1.0 (Premium + Enterprise Scale)
+- Data and OEM strategy: `RVS_data_moat.md` v3.0, `RVS_OEM_GoToMarket.md` v1.0
+- Execution: `RVS_Implementation_Plan_v2.md` v3.0
+- DMS coexistence: `RVS_vs_DMS_value_prop.md` v3.0
+
+If this document conflicts with any other v3.0 document on a specific requirement, the conflict should be raised and resolved before implementation begins; the resolution updates whichever document is wrong.
+
+---
+
+*Last updated: April 30, 2026. v3.0 supersedes v2.0 (April 30, 2026, earlier same-day) and v1.0 (March 20, 2026). For questions, contact the RVS platform team.*

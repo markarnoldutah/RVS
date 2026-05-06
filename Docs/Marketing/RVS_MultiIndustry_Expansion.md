@@ -1,3 +1,50 @@
+# RVS Multi-Industry Expansion — Future Thesis (Deferred)
+
+**Version:** 1.2 (status update only — aligned with v3 four-tier doc set)
+**Date:** April 30, 2026
+**Status:** **DEFERRED — RETAINED FOR REFERENCE ONLY**
+
+---
+
+## Status Banner — Read First
+
+> **This document describes a future expansion thesis that has been formally deferred.**
+>
+> The strategic pivot documented in `RVS_Context.md` v3.0 and `RVS_Competitive_Strategy.md` v3.0 makes RV-vertical execution the company's exclusive focus through at least the OEM thesis validation milestone (target: month 18–24). The four-tier pricing model (Solo / Professional / Premium / Enterprise Scale) plus the OEM Data Licensing track is explicitly RV-only in commercial scope. Marine, heavy equipment, and agricultural verticals remain out of scope for the active roadmap.
+>
+> The architectural arguments in this document remain correct — the platform's domain model genuinely is multi-industry-ready, and `assetId` is already structured as `{AssetType}:{Identifier}` (e.g., `RV:1ABC234567`, `Boat:HIN12345`, `Excavator:CAT320GX98765`) to support this. **What has been deferred is the commercial pursuit of these verticals**, not the architectural openness.
+>
+> The reasons for the deferral:
+>
+> 1. **Focus.** Solo developer execution cannot ship two verticals simultaneously. Splitting attention between RV and marine (or any other vertical) before either is profitable destroys both.
+>
+> 2. **OEM thesis dependency.** Multi-industry expansion only makes commercial sense if the OEM data licensing model is validated in RV first. If RV OEMs sign data licensing contracts, the same playbook extends to marine, heavy equipment, and agricultural OEMs. If RV OEMs do not, the multi-industry thesis was speculative anyway.
+>
+> 3. **Different vertical, different competitive landscape.** Marine has different DMS players (Lightspeed Marine, others), different OEM concentration, different dealer structure. Each vertical requires fresh competitive analysis. Doing this analysis pre-validation is wasted effort.
+>
+> 4. **Coverage math.** RV alone has ~50 OEMs and ~5,000 service locations. Reaching OEM-grade coverage in RV requires concentrated effort. Diluting that effort with marine work delays both verticals' coverage milestones.
+>
+> **Revisit this document only if:** (a) RV OEM thesis is validated with at least one production data licensing contract, (b) RV Enterprise tier has 10+ paying customers, and (c) the RV market shows signs of saturation that would justify horizontal expansion.
+>
+> The original thesis below is preserved for historical reference and for the architect (or future engineer) who needs to remember why the platform was built with `assetId` as a polymorphic key.
+
+---
+
+## Cross-References
+
+- Active strategy: [`RVS_Context.md`](RVS_Context.md), [`RVS_Competitive_Strategy.md`](RVS_Competitive_Strategy.md)
+- Why focus matters in Phase 1–3: [`RVS_Implementation_Plan_v2.md`](RVS_Implementation_Plan_v2.md) §2 (Scope Discipline)
+- Architectural support for polymorphic asset IDs: [`RVS_Technical_PRD.md`](RVS_Technical_PRD.md) §7 (data model)
+- Future commercialization paths if multi-industry is revisited: [`RVS_OEM_GoToMarket.md`](RVS_OEM_GoToMarket.md) §7 (Backup Monetization)
+
+---
+
+## Original Thesis (Retained for Reference)
+
+The original thesis from v1.0 is preserved below without changes. The technical arguments remain correct; what changed is the strategic prioritization, not the architectural feasibility.
+
+---
+
 The architecture you designed for **RVS** is unusually well positioned to expand beyond RVs into other service industries because the **core domain model is not RV-specific**. It is built around three universal service concepts:
 
 1. **Customer**
@@ -380,3 +427,22 @@ If you'd like, I can also show you something extremely important strategically:
 **Why automotive dealerships are actually the *hardest* industry for RVS to enter despite being the largest.**
 
 (The reason is very non-obvious but extremely important for product strategy.)
+
+---
+
+## Footer (v1.1 update, April 30, 2026)
+
+This document is no longer part of the active product strategy. Per the status banner at the top, the multi-industry expansion thesis is deferred until the OEM data licensing thesis is validated in RV.
+
+The architectural points made in the original thesis remain correct, and the platform's `{AssetType}:{Identifier}` polymorphic asset ID format continues to support the eventual expansion. No code changes are needed today to keep the multi-industry option open — the architecture already supports it.
+
+What is needed before commercializing in any non-RV vertical:
+- At least one validated commercial path in RV (Enterprise contracts at scale, or OEM data licensing live)
+- Vertical-specific competitive analysis (marine: Lightspeed Marine, Dockwa, others; heavy equipment: vastly different competitive landscape; agriculture: deep John Deere ecosystem incumbents)
+- Vertical-specific taxonomy work (Section 10A controlled vocabularies for marine engines, hydraulic systems, agricultural implements, etc.)
+- Vertical-specific OEM relationship building from scratch
+- Capital and team capacity to execute a second-vertical GTM motion
+
+When all of those are present and the RV business is healthy, this document becomes the playbook starting point. Until then, it stays in the archive.
+
+*End of RVS_MultiIndustry_Expansion.md v1.1 (deferred status update).*
