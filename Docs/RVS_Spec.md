@@ -1,0 +1,137 @@
+# RVS — Spec
+
+**Version:** 1.0 · September 4, 2026
+**Scope:** Everything RVS does. If it isn't here, it isn't in scope.
+
+Requirements are numbered `A-n` (intake), `B-n` (packet and delivery), `C-n` (manager), `X-n` (cross-cutting). Fresh numbering — the old FR-nnn and OQ-nn series had collisions across documents and are archived with them.
+
+**Stack:** Azure, .NET, Blazor, Cosmos DB (SQL API), Auth0 (Free tier), Azure Communication Services, Blob Storage.
+
+---
+
+## A. Intake app — *substantially built*
+
+Anonymous Blazor web form at `rvintake.com/{locationSlug}`. No login, ever.
+
+| # | Requirement |
+|---|---|
+| **A-1** | Anonymous access. No authentication on the intake endpoint. Per-IP rate limiting. |
+| **A-2** | Collects: customer name, phone, email, preferred contact method; VIN or make/model/year; free-text description of the problem; photos and short video. |
+| **A-3** | VIN decode via NHTSA vPIC for make, model year, type. Failure degrades gracefully — submission still succeeds with customer-supplied values. |
+| **A-4** | AI generates 2–4 follow-up questions based on the description. Hardcoded per-category fallbacks when the AI call fails. Answers are stored with the request. |
+| **A-5** | AI suggests one issue category from a controlled list. Customer can override. Advisory only. |
+| **A-6** | Attachments: jpeg, png, mp4, m4a, wav. Max 10, 25 MB each. Direct browser-to-Blob SAS upload — binaries never transit the API. |
+| **A-7** | Returning customers (matched by email) get name, phone, and known VINs prefilled. |
+| **A-8** | On submit: create the service request, append the ledger entry (X-2), generate the customer status token, enqueue the packet (B-1). Return `201` without waiting on the packet. |
+
+**Controlled vocabulary at launch: `issue-category` only.** Roughly 10–14 codes (Slide System, Electrical, Plumbing, HVAC, Generator, Appliance, Roof/Seals, Chassis, Other). The four technician-side vocabularies — component type, failure mode, repair action, part number — are archived. They were never populated at intake anyway; they filled in after a technician closed a job, which is a workflow RVS no longer has.
+
+This means the packet's structured content is: decoded unit, one category, the customer's own words, the diagnostic Q&A, and photos. That is the honest scope, and it is enough. The diagnostic Q&A block is the part that reads as expert on paper — *"Does the slide move at all? — Motor hums, no movement"* is worth more to a service manager than any taxonomy label. Invest the effort there.
+
+---
+
+## B. Packet and email delivery — *current work*
+
+The packet is the product. Everything else exists to produce it.
+
+### B-1 — Generation
+
+Enqueued on intake submission; must not block the `201`. Regenerated on demand. Three failed attempts raises an alert and is surfaced in the manager app. Failure never rolls back the service request.
+
+### B-2 — Contents
+
+One page, in this order:
+
+1. Unit header — year, make, model, VIN (degrades if VIN absent)
+2. Customer — name, phone, email, preferred contact
+3. Location, submission timestamp, short reference code
+4. Issue category
+5. **The customer's description, verbatim**
+6. **Diagnostic Q&A**
+7. AI summary, labeled as AI-generated
+8. Photo thumbnails, up to 6 on page one, rest on an appendix page
+9. Paste block (B-5)
+10. Status link + QR
+
+Never includes: pricing, quotes, labor rates, or any other customer's data.
+
+### B-3 — Rendering
+
+HTML with an embedded print stylesheet is the primary rendering; it must print cleanly at Letter and A4 in greyscale. PDF is derived from the same composition model, not a second template. Images embed as time-limited SAS URLs, not base64.
+
+### B-4 — Email delivery
+
+| | |
+|---|---|
+| Transport | Azure Communication Services |
+| Recipients | 1–10 addresses configured per location |
+| Subject | `[RVS] {category} — {year} {make} {model} — {customer last name}` |
+| Body | The packet as inline HTML, degrading to the paste block for text-only clients |
+| Attachments | The PDF, plus the original photos as image attachments |
+| Target | Delivered within 60 seconds of submission, P99 |
+| Retry | 3 attempts, exponential backoff, then alert |
+| Bounce | A hard bounce disables that recipient and notifies the owner — never the whole configuration |
+
+Idempotent per `(serviceRequestId, packetVersion)`.
+
+### B-5 — Paste block
+
+A delimited plain-text block formatted for a DMS complaint field. ASCII-safe — no smart quotes, no em-dashes, no non-breaking spaces, because DMS text fields mangle Unicode. Capped at a configurable character count (default 1,000) with truncation at a word boundary. Order: category, then the customer's verbatim description, then the status link.
+
+This is the DMS integration. It is manual, it is honest about being manual, and it eliminates the retyping that the advisor actually cares about.
+
+### B-6 — Per-location configuration
+
+Enable/disable, recipient list, attach-PDF, include-photos, paste-block cap, status-link TTL, optional logo. Defaults chosen so a location works with one setting changed: the recipient address.
+
+### B-7 — PDF rendering decision
+
+Open (see `RVS_Plan.md`, Q1). Constraints regardless of choice: no per-render outbound network dependency beyond Blob Storage; no headless browser process that can't be health-checked and recycled; license reviewed for commercial use before it enters the dependency graph.
+
+---
+
+## C. Manager app — *thin, deliberately*
+
+The manager app exists so a status update can happen. It is not a workspace and should not become one.
+
+| # | Requirement |
+|---|---|
+| **C-1** | Authenticated (Auth0). List of service requests for the location, newest first. Filter by status. That's the whole list view. |
+| **C-2** | Detail view: renders the packet, plus the status control and a resend button. Nothing else. |
+| **C-3** | Set status. Suggested set: `New → Received → In Progress → Ready → Closed`, plus `Cancelled`. Changing status updates what the customer sees on their status page. |
+| **C-4** | Disposition: close a request without work (duplicate, spam, wrong location, customer withdrew), with a reason code. |
+| **C-5** | Resend the packet to the configured recipients or an ad-hoc address. |
+| **C-6** | Location settings: the B-6 configuration. |
+
+### C-7 — Status updates without logging in *(recommended)*
+
+The packet email carries one-click action links — *Received*, *In Progress*, *Ready* — each a tokenized single-purpose URL. Clicking one sets the status and shows a small confirmation page. No login, no app.
+
+This matters more than it looks. If setting status requires opening a web app every day, RVS is still a thing people have to visit — the objection the whole design is meant to answer. One-click email actions mean the manager app becomes optional for daily operation and is only opened for configuration and history.
+
+Cost is small: the tokens, endpoints, and audit logging are the same machinery as the customer status link. Decision is Q2 in `RVS_Plan.md`.
+
+---
+
+## X. Cross-cutting
+
+| # | Requirement |
+|---|---|
+| **X-1** | **Customer status page.** `rvintake.com/status/{token}`, anonymous, rate-limited. Shows unit, submission date, current status, and the location's phone number. No conversation, no messaging, no file exchange. |
+| **X-2** | **Ledger write.** Append-only entry on intake submission: asset ID, tenant, location, category, timestamp, taxonomy version. Write-once; corrections are new entries referencing the original. Invisible to users. Persistent write failure raises an alert. *This exists solely so the record is there later. Nothing reads it today.* |
+| **X-3** | **Anonymization license.** Terms of service and any design-partner agreement must grant a perpetual, irrevocable license to use service data in anonymized, aggregated form. **Get this into the first customer's paperwork.** It cannot be added retroactively without renegotiating with every existing customer. |
+| **X-4** | **Tenancy.** Every query is tenant-scoped through the existing claims and gate middleware. Cross-tenant data never appears in any response. |
+| **X-5** | **Tokens.** All anonymous-access tokens (status page, packet link, email actions): ≥128 bits entropy, stored hashed, TTL-bounded, rate-limited per IP, access audit-logged, read-only except the single status write in C-7. |
+| **X-6** | **Attachment access.** Time-limited read SAS, generated per request, never persisted. |
+
+### Non-functional
+
+Intake submission P95 under 2s. Packet generated P95 under 10s, email delivered P99 under 60s. Nothing in the packet path may block or roll back an intake submission. Free-text problem descriptions are never written to application logs.
+
+---
+
+## Explicitly out of scope
+
+Two-way SMS or messaging · DMS API integration of any kind · offline mobile app · scheduling or calendars · quoting, invoicing, payments · parts and inventory · benchmarking or analytics dashboards · cross-location reporting · technician assignment and workload · SSO/SAML/SCIM · warranty claim workflows.
+
+Some of these are specced in detail in the archive. Retrieval triggers are in `RVS_Archive_Index.md`. Adding any of them back is a decision that gets logged in `RVS_Plan.md`, not a thing that happens because a prospect asked.

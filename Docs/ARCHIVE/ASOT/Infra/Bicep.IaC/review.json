@@ -1,0 +1,491 @@
+{
+  "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/providers/Microsoft.Resources/deployments/rvs-dev-202604102013",
+  "location": "westus3",
+  "name": "rvs-dev-202604102013",
+  "properties": {
+    "correlationId": "2df94e80-c9c5-463e-93da-bc2464292be5",
+    "debugSetting": null,
+    "dependencies": [
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3",
+            "resourceName": "rg-rvs-dev-westus3",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          }
+        ],
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Resources/deployments/deploy-openai-naming-dev",
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceName": "deploy-openai-naming-dev",
+        "resourceType": "Microsoft.Resources/deployments"
+      },
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Resources/deployments/deploy-openai-naming-dev",
+            "resourceGroup": "rg-rvs-dev-westus3",
+            "resourceName": "deploy-openai-naming-dev",
+            "resourceType": "Microsoft.Resources/deployments"
+          },
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3",
+            "resourceName": "rg-rvs-dev-westus3",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          }
+        ],
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Resources/deployments/deploy-openai-dev",
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceName": "deploy-openai-dev",
+        "resourceType": "Microsoft.Resources/deployments"
+      },
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-ncus",
+            "resourceName": "rg-rvs-dev-ncus",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          }
+        ],
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-ncus/providers/Microsoft.Resources/deployments/deploy-whisper-naming-dev",
+        "resourceGroup": "rg-rvs-dev-ncus",
+        "resourceName": "deploy-whisper-naming-dev",
+        "resourceType": "Microsoft.Resources/deployments"
+      },
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-ncus",
+            "resourceName": "rg-rvs-dev-ncus",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          },
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-ncus/providers/Microsoft.Resources/deployments/deploy-whisper-naming-dev",
+            "resourceGroup": "rg-rvs-dev-ncus",
+            "resourceName": "deploy-whisper-naming-dev",
+            "resourceType": "Microsoft.Resources/deployments"
+          }
+        ],
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-ncus/providers/Microsoft.Resources/deployments/deploy-whisper-dev",
+        "resourceGroup": "rg-rvs-dev-ncus",
+        "resourceName": "deploy-whisper-dev",
+        "resourceType": "Microsoft.Resources/deployments"
+      },
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3",
+            "resourceName": "rg-rvs-dev-westus3",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          }
+        ],
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Resources/deployments/deploy-storage-dev",
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceName": "deploy-storage-dev",
+        "resourceType": "Microsoft.Resources/deployments"
+      },
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3",
+            "resourceName": "rg-rvs-dev-westus3",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          }
+        ],
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Resources/deployments/deploy-acs-naming-dev",
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceName": "deploy-acs-naming-dev",
+        "resourceType": "Microsoft.Resources/deployments"
+      },
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Resources/deployments/deploy-acs-naming-dev",
+            "resourceGroup": "rg-rvs-dev-westus3",
+            "resourceName": "deploy-acs-naming-dev",
+            "resourceType": "Microsoft.Resources/deployments"
+          },
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3",
+            "resourceName": "rg-rvs-dev-westus3",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          }
+        ],
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Resources/deployments/deploy-acs-dev",
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceName": "deploy-acs-dev",
+        "resourceType": "Microsoft.Resources/deployments"
+      },
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus2",
+            "resourceName": "rg-rvs-dev-westus2",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          }
+        ],
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus2/providers/Microsoft.Resources/deployments/deploy-swa-intake-dev",
+        "resourceGroup": "rg-rvs-dev-westus2",
+        "resourceName": "deploy-swa-intake-dev",
+        "resourceType": "Microsoft.Resources/deployments"
+      },
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus2",
+            "resourceName": "rg-rvs-dev-westus2",
+            "resourceType": "Microsoft.Resources/resourceGroups"
+          }
+        ],
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus2/providers/Microsoft.Resources/deployments/deploy-swa-manager-dev",
+        "resourceGroup": "rg-rvs-dev-westus2",
+        "resourceName": "deploy-swa-manager-dev",
+        "resourceType": "Microsoft.Resources/deployments"
+      }
+    ],
+    "diagnostics": null,
+    "duration": "PT1M38.6762453S",
+    "error": null,
+    "extensions": [],
+    "mode": "Incremental",
+    "onErrorDeployment": null,
+    "outputResources": [
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-ncus",
+        "identifiers": null,
+        "resourceType": "Microsoft.Resources/resourceGroups"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-ncus/providers/Microsoft.CognitiveServices/accounts/oai-rvs-whisper-dev-ncus-s01-001",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-ncus",
+        "resourceType": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-ncus/providers/Microsoft.CognitiveServices/accounts/oai-rvs-whisper-dev-ncus-s01-001/deployments/whisper",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-ncus",
+        "resourceType": "Microsoft.CognitiveServices/accounts/deployments"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus2",
+        "identifiers": null,
+        "resourceType": "Microsoft.Resources/resourceGroups"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus2/providers/Microsoft.Web/staticSites/stapp-rvs-intake-dev",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-westus2",
+        "resourceType": "Microsoft.Web/staticSites"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus2/providers/Microsoft.Web/staticSites/stapp-rvs-manager-dev",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-westus2",
+        "resourceType": "Microsoft.Web/staticSites"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3",
+        "identifiers": null,
+        "resourceType": "Microsoft.Resources/resourceGroups"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.CognitiveServices/accounts/oai-rvs-ai-dev-wus3-s01-001",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceType": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.CognitiveServices/accounts/oai-rvs-ai-dev-wus3-s01-001/deployments/gpt-4o",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceType": "Microsoft.CognitiveServices/accounts/deployments"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Communication/communicationServices/acs-rvs-notify-dev-wus3-s01-001",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceType": "Microsoft.Communication/communicationServices"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Communication/emailServices/acs-rvs-notify-dev-wus3-s01-001-email",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceType": "Microsoft.Communication/emailServices"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Communication/emailServices/acs-rvs-notify-dev-wus3-s01-001-email/domains/AzureManagedDomain",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceType": "Microsoft.Communication/emailServices/domains"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Storage/storageAccounts/strvsdevwus3001",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceType": "Microsoft.Storage/storageAccounts"
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/4d1d5e99-e872-496d-98be-e8a0a4232aec/resourceGroups/rg-rvs-dev-westus3/providers/Microsoft.Storage/storageAccounts/strvsdevwus3001/blobServices/default",
+        "identifiers": null,
+        "resourceGroup": "rg-rvs-dev-westus3",
+        "resourceType": "Microsoft.Storage/storageAccounts/blobServices"
+      }
+    ],
+    "outputs": {
+      "acsEmailServiceName": {
+        "type": "String",
+        "value": "acs-rvs-notify-dev-wus3-s01-001-email"
+      },
+      "acsEndpoint": {
+        "type": "String",
+        "value": "https://acs-rvs-notify-dev-wus3-s01-001.unitedstates.communication.azure.com"
+      },
+      "acsMailFromDomain": {
+        "type": "String",
+        "value": "a83bded7-45cc-4412-91d8-9ece3ac781bd.azurecomm.net"
+      },
+      "acsName": {
+        "type": "String",
+        "value": "acs-rvs-notify-dev-wus3-s01-001"
+      },
+      "dnsNameServers": {
+        "type": "Array",
+        "value": []
+      },
+      "intakeFqdn": {
+        "type": "String",
+        "value": ""
+      },
+      "managerFqdn": {
+        "type": "String",
+        "value": ""
+      },
+      "openAiDeploymentName": {
+        "type": "String",
+        "value": "gpt-4o"
+      },
+      "openAiEndpoint": {
+        "type": "String",
+        "value": "https://oai-rvs-ai-dev-wus3-s01-001.openai.azure.com/"
+      },
+      "primaryResourceGroup": {
+        "type": "String",
+        "value": "rg-rvs-dev-westus3"
+      },
+      "storageAccountName": {
+        "type": "String",
+        "value": "strvsdevwus3001"
+      },
+      "storageBlobEndpoint": {
+        "type": "String",
+        "value": "https://strvsdevwus3001.blob.core.windows.net/"
+      },
+      "swaIntakeDeploymentToken": {
+        "type": "SecureString"
+      },
+      "swaIntakeHostname": {
+        "type": "String",
+        "value": "gentle-flower-0b75fef1e.6.azurestaticapps.net"
+      },
+      "swaManagerDeploymentToken": {
+        "type": "SecureString"
+      },
+      "swaManagerHostname": {
+        "type": "String",
+        "value": "black-pebble-04c291c1e.6.azurestaticapps.net"
+      },
+      "swaResourceGroup": {
+        "type": "String",
+        "value": "rg-rvs-dev-westus2"
+      },
+      "whisperDeploymentName": {
+        "type": "String",
+        "value": "whisper"
+      },
+      "whisperEndpoint": {
+        "type": "String",
+        "value": "https://oai-rvs-whisper-dev-ncus-s01-001.openai.azure.com/"
+      },
+      "whisperResourceGroup": {
+        "type": "String",
+        "value": "rg-rvs-dev-ncus"
+      }
+    },
+    "parameters": {
+      "acsDataLocation": {
+        "type": "String",
+        "value": "United States"
+      },
+      "deployAcs": {
+        "type": "Bool",
+        "value": true
+      },
+      "deployDns": {
+        "type": "Bool",
+        "value": false
+      },
+      "deployStorageAccount": {
+        "type": "Bool",
+        "value": true
+      },
+      "deploySwa": {
+        "type": "Bool",
+        "value": true
+      },
+      "dnsResourceGroupName": {
+        "type": "String",
+        "value": "rg-rvs-prod-westus3"
+      },
+      "domainName": {
+        "type": "String",
+        "value": "rvserviceflow.com"
+      },
+      "environmentName": {
+        "type": "String",
+        "value": "dev"
+      },
+      "intakeDnsPrefix": {
+        "type": "String",
+        "value": "intake-dev"
+      },
+      "keyVaultName": {
+        "type": "String",
+        "value": ""
+      },
+      "location": {
+        "type": "String",
+        "value": "westus3"
+      },
+      "managerDnsPrefix": {
+        "type": "String",
+        "value": "manager-dev"
+      },
+      "openAiCapacity": {
+        "type": "Int",
+        "value": 1
+      },
+      "primaryResourceGroupName": {
+        "type": "String",
+        "value": "rg-rvs-dev-westus3"
+      },
+      "storageAccountNameOverride": {
+        "type": "String",
+        "value": ""
+      },
+      "storageBlobAccessPrincipalId": {
+        "type": "String",
+        "value": ""
+      },
+      "storageCorsAllowedOrigins": {
+        "type": "Array",
+        "value": []
+      },
+      "swaLocation": {
+        "type": "String",
+        "value": "westus2"
+      },
+      "swaResourceGroupName": {
+        "type": "String",
+        "value": "rg-rvs-dev-westus2"
+      },
+      "swaSkuName": {
+        "type": "String",
+        "value": "Free"
+      },
+      "textDeploymentName": {
+        "type": "String",
+        "value": "gpt-4o"
+      },
+      "whisperCapacity": {
+        "type": "Int",
+        "value": 1
+      },
+      "whisperLocation": {
+        "type": "String",
+        "value": "northcentralus"
+      },
+      "whisperResourceGroupName": {
+        "type": "String",
+        "value": "rg-rvs-dev-ncus"
+      }
+    },
+    "parametersLink": null,
+    "providers": [
+      {
+        "id": null,
+        "namespace": "Microsoft.Resources",
+        "providerAuthorizationConsentState": null,
+        "registrationPolicy": null,
+        "registrationState": null,
+        "resourceTypes": [
+          {
+            "aliases": null,
+            "apiProfiles": null,
+            "apiVersions": null,
+            "capabilities": null,
+            "defaultApiVersion": null,
+            "locationMappings": null,
+            "locations": [
+              "westus3",
+              "northcentralus",
+              "westus2"
+            ],
+            "properties": null,
+            "resourceType": "resourceGroups",
+            "zoneMappings": null
+          },
+          {
+            "aliases": null,
+            "apiProfiles": null,
+            "apiVersions": null,
+            "capabilities": null,
+            "defaultApiVersion": null,
+            "locationMappings": null,
+            "locations": [
+              null
+            ],
+            "properties": null,
+            "resourceType": "deployments",
+            "zoneMappings": null
+          }
+        ]
+      }
+    ],
+    "provisioningState": "Succeeded",
+    "templateHash": "8169520146645567431",
+    "templateLink": null,
+    "timestamp": "2026-04-11T02:15:21.268481+00:00",
+    "validatedResources": null,
+    "validationLevel": null
+  },
+  "tags": null,
+  "type": "Microsoft.Resources/deployments"
+}
