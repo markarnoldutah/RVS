@@ -117,16 +117,16 @@ This is the honest state of `../RVS_Spec.md`.
 | X-2 ledger write on submission | **Built** | `IntakeOrchestrationService` appends per intake, best-effort |
 | X-3 anonymization license | **Paperwork** | Not a code item. Highest-leverage open item in the whole set |
 | X-4 tenancy | **Built** | |
-| X-5 tokens ≥128 bits, hashed, TTL | **Conflict** | Tokens are stored **unhashed** today |
+| X-5 tokens ≥128 bits, hashed, TTL | **Resolved, not yet built** | Model decided in issue #427 — SHA-256-hashed, per-customer status token + per-request C-7 links. Implementation and migration in #440 / #441 |
 | X-6 time-limited read SAS | **Built** | |
 
 **B is genuinely greenfield.** Email exists, but it only ever sends a *customer confirmation* from the last intake step. Nothing emails a service manager. `Dealership.ServiceEmail` is populated and mapped but read by no code path.
 
 ---
 
-## Two conflicts to resolve before building B
+## Conflicts to resolve before building B
 
-**1. Token model.** X-1/X-5 describe a per-request, hashed, TTL-bounded status token. What exists is a per-*customer* magic link: a 90-day token on `GlobalCustomerAcct` (partitioned by email, cross-tenant), stored unhashed, indexed for lookup. The prior ASOT decision explicitly chose unhashed storage and argued it was adequate. The Spec now says hashed. The Spec wins, but this is a code and data-migration change, not a doc edit — and the per-request vs per-customer question is the bigger of the two, because C-7's one-click action links reuse this machinery.
+**1. Token model — resolved (issue #427, closes Q7).** X-5 is met by: SHA-256-hashed storage with the raw token never persisted; the **status token staying per-customer** on `GlobalCustomerAcct` (TTL cut to ≤ 30 days, sliding renewal on use); and **C-7 one-click action links being per-request and per-action** (single-purpose, short fixed TTL or single-use). Both scopes share one generation / hash / TTL / audit helper — the "same machinery" the Plan calls for, at the X-5 bar. The prior ASOT decision that chose unhashed storage is overturned: its own stated trigger — a token that can write — is met by C-7. Migration (#441): backfill hashes from the current plaintext pre-GA, then drop the plaintext `magicLinkToken` field; issued links keep working. Still a code and data-migration change (#440), not a doc edit.
 
 **2. Voice and vision AI are in the code but not in the Spec.** `ai/transcribe-issue` (Whisper) and `ai/extract-vin` (gpt-4o vision) are fully wired into intake steps 3 and 5, along with `ai/suggest-insights` and `assess-capabilities`. The Spec's A section does not mention them. They are either in scope and should be specced, or archived and should be removed — the Whisper account is unconditional infrastructure spend either way.
 

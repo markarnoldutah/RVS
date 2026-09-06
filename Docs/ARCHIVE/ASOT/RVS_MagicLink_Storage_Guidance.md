@@ -1,5 +1,7 @@
 # RVS Magic Link Token Storage — Security Guidance and Design Decision
 
+> **SUPERSEDED — Sep 5 2026 (issue #427, Plan Q7).** This document's decision to store magic-link tokens unhashed is overturned. Anonymous tokens are now SHA-256-hashed per Spec X-5. The trigger this document itself named — "if future requirements allow customers to update service requests via magic link … hashing becomes mandatory" (Section 4) — is met by Spec C-7 one-click action links. Retained for the threat-model analysis only; do not cite the storage decision as current. Current model: `Docs/RVS_Spec.md` X-5, `Docs/ASOT/RVS_Identity.md`, `Docs/ASOT/RVS_Architecture.md`.
+
 **Authoritative Source of Truth (ASOT) — April 5, 2026**
 
 This document resolves the P0 inconsistency between `RVS_PRD.md` Section 7.2 and `RVS_Core_Architecture_Version3.1.md` Section 13 regarding magic link token storage (identified in `RVS_Cloud_Arch_Assessment.md` line 289). This provides the definitive architectural decision for RVS implementation.

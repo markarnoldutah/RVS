@@ -89,7 +89,7 @@ Two endpoints serve unauthenticated users, both rate-limited: the intake endpoin
 
 Spec X-5 requires that every anonymous token be ≥128 bits of entropy, **stored hashed**, TTL-bounded, rate-limited per IP, access-audited, and read-only except for the single status write in C-7.
 
-**The current implementation does not meet this.** Tokens are stored unhashed on `GlobalCustomerAcct.magicLinkToken` with a 90-day expiry, and the prior ASOT decision argued explicitly that unhashed storage was adequate for the threat model. The Spec supersedes that decision. Closing the gap is a code and data-migration task, and it should be settled before C-7 one-click status links are built on the same machinery — see `RVS_Architecture.md` and open question Q7 in `../RVS_Plan.md`.
+**The current implementation does not yet meet this** — tokens are stored unhashed on `GlobalCustomerAcct.magicLinkToken` with a 90-day expiry. The model is now decided (issue #427, closes Q7): SHA-256-hashed storage with the raw token never persisted; the **status token stays per-customer** (TTL ≤ 30 days, sliding renewal on use); **C-7 action links are per-request and per-action** (single-purpose, TTL ≤ 14 days or single-use); both share one generation / hash / TTL / audit helper. The prior ARCHIVE decision (`Docs/ARCHIVE/ASOT/RVS_MagicLink_Storage_Guidance.md`) that argued unhashed storage was adequate is overturned — its own stated trigger, a token that can write, is met by C-7. Implementation and migration are tracked in #440 / #441. See `RVS_Architecture.md` and Q7 in `../RVS_Plan.md`.
 
 ---
 
