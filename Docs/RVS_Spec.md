@@ -23,6 +23,12 @@ Anonymous Blazor web form at `rvintake.com/{locationSlug}`. No login, ever.
 | **A-6** | Attachments: jpeg, png, mp4, m4a, wav. Max 10, 25 MB each. Direct browser-to-Blob SAS upload — binaries never transit the API. |
 | **A-7** | Returning customers (matched by email) get name, phone, and known VINs prefilled. |
 | **A-8** | On submit: create the service request, append the ledger entry (X-2), generate the customer status token, enqueue the packet (B-1). Return `201` without waiting on the packet. |
+| **A-9** | **Voice input.** Free-text fields accept dictation: browser microphone capture is transcribed by Azure OpenAI Whisper (`ai/transcribe-issue`) and the transcript is cleaned before it fills the field (VIN-context cleanup strips spoken punctuation and spacing). Optional and advisory — typing is always available; a transcription failure leaves the field unchanged and raises no blocking error. |
+| **A-10** | **VIN from photo.** The customer can photograph the VIN plate instead of typing it. Azure OpenAI gpt-4o vision (`ai/extract-vin`) returns a VIN and a confidence score: at ≥ 0.7 the VIN field is auto-filled, at ≥ 0.9 the A-3 decode also fires automatically, below 0.7 the result is discarded. The extracted value is always editable. Failure degrades to manual entry — submission still succeeds. |
+| **A-11** | **Issue insights.** From the description, AI infers urgency and RV-usage context (`ai/suggest-insights`), shown to the customer as advisory "Suggested" chips. Advisory only, never blocks submission; accepted values are stored on the request with their provider and confidence. |
+| **A-12** | **Capability pre-check.** On leaving the description step, the issue is checked against the location's enabled service capabilities (`assess-capabilities`). If the location is unlikely to be able to help, intake shows a non-blocking alert; the customer may still submit. |
+
+All four AI capabilities in A-9–A-12 are in scope — decision Q8 / issue #429. Each has a rule-based or no-op fallback behind the same interface; none is a hard dependency for a successful submission.
 
 **Controlled vocabulary at launch: `issue-category` only.** Roughly 10–14 codes (Slide System, Electrical, Plumbing, HVAC, Generator, Appliance, Roof/Seals, Chassis, Other). The four technician-side vocabularies — component type, failure mode, repair action, part number — are archived. They were never populated at intake anyway; they filled in after a technician closed a job, which is a workflow RVS no longer has.
 

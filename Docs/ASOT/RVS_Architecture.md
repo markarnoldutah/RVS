@@ -119,6 +119,10 @@ This is the honest state of `../RVS_Spec.md`.
 | X-4 tenancy | **Built** | |
 | X-5 tokens ≥128 bits, hashed, TTL | **Resolved, not yet built** | Model decided in issue #427 — SHA-256-hashed, per-customer status token + per-request C-7 links. Implementation and migration in #440 / #441 |
 | X-6 time-limited read SAS | **Built** | |
+| A-9 voice input (Whisper transcription) | **Built** | `ai/transcribe-issue`, steps 3 and 5; `VinTranscriptCleaner` on the VIN field. Specced in issue #429 |
+| A-10 VIN from photo (gpt-4o vision) | **Built** | `ai/extract-vin`, step 3; auto-fill ≥ 0.7, auto-decode ≥ 0.9. Specced in issue #429 |
+| A-11 issue insights (urgency, RV usage) | **Built** | `ai/suggest-insights`, step 5; persisted on `ServiceRequest` with provider/confidence. Specced in issue #429 |
+| A-12 capability pre-check | **Built** | `assess-capabilities`, step 5 → 6 boundary; non-blocking alert. Specced in issue #429 |
 
 **B is genuinely greenfield.** Email exists, but it only ever sends a *customer confirmation* from the last intake step. Nothing emails a service manager. `Dealership.ServiceEmail` is populated and mapped but read by no code path.
 
@@ -128,7 +132,7 @@ This is the honest state of `../RVS_Spec.md`.
 
 **1. Token model — resolved (issue #427, closes Q7).** X-5 is met by: SHA-256-hashed storage with the raw token never persisted; the **status token staying per-customer** on `GlobalCustomerAcct` (TTL cut to ≤ 30 days, sliding renewal on use); and **C-7 one-click action links being per-request and per-action** (single-purpose, short fixed TTL or single-use). Both scopes share one generation / hash / TTL / audit helper — the "same machinery" the Plan calls for, at the X-5 bar. The prior ASOT decision that chose unhashed storage is overturned: its own stated trigger — a token that can write — is met by C-7. Migration (#441): backfill hashes from the current plaintext pre-GA, then drop the plaintext `magicLinkToken` field; issued links keep working. Still a code and data-migration change (#440), not a doc edit.
 
-**2. Voice and vision AI are in the code but not in the Spec.** `ai/transcribe-issue` (Whisper) and `ai/extract-vin` (gpt-4o vision) are fully wired into intake steps 3 and 5, along with `ai/suggest-insights` and `assess-capabilities`. The Spec's A section does not mention them. They are either in scope and should be specced, or archived and should be removed — the Whisper account is unconditional infrastructure spend either way.
+**2. Voice and vision AI — resolved (issue #429, closes Q8).** `ai/transcribe-issue` (Whisper), `ai/extract-vin` (gpt-4o vision), `ai/suggest-insights`, and `assess-capabilities` are all in scope and are now specced as Spec A-9–A-12. Nothing archived; no descope sub-issue on #423. Each keeps its rule-based / no-op fallback and none blocks submission. The Whisper and gpt-4o accounts stay but move behind a `deployWhisper` (and gpt-4o) flag in issue #467, defaulted on, so the spend is per-environment and reversible.
 
 ---
 

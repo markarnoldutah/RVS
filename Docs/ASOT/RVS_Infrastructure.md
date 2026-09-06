@@ -142,7 +142,7 @@ Conservative — flagged, not assumed.
 
 **Keep, despite the descope:** ACS. SMS and email ride the same resource and email is now the core delivery mechanism. Dropping two-way SMS removes code paths, not infrastructure. Also keep the Manager Static Web App and the Auth0 secrets — a thin manager app is still in scope.
 
-**Decide before the next infra deploy:** the Whisper account and the `rg-rvs-{env}-ncus` resource group are **unconditional** — they deploy in every environment with no flag. If voice capture stays in intake, that is fine; if it is archived, this is pure spend. Either way it should be behind a `deployWhisper` flag rather than deleted, so the decision is reversible. The same argument applies to the gpt-4o account, which is also unflagged and is still needed for VIN vision extraction and issue refinement.
+**Flag before the next infra deploy (issue #467):** the Whisper account and the `rg-rvs-{env}-ncus` resource group are **unconditional** — they deploy in every environment with no flag. Voice capture is in scope (issue #429, closes Q8), so the account stays, but it belongs behind a `deployWhisper` flag — defaulted on — rather than left unconditional, so the per-environment spend is a deliberate choice and the decision stays reversible. The same treatment applies to the gpt-4o account, which is also unflagged and is needed for VIN vision extraction and issue refinement.
 
 **Verify against the packet flow first:** the `rv-warranty-rules` container (no reader) and the cross-tenant reach of `global-customer-accounts`. See `RVS_DataModel.md`.
 

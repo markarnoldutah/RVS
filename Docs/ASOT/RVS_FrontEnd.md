@@ -28,7 +28,7 @@ Shell is `Pages/IntakeWizard.razor`, routed at `/{Slug}` with an optional `?toke
 
 Supporting pages: `Confirmation`, `Status` (confirmation-number entry), `StatusPage` (`/status/{Token}` → `GET api/status/{token}`), `Home`, `Error`, `NotFound`. `Intake.razor` at `/intake` is a static "use your dealer's link" notice and a dead end.
 
-**Steps 3 and 5 depend on AI capability the Spec does not currently describe** — Whisper transcription, gpt-4o VIN extraction, urgency/usage insights, capability assessment. Either spec them or archive them; see `RVS_Architecture.md`.
+**Steps 3 and 5 depend on AI capability now specced as Spec A-9–A-12** — Whisper transcription, gpt-4o VIN extraction, urgency/usage insights, capability pre-check. All four are in scope (issue #429, closes Q8); nothing here is archived. See `RVS_Architecture.md`.
 
 ---
 
