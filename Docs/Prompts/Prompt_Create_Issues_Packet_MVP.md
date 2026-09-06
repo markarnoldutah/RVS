@@ -3,7 +3,7 @@
 Assumes the GitHub Issue Manager custom agent and the GitHub MCP server.
 
 **Repo:** `markarnoldutah/RVS`
-**Project:** `https://github.com/markarnoldutah/RVS`
+**Project:** `https://github.com/users/markarnoldutah/projects/1`
 **Proceed without Issue types.** Use Acceptance Criteria, never task lists.
 
 ---
