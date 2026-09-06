@@ -92,7 +92,7 @@ SMB CRM and invoicing, roughly $30–100/mo. Different category — that is the 
 
 **The name overpromises.** "RV Service Intelligence" describes the archived product. Don't let it drag the roadmap back toward analytics.
 
-There is a cheap fix that needs no renaming: **sell the artifact, not the company.** Name the packet and make it the noun in every sentence — the thing a shop buys is a one-page service request write-up, not a platform. Lead with `rvintake.com` publicly and leave `rvserviceflow.com` as the corporate domain. *(Open: confirm `rvintake.com` is actually held. Spec A-1 and X-1 both assume it and the only zone file in the repo is for `rvserviceflow.com`. Worth settling before it is printed on a counter QR code.)*
+There is a cheap fix that needs no renaming: **sell the artifact, not the company.** Name the packet and make it the noun in every sentence — the thing a shop buys is a one-page service request write-up, not a platform. Lead with `rvintake.com` publicly and leave `rvserviceflow.com` as the corporate domain. The domain is held — confirmed September 6, 2026 — so the only thing standing between here and a counter QR code is pointing it at the intake app. The repo's one zone file is for `rvserviceflow.com`; `rvintake.com` has no DNS recorded here yet.
 
 ---
 
