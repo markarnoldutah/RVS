@@ -86,7 +86,11 @@ Enable/disable, recipient list, attach-PDF, include-photos, paste-block cap, sta
 
 ### B-7 — PDF rendering decision
 
-Open (see `RVS_Plan.md`, Q1). Constraints regardless of choice: no per-render outbound network dependency beyond Blob Storage; no headless browser process that can't be health-checked and recycled; license reviewed for commercial use before it enters the dependency graph.
+**Decided (issue #426): QuestPDF.** A pure-managed .NET library with a bundled native renderer — no headless browser, no per-render network call, in-process and synchronous, nothing to health-check or recycle. The packet is built once as a code composition model (B-3); QuestPDF renders it to PDF and the same model renders to HTML. Sub-100 ms per page, well inside the B-1 / X-7 budgets.
+
+Constraints that still hold: no per-render outbound dependency beyond Blob Storage; no headless browser process; the API container stays Debian-based (QuestPDF's native lib needs glibc ≥ 2.28 and does not support Alpine).
+
+**Licence finding.** QuestPDF ships under the QuestPDF Community License v3.0 (source-available, *not* MIT as of the 2026.x releases). Free for an organisation with annual gross revenue under USD 1,000,000 in its last fiscal year, commercial use included — RVS qualifies today. Publicly traded companies and public-sector entities are excluded regardless of revenue; neither applies. On crossing the threshold (or an acquisition, or an IPO) there is a 90-day window to buy a paid licence: Professional USD 1,999 or Enterprise USD 4,999 — perpetual, unlimited developers, one year of updates included. That is a known, bounded, deferrable cost, not an open-ended royalty. Fallback if the terms ever become unacceptable: PDFsharp / MigraDoc (MIT, empira Software GmbH), same architectural shape, weaker text layout.
 
 ---
 

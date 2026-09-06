@@ -70,7 +70,7 @@ The archived strategy carried a Yes/No filter that kept scope honest for a year.
 
 | # | Question | Owner | Needed by |
 |---|---|---|---|
-| **Q1** | PDF rendering library and license. Headless Chromium on App Service is operationally painful; a native .NET renderer avoids that but has license terms to check against commercial use. | Engineering | Before build item 1 |
+| ~~**Q1**~~ | ~~PDF rendering library and license.~~ **Resolved (issue #426): QuestPDF.** Native .NET renderer, no headless browser. Community License v3.0 is free under USD 1M revenue (RVS qualifies); paid tier is perpetual USD 1,999 / 4,999 if the threshold is crossed. See decision log and Spec B-7. | Engineering | ~~Before build item 1~~ Done |
 | **Q2** | Build one-click status links (C-7) now or after the manager app? Recommendation: now — it's cheap once the token machinery exists and it's the thing that makes the "no dashboard" claim actually true. | Product | Before build item 4 |
 | **Q3** | Does the mobile tech's "buy in" mean a subscription at ~$39/mo, or equity/partnership? Materially different. | GTM | Next conversation with him |
 | **Q4** | At the dealer group: who owns the location service pages — marketing, IT, or an agency? Determines whether the pilot is a 20-minute change or a procurement cycle. | GTM | Before pitching |
@@ -102,6 +102,7 @@ Honest note on both: one interested mobile technician is a design partner and a 
 | Sep 4 2026 | **Offline mobile app dropped** | The wedge is customer-side intake. A one-person operator needs to *receive* structured work, not run a field app. Revisit only on a demonstrated dead-zone requirement. |
 | Sep 4 2026 | **Ledger write and anonymization license retained** | The only two pieces of the data strategy that are cheap now and expensive-to-impossible to retrofit. Everything downstream is archived. |
 | Sep 4 2026 | **Replaced the Yes/No scope filter rather than porting it** | The archived filter's four questions all rested on the dataset thesis or the four-tier pricing model. Both are gone, so every question would have passed vacuously. The new filter tests the packet, the no-dashboard claim, craft-over-architecture, and what comes out. |
+| Sep 5 2026 | **PDF rendering: QuestPDF** (issue #426, closes Q1) | Headless Chromium (PuppeteerSharp/Playwright) fails B-7 — a browser process on Linux App Service B1 that can't be reliably health-checked or recycled, plus a ~300 MB engine the base image can't support. QuestPDF renders in-process with a bundled native lib, no network call per render, sub-100 ms per page. Community License v3.0 is free under USD 1M annual revenue (RVS qualifies now; commercial use is permitted); above that, 90 days to buy a perpetual Professional (USD 1,999) or Enterprise (USD 4,999) licence — bounded and deferrable. Publicly traded / public-sector exclusions don't apply. Fallback: PDFsharp/MigraDoc (MIT). |
 
 ---
 
