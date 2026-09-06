@@ -32,8 +32,6 @@ Solution file is [RVS.slnx](RVS.slnx) (new SLNX format — `dotnet` CLI handles 
 | [RVS.Domain](RVS.Domain/) | Entities, DTOs, Interfaces, Validation, Exceptions. **Zero infra dependencies.** |
 | [RVS.Infra.AzCosmosRepository](RVS.Infra.AzCosmosRepository/) | Cosmos DB repository implementations. |
 | [RVS.Infra.AzBlobRepository](RVS.Infra.AzBlobRepository/) | Azure Blob Storage (attachments). |
-| [RVS.Infra.AzTablesRepository](RVS.Infra.AzTablesRepository/) | Azure Tables (tenant access gate). |
-| [RVS.Infra.AzCredentials](RVS.Infra.AzCredentials/) | Shared credential helpers. |
 | [RVS.Blazor.Intake](RVS.Blazor.Intake/) | Blazor **WASM** — anonymous 8-step customer intake wizard. |
 | [RVS.Blazor.Manager](RVS.Blazor.Manager/) | Blazor **WASM** — authenticated dealer manager desktop (OIDC/Auth0, PKCE). |
 | [RVS.UI.Shared](RVS.UI.Shared/) | Shared typed API clients (`IntakeApiClient`, `ServiceRequestApiClient`, `LookupApiClient`, `AttachmentApiClient`, and `AnalyticsApiClient` — archived scope), client-side validators, badge components. **`ThemeService` is not here** — each Blazor app has its own copy. |

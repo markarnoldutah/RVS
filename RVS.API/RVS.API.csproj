@@ -33,7 +33,6 @@
   <ItemGroup>
     <ProjectReference Include="..\RVS.Infra.AzBlobRepository\RVS.Infra.AzBlobRepository.csproj" />
     <ProjectReference Include="..\RVS.Infra.AzCosmosRepository\RVS.Infra.AzCosmosRepository.csproj" />
-    <ProjectReference Include="..\RVS.Infra.AzTablesRepository\RVS.Infra.AzTablesRepository.csproj" />
   </ItemGroup>
 
 </Project>

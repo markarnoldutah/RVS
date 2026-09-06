@@ -89,7 +89,7 @@ Role assignments:
 
 There is no RBAC grant to Cosmos or OpenAI. Both are consumed by key, read from Key Vault.
 
-Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint, key, vision/text/whisper deployment names, Whisper endpoint and key), `CosmosDb--Endpoint/Key/DatabaseId`, `BlobStorage--Endpoint`, `AzureTables--ConnectionString`, `AzureCommunicationServices--Endpoint/ConnectionString`, `ApplicationInsights--ConnectionString`, `Auth0--*`.
+Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint, key, vision/text/whisper deployment names, Whisper endpoint and key), `CosmosDb--Endpoint/Key/DatabaseId`, `BlobStorage--Endpoint`, `AzureCommunicationServices--Endpoint/ConnectionString`, `ApplicationInsights--ConnectionString`, `Auth0--*`.
 
 `app-service-config.bicep` sets only three app settings — `ASPNETCORE_ENVIRONMENT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `KeyVault__VaultUri`. Everything else is pulled by the Key Vault configuration provider at startup using the managed identity. Locally, development uses `appsettings.Development.json` plus `dotnet user-secrets`, and Blob uses `AzureCliCredential` directly to avoid the managed-identity probe timeout.
 
@@ -125,7 +125,6 @@ Auth: the API uses Azure OIDC federated credentials, no long-lived secrets. Stat
 | Defect | Detail |
 |---|---|
 | Prod OpenAI unreachable | Both OpenAI modules set `publicNetworkAccess: Disabled` and `networkAcls.defaultAction: Deny` when `environmentName == 'prod'`, and no private endpoint is declared anywhere. As written, production cannot reach either account |
-| Tables secret contradicts storage policy | `AzureTables--ConnectionString` is built from an account key while `allowSharedKeyAccess=false` in every environment |
 | `build-mobile.yml` | Builds `RVS.MAUI.Tech` on `mobile-v*` tags. That project is not in the repo and the offline mobile app is archived. Delete the workflow |
 | `deployment-cmds.azcli` | References a `parameters/dev.bicepparam` that does not exist. It also carries a manual `Stripe--WebhookSecret` vault write — harmless, but premature: billing is build item 7 and nothing reads that secret yet |
 | `prod_phase2` placeholders | See Environments above |

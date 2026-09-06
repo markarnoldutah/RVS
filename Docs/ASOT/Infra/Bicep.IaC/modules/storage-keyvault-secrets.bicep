@@ -1,10 +1,9 @@
 // ──────────────────────────────────────────────────────────────
 // Module: Store Storage Account secrets in Key Vault
 // ──────────────────────────────────────────────────────────────
-// Stores the Blob Storage endpoint and the Azure Tables
-// connection string in Key Vault for the RVS API configuration
-// provider. The API uses Managed Identity for Blob access and
-// the connection string for Azure Tables.
+// Stores the Blob Storage endpoint in Key Vault for the RVS API
+// configuration provider. The API uses Managed Identity for Blob
+// access (no key needed).
 // ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
@@ -34,16 +33,6 @@ resource blobEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   name: 'BlobStorage--Endpoint'
   properties: {
     value: storageAccount.properties.primaryEndpoints.blob
-    contentType: 'text/plain'
-  }
-}
-
-@description('Azure Tables connection string — used by the API for audit logging and tenant access gate.')
-resource tablesConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
-  parent: keyVault
-  name: 'AzureTables--ConnectionString'
-  properties: {
-    value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
     contentType: 'text/plain'
   }
 }

@@ -491,7 +491,7 @@ module cosmosKeyVaultSecrets 'modules/cosmos-keyvault-secrets.bicep' = if (deplo
   }
 }
 
-// ── Key Vault Secrets (Storage — Blob + Tables) ───────────────
+// ── Key Vault Secrets (Storage — Blob endpoint) ──────────────
 
 module storageKeyVaultSecrets 'modules/storage-keyvault-secrets.bicep' = if (deployStorageAccount && deployKeyVault) {
   name: 'deploy-storage-kv-secrets-${environmentName}'
