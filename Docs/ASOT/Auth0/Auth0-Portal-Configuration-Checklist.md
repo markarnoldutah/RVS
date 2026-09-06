@@ -1,7 +1,9 @@
 # Auth0 Portal Configuration Checklist
 
-**Updated:** March 25, 2026
-**Source:** RVS_Auth0_Identity_Version2.md (v2.2), RVS_Technical_PRD.md, Program.cs, ClaimsService.cs
+**Updated:** September 4, 2026
+**Source:** [`../RVS_Identity.md`](../RVS_Identity.md), `RVS.API/Program.cs`, `ClaimsService.cs`
+
+Portal-side steps only. The identity model itself is in [`../RVS_Identity.md`](../RVS_Identity.md).
 
 ---
 
@@ -44,7 +46,7 @@ Define all 21 permissions on the API under **APIs > RVS API > Permissions**:
 | `service-requests:search` | Search / filter service requests |
 | `service-requests:create` | Create a service request from the dealer dashboard |
 | `service-requests:update` | Update service request (status, notes, category) |
-| `service-requests:update-service-event` | Update Section 10A fields (repair action, parts, labor) |
+| `service-requests:update-service-event` | Technician repair-outcome fields. **Archived scope** — the permission still exists in `Program.cs`; do not assign it |
 | `service-requests:delete` | Delete a service request |
 | `attachments:read` | View / download attachments |
 | `attachments:upload` | Upload an attachment |
@@ -54,7 +56,7 @@ Define all 21 permissions on the API under **APIs > RVS API > Permissions**:
 | `locations:read` | View location details and list |
 | `locations:create` | Create a new physical location |
 | `locations:update` | Update location settings |
-| `analytics:read` | View service request analytics |
+| `analytics:read` | View service request analytics. **Archived scope** — the endpoint is a descope target; do not assign it |
 | `tenants:config:read` | View tenant configuration |
 | `tenants:config:create` | Bootstrap tenant configuration |
 | `tenants:config:update` | Update tenant configuration |
@@ -76,7 +78,7 @@ Create under **User Management > Roles**. Assign the permissions per the matrix 
 | **`dealer:regional-manager`** | `service-requests:read`, `search`, `create`, `update`, `update-service-event`, `delete` + `attachments:read`, `upload`, `delete` + `dealerships:read` + `locations:read`, `update` + `analytics:read` + `lookups:read` (14 permissions) |
 | **`dealer:manager`** | Same as `dealer:regional-manager` (14 permissions) |
 | **`dealer:advisor`** | `service-requests:read`, `search`, `create`, `update` + `attachments:read`, `upload` + `dealerships:read` + `locations:read` + `lookups:read` (9 permissions) |
-| **`dealer:technician`** | `service-requests:read`, `search`, `update-service-event` + `attachments:read`, `upload` + `dealerships:read` + `locations:read` + `lookups:read` (8 permissions) |
+| **`dealer:technician`** | **Archived scope** — there is no technician workflow. Do not create this role |
 | **`dealer:readonly`** | `service-requests:read`, `search` + `attachments:read` + `dealerships:read` + `locations:read` + `analytics:read` + `lookups:read` (7 permissions) |
 
 ---

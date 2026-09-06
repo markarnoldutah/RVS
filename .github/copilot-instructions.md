@@ -151,7 +151,7 @@ All feature implementation MUST follow Red → Green → Refactor. This is not o
 
 ### UI Component Library — MudBlazor
 
-All Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`, `RVS.MAUI.Tech`) use **MudBlazor 9.x** (Material Design 3). Do not use Microsoft.FluentUI.AspNetCore.Components.
+Both Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`) use **MudBlazor 9.x** (Material Design 3). Do not use Microsoft.FluentUI.AspNetCore.Components. There is no MAUI project — the technician app is archived.
 
 ### Setup (per project)
 - `wwwroot/index.html` (WASM) or `App.razor` (hosted): link `MudBlazor.min.css`, Roboto font, `MudBlazor.min.js`
@@ -190,7 +190,8 @@ All Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`, `RVS.MA
 This project is the approved MudBlazor prototype for the full wizard flow. Use it as the reference implementation when migrating or building new pages in `RVS.Blazor.Intake`.
 
 ### Project Documentation
-- Treat `Docs/ASOT/*.md` as the authoritative source for PRD/architecture decisions.
-- When answering questions about product behavior, always check `Docs/ASOT/` first.
-- Prefer the docs in `Docs/ASOT/` over older notes elsewhere in the repo.
+- Product canon is four documents at `Docs/`: `RVS_Overview.md` (what this is), `RVS_Spec.md` (**if a requirement isn't there, it isn't in scope**), `RVS_Plan.md` (build order and open questions), `RVS_Archive_Index.md` (what was cut and why).
+- `Docs/ASOT/*.md` describes **what is built** — Architecture, DataModel, Infrastructure, Identity, FrontEnd. Where code and Spec disagree, each doc has a coverage or gap table. The Spec is the target; ASOT is the current state.
+- `Docs/ARCHIVE/` and `Docs/Obsolete/` are frozen snapshots. Never cite them as current.
+- Scope was deliberately reduced to: anonymous intake → a one-page packet emailed to the service department → a thin manager app. DMS integration, two-way SMS, the technician app, scheduling, analytics/benchmarking, billing tiers and OEM data licensing are archived. Code for several still exists as a descope target — do not extend it.
 - .Bicep files in `Docs/ASOT/Infra/Bicep.IaC/` are the source of truth for Azure resource configuration. Do not rely on hand-drawn diagrams or outdated documentation for infrastructure details.

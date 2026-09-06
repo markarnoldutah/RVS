@@ -4,9 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Authoritative Docs
 
-- Product / architecture source of truth: [Docs/ASOT/](Docs/ASOT/) — PRD, Technical PRD, implementation plan, Cosmos data model, Auth0 identity, Magic Link storage. Prefer these over any older notes elsewhere in the repo.
-- Infra source of truth: Bicep files in [Docs/ASOT/Infra/](Docs/ASOT/Infra/). Do not trust hand-drawn diagrams or older docs for Azure resource configuration.
+**Product canon — four documents, and that is the whole set:**
+
+| Document | Use it when |
+| --- | --- |
+| [Docs/RVS_Overview.md](Docs/RVS_Overview.md) | You need to remember what this is, or explain it to someone |
+| [Docs/RVS_Spec.md](Docs/RVS_Spec.md) | You're writing code. **If a requirement isn't here, it isn't in scope** |
+| [Docs/RVS_Plan.md](Docs/RVS_Plan.md) | You're deciding what to do next, or need an open question |
+| [Docs/RVS_Archive_Index.md](Docs/RVS_Archive_Index.md) | You need something from the prior document set, or why it was cut |
+
+**Technical detail** lives in [Docs/ASOT/](Docs/ASOT/): [RVS_Architecture.md](Docs/ASOT/RVS_Architecture.md), [RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md), [RVS_Infrastructure.md](Docs/ASOT/RVS_Infrastructure.md), [RVS_Identity.md](Docs/ASOT/RVS_Identity.md), [RVS_FrontEnd.md](Docs/ASOT/RVS_FrontEnd.md). These describe **what is built**; the Spec describes what is intended. Each ASOT doc carries a coverage or gap table where the two differ.
+
+- Infra source of truth: Bicep files in [Docs/ASOT/Infra/Bicep.IaC/](Docs/ASOT/Infra/Bicep.IaC/). Do not trust hand-drawn diagrams or older docs for Azure resource configuration.
+- GTM material: [Docs/Marketing/](Docs/Marketing/) — Positioning, GoToMarket, Objections.
+- [Docs/ARCHIVE/](Docs/ARCHIVE/) and [Docs/Obsolete/](Docs/Obsolete/) are frozen snapshots. **Never cite them as current.**
 - Per-language instruction files also live in [.github/instructions/](.github/instructions/) (C#, ASP.NET, Blazor, Markdown, Testing).
+
+**Scope discipline.** The product was deliberately reduced to: anonymous intake → a one-page packet emailed to the service department → a thin manager app. Archived and out of scope: DMS integration, two-way SMS, technician/MAUI app, scheduling, benchmarking and analytics, billing tiers, OEM data licensing. Code for several of these still exists and is a descope target, not a feature — see the descope backlogs in the ASOT docs before extending anything in those areas.
 
 ## Solution Layout
 
@@ -20,10 +34,10 @@ Solution file is [RVS.slnx](RVS.slnx) (new SLNX format — `dotnet` CLI handles 
 | [RVS.Infra.AzBlobRepository](RVS.Infra.AzBlobRepository/) | Azure Blob Storage (attachments). |
 | [RVS.Infra.AzTablesRepository](RVS.Infra.AzTablesRepository/) | Azure Tables (tenant access gate). |
 | [RVS.Infra.AzCredentials](RVS.Infra.AzCredentials/) | Shared credential helpers. |
-| [RVS.Blazor.Intake](RVS.Blazor.Intake/) | Blazor **WASM** — anonymous 7-step customer intake wizard. |
+| [RVS.Blazor.Intake](RVS.Blazor.Intake/) | Blazor **WASM** — anonymous 8-step customer intake wizard. |
 | [RVS.Blazor.Manager](RVS.Blazor.Manager/) | Blazor **WASM** — authenticated dealer manager desktop (OIDC/Auth0, PKCE). |
-| [RVS.UI.Shared](RVS.UI.Shared/) | Shared typed API clients (`ServiceRequestApiClient`, `AnalyticsApiClient`, `LookupApiClient`, `AttachmentApiClient`) + `ThemeService`. |
-| [RVS.Data.Cosmos.Seed](RVS.Data.Cosmos.Seed/) | Idempotent seeder — creates 9 containers with partition keys/unique keys/indexing, seeds test data. |
+| [RVS.UI.Shared](RVS.UI.Shared/) | Shared typed API clients (`IntakeApiClient`, `ServiceRequestApiClient`, `LookupApiClient`, `AttachmentApiClient`, and `AnalyticsApiClient` — archived scope), client-side validators, badge components. **`ThemeService` is not here** — each Blazor app has its own copy. |
+| [RVS.Data.Cosmos.Seed](RVS.Data.Cosmos.Seed/) | Idempotent seeder — creates 10 containers with partition keys/unique keys/indexing, seeds test data. |
 | [Tests/RVS.Domain.Tests](Tests/RVS.Domain.Tests/) | Pure logic: mappers, validators, entities. |
 | [Tests/RVS.API.Tests](Tests/RVS.API.Tests/) | Services, middleware, controllers (with Moq). |
 | [Tests/RVS.UI.Shared.Tests](Tests/RVS.UI.Shared.Tests/) | Shared API client tests. |
@@ -65,7 +79,7 @@ WASM workload is required for Blazor projects. CI installs it via `dotnet worklo
 
 ## Architecture at a Glance
 
-**Multi-tenant B2B SaaS for RV dealerships.** Tenant = corporation, partitioned by `tenantId` (= Auth0 `org_id`). Three client apps share one API.
+**Multi-tenant B2B SaaS for RV dealerships.** Tenant = corporation, partitioned by `tenantId`. **RVS does not use Auth0 Organizations** — `tenantId` comes from the user's `app_metadata`, injected into the JWT by a Post-Login Action. Values are conventionally shaped like `org_acme_rv`, but they are ordinary strings, not Auth0 org identifiers. Two client apps share one API.
 
 ### Request → Response Flow
 
@@ -82,9 +96,11 @@ WASM workload is required for Blazor projects. CI installs it via `dotnet worklo
 4. **Services** (sealed, scoped): guard clauses → repository → return domain entities.
 5. **Repositories** (scoped, Cosmos): all queries are **single-partition on `tenantId`** — cross-partition is structurally prevented.
 
-### Cosmos DB (9 containers)
+### Cosmos DB (10 containers, kebab-case)
 
-`serviceRequests`, `customerProfiles`, `globalCustomerAccts`, `assetLedger`, `dealerships`, `locations`, `tenantConfigs`, `lookupSets`, `slugLookup`. `ConnectionMode.Gateway` (server-side caching enabled). Container creation + seeding lives in [RVS.Data.Cosmos.Seed/Program.cs](RVS.Data.Cosmos.Seed/Program.cs).
+`service-requests`, `customer-profiles`, `global-customer-accounts`, `asset-ledger`, `dealerships`, `locations`, `slug-lookups`, `tenant-configs`, `lookup-sets`, `rv-warranty-rules`. `ConnectionMode.Gateway` (server-side caching enabled). Container creation + seeding lives in [RVS.Data.Cosmos.Seed/Program.cs](RVS.Data.Cosmos.Seed/Program.cs); the same set is declared in `modules/cosmos-db.bicep`. Partition keys and entity shapes are in [Docs/ASOT/RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md).
+
+Most containers partition on `/tenantId`. The exceptions are deliberate: `global-customer-accounts` on `/email`, `asset-ledger` on `/assetId`, `slug-lookups` on `/slug`, `lookup-sets` on `/category`, `rv-warranty-rules` on `/manufacturer`. `rv-warranty-rules` is seeded but has no repository and is never read.
 
 ### Auth & Claims
 
@@ -95,13 +111,14 @@ WASM workload is required for Blazor projects. CI installs it via `dotnet worklo
 
 ### AI / External Integrations
 
-All integrations have a `Mock*`/`NoOp*` fallback behind the same interface — toggled by `Integrations:UseMocks` in config. Real implementations use `Microsoft.Extensions.Http.Resilience.AddStandardResilienceHandler` with per-client timeouts:
+All integrations have a `Mock*`/`NoOp*` fallback behind the same interface, nominally toggled by `Integrations:UseMocks`. **That flag is `false` in every appsettings file, including Development** — the fallback that actually fires is the secondary one: if the relevant endpoint setting is absent, registration silently degrades to the rule-based or no-op implementation. Real implementations use `Microsoft.Extensions.Http.Resilience.AddStandardResilienceHandler` with per-client timeouts:
 
 - VIN Decode → NHTSA vPIC (`NhtsaVinDecoderClient`)
 - VIN Extraction (vision) → Azure OpenAI (`AzureOpenAiVinExtractionService`)
 - Speech-to-Text → Azure OpenAI Whisper (**northcentralus** — Whisper 001 Standard not in westus3)
 - Issue text refinement + categorization → Azure OpenAI (fallback: `RuleBasedIssueTextRefinementService` / `RuleBasedCategorizationService`)
-- Email + SMS → Azure Communication Services (fallback: NoOp)
+- Email → Azure Communication Services (fallback: NoOp). Today it only sends a customer confirmation; **nothing emails a service manager yet** — that is Spec section B, the current work
+- SMS → Azure Communication Services (fallback: NoOp). **Archived scope**, outbound-only, descope target
 
 ### Secrets Model
 

@@ -1,7 +1,7 @@
 # RVS — Overview
 
 **Version:** 1.0 · September 4, 2026
-**Status:** Active. This document set supersedes everything in `/archive`.
+**Status:** Active. This document set supersedes everything in [`ARCHIVE/`](ARCHIVE/).
 
 ---
 
@@ -40,7 +40,7 @@ Both prospects said some version of *"not another dashboard."* The product is bu
 - **Not a scheduling system.** No calendar, no bay assignment, no capacity planning.
 - **Not a messaging platform.** RVS sends a service request to the shop and a status link to the customer. It does not host conversations. Two-way SMS is out.
 - **Not an analytics product.** No benchmarking, no dashboards of charts, no cross-dealer comparison.
-- **Not integrated with any DMS.** Deliberately. Email plus a paste-ready text block does the same job today without a partner program. See `RVS_Archive_Index.md` for the analysis behind that call.
+- **Not integrated with any DMS.** Deliberately. Email plus a paste-ready text block does the same job today without a partner program. See [`RVS_Archive_Index.md`](RVS_Archive_Index.md) for the analysis behind that call.
 
 ## The one thing that must not be dropped
 
