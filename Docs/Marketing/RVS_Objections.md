@@ -1,6 +1,6 @@
 # RVS — Objection Handling
 
-**Version:** 1.0 · September 4, 2026
+**Version:** 1.1 · September 6, 2026
 **Scope:** What to say in the room. Positioning is in `RVS_Positioning.md`.
 
 Every answer below has been rewritten for the reduced scope. The old answers leaned on benchmarking, cross-dealer data, a technician app and a four-tier price list — **none of that exists**, and claiming it now is both dishonest and unnecessary. The honest answer is usually stronger, because the product is small enough to demo instead of describe.
@@ -39,11 +39,19 @@ One setting has to change for a location to work: the recipient address. Everyth
 
 The one most founders skip. The dealer is comparing you to answering the phone, which they perceive as free.
 
-For the mobile tech, the number is concrete: a wasted trip is $100–200 in time and fuel, and one avoided trip a month covers the tool several times over.
+> "It's $79 a month per store. Forty intake calls a day at three minutes each is about two hours of advisor time — call it a thousand dollars a month of somebody's day. I'm not claiming to eliminate that. A meaningful dent in it costs eight percent of it."
 
-For a dealership, the arithmetic is staff time. Forty intake calls a day at three minutes each is two hours of advisor time. You do not need to claim you eliminate it — a meaningful dent is enough.
+For the mobile tech the number is more concrete still: a wasted trip is $100–200 in time and fuel, and one avoided trip a month covers $39 several times over.
 
-Do not quote a price. Pricing is unresolved (Q6 in `../RVS_Plan.md`). The pilot is free.
+**Quote the price.** Pricing is settled — the numbers are in `RVS_Positioning.md`, the first sixty days are free at a named price, and refusing to quote reads as either hiding something or not knowing your own business. With a service manager, the second is worse.
+
+### "Why is it so cheap? What's the catch?"
+
+You will get this from the dealer group, and it is a real risk — cheap software gets treated as disposable. Do not get defensive and do not invent a reason.
+
+> "Because I want it running in your shop this month rather than in your procurement queue next quarter. It's priced so you can approve it yourself. It'll go up for people who sign later than you — yours won't."
+
+That is true, it flatters the buyer correctly, and it converts the low price from a quality signal into a scarcity one. It also commits you to grandfathering the early customers, which you should do anyway.
 
 ---
 
@@ -71,7 +79,9 @@ Answer these straight. The scope is deliberate and saying so builds more credibi
 | *"Will it write the repair order?"* | "No. It gives your advisor a paste-ready block so they don't retype the complaint." |
 | *"Do I have to log in every day?"* | "No, and that's the design goal. The write-up comes by email, and the status buttons are links in that email. There's a web app for settings and history; you shouldn't need it daily." |
 | *"What if the AI gets the category wrong?"* | "The customer can override it, and the category is advisory. The part that matters is their own description, verbatim, plus the follow-up answers — those aren't AI-generated content, they're the customer's answers." |
-| *"Who else is using it?"* | Honest, in months one to six: "Nobody yet — you'd be the first, which is why the pilot is free and why I'll change whatever doesn't fit." Do not invent references. |
+| *"Who else is using it?"* | Honest, in months one to six: "Nobody yet — you'd be the first, which is why your first sixty days are free and why I'll change whatever doesn't fit." Do not invent references. |
+| *"Can you do better on price?"* | "Not on the monthly — it's the same for everyone, and it's already priced so you don't need to ask anyone's permission. What I can do is the first sixty days free and lock your rate." Discount time, never the number. |
+| *"Send me something and I'll think about it."* | Send the packet, then ask for the service inbox address before you leave: "Give me the email address and I'll have it live before I'm out of the parking lot — nothing happens until a customer submits." Setup is one field. Use it. |
 
 ---
 
@@ -79,6 +89,6 @@ Answer these straight. The scope is deliberate and saying so builds more credibi
 
 - Anything about benchmarking, industry data, cross-dealer insight or OEM analytics. **The capability does not exist.**
 - Anything about a technician mobile app.
-- Any specific price.
+- Any price other than the ones in `RVS_Positioning.md` — improvised discounts and invented tiers, not quoting the number, are the failure mode here.
 - Any customer count or case-study statistic you cannot name.
 - "No one else is doing this."
