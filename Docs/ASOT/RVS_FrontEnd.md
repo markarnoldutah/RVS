@@ -50,7 +50,7 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 | `/claims-debug` | `ClaimsDebug` | **No** — self-labelled "remove before production" |
 | `/authentication/{action}` | `Authentication` | Yes |
 
-Missing from Spec C: **no resend action anywhere** (C-5), and **no disposition flow with a reason code** (C-4) — closing is just setting status to Completed or Cancelled. Status vocabulary is `New / InProgress / WaitingOnCustomer / WaitingOnParts / Completed / Cancelled`, which is not the Spec's suggested `New → Received → In Progress → Ready → Closed` plus `Cancelled`. That difference is open question Q5.
+Missing from Spec C: **no resend action anywhere** (C-5), and **no disposition flow with a reason code** (C-4) — closing is just setting status to Completed or Cancelled. Status vocabulary is `New / InProgress / WaitingOnCustomer / WaitingOnParts / Completed / Cancelled`; the Spec (C-3 / C-8) was aligned to this set in issue #428, closing Q5.
 
 Nothing in either app renders a packet, a PDF, an email preview, or a paste block. Searching the frontend for "packet" returns nothing.
 

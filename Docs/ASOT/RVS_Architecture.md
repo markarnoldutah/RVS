@@ -108,7 +108,7 @@ This is the honest state of `../RVS_Spec.md`.
 | **B-1 … B-7 packet and delivery** | **Not built** | No composition, no PDF, no manager email, no paste block. See below |
 | C-1 list, filter | **Built** | Far heavier than specced — 10 search fields |
 | C-2 detail + status + resend | **Partial** | Detail and status exist. **No resend** |
-| C-3 set status | **Built** | Vocabulary differs from Spec — see Q5 |
+| C-3 set status | **Built** | Vocabulary matches Spec C-3 / C-8 (aligned to code in issue #428) |
 | C-4 disposition + reason code | **Not built** | Only status → Cancelled |
 | C-5 resend packet | **Not built** | |
 | C-6 per-location settings | **Partial** | Location CRUD + capabilities exist; the B-6 packet settings do not |

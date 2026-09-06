@@ -102,18 +102,26 @@ The manager app exists so a status update can happen. It is not a workspace and 
 |---|---|
 | **C-1** | Authenticated (Auth0). List of service requests for the location, newest first. Filter by status. That's the whole list view. |
 | **C-2** | Detail view: renders the packet, plus the status control and a resend button. Nothing else. |
-| **C-3** | Set status. Suggested set: `New → Received → In Progress → Ready → Closed`, plus `Cancelled`. Changing status updates what the customer sees on their status page. |
+| **C-3** | Set status. One fixed set, the same for every location: `New`, `In Progress`, `Waiting on Parts`, `Waiting on Customer`, `Completed`, `Cancelled` (stored as `New` / `InProgress` / `WaitingOnParts` / `WaitingOnCustomer` / `Completed` / `Cancelled`). The path is `New → In Progress → Completed`; the two `Waiting on` values are holds off that path; `Cancelled` is a manual stop. Any status may move to any other. Changing status updates what the customer sees on their status page. Per-location configurable vocabularies are rejected — see C-8. |
 | **C-4** | Disposition: close a request without work (duplicate, spam, wrong location, customer withdrew), with a reason code. |
 | **C-5** | Resend the packet to the configured recipients or an ad-hoc address. |
 | **C-6** | Location settings: the B-6 configuration. |
 
 ### C-7 — Status updates without logging in *(recommended)*
 
-The packet email carries one-click action links — *Received*, *In Progress*, *Ready* — each a tokenized single-purpose URL. Clicking one sets the status and shows a small confirmation page. No login, no app.
+The packet email carries one-click action links — *In Progress*, *Waiting on Parts*, *Completed* — each a tokenized single-purpose URL, and each one of the C-3 statuses. Clicking one sets the status and shows a small confirmation page. No login, no app.
 
 This matters more than it looks. If setting status requires opening a web app every day, RVS is still a thing people have to visit — the objection the whole design is meant to answer. One-click email actions mean the manager app becomes optional for daily operation and is only opened for configuration and history.
 
 Cost is small: the tokens, endpoints, and audit logging are the same machinery as the customer status link. Decision is Q2 in `RVS_Plan.md`.
+
+### C-8 — Status vocabulary decision
+
+**Decided (issue #428, closes Q5): one fixed set, adopted from the code.** The statuses are `New`, `InProgress`, `WaitingOnParts`, `WaitingOnCustomer`, `Completed`, `Cancelled` (C-3), the set already implemented in `StatusTransitions`. Every location uses it as-is.
+
+**Per-location configurable status vocabularies are rejected.** They fail the scope filter on craft-over-architecture and on what-comes-out: a configuration surface, per-tenant migration, and customer-status-page copy that varies by location, none of which makes the packet better. A solo mobile tech and a multi-location dealership are both served by the same six values — `WaitingOnParts` and `WaitingOnCustomer` cover the real holds, and closing without work is C-4 disposition, not a status.
+
+Transitions are unrestricted: any status may move to any other (self-transitions excepted). There is no `Received` or `Ready` state — the earlier suggested set in this doc is superseded.
 
 ---
 
