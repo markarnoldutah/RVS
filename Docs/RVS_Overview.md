@@ -57,8 +57,6 @@ Everything downstream of the ledger — the anonymization pipeline, k-anonymity,
 
 ## Document set
 
-Five documents. That is the whole set.
-
 | Document | Use it when |
 |---|---|
 | `RVS_Overview.md` | You need to remember what this is, or explain it to someone |
@@ -67,7 +65,14 @@ Five documents. That is the whole set.
 | `RVS_Money.md` | You need unit economics, cost structure, a revenue scenario, or the break-even |
 | `RVS_Archive_Index.md` | You need something from the old document set, or want to know why something was cut |
 
-`RVS_Money.md` was the fifth, added September 7, 2026 after the pricing decision — the test below was applied and it failed to fit anywhere. If you find yourself adding a sixth, check whether it belongs as a section in one of these first.
+**There is no target number of documents.** The rule is placement, not count:
+
+- **One authoritative home per fact.** Anything stated in two places disagrees eventually — that is precisely what happened to the prior set.
+- **A document earns its place by answering a question someone actually asks.** If nobody reaches for it, it is notes, not canon.
+- **Documents describing capability that doesn't exist belong in `ARCHIVE/`.** The prior set specced things years from being built.
+- **Register a new one in this table, in `CLAUDE.md`, and in `.github/copilot-instructions.md`, on the same commit.** An unregistered document is where drift starts.
+
+Splitting a document that has grown a second subject is as valid as merging two that say the same thing. Judge the layout, not the count.
 
 ---
 

@@ -190,7 +190,7 @@ Both Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`) use **
 This project is the approved MudBlazor prototype for the full wizard flow. Use it as the reference implementation when migrating or building new pages in `RVS.Blazor.Intake`.
 
 ### Project Documentation
-- Product canon is four documents at `Docs/`: `RVS_Overview.md` (what this is), `RVS_Spec.md` (**if a requirement isn't there, it isn't in scope**), `RVS_Plan.md` (build order and open questions), `RVS_Archive_Index.md` (what was cut and why).
+- Product canon is at `Docs/`: `RVS_Overview.md` (what this is), `RVS_Spec.md` (**if a requirement isn't there, it isn't in scope**), `RVS_Plan.md` (build order and open questions), `RVS_Money.md` (unit economics, cost structure, revenue scenarios), `RVS_Archive_Index.md` (what was cut and why). There is no fixed number of canon documents — one authoritative home per fact, and a new one gets registered here, in `CLAUDE.md` and in `RVS_Overview.md` on the same commit.
 - `Docs/ASOT/*.md` describes **what is built** — Architecture, DataModel, Infrastructure, Identity, FrontEnd. Where code and Spec disagree, each doc has a coverage or gap table. The Spec is the target; ASOT is the current state.
 - `Docs/ARCHIVE/` and `Docs/Obsolete/` are frozen snapshots. Never cite them as current.
 - Scope was deliberately reduced to: anonymous intake → a one-page packet emailed to the service department → a thin manager app. DMS integration, two-way SMS, the technician app, scheduling, analytics/benchmarking, billing tiers and OEM data licensing are archived. Code for several still exists as a descope target — do not extend it.
