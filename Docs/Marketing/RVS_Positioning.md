@@ -1,6 +1,6 @@
 # RVS — Positioning
 
-**Version:** 1.0 · September 4, 2026
+**Version:** 1.2 · September 7, 2026
 **Scope:** What we say RVS is, and who we say it against. Aligned to `../RVS_Overview.md`.
 
 The prior positioning set — four-tier pricing, OEM data licensing, benchmarking, the cross-dealer moat, the technician app — described a product that is now archived. The competitor facts in those documents were good and are retained here. The strategy built on top of them is not.
@@ -92,6 +92,8 @@ SMB CRM and invoicing, roughly $30–100/mo. Different category — that is the 
 
 **The name overpromises.** "RV Service Intelligence" describes the archived product. Don't let it drag the roadmap back toward analytics.
 
+There is a cheap fix that needs no renaming: **sell the artifact, not the company.** Name the packet and make it the noun in every sentence — the thing a shop buys is a one-page service request write-up, not a platform. Lead with `rvintake.com` publicly and leave `rvserviceflow.com` as the corporate domain. The domain is held — confirmed September 6, 2026 — so the only thing standing between here and a counter QR code is pointing it at the intake app. The repo's one zone file is for `rvserviceflow.com`; `rvintake.com` has no DNS recorded here yet.
+
 ---
 
 ## Forbidden phrases
@@ -103,17 +105,53 @@ Not defensible. Remove on sight.
 - "Replacement for your DMS / CRM / messaging tool."
 - "First mover" anything.
 - Any claim about benchmarking, industry datasets, cross-dealer insight, or OEM data — **that capability is archived and does not exist.**
-- Any specific pricing. See below.
+- Any pricing other than the numbers below. Improvised discounts and invented tiers are the failure mode here, not quoting a price.
 
 ---
 
 ## Pricing
 
-**Open.** The old four-tier model priced a product that no longer exists, and nothing has replaced it — this is Q6 in `../RVS_Plan.md`, owned by GTM, needed before billing is built.
+**Decided — Q6 closed.** One product, one price, per location. No tiers.
 
-Two anchors worth holding while it's decided: the SMB tools a solo operator already buys sit at roughly $30–100/mo, and a dealer group paying $450–3,000/mo for its DMS will not rationally pay more than that for a layer in front of it.
+| | Price | Who |
+|---|---|---|
+| **Mobile** | **$39/mo** | One person, no fixed shop |
+| **Shop** | **$79 per location/mo** | 1–2 locations |
+| | **$69 per location/mo** | 3–9 locations |
+| | **$59 per location/mo** | 10+ locations |
+| **Annual prepay** | Two months free | Any |
 
-Do not quote a number to a prospect until this is settled. If pressed, say the pilot is free and pricing follows the pilot.
+Everything is included at every price. Mobile is not a reduced tier — it is the same product at a different unit, because a solo operator has no "location" to count. It is defined by eligibility, never by a smaller feature set. If a two-truck shop takes the $39, let them; you want the packets.
+
+Quote these numbers. The free period is a discount, not a mystery — see "Terms, and the first sixty days" in `RVS_GoToMarket.md`.
+
+**Why there are no tiers.** Tiers need feature gates, and nothing here is gateable without breaking the scope filter in `../RVS_Plan.md`. Gate the PDF or the photos and the packet gets worse — filter #1, disqualifying. Gate the manager app and you are charging for the thing you tell people they will never open. The archived four-tier model worked because it gated benchmarking, SSO and a technician app. None of those exist.
+
+Per location is the right unit because it is already the product's own boundary: `rvintake.com/{locationSlug}`, the B-6 configuration, the recipient list. A dealer group grows into more money without a second pricing conversation.
+
+**Why $79 and not $199.** The binding constraint is not value, it is who can say yes. The whole motion is *ask a service manager, never a CIO*, and a service manager's discretionary spend is a few hundred dollars a month. Two stores at $79 is $158 — a corporate card, not a procurement cycle. At $199 per location a five-store pilot is $1,000/mo, which routes to exactly the person `RVS_GoToMarket.md` says to avoid, at exactly the cost in months it warns about. **This price buys sales velocity. It is not a valuation of the product.** Do not optimize it upward before three shops are running on it.
+
+The value arithmetic is comfortable regardless. Forty intake calls a day at three minutes each is about two hours of advisor time, on the order of $1,000/month per store; $79 is roughly 8% of the labor it dents. It also sits sanely under the $450–3,000/mo that same dealer pays for the DMS this feeds.
+
+**Against the functionality, $79 is low, and that is deliberate.** Spec A-9 through A-12 are real capability — dictation, VIN-from-photo, AI follow-up questions, issue insights — on top of NHTSA decode, direct-to-blob attachments, a rendered PDF, the paste block, the status page and one-click status links, with per-submission Azure OpenAI cost behind them. The buyer does not price that machinery; they price the artifact in their inbox against answering the phone. The gap between what the product does and what it sells for today is the first thing to revisit once there is usage to point at.
+
+**Models rejected, so they stop coming back:**
+
+- **Per-packet or usage pricing.** It suppresses the exact behavior the product depends on — a location metered per submission stops promoting the link — and early volume is what produces both proof and the X-2 ledger. It also makes the invoice variable, which invites scrutiny a flat $79 never gets. This is the natural second model for a high-volume group, not the first.
+- **Free intake, paid packet.** The packet is the product. There is nothing left on the other side of that line.
+- **Charging the RV owner.** No.
+
+Fair-use cap is 300 requests per location per month. It exists to stop an absurd outlier, not to meter. Do not feature it — and note that a $79 location does not reach cost break-even until roughly 2,460 requests a month (`../RVS_Money.md`), so the cap has about 8× of headroom. If a dealer group ever balks at it, raise it. It is protecting nothing.
+
+Serving cost, margins and the revenue scenarios these prices produce are in `../RVS_Money.md`.
+
+**Don't build billing yet.** Build item 7 is two sprints. The first five customers get a hand-sent invoice and a Stripe payment link. Put the month's request count on the invoice line item — *"September — 14 service requests"* — which is the cheapest available answer to the renewal risk below.
+
+### The renewal risk nobody had written down
+
+A product designed so that nobody logs in has no usage signal and nothing to renew against. In month four an invoice arrives to someone with no recent memory of the value. That is not an argument for a dashboard. It is evidence that the scope filter has no category for *protects revenue*: the obvious fix, a monthly recap email, fails filter #1 outright because it makes no individual packet better.
+
+Recorded rather than solved. The invoice line item does the same job for zero product work. If something harder ever needs this category, the filter gets an honest amendment then — it does not get to make a commercial decision by accident in the meantime.
 
 ---
 

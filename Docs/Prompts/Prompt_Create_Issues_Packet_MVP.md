@@ -23,7 +23,7 @@ Add every issue to the project as you create it. Do not batch this to the end.
 
 ### Before you start
 
-Read these four files in the repo. They are the authority, and this prompt is a derivative of them — if the two disagree, the repo wins and you should say so rather than guessing:
+Read these files in the repo. They are the authority, and this prompt is a derivative of them — if the two disagree, the repo wins and you should say so rather than guessing:
 
 - `Docs/RVS_Spec.md` — requirement IDs `A-n`, `B-n`, `C-n`, `X-n`. **If a requirement isn't there, it isn't in scope.**
 - `Docs/RVS_Plan.md` — build order, ship criteria, the scope filter, open questions `Q1`–`Q8`
