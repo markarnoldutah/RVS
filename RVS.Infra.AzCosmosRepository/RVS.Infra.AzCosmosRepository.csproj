@@ -8,11 +8,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.59.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\RVS.Domain\RVS.Domain.csproj" />
-    <ProjectReference Include="..\RVS.Infra.AzCredentials\RVS.Infra.AzCredentials.csproj" />
   </ItemGroup>
 
 </Project>

@@ -19,8 +19,6 @@ Product canon is `../RVS_Overview.md`, `../RVS_Spec.md`, `../RVS_Plan.md`. This 
 | `RVS.Blazor.Manager` | Authenticated manager WASM app | Core, needs descoping |
 | `RVS.UI.Shared` | Typed API clients, validators, badge components | Core |
 | `RVS.Data.Cosmos.Seed` | Idempotent container creation + test data | Core |
-| `RVS.Infra.AzTablesRepository` | Tables access | **Dead** — see Known gaps |
-| `RVS.Infra.AzCredentials` | Credential helper | **Dead** — referenced by two csproj, called by nothing |
 
 ---
 
@@ -155,11 +153,9 @@ Built for capability the Overview archives. Deleting this is real work and is no
 
 | Item | Detail |
 |---|---|
-| Tenant access gate | `ITenantAccessRepository` has no implementation and its registration is commented out in `Program.cs`. `TablesAuditRepository` throws `NotImplementedException` from every method and is unregistered. The middleware runs; the backing store does not exist |
-| `RVS.Infra.AzTablesRepository`, `RVS.Infra.AzCredentials` | Effectively dead projects |
+| Tenant access gate | `TenantAccessGateMiddleware` reads `LoginsEnabled` from Cosmos `tenant-configs` via `ITenantConfigService.GetAccessGateAsync` and returns 403 for a disabled tenant. The dead `ITenantAccessRepository` interface and the `RVS.Infra.AzTablesRepository` / `RVS.Infra.AzCredentials` projects (plus the `AzureTables--ConnectionString` secret) were removed in issue #462. Remaining work is the end-to-end "disabled tenant → 403" test tracked in #465 |
 | `build-mobile.yml` | Builds `RVS.MAUI.Tech`, which is not in the repo. The workflow cannot succeed |
 | Prod Azure OpenAI | `publicNetworkAccess: Disabled` with no private endpoint declared — unreachable as written. See `RVS_Infrastructure.md` |
-| `AzureTables--ConnectionString` | Built from an account key while `allowSharedKeyAccess=false` in every environment |
 | Container naming | Bicep and seeder agree on 10 kebab-case containers. Older docs claimed 9 camelCase |
 
 ---

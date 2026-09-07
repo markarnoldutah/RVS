@@ -1,4 +1,3 @@
-using Azure.Data.Tables;
 using Azure.Core;
 using Azure.Identity;
 using Azure.Storage.Blobs;
@@ -208,15 +207,6 @@ builder.Services.AddSingleton<BlobServiceClient>(sp =>
     return new BlobServiceClient(new Uri(endpoint), credential);
 });
 
-// Azure Tables client
-builder.Services.AddSingleton<TableServiceClient>(sp =>
-{
-    var connectionString = builder.Configuration["AzureTables:ConnectionString"]
-        ?? throw new InvalidOperationException("AzureTables:ConnectionString configuration is missing.");
-
-    return new TableServiceClient(connectionString);
-});
-
 #region Repositories
 var cosmosDbId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvs-db";
 
@@ -282,9 +272,6 @@ builder.Services.AddScoped<ITenantConfigRepository>(sp =>
     var logger = sp.GetRequiredService<ILogger<CosmosTenantConfigRepository>>();
     return new CosmosTenantConfigRepository(client, cosmosDbId, logger);
 });
-
-// ITenantAccessRepository — implemented in RVS.Infra.AzTablesRepository (registered separately when ready)
-// builder.Services.AddScoped<ITenantAccessRepository, TablesTenantAccessRepository>();
 #endregion
 
 #region Services
