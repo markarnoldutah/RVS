@@ -10,6 +10,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RVS.Domain\RVS.Domain.csproj" />
+    <!-- PDF renderer lives in RVS.API (carries the QuestPDF dependency). Dev-only tool,
+         not deployed, so pulling the API in for a byte[] renderer is acceptable here. -->
+    <ProjectReference Include="..\RVS.API\RVS.API.csproj" />
   </ItemGroup>
 
 </Project>

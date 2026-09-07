@@ -1,34 +1,67 @@
+using RVS.API.Packets;
 using RVS.Domain.Packets;
 using RVS.PacketDump.Html;
 
-// Renders sample service packets to standalone HTML files so the print output can be
-// checked on a real shop printer at Letter and A4 (issue #431, Spec B-3). Dev utility
-// only — not part of any deployable artifact.
+// Renders sample service packets to standalone files so the print output can be checked
+// on a real shop printer at Letter and A4 (issues #431 HTML / #432 PDF, Spec B-3).
+// Dev utility only — not part of any deployable artifact.
 //
-//   dotnet run --project RVS.PacketDump.HTML                 # writes ./packet-*.html
-//   dotnet run --project RVS.PacketDump.HTML -- ~/Desktop    # writes into a directory
-//   dotnet run --project RVS.PacketDump.HTML -- out.html --full
+//   dotnet run --project RVS.PacketDump.HTML                      # ./packet-*.html + .pdf
+//   dotnet run --project RVS.PacketDump.HTML -- ~/Desktop         # into a directory
+//   dotnet run --project RVS.PacketDump.HTML -- --pdf --full      # one PDF, full packet
+//   dotnet run --project RVS.PacketDump.HTML -- ~/Desktop/p.html  # extension fixes format
 //
-// Open the file in a browser and use its print dialog (Cmd/Ctrl-P) to choose paper size
-// and print or save as PDF. The renderer deliberately leaves paper size to that dialog.
+// Switches:
+//   --format html|pdf|both   (default both; also --html / --pdf)
+//   --variant full|minimal|both   (default both; also --full / --minimal)
+//
+// Open an HTML file in a browser and use its print dialog (Cmd/Ctrl-P) to choose paper
+// size; the renderer leaves paper size to that dialog. The PDF has a fixed page box
+// sized to the A4 ∩ Letter intersection, so it prints inside the margins of either.
 
-var (target, variant) = Args.Parse(args);
+var options = Args.Parse(args);
 
-var samples = new List<(string Name, ServicePacket Packet)>();
-if (variant is "full" or "both")
+var variants = new List<(string Name, ServicePacket Packet)>();
+if (options.Variant is "full" or "both")
 {
-    samples.Add(("packet-full.html", SamplePackets.Full()));
+    variants.Add(("full", SamplePackets.Full()));
 }
 
-if (variant is "minimal" or "both")
+if (options.Variant is "minimal" or "both")
 {
-    samples.Add(("packet-minimal.html", SamplePackets.Minimal()));
+    variants.Add(("minimal", SamplePackets.Minimal()));
 }
 
-foreach (var (name, packet) in samples)
+var formats = new List<string>();
+if (options.Format is "html" or "both")
 {
-    var path = target.IsDirectory ? Path.Combine(target.Value, name) : target.Value;
-    var html = PacketHtmlRenderer.Render(packet);
-    File.WriteAllText(path, html);
-    Console.WriteLine($"wrote {Path.GetFullPath(path)}  ({html.Length:N0} chars)");
+    formats.Add("html");
+}
+
+if (options.Format is "pdf" or "both")
+{
+    formats.Add("pdf");
+}
+
+foreach (var (name, packet) in variants)
+{
+    foreach (var format in formats)
+    {
+        var path = options.Target.IsDirectory
+            ? Path.Combine(options.Target.Value, $"packet-{name}.{format}")
+            : options.Target.Value;
+
+        if (format == "html")
+        {
+            var html = PacketHtmlRenderer.Render(packet);
+            File.WriteAllText(path, html);
+            Console.WriteLine($"wrote {Path.GetFullPath(path)}  ({html.Length:N0} chars)");
+        }
+        else
+        {
+            var pdf = PacketPdfRenderer.Render(packet);
+            File.WriteAllBytes(path, pdf);
+            Console.WriteLine($"wrote {Path.GetFullPath(path)}  ({pdf.Length:N0} bytes)");
+        }
+    }
 }
