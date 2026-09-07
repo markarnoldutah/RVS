@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 There is no target number of these. One authoritative home per fact; a document earns its place by answering a question someone actually asks; register a new one here, in `RVS_Overview.md` and in `.github/copilot-instructions.md` on the same commit. See "Document set" in the Overview.
 
-**Technical detail** lives in [Docs/ASOT/](Docs/ASOT/): [RVS_Architecture.md](Docs/ASOT/RVS_Architecture.md), [RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md), [RVS_Infrastructure.md](Docs/ASOT/RVS_Infrastructure.md), [RVS_Identity.md](Docs/ASOT/RVS_Identity.md), [RVS_FrontEnd.md](Docs/ASOT/RVS_FrontEnd.md). These describe **what is built**; the Spec describes what is intended. Each ASOT doc carries a coverage or gap table where the two differ.
+**Technical detail** lives in [Docs/ASOT/](Docs/ASOT/): [RVS_Architecture.md](Docs/ASOT/RVS_Architecture.md), [RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md), [RVS_Infrastructure.md](Docs/ASOT/RVS_Infrastructure.md), [RVS_Identity.md](Docs/ASOT/RVS_Identity.md), [RVS_FrontEnd.md](Docs/ASOT/RVS_FrontEnd.md), [RVS_PacketComposition.md](Docs/ASOT/RVS_PacketComposition.md). These describe **what is built**; the Spec describes what is intended. Each ASOT doc carries a coverage or gap table where the two differ.
 
 - Infra source of truth: Bicep files in [Docs/ASOT/Infra/Bicep.IaC/](Docs/ASOT/Infra/Bicep.IaC/). Do not trust hand-drawn diagrams or older docs for Azure resource configuration.
 - GTM material: [Docs/Marketing/](Docs/Marketing/) — Positioning, GoToMarket, Objections.
