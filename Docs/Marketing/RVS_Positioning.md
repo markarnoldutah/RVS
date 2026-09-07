@@ -1,6 +1,6 @@
 # RVS — Positioning
 
-**Version:** 1.1 · September 6, 2026
+**Version:** 1.2 · September 7, 2026
 **Scope:** What we say RVS is, and who we say it against. Aligned to `../RVS_Overview.md`.
 
 The prior positioning set — four-tier pricing, OEM data licensing, benchmarking, the cross-dealer moat, the technician app — described a product that is now archived. The competitor facts in those documents were good and are retained here. The strategy built on top of them is not.
@@ -141,7 +141,9 @@ The value arithmetic is comfortable regardless. Forty intake calls a day at thre
 - **Free intake, paid packet.** The packet is the product. There is nothing left on the other side of that line.
 - **Charging the RV owner.** No.
 
-Fair-use cap is 300 requests per location per month. It exists to stop an absurd outlier, not to meter. Do not feature it.
+Fair-use cap is 300 requests per location per month. It exists to stop an absurd outlier, not to meter. Do not feature it — and note that a $79 location does not reach cost break-even until roughly 2,460 requests a month (`../RVS_Money.md`), so the cap has about 8× of headroom. If a dealer group ever balks at it, raise it. It is protecting nothing.
+
+Serving cost, margins and the revenue scenarios these prices produce are in `../RVS_Money.md`.
 
 **Don't build billing yet.** Build item 7 is two sprints. The first five customers get a hand-sent invoice and a Stripe payment link. Put the month's request count on the invoice line item — *"September — 14 service requests"* — which is the cheapest available answer to the renewal risk below.
 

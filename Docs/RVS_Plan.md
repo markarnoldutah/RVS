@@ -1,6 +1,6 @@
 # RVS — Plan
 
-**Version:** 1.1 · September 6, 2026
+**Version:** 1.2 · September 7, 2026
 
 ---
 
@@ -111,6 +111,8 @@ Honest note on both: one interested mobile technician is a design partner and a 
 | Sep 6 2026 | **Mobile tech: subscription, never equity** (closes Q3) | Six months free, then $39/mo locked for life. Equity trades a percentage of the company for advice worth a few thousand dollars; converts a customer into an owner, which destroys the value as evidence (*"a shop that pays"* is a proof point, *"my partner likes it"* is not); puts a name on the cap table before there is anything to raise against; and cannot be undone. Upside, if wanted, is a named referral fee — costs nothing until it works. |
 | Sep 6 2026 | **Q4 downgraded from a gate to a second-conversation item** | The pilot is built to require nothing the service manager cannot authorize alone: counter QR code, advisor email signatures, and the service department's existing callback autoresponder. Replacing the location web form becomes the expansion ask, made once packets are landing. Who owns the pages is still worth knowing; it no longer holds up a pitch. |
 | Sep 6 2026 | **Stripe billing deferred until three shops are running** (build item 7) | The first five customers get a hand-sent invoice and a Stripe payment link. Takes two sprints off the critical path, and the billing model gets built against observed behaviour instead of a guess. The month's request count goes on the invoice line item — that is also the cheapest available answer to the renewal risk below. |
+| Sep 7 2026 | **Added a fifth canon document, `RVS_Money.md`** | The four-document rule says check whether it belongs as a section first; it was checked and it does not. Unit economics and cost structure are not product scope (`RVS_Spec.md`), not build order (this file), and not a sales argument (`Marketing/`), and the archived model in `ARCHIVE/ASOT/RVS_Implementation_Plan_v2.md` §7 priced the four-tier product. Folding it into this file would have doubled its length with material nobody reads while deciding what to build next. Registered in `CLAUDE.md`, `RVS_Overview.md` and `RVS_Archive_Index.md` on the same commit, because an unregistered fifth document is exactly the drift the rule exists to prevent. The rule now reads *five documents*, and the test applies to a sixth. |
+| Sep 7 2026 | **The financial shape is known and written down** (`RVS_Money.md`) | Serving cost is ~$0.03 per service request and fixed infrastructure is ~$117/month, so hard costs are covered by five shop locations and margins run 80–88% in every scenario. The base case still does not reach a founder salary inside 24 months; a $8,000/month draw needs ~135 locations. One 25-location dealer group is worth nineteen independent shops won one at a time, which makes the live dealer-group prospect the only genuinely load-bearing item in GTM. Ceiling at current scope and prices is under $1M ARR — recorded so no hire is ever made against a revenue curve that was not going to arrive. Two assumptions carry the whole model and neither is observed: requests per location, and founder close rate. The first three paying shops settle both; re-run the document then. |
 | Sep 6 2026 | **Recorded, not solved: the scope filter has no category for "protects revenue"** | A product designed so nobody logs in has no usage signal and nothing to renew against; in month four an invoice reaches someone with no recent memory of the value. The obvious fix — a monthly recap email — fails filter #1 outright, since it makes no individual packet better. Not building it. The invoice line item does the same job for zero product work. Logged so that the filter gets an honest amendment when something harder needs this category, rather than making a commercial decision by accident. | |
 
 ---
@@ -118,6 +120,8 @@ Honest note on both: one interested mobile technician is a design partner and a 
 ## Things worth staying honest about
 
 **The name overpromises.** "RV Service Intelligence" describes the archived product. What's being built is structured intake with good delivery. Not urgent, but don't let the name drive the roadmap back toward analytics.
+
+**The money is written down now, and it is small.** `RVS_Money.md` carries the unit economics, the cost structure and three revenue scenarios. The short version: hard costs are covered by five locations, margins are 80–88%, and the base case still does not pay a salary inside two years. Read it before making any commitment that assumes revenue.
 
 **At this scope, the product is a form and an email.** That is a real product with real value — but it is not hard to copy. The durable version of it is the quality of the diagnostic questions, the fit of the categories to actual RV failures, and how good the PDF looks on a shop counter. That's craft, not architecture. Spend the effort there.
 

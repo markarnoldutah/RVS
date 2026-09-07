@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Authoritative Docs
 
-**Product canon — four documents, and that is the whole set:**
+**Product canon — five documents, and that is the whole set:**
 
 | Document | Use it when |
 | --- | --- |
 | [Docs/RVS_Overview.md](Docs/RVS_Overview.md) | You need to remember what this is, or explain it to someone |
 | [Docs/RVS_Spec.md](Docs/RVS_Spec.md) | You're writing code. **If a requirement isn't here, it isn't in scope** |
 | [Docs/RVS_Plan.md](Docs/RVS_Plan.md) | You're deciding what to do next, or need an open question |
+| [Docs/RVS_Money.md](Docs/RVS_Money.md) | You need unit economics, cost structure, a revenue scenario, or the break-even |
 | [Docs/RVS_Archive_Index.md](Docs/RVS_Archive_Index.md) | You need something from the prior document set, or why it was cut |
 
 **Technical detail** lives in [Docs/ASOT/](Docs/ASOT/): [RVS_Architecture.md](Docs/ASOT/RVS_Architecture.md), [RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md), [RVS_Infrastructure.md](Docs/ASOT/RVS_Infrastructure.md), [RVS_Identity.md](Docs/ASOT/RVS_Identity.md), [RVS_FrontEnd.md](Docs/ASOT/RVS_FrontEnd.md). These describe **what is built**; the Spec describes what is intended. Each ASOT doc carries a coverage or gap table where the two differ.
