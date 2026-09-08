@@ -20,6 +20,12 @@ public sealed class BlobStorageService : IBlobStorageService
     private static readonly TimeSpan UploadSasDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan ReadSasDuration = TimeSpan.FromHours(1);
 
+    /// <summary>Azure caps a user delegation key — and therefore any SAS it signs — at 7 days.</summary>
+    private static readonly TimeSpan MaxReadSasDuration = TimeSpan.FromDays(7);
+
+    /// <summary>Backdates the SAS/key start to absorb clock skew between this host and Azure.</summary>
+    private static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(5);
+
     public BlobStorageService(BlobServiceClient blobServiceClient, ILogger<BlobStorageService> logger)
     {
         _blobServiceClient = blobServiceClient;
@@ -35,15 +41,18 @@ public sealed class BlobStorageService : IBlobStorageService
         var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
         var blobClient = containerClient.GetBlobClient(blobName);
 
-        var userDelegationKey = await GetUserDelegationKeyAsync(cancellationToken);
+        var startsOn = DateTimeOffset.UtcNow.Subtract(ClockSkew);
+        var expiresOn = DateTimeOffset.UtcNow.Add(UploadSasDuration);
+
+        var userDelegationKey = await GetUserDelegationKeyAsync(startsOn, expiresOn, cancellationToken);
 
         var sasBuilder = new BlobSasBuilder
         {
             BlobContainerName = containerName,
             BlobName = blobName,
             Resource = "b",
-            StartsOn = DateTimeOffset.UtcNow,
-            ExpiresOn = DateTimeOffset.UtcNow.Add(UploadSasDuration)
+            StartsOn = startsOn,
+            ExpiresOn = expiresOn
         };
         sasBuilder.SetPermissions(BlobSasPermissions.Write | BlobSasPermissions.Create);
 
@@ -58,23 +67,35 @@ public sealed class BlobStorageService : IBlobStorageService
     }
 
     /// <inheritdoc />
-    public async Task<string> GenerateReadSasUrlAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
+    public Task<string> GenerateReadSasUrlAsync(string containerName, string blobName, CancellationToken cancellationToken = default) =>
+        GenerateReadSasUrlAsync(containerName, blobName, ReadSasDuration, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<string> GenerateReadSasUrlAsync(string containerName, string blobName, TimeSpan lifetime, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
         ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lifetime, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(lifetime, MaxReadSasDuration);
 
         var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
         var blobClient = containerClient.GetBlobClient(blobName);
 
-        var userDelegationKey = await GetUserDelegationKeyAsync(cancellationToken);
+        var startsOn = DateTimeOffset.UtcNow.Subtract(ClockSkew);
+        var expiresOn = startsOn.Add(lifetime);
+
+        // Azure requires the SAS interval to sit inside the signing key's interval, and caps
+        // a user delegation key at 7 days from its start. The lifetime guard above keeps
+        // expiresOn within that ceiling, so the key can cover the SAS exactly.
+        var userDelegationKey = await GetUserDelegationKeyAsync(startsOn, expiresOn, cancellationToken);
 
         var sasBuilder = new BlobSasBuilder
         {
             BlobContainerName = containerName,
             BlobName = blobName,
             Resource = "b",
-            StartsOn = DateTimeOffset.UtcNow,
-            ExpiresOn = DateTimeOffset.UtcNow.Add(ReadSasDuration)
+            StartsOn = startsOn,
+            ExpiresOn = expiresOn
         };
         sasBuilder.SetPermissions(BlobSasPermissions.Read);
 
@@ -83,7 +104,9 @@ public sealed class BlobStorageService : IBlobStorageService
             Sas = sasBuilder.ToSasQueryParameters(userDelegationKey, _blobServiceClient.AccountName)
         };
 
-        _logger.LogDebug("Generated read SAS URL for blob {BlobName} in container {ContainerName}", blobName, containerName);
+        _logger.LogDebug(
+            "Generated read SAS URL for blob {BlobName} in container {ContainerName} valid for {Lifetime}",
+            blobName, containerName, lifetime);
 
         return uriBuilder.ToUri().ToString();
     }
@@ -132,14 +155,14 @@ public sealed class BlobStorageService : IBlobStorageService
     }
 
     /// <summary>
-    /// Requests a short-lived user delegation key from the storage account.
-    /// The key is used to sign SAS tokens without requiring a storage account key.
+    /// Requests a user delegation key from the storage account, valid for the same window as
+    /// the SAS it will sign. The key lets SAS tokens be signed without a storage account key;
+    /// Azure requires the SAS start/expiry to fall inside the key's validity.
     /// </summary>
-    private async Task<UserDelegationKey> GetUserDelegationKeyAsync(CancellationToken ct)
+    private async Task<UserDelegationKey> GetUserDelegationKeyAsync(
+        DateTimeOffset startsOn, DateTimeOffset expiresOn, CancellationToken ct)
     {
-        var expiry = DateTimeOffset.UtcNow.Add(UploadSasDuration);
-        var response = await _blobServiceClient.GetUserDelegationKeyAsync(
-            DateTimeOffset.UtcNow, expiry, ct);
+        var response = await _blobServiceClient.GetUserDelegationKeyAsync(startsOn, expiresOn, ct);
 
         return response.Value;
     }

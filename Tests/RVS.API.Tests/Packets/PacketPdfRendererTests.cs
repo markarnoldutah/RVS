@@ -408,6 +408,19 @@ public class PacketPdfRendererTests
     }
 
     [Fact]
+    public void Build_WithExactlySixPhotos_ShouldNotPageToAnAppendix()
+    {
+        var photos = Enumerable.Range(1, 6)
+            .Select(i => new PacketPhoto { Url = $"https://blob/p{i}.jpg", FileName = $"p{i}.jpg" })
+            .ToArray();
+
+        var section = Section(FullPacket() with { Photos = photos }, "photos");
+
+        section.PhotosOnFirstPage.Should().Be(6);
+        section.HasAppendix.Should().BeFalse();
+    }
+
+    [Fact]
     public void Build_ShouldIgnorePhotosWithoutAnHttpUrl()
     {
         var photos = new[]
