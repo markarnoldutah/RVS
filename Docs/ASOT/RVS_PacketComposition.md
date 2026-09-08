@@ -1,7 +1,7 @@
 # RVS — Packet Composition
 
-**Version:** 1.2 · September 7, 2026
-**Scope:** How a service packet is assembled and rendered, end to end. Covers what is built (`#430` composition, `#431` HTML render, `#432` PDF render) and the design of the stages that are not yet (`#433`–`#434`).
+**Version:** 1.3 · September 7, 2026
+**Scope:** How a service packet is assembled and rendered, end to end. Covers what is built (`#430` composition, `#431` HTML render, `#432` PDF render, `#433` photo SAS resolution) and the design of the stage that is not yet (`#434` orchestration).
 
 Product canon is `../RVS_Overview.md`, `../RVS_Spec.md`, `../RVS_Plan.md`. Requirements referenced here as `Spec B-2` etc. live in `../RVS_Spec.md` section B. This document describes the intended mechanism; where a stage is not yet built it says so.
 
@@ -70,6 +70,11 @@ The orchestrator assembles everything the composer needs that is **not** on the 
 
 These are packed into a `PacketCompositionContext` (`RVS.Domain/Packets/PacketCompositionContext.cs`). Photo URLs are a dictionary keyed by attachment id; an image attachment with no entry is dropped rather than rendered broken.
 
+**Photo read URLs — `#433` (built).** `PacketPhotoUrlResolver` (`RVS.API/Packets/`, `IPacketPhotoUrlResolver`) takes a `ServiceRequest` and returns the `PhotoUrls` dictionary: one Blob read SAS per image attachment (`ContentType` `image/*`), keyed by `AttachmentId`, from the `rvs-attachments` container. Non-image attachments and image attachments with a blank blob path are omitted. It holds no repository — nothing is written back to the request or to storage, so a SAS token is **never persisted** (`Spec X-6`); every call mints fresh URLs, so a regenerated packet gets fresh URLs.
+
+- **TTL: 7 days.** The HTML packet is delivered by email (`Spec B-4`) and can sit unopened in a shop inbox across a weekend or a holiday; the staff-view read SAS default (1 hour, `AttachmentService`) would show a service advisor broken thumbnails. Seven days is also the ceiling Azure allows for a user-delegation-key-signed SAS. It stays genuinely time-limited and bounds exposure if the mail is forwarded. The PDF (`#432`) embeds photo bytes and is unaffected by this TTL.
+- `IBlobStorageService.GenerateReadSasUrlAsync` gained a `TimeSpan lifetime` overload for this; the user delegation key is now requested for the same window as the SAS it signs (previously a fixed 15 min, shorter than the 1 h read SAS it was signing).
+
 ### 3. Compose — `#430` (built)
 
 `PacketComposer.Compose(ServiceRequest request, PacketCompositionContext context)` in `RVS.Domain/Packets/` folds the two inputs into one `ServicePacket`.
@@ -111,7 +116,7 @@ Both renderers take one `ServicePacket` and read the same fields in the same ord
   - **Identity band.** `PacketPdfRenderer` paints sections 1–3 as the same IDS masthead the HTML uses — a `RV ServiceFlow` letterhead with `RVS #` + received date top-right, the year/make/model headline, then a three-column `Customer / Location & received / Unit` band closed by a rule — rather than three stacked blocks. Section 4 onward (category, assessment, complaint, …) render linearly below it.
   - **Page box.** A PDF has one fixed media box and cannot defer the paper choice to the printer the way the HTML `@page` rule does, so the content is sized to 210 mm × 279 mm — the intersection of A4 and US Letter — with 14 mm margins, so it prints inside the margins of either sheet.
   - **Greyscale** — the diagnostic block gets the heaviest frame; the AI summary carries a bordered `AI-GENERATED` tag; no information is carried by colour.
-  - **Photos** are passed in as bytes keyed by URL (`photoImages`); a photo with no bytes renders as a labelled placeholder cell. Resolving the time-limited SAS URLs to bytes is the orchestrator's job (`#433`). Up to six on page one, the rest after a `PageBreak` (`Spec B-2` item 8).
+  - **Photos** are passed in as bytes keyed by URL (`photoImages`); a photo with no bytes renders as a labelled placeholder cell. `#433` mints the per-photo read SAS URLs; fetching those URLs to bytes for the PDF is the orchestrator's job (`#434`). Up to six on page one, the rest after a `PageBreak` (`Spec B-2` item 8).
   - **Determinism** — document metadata dates are pinned to the packet's submission time so the same packet renders byte-for-byte identically.
   - **Fonts** — QuestPDF's bundled Lato only; no font assets are vendored. Verbatim and paste blocks render in a bordered box rather than a monospace face (cosmetic; not a `Spec` requirement).
 
@@ -128,7 +133,7 @@ The PDF is stored; the HTML packet is emailed to the location's configured servi
 | Composition model + composer | `#430` | **Built** |
 | HTML render + print stylesheet | `#431` | **Built** |
 | PDF render (QuestPDF) | `#432` | **Built** |
-| Photo SAS embedding | `#433` | Planned |
+| Photo SAS resolution (`PacketPhotoUrlResolver`) | `#433` | **Built** |
 | Generation orchestration | `#434` | Planned |
 | Email delivery | `#435`–`#439` | Planned |
 | Preferred-contact + reference-code gaps | `#472` | Deferred |

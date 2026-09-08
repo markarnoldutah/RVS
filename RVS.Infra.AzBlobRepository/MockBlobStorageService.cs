@@ -40,6 +40,16 @@ public sealed class MockBlobStorageService : IBlobStorageService
     }
 
     /// <inheritdoc />
+    public Task<string> GenerateReadSasUrlAsync(string containerName, string blobName, TimeSpan lifetime, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lifetime, TimeSpan.Zero);
+
+        return GenerateReadSasUrlAsync(containerName, blobName, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<string> UploadAsync(string containerName, string blobName, Stream content, string contentType, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(containerName);

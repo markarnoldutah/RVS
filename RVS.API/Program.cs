@@ -5,6 +5,7 @@ using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using RVS.API.HealthChecks;
 using RVS.API.Integrations;
 using RVS.API.Middleware;
+using RVS.API.Packets;
 using RVS.Infra.AzBlobRepository;
 using RVS.API.Services;
 using RVS.Domain.Integrations;
@@ -286,6 +287,7 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IIntakeOrchestrationService, IntakeOrchestrationService>();
+builder.Services.AddScoped<IPacketPhotoUrlResolver, PacketPhotoUrlResolver>();
 #endregion
 
 #region Integration Clients
