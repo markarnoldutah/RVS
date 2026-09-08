@@ -165,22 +165,24 @@ public class PacketHtmlRendererTests
     // ── 1. Unit header ─────────────────────────────────────────────────────
 
     [Fact]
-    public void Render_WhenVinPresent_ShouldRenderTheVinLine()
+    public void Render_WhenVinPresent_ShouldRenderTheSerialLine()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        html.Should().Contain("1FDXE45S12HB00001");
+        // IDS calls the VIN the "Serial#"; we label it "Serial# (VIN)".
+        html.Should().Contain("Serial# (VIN):").And.Contain("1FDXE45S12HB00001");
         html.Should().Contain("2021").And.Contain("Winnebago").And.Contain("View");
     }
 
     [Fact]
-    public void Render_WhenVinAbsent_ShouldOmitTheVinLine()
+    public void Render_WhenVinAbsent_ShouldOmitTheSerialLine()
     {
         var packet = FullPacket() with { Unit = new PacketUnitHeader { Year = 2021, Make = "Winnebago", Model = "View" } };
 
         var html = PacketHtmlRenderer.Render(packet);
 
-        html.Should().NotContain("VIN");
+        html.Should().NotContain("Serial#");
+        html.Should().NotContain("1FDXE45S12HB00001");
     }
 
     [Fact]
@@ -225,6 +227,82 @@ public class PacketHtmlRendererTests
         html.Should().Contain("A1B2C3D4");
         html.Should().Contain("2026-09-05 14:30 UTC");
         html.Should().Contain("Salt Lake Service Center");
+    }
+
+    // ── IDS work-order alignment (issue #431, Blue Compass / Integrated Dealer Systems) ──
+
+    [Fact]
+    public void Render_ShouldPlaceTheReferenceCodeInTheMastheadAsRvsNumber()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("RVS #:");
+        // Mirrors IDS "W/O #" top-right: the tracking number comes before any section body.
+        html.IndexOf("A1B2C3D4", StringComparison.Ordinal)
+            .Should().BeLessThan(Order(html, "section:customer"));
+        html.Should().Contain("Received: 2026-09-05");
+    }
+
+    [Fact]
+    public void Render_ShouldRenderTheThreeColumnCustomerLocationUnitBand()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("class=\"idcols\"");
+        html.Should().MatchRegex(@"\.idcols\b[^}]*display\s*:\s*grid");
+        html.Should().Contain("class=\"col customer\"")
+            .And.Contain("class=\"col origin\"")
+            .And.Contain("class=\"col unit\"");
+    }
+
+    [Fact]
+    public void Render_ShouldUseIdsFieldVocabulary()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("Complaint");          // not "In the customer's words"
+        html.Should().Contain("Manufacturer:");      // not "Make"
+        html.Should().Contain("Serial# (VIN):");     // not "VIN"
+        html.Should().Contain("Preliminary assessment");
+        html.Should().Contain("Reported symptoms &amp; diagnostic Q&amp;A");
+    }
+
+    [Fact]
+    public void Render_ShouldEmitARunningFooterWithReferenceAndPageCounter()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        // @page margin box for engines that honour it (Chrome/Edge/Firefox print)…
+        html.Should().Contain("@bottom-right")
+            .And.Contain("counter(page)")
+            .And.Contain("counter(pages)");
+        html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*RVS #A1B2C3D4");
+        // …and a static end-of-flow footer for engines that don't (Safari).
+        html.Should().Contain("class=\"packet-foot\"");
+        html[Order(html, "section:status-link")..]
+            .Should().Contain("RVS #A1B2C3D4");
+    }
+
+    [Fact]
+    public void Render_RunningFooterContent_ShouldStayInsideACssString()
+    {
+        var packet = FullPacket() with
+        {
+            Origin = new PacketOrigin
+            {
+                LocationName = "Salt Lake Service Center",
+                SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
+                ReferenceCode = "A1B2C3D4",
+            },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        // The reference code alphabet is ASCII with no quote/backslash, so the @page
+        // content string is well-formed. Guard against a stray quote breaking the rule.
+        var open = html.IndexOf("@bottom-left", StringComparison.Ordinal);
+        var slice = html[open..html.IndexOf("@bottom-right", StringComparison.Ordinal)];
+        slice.Split('"').Length.Should().Be(3, "content should be exactly one quoted string");
     }
 
     // ── 4. Category ────────────────────────────────────────────────────────

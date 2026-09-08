@@ -14,6 +14,15 @@ namespace RVS.Domain.Packets;
 /// <c>ServiceRequest</c>. It performs no I/O and embeds no assets — photos are referenced
 /// by the time-limited URLs already resolved on the packet, never base64.
 ///
+/// Layout follows the Integrated Dealer Systems (IDS) work-order idiom so a service
+/// manager reads it on daily muscle memory: a right-aligned tracking number in the
+/// masthead (<c>RVS #</c>, mirroring IDS <c>W/O #</c>), a three-column Customer / Location
+/// / Unit band, <c>COMPLAINT</c> as the heading over the verbatim customer text, and a
+/// running page footer carrying the reference and page count. It deliberately omits
+/// everything IDS uses for the repair-authorization contract — pricing, parts/labour
+/// tables, signatures, arbitration text — none of which belongs in an intake packet
+/// (<c>Spec B-2</c>).
+///
 /// Design constraints, all verified structurally by the renderer's tests:
 /// <list type="bullet">
 ///   <item>Prints cleanly at Letter and A4 — <c>@page</c> declares margins only and never
@@ -26,14 +35,19 @@ namespace RVS.Domain.Packets;
 /// </summary>
 public static class PacketHtmlRenderer
 {
-    private const int PhotosOnFirstPage = 6;
-
     /// <summary>
     /// Renders <paramref name="packet"/> to a complete HTML5 document string.
     /// </summary>
     public static string Render(ServicePacket packet)
     {
         ArgumentNullException.ThrowIfNull(packet);
+
+        var submittedUtc = packet.Origin.SubmittedAtUtc
+            .ToUniversalTime()
+            .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
+        var submittedDate = packet.Origin.SubmittedAtUtc
+            .ToUniversalTime()
+            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         var sb = new StringBuilder(4096);
 
@@ -42,13 +56,12 @@ public static class PacketHtmlRenderer
         sb.Append("<meta charset=\"utf-8\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         sb.Append("<title>Service Packet ").Append(Text(packet.Origin.ReferenceCode)).Append("</title>\n");
-        sb.Append("<style>\n").Append(Stylesheet).Append("\n</style>\n");
+        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(packet.Origin.ReferenceCode, submittedUtc)))
+            .Append("\n</style>\n");
         sb.Append("</head>\n<body>\n");
         sb.Append("<main class=\"packet\">\n");
 
-        AppendUnit(sb, packet.Unit);
-        AppendCustomer(sb, packet.Customer);
-        AppendOrigin(sb, packet.Origin);
+        AppendMasthead(sb, packet, submittedUtc, submittedDate);
         AppendCategory(sb, packet.IssueCategory);
         AppendDescription(sb, packet.IssueDescription);
         AppendDiagnostics(sb, packet.Diagnostics);
@@ -56,74 +69,86 @@ public static class PacketHtmlRenderer
         AppendPhotos(sb, packet.Photos);
         AppendPasteBlock(sb, packet.PasteBlock);
         AppendStatusLink(sb, packet.StatusLink);
+        AppendFooter(sb, packet.Origin.ReferenceCode, submittedUtc);
 
         sb.Append("</main>\n</body>\n</html>\n");
 
         return sb.ToString();
     }
 
-    // ── 1. Unit header ─────────────────────────────────────────────────────
+    // ── Masthead: sections 1 (unit), 2 (customer), 3 (origin) ──────────────
+    //
+    // IDS puts the tracking number top-right and identifies the job in a three-column
+    // Customer / Dates / Unit band. We mirror that: RVS # + received date in the refbox,
+    // then a Customer | Location & received | Unit grid. The Spec B-2 section markers stay
+    // in order (unit, customer, origin) so the ordering contract is unchanged.
 
-    private static void AppendUnit(StringBuilder sb, PacketUnitHeader unit)
+    private static void AppendMasthead(
+        StringBuilder sb, ServicePacket packet, string submittedUtc, string submittedDate)
     {
-        sb.Append("<!-- section:unit -->\n");
-        sb.Append("<header class=\"unit\">\n");
+        var unit = packet.Unit;
+        var customer = packet.Customer;
+        var origin = packet.Origin;
 
+        sb.Append("<!-- section:unit -->\n");
+        sb.Append("<header class=\"masthead\">\n");
+
+        // Masthead top: letterhead left, tracking number right.
+        sb.Append("<div class=\"masthead-top\">\n");
+        sb.Append("<div class=\"letterhead\">RV ServiceFlow")
+            .Append("<span class=\"doctype\">Service intake packet</span></div>\n");
+        sb.Append("<div class=\"refbox\">\n");
+        sb.Append("<p class=\"rvsno\">RVS #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
+        sb.Append("<p class=\"received\">Received: ").Append(Text(submittedDate)).Append("</p>\n");
+        sb.Append("</div>\n</div>\n");
+
+        // Unit descriptor headline — useful in a cold inbox; IDS omits it only because the
+        // DMS screen already shows the unit.
         var descriptor = string.Join(
             ' ',
             new[] { unit.Year?.ToString(CultureInfo.InvariantCulture), unit.Make, unit.Model }
                 .Where(part => !string.IsNullOrWhiteSpace(part)));
+        sb.Append("<h1>")
+            .Append(string.IsNullOrWhiteSpace(descriptor) ? "Unit details not provided" : Text(descriptor))
+            .Append("</h1>\n");
 
-        if (string.IsNullOrWhiteSpace(descriptor))
-        {
-            sb.Append("<h1>Unit details not provided</h1>\n");
-        }
-        else
-        {
-            sb.Append("<h1>").Append(Text(descriptor)).Append("</h1>\n");
-        }
+        // Three-column identity band.
+        sb.Append("<div class=\"idcols\">\n");
 
-        if (unit.HasVin)
-        {
-            sb.Append("<p class=\"vin\">VIN: <span>").Append(Text(unit.Vin!)).Append("</span></p>\n");
-        }
-
-        sb.Append("</header>\n");
-    }
-
-    // ── 2. Customer ────────────────────────────────────────────────────────
-
-    private static void AppendCustomer(StringBuilder sb, PacketCustomer customer)
-    {
         sb.Append("<!-- section:customer -->\n");
-        sb.Append("<section class=\"customer\">\n");
-        sb.Append("<h2>Customer</h2>\n");
+        sb.Append("<section class=\"col customer\">\n<h2>Customer</h2>\n");
         sb.Append("<p class=\"name\">").Append(Text(customer.FullName)).Append("</p>\n");
         AppendRow(sb, "Phone", customer.Phone);
         AppendRow(sb, "Email", customer.Email);
         AppendRow(sb, "Preferred contact", customer.PreferredContact);
         sb.Append("</section>\n");
-    }
 
-    // ── 3. Origin ──────────────────────────────────────────────────────────
-
-    private static void AppendOrigin(StringBuilder sb, PacketOrigin origin)
-    {
         sb.Append("<!-- section:origin -->\n");
-        sb.Append("<section class=\"origin\">\n");
-        sb.Append("<h2>Where &amp; when</h2>\n");
+        sb.Append("<section class=\"col origin\">\n<h2>Location &amp; received</h2>\n");
         AppendRow(sb, "Location", origin.LocationName);
         AppendRow(sb, "Location phone", origin.LocationPhone);
-
-        var submitted = origin.SubmittedAtUtc
-            .ToUniversalTime()
-            .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-        AppendRow(sb, "Submitted", submitted + " UTC");
-
-        sb.Append("<p class=\"reference\">Reference: <strong>")
-            .Append(Text(origin.ReferenceCode))
-            .Append("</strong></p>\n");
+        AppendRow(sb, "Received", submittedUtc);
         sb.Append("</section>\n");
+
+        sb.Append("<section class=\"col unit\">\n<h2>Unit</h2>\n");
+        var hasUnitRow = false;
+        hasUnitRow |= AppendRow(sb, "Year", unit.Year?.ToString(CultureInfo.InvariantCulture));
+        hasUnitRow |= AppendRow(sb, "Manufacturer", unit.Make);
+        hasUnitRow |= AppendRow(sb, "Model", unit.Model);
+        if (unit.HasVin)
+        {
+            sb.Append("<p class=\"row\">Serial# (VIN): <span>").Append(Text(unit.Vin!)).Append("</span></p>\n");
+            hasUnitRow = true;
+        }
+
+        if (!hasUnitRow)
+        {
+            sb.Append("<p class=\"empty\">Not recorded</p>\n");
+        }
+
+        sb.Append("</section>\n");
+        sb.Append("</div>\n");
+        sb.Append("</header>\n");
     }
 
     // ── 4. Category ────────────────────────────────────────────────────────
@@ -139,13 +164,13 @@ public static class PacketHtmlRenderer
         sb.Append("</section>\n");
     }
 
-    // ── 5. Description, verbatim ──────────────────────────────────────────
+    // ── 5. Complaint — the customer's words, verbatim (IDS "COMPLAINT") ────
 
     private static void AppendDescription(StringBuilder sb, string description)
     {
         sb.Append("<!-- section:description -->\n");
         sb.Append("<section class=\"description\">\n");
-        sb.Append("<h2>In the customer's words</h2>\n");
+        sb.Append("<h2>Complaint <span class=\"sub\">— customer's words, verbatim</span></h2>\n");
         sb.Append("<pre class=\"verbatim\">").Append(Text(description)).Append("</pre>\n");
         sb.Append("</section>\n");
     }
@@ -156,7 +181,7 @@ public static class PacketHtmlRenderer
     {
         sb.Append("<!-- section:diagnostics -->\n");
         sb.Append("<section class=\"diagnostics\">\n");
-        sb.Append("<h2>Diagnostic questions &amp; answers</h2>\n");
+        sb.Append("<h2>Reported symptoms &amp; diagnostic Q&amp;A</h2>\n");
 
         if (diagnostics.Count == 0)
         {
@@ -186,7 +211,7 @@ public static class PacketHtmlRenderer
         sb.Append("</section>\n");
     }
 
-    // ── 7. AI summary ─────────────────────────────────────────────────────
+    // ── 7. AI summary — a preliminary assessment, labelled AI-generated ───
 
     private static void AppendAiSummary(StringBuilder sb, PacketAiSummary? summary)
     {
@@ -197,7 +222,7 @@ public static class PacketHtmlRenderer
 
         sb.Append("<!-- section:ai-summary -->\n");
         sb.Append("<section class=\"ai-summary\">\n");
-        sb.Append("<h2>Summary <span class=\"tag\">AI-generated</span></h2>\n");
+        sb.Append("<h2>Preliminary assessment <span class=\"tag\">AI-generated</span></h2>\n");
         sb.Append("<p>").Append(Text(summary.Text)).Append("</p>\n");
         sb.Append("</section>\n");
     }
@@ -275,17 +300,52 @@ public static class PacketHtmlRenderer
         sb.Append("</section>\n");
     }
 
+    // ── Running footer (mirrors IDS "Printed On … © … Page N of N") ───────
+
+    private static void AppendFooter(StringBuilder sb, string referenceCode, string submittedUtc)
+    {
+        // A static end-of-flow footer for engines that ignore @page margin boxes
+        // (Safari); the @page rule in the stylesheet repeats the same line on every
+        // printed page where supported.
+        sb.Append("<footer class=\"packet-foot\">\n");
+        sb.Append("<span>RVS #").Append(Text(referenceCode)).Append(" · ").Append(Text(submittedUtc)).Append("</span>\n");
+        sb.Append("<span>RV ServiceFlow — service intake packet</span>\n");
+        sb.Append("</footer>\n");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    private static void AppendRow(StringBuilder sb, string label, string? value)
+    /// <summary>Appends a <c>Label: value</c> row; returns <c>false</c> and appends nothing when the value is blank.</summary>
+    private static bool AppendRow(StringBuilder sb, string label, string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return;
+            return false;
         }
 
         sb.Append("<p class=\"row\">").Append(label).Append(": <span>")
             .Append(Text(value)).Append("</span></p>\n");
+        return true;
+    }
+
+    /// <summary>
+    /// The running-footer text baked into the <c>@page</c> margin box. CSS
+    /// <c>content:</c> is a quoted string, so it must be ASCII and carry no <c>"</c> or
+    /// <c>\</c>; the reference code and timestamp are already in that alphabet.
+    /// </summary>
+    private static string RunningFooterText(string referenceCode, string submittedUtc)
+    {
+        var raw = $"RVS #{referenceCode} / {submittedUtc} / RV ServiceFlow";
+        var sb = new StringBuilder(raw.Length);
+        foreach (var ch in raw)
+        {
+            if (ch is not ('"' or '\\') && !char.IsControl(ch))
+            {
+                sb.Append(ch);
+            }
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>HTML-encodes text for element content.</summary>
@@ -305,8 +365,12 @@ public static class PacketHtmlRenderer
     /// margins only and never a paper size, so a single document prints cleanly on both
     /// US Letter and A4.
     /// </summary>
-    private const string Stylesheet = """
-        @page { margin: 14mm; }
+    private static string BuildStylesheet(string runningFooterText) => $$"""
+        @page {
+          margin: 14mm 14mm 18mm;
+          @bottom-left { content: "{{runningFooterText}}"; font-size: 8pt; color: #000; }
+          @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #000; }
+        }
 
         * { box-sizing: border-box; }
 
@@ -327,7 +391,7 @@ public static class PacketHtmlRenderer
           padding: 8mm;
         }
 
-        h1 { font-size: 16pt; margin: 0 0 2mm; }
+        h1 { font-size: 15pt; margin: 3mm 0 0; }
         h2 {
           font-size: 11pt;
           text-transform: uppercase;
@@ -336,12 +400,37 @@ public static class PacketHtmlRenderer
           padding-bottom: 1mm;
           border-bottom: 1px solid #000;
         }
+        h2 .sub { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 9pt; }
 
         section, header { margin: 0 0 6mm; break-inside: avoid; }
 
-        .unit .vin { font-size: 10pt; margin: 0; }
-        .row, .name, .reference { margin: 0 0 1mm; }
-        .reference strong { font-size: 11pt; }
+        /* Masthead — IDS-style letterhead + top-right tracking number + 3-column band. */
+        .masthead { border-bottom: 2px solid #000; padding-bottom: 3mm; }
+        .masthead-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
+        .letterhead { font-size: 13pt; font-weight: 700; }
+        .letterhead .doctype {
+          display: block;
+          font-size: 8.5pt;
+          font-weight: 400;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+        .refbox { text-align: right; white-space: nowrap; }
+        .refbox .rvsno { margin: 0; font-size: 12pt; }
+        .refbox .rvsno strong { font-size: 13pt; }
+        .refbox .received { margin: 0.5mm 0 0; font-size: 9pt; }
+
+        .idcols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6mm; margin-top: 3mm; }
+        .idcols .customer { grid-column: 1; }
+        .idcols .origin { grid-column: 2; }
+        .idcols .unit { grid-column: 3; }
+        .idcols .col { margin: 0; }
+        .idcols .col h2 { font-size: 8.5pt; margin-bottom: 1.5mm; }
+        .idcols .col p { margin: 0 0 1mm; font-size: 9.5pt; }
+        .idcols .col .name { font-weight: 700; }
+        .idcols .col .empty { font-style: italic; }
+
+        .row, .name { margin: 0 0 1mm; }
 
         .description .verbatim,
         pre.dms-text {
@@ -398,6 +487,16 @@ public static class PacketHtmlRenderer
         .photo-grid figure:nth-child(n + 7) { break-before: page; }
 
         .status-link a { color: #000; }
+
+        .packet-foot {
+          margin-top: 8mm;
+          padding-top: 2mm;
+          border-top: 1px solid #000;
+          font-size: 8pt;
+          display: flex;
+          justify-content: space-between;
+          gap: 6mm;
+        }
 
         @media print {
           body { font-size: 10pt; }
