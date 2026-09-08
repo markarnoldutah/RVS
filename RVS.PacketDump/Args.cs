@@ -4,11 +4,45 @@ namespace RVS.PacketDump;
 internal readonly record struct Target(string Value, bool IsDirectory);
 
 /// <summary>Parsed command line: output target, which sample packet(s), which format(s).</summary>
-internal readonly record struct Options(Target Target, string Variant, string Format);
+/// <remarks>When <see cref="ShowHelp"/> is true the other fields are unset and nothing should be rendered.</remarks>
+internal readonly record struct Options(Target Target, string Variant, string Format, bool ShowHelp = false);
 
 /// <summary>Minimal command-line parsing for the packet dump utility.</summary>
 internal static class Args
 {
+    /// <summary>Usage text printed for <c>--help</c> / <c>-h</c> / <c>-?</c> / <c>/?</c>.</summary>
+    public const string HelpText = """
+        RVS.PacketDump — renders sample ServicePackets to standalone .html / .pdf files
+        for print-testing at Letter and A4 (dev utility, not deployable).
+
+        Usage:
+          dotnet run --project RVS.PacketDump -- [path] [options]
+
+        Arguments:
+          path                     Output location. A directory (or a path that does not
+                                   end in .html/.pdf) receives packet-<variant>.<format>
+                                   for every selected combination. A path ending in
+                                   .html or .pdf is a single output file: its extension
+                                   fixes the format and pins the variant to 'full'.
+                                   Defaults to the current directory.
+
+        Options:
+          --format <html|pdf|both> Which renderer(s) to run. Default: both.
+          --html                   Shorthand for --format html.
+          --pdf                    Shorthand for --format pdf.
+          --variant <full|minimal|both>
+                                   Which sample packet(s) to render. Default: both.
+          --full                   Shorthand for --variant full.
+          --minimal                Shorthand for --variant minimal.
+          -h, --help, -?, /?       Print this help and exit.
+
+        Examples:
+          dotnet run --project RVS.PacketDump
+          dotnet run --project RVS.PacketDump -- ~/Desktop
+          dotnet run --project RVS.PacketDump -- --pdf --full
+          dotnet run --project RVS.PacketDump -- ~/Desktop/packet.pdf
+        """;
+
     /// <summary>
     /// Parses <c>[path] [--variant full|minimal|both] [--full] [--minimal]
     /// [--format html|pdf|both] [--html] [--pdf]</c>.
@@ -30,6 +64,8 @@ internal static class Args
             var arg = args[i];
             switch (arg)
             {
+                case "--help" or "-h" or "-?" or "/?":
+                    return new Options(default, string.Empty, string.Empty, ShowHelp: true);
                 case "--full":
                     variant = "full";
                     break;

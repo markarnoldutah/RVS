@@ -14,12 +14,19 @@ using RVS.PacketDump;
 // Switches:
 //   --format html|pdf|both   (default both; also --html / --pdf)
 //   --variant full|minimal|both   (default both; also --full / --minimal)
+//   -h | --help | -? | /?    print the full switch list and exit
 //
 // Open an HTML file in a browser and use its print dialog (Cmd/Ctrl-P) to choose paper
 // size; the renderer leaves paper size to that dialog. The PDF has a fixed page box
 // sized to the A4 ∩ Letter intersection, so it prints inside the margins of either.
 
 var options = Args.Parse(args);
+
+if (options.ShowHelp)
+{
+    Console.WriteLine(Args.HelpText);
+    return;
+}
 
 var variants = new List<(string Name, ServicePacket Packet)>();
 if (options.Variant is "full" or "both")

@@ -34,6 +34,10 @@ When the user says **"Execute Issue #abc"** (where `abc` is a valid GitHub Issue
 
 Do not commit issue work directly to `main`. If the branch already exists, check it out and continue on it rather than creating a duplicate.
 
+## Committing
+
+**Never commit or push automatically.** Do the work, leave the changes in the working tree, and stop there. Run `git commit` or `git push` only when I explicitly ask for it in that same message. Creating a branch, "executing" an issue, or being told to "make the change" is **not** permission to commit — wait for an explicit "commit this" / "push it" instruction.
+
 ## Solution Layout
 
 Solution file is [RVS.slnx](RVS.slnx) (new SLNX format — `dotnet` CLI handles it; older `dotnet sln` subcommands may not).

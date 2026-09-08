@@ -24,6 +24,9 @@ dotnet run --project RVS.PacketDump -- --pdf --full
 
 # A named file — the extension fixes the format
 dotnet run --project RVS.PacketDump -- ~/Desktop/packet.pdf
+
+# Print the full switch list and exit
+dotnet run --project RVS.PacketDump -- --help
 ```
 
 ### Switches
@@ -32,6 +35,7 @@ dotnet run --project RVS.PacketDump -- ~/Desktop/packet.pdf
 |---|---|---|
 | `--format` (or `--html` / `--pdf`) | `html`, `pdf`, `both` | `both` |
 | `--variant` (or `--full` / `--minimal`) | `full`, `minimal`, `both` | `both` |
+| `-h`, `--help`, `-?`, `/?` | prints usage and exits | — |
 | _positional_ | output path — a directory, or a file ending `.html` / `.pdf` | current directory |
 
 A named output file's extension overrides `--format` and pins `--variant` to `full`

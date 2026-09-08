@@ -9,6 +9,8 @@ When the user says **"Execute Issue #abc"** (where `abc` is a valid GitHub Issue
 
 Do not commit issue work directly to `main`. If the branch already exists, check it out and continue on it rather than creating a duplicate.
 
+**Never commit or push automatically.** Do the work, leave the changes in the working tree, and stop. Run `git commit` or `git push` only when the user explicitly asks for it in that same message — creating a branch or being told to "execute" an issue is not permission to commit.
+
 ## Project Structure
 
 - `<App>.API` — Controllers, Services, Mappers, Middleware, Integrations
