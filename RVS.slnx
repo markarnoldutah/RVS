@@ -6,6 +6,7 @@
   <Project Path="RVS.Domain/RVS.Domain.csproj" Id="f0820481-269c-4025-8f65-7dc70c6f2ae2" />
   <Project Path="RVS.Infra.AzBlobRepository/RVS.Infra.AzBlobRepository.csproj" />
   <Project Path="RVS.Infra.AzCosmosRepository/RVS.Infra.AzCosmosRepository.csproj" />
+  <Project Path="RVS.PacketDump/RVS.PacketDump.csproj" />
   <Project Path="RVS.UI.Shared/RVS.UI.Shared.csproj" />
   <Project Path="Tests/RVS.API.Tests/RVS.API.Tests.csproj" />
   <Project Path="Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj" />

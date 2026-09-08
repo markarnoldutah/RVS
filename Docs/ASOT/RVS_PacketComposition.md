@@ -1,7 +1,7 @@
 # RVS — Packet Composition
 
-**Version:** 1.0 · September 7, 2026
-**Scope:** How a service packet is assembled and rendered, end to end. Covers what is built (`#430`) and the design of the stages that are not yet (`#431`–`#434`).
+**Version:** 1.2 · September 7, 2026
+**Scope:** How a service packet is assembled and rendered, end to end. Covers what is built (`#430` composition, `#431` HTML render, `#432` PDF render) and the design of the stages that are not yet (`#433`–`#434`).
 
 Product canon is `../RVS_Overview.md`, `../RVS_Spec.md`, `../RVS_Plan.md`. Requirements referenced here as `Spec B-2` etc. live in `../RVS_Spec.md` section B. This document describes the intended mechanism; where a stage is not yet built it says so.
 
@@ -84,21 +84,36 @@ It is a **pure transform**: guard clauses, then read-only mapping. No repository
 | 2 | Customer — name, phone, email, preferred contact | fields null when absent; `PreferredContact` always null today (`#472`) |
 | 3 | Origin — location, submission timestamp, short reference code | location fields null if context omits them; reference code always present |
 | 4 | Issue category | null when unclassified — it is advisory |
-| 5 | Customer's description | **verbatim** — never trimmed or rewritten |
-| 6 | Diagnostic Q&A | empty list when none; blank-question entries skipped |
-| 7 | AI summary | null when no summary; when present, always carries the AI-generated label |
+| 5 | AI summary | null when no summary; when present, always carries the AI-generated label; rendered **above** the complaint so the concise problem recreation is read first |
+| 6 | Customer's description | **verbatim** — never trimmed or rewritten |
+| 7 | Diagnostic Q&A | empty list when none; blank-question entries skipped |
 | 8 | Photos | empty list when no image attachment has a resolved URL |
 | 9 | Paste block | from context; null until `#437` |
 | 10 | Status link | from context; null until `#427` |
 
 Short reference code: first hyphen-delimited segment of `ServiceRequest.Id`, upper-cased (`a1b2c3d4-…` → `A1B2C3D4`). Deterministic, stable across regenerations, no stored field. The Spec does not yet define a format — see `#472`.
 
-### 4. Render — `#431` (HTML) and `#432` (PDF), planned
+### 4. Render — `#431` (HTML, built) and `#432` (PDF, built)
 
 Both renderers take one `ServicePacket` and read the same fields in the same order, so HTML and PDF cannot diverge in content or ordering. Renderers do presentation only.
 
-- **HTML** is the primary artifact: a self-contained page with an embedded print stylesheet, legible in greyscale, printing cleanly at Letter and A4. The diagnostic Q&A block is the one that must read as expert. This HTML is also the email body. `Spec B-3`.
-- **PDF** is rendered by QuestPDF — pure-managed .NET, in-process, synchronous, no headless browser, no per-render network call. `Spec B-7` (decision `#426`).
+- **HTML** — `PacketHtmlRenderer.Render(ServicePacket)` in `RVS.Domain/Packets/`. A pure `string`-in/`string`-out transform (no I/O, no entity access), it emits one self-contained HTML5 document with an inline print stylesheet — no external CSS, JS, or fonts. This is the primary artifact and also the delivery email body. `Spec B-3`.
+  - **Letter and A4.** `@page` declares margins only and never pins a paper size, so the printer's own paper selection wins; the content column is sized to A4's narrower printable width so it fits both.
+  - **Greyscale.** Every distinction is a border, a weight, or a textual label — no information is carried by colour. The AI summary carries a bordered `AI-generated` tag, not a colour badge.
+  - **The diagnostic Q&A is the dominant block** — the heaviest frame on the page, bold questions, answers on ruled indents.
+  - **Photos** are `<img>` referencing the context-resolved time-limited URLs (never base64); URLs are attribute-encoded. Per `Spec B-2` item 8, a CSS `break-before: page` moves the 7th photo onward to an appendix page.
+  - **Degradation** is honoured as delivered by the composer: absent VIN drops just the Serial# line; absent category renders `Uncategorized`; empty diagnostics render an explicit placeholder; absent AI summary, photos, paste block, and status link omit their sections entirely.
+  - Non-`http(s)` status links render as inert text rather than an anchor.
+  - **IDS work-order idiom.** Layout mirrors an Integrated Dealer Systems work order so a service manager reads it on daily muscle memory: the reference code sits top-right in the masthead as `RVS #` (mirroring IDS `W/O #`) with the received date under it; identity is a three-column **Customer / Location &amp; received / Unit** band; the AI **`Preliminary assessment`** is rendered above the **`COMPLAINT`** (the verbatim customer text) so the concise problem recreation is read first (`Spec B-2` item 5); field labels use IDS/RV-industry terms (`Serial# (VIN)` not "VIN", `Manufacturer` not "Make"); a running page footer carries `RVS #` + timestamp (`@page` margin box where the print engine supports it, plus a static end-of-flow `.packet-foot` for Safari). It deliberately omits everything IDS uses for the repair-authorization contract — pricing, parts/labour tables, subtotals, signatures, arbitration text — none of which belongs in an intake packet (`Spec B-2`).
+- **PDF** — `PacketPdfRenderer.Render(ServicePacket, photoImages?)` in `RVS.API/Packets/`, rendered by QuestPDF: pure-managed .NET, in-process, synchronous, no headless browser, no per-render network call. `Spec B-7` (decision `#426`).
+  - **Not in `RVS.Domain`.** Unlike the HTML renderer, this one carries the QuestPDF dependency, so it lives in `RVS.API` — `RVS.Domain` is referenced by the Blazor WASM apps and must not drag a native PDF engine into a browser bundle.
+  - **One content model, two renderers, held apart by `PacketPdfLayout`** (`RVS.API/Packets/`). `PacketPdfLayout.Build(ServicePacket)` is a pure transform to an ordered, degradation-resolved section model whose section set, section order (including the `Preliminary assessment` above the `Complaint`) and headings match `PacketHtmlRenderer` line for line; `PacketPdfRenderer` only paints it. The layout model is unit-tested as plain data and its `ToPlainText()` projection is diffed against the HTML output so the two renderings cannot diverge in content or order.
+  - **Identity band.** `PacketPdfRenderer` paints sections 1–3 as the same IDS masthead the HTML uses — a `RV ServiceFlow` letterhead with `RVS #` + received date top-right, the year/make/model headline, then a three-column `Customer / Location & received / Unit` band closed by a rule — rather than three stacked blocks. Section 4 onward (category, assessment, complaint, …) render linearly below it.
+  - **Page box.** A PDF has one fixed media box and cannot defer the paper choice to the printer the way the HTML `@page` rule does, so the content is sized to 210 mm × 279 mm — the intersection of A4 and US Letter — with 14 mm margins, so it prints inside the margins of either sheet.
+  - **Greyscale** — the diagnostic block gets the heaviest frame; the AI summary carries a bordered `AI-GENERATED` tag; no information is carried by colour.
+  - **Photos** are passed in as bytes keyed by URL (`photoImages`); a photo with no bytes renders as a labelled placeholder cell. Resolving the time-limited SAS URLs to bytes is the orchestrator's job (`#433`). Up to six on page one, the rest after a `PageBreak` (`Spec B-2` item 8).
+  - **Determinism** — document metadata dates are pinned to the packet's submission time so the same packet renders byte-for-byte identically.
+  - **Fonts** — QuestPDF's bundled Lato only; no font assets are vendored. Verbatim and paste blocks render in a bordered box rather than a monospace face (cosmetic; not a `Spec` requirement).
 
 ### 5. Deliver — Feature 3 (`#435`–`#439`), planned
 
@@ -111,8 +126,8 @@ The PDF is stored; the HTML packet is emailed to the location's configured servi
 | Stage | Issue | State |
 |---|---|---|
 | Composition model + composer | `#430` | **Built** |
-| HTML render + print stylesheet | `#431` | Planned |
-| PDF render (QuestPDF) | `#432` | Planned |
+| HTML render + print stylesheet | `#431` | **Built** |
+| PDF render (QuestPDF) | `#432` | **Built** |
 | Photo SAS embedding | `#433` | Planned |
 | Generation orchestration | `#434` | Planned |
 | Email delivery | `#435`–`#439` | Planned |
@@ -122,7 +137,7 @@ The PDF is stored; the HTML packet is emailed to the location's configured servi
 
 ## Design notes
 
-- **One model, two renderers.** The composition step is the single point where content and ordering are decided. Adding a section means changing one record and two render methods, not keeping two templates in sync.
+- **One model, two renderers.** The composition step is the single point where content and ordering are decided. Adding a section means changing `ServicePacket`, the HTML renderer, and `PacketPdfLayout` — never keeping two templates in sync. `PacketPdfLayout`'s `ToPlainText()` is diffed against the HTML output in tests to catch any drift.
 - **Composer stays pure.** Everything that needs I/O — token minting, SAS generation, paste-block assembly, loading the location — happens in the orchestrator and arrives as data in `PacketCompositionContext`. This keeps composition fully unit-testable with no mocks (`Tests/RVS.Domain.Tests/Packets/`).
 - **Degradation is the composer's job, not the renderer's.** A renderer receives a `ServicePacket` whose absent sections are already null or empty; it never inspects a `ServiceRequest`.
 - **Exclusion by omission.** The packet cannot leak pricing or another customer's data because the composer never reads those fields — not because a filter removes them later.

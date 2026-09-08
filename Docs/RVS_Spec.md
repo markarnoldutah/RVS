@@ -52,9 +52,9 @@ One page, in this order:
 2. Customer — name, phone, email, preferred contact
 3. Location, submission timestamp, short reference code
 4. Issue category
-5. **The customer's description, verbatim**
-6. **Diagnostic Q&A**
-7. AI summary, labeled as AI-generated
+5. AI summary, labeled as AI-generated — placed here so the service manager reads the concise recreation of the problem first
+6. **The customer's description, verbatim**
+7. **Diagnostic Q&A**
 8. Photo thumbnails, up to 6 on page one, rest on an appendix page
 9. Paste block (B-5)
 10. Status link + QR

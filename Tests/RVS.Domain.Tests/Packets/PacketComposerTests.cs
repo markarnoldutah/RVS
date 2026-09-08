@@ -133,18 +133,18 @@ public class PacketComposerTests
         // 4. Issue category
         packet.IssueCategory.Should().Be("Electrical");
 
-        // 5. Description, verbatim
-        packet.IssueDescription.Should().Be("  Generator quits after ten minutes. Smells hot.  ");
-
-        // 6. Diagnostic Q&A
-        packet.Diagnostics.Should().HaveCount(2);
-        packet.Diagnostics[0].Question.Should().Be("Does the generator start at all?");
-        packet.Diagnostics[0].Answers.Should().Equal("Yes, then dies", "Dies after about 10 minutes");
-
-        // 7. AI summary, labelled AI-generated
+        // 5. AI summary, labelled AI-generated (rendered above the description)
         packet.AiSummary.Should().NotBeNull();
         packet.AiSummary!.Text.Should().Be("Likely overheating on the generator windings.");
         packet.AiSummary.IsAiGenerated.Should().BeTrue();
+
+        // 6. Description, verbatim
+        packet.IssueDescription.Should().Be("  Generator quits after ten minutes. Smells hot.  ");
+
+        // 7. Diagnostic Q&A
+        packet.Diagnostics.Should().HaveCount(2);
+        packet.Diagnostics[0].Question.Should().Be("Does the generator start at all?");
+        packet.Diagnostics[0].Answers.Should().Equal("Yes, then dies", "Dies after about 10 minutes");
 
         // 8. Photos
         packet.Photos.Should().ContainSingle();
