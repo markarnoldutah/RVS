@@ -31,6 +31,7 @@ public class PacketGenerationServiceTests
     private readonly Mock<IBlobStorageService> _blobMock = new();
     private readonly Mock<IPacketGenerationQueue> _queueMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
+    private readonly Mock<INotificationService> _notificationMock = new();
     private readonly PacketGenerationService _sut;
 
     public PacketGenerationServiceTests()
@@ -59,8 +60,26 @@ public class PacketGenerationServiceTests
             _blobMock.Object,
             _queueMock.Object,
             _userContextMock.Object,
+            _notificationMock.Object,
             Mock.Of<ILogger<PacketGenerationService>>());
     }
+
+    /// <summary>A location wired for packet email: enabled, with recipients configured.</summary>
+    private static Location LocationWithRecipients(
+        bool attachPdf = true, bool includePhotos = true, bool enabled = true) => new()
+    {
+        Id = "loc_1",
+        TenantId = TenantId,
+        Name = "Salt Lake Service",
+        Phone = "801-555-0100",
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Enabled = enabled,
+            Recipients = ["service@dealer.example", "advisor@dealer.example"],
+            AttachPdf = attachPdf,
+            IncludePhotos = includePhotos,
+        },
+    };
 
     private static readonly byte[] OnePixelPng = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
@@ -317,6 +336,186 @@ public class PacketGenerationServiceTests
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         sr.PacketGeneration.Status.Should().Be("Generating", "a cancellation is not a generation failure");
+    }
+
+    // ── Packet email delivery (Spec B-4, issue #437) ──────────────────────
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_WhenLocationHasRecipients_ShouldSendThePacketEmail()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(
+            It.Is<PacketEmailMessage>(m =>
+                m.Subject == "[RVS] Slide System — 2021 Jayco Eagle — Doe" &&
+                m.Recipients.SequenceEqual(new[] { "service@dealer.example", "advisor@dealer.example" })),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_WhenDeliveryIsDisabled_ShouldNotSendAnEmail()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients(enabled: false));
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_WhenNoRecipientsAreConfigured_ShouldNotSendAnEmail()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        // Default location mock has an enabled PacketConfig with an empty recipient list.
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_WhenLocationIsMissing_ShouldNotSendAnEmail()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location?)null);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_ShouldAttachThePdfWhenTheLocationAsksForIt()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients(attachPdf: true, includePhotos: false));
+
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().ContainSingle(a => a.ContentType == "application/pdf");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_ShouldNotAttachThePdfWhenTheLocationOptsOut()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients(attachPdf: false, includePhotos: false));
+
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_ShouldAttachTheOriginalPhotosWhenTheLocationAsksForThem()
+    {
+        var sr = BuildRequest(
+            Image("att_1", "ten_acme/sr/one.jpg"),
+            Image("att_2", "ten_acme/sr/two.jpg"));
+        SetupRequest(sr);
+        _photoResolverMock.Setup(r => r.ResolveAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>
+            {
+                ["att_1"] = "https://blob/one.jpg?sig=a",
+                ["att_2"] = "https://blob/two.jpg?sig=b",
+            });
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients(attachPdf: false, includePhotos: true));
+
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().HaveCount(2);
+        sent.Attachments.Should().OnlyContain(a => a.ContentType == "image/jpeg");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_ShouldNotAttachPhotosWhenTheLocationOptsOut()
+    {
+        var sr = BuildRequest(Image("att_1", "ten_acme/sr/one.jpg"));
+        SetupRequest(sr);
+        _photoResolverMock.Setup(r => r.ResolveAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string> { ["att_1"] = "https://blob/one.jpg?sig=a" });
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients(attachPdf: true, includePhotos: false));
+
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().OnlyContain(a => a.ContentType == "application/pdf");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheEmailSendThrows_ShouldStillReportGenerationSucceeded()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("ACS rejected the message"));
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        sr.PacketGeneration.Status.Should().Be("Succeeded");
+        sr.PacketGeneration.PacketVersion.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenGenerationItselfFails_ShouldNotSendAnEmail()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+        _blobMock.Setup(b => b.UploadAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("blob upload rejected"));
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── RequestRegenerationAsync ───────────────────────────────────────────
