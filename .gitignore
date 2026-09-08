@@ -366,3 +366,4 @@ MigrationBackup/
 FodyWeavers.xsd
 # MCP server config — may contain access tokens; keep local, commit .mcp.json.example instead
 .mcp.json
+.DS_Store
