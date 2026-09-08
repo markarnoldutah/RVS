@@ -76,4 +76,15 @@ public interface IServiceRequestService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
     Task DeleteAsync(string tenantId, string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Requests on-demand regeneration of the request's service packet (<c>Spec B-1</c>, issue #434):
+    /// resets the packet-generation state to <c>Pending</c> and enqueues a fresh generation job.
+    /// Returns as soon as the job is enqueued — generation runs in the background.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
+    Task RegeneratePacketAsync(string tenantId, string id, CancellationToken cancellationToken = default);
 }

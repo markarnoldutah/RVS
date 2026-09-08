@@ -145,4 +145,38 @@ public class MockBlobStorageServiceTests
 
         result.Should().Be("https://mockblob.blob.core.windows.net/attachments/ten_1/loc_1/sr_001/att_1_photo.jpg");
     }
+
+    // ── DownloadAsync ────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DownloadAsync_WhenContainerNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? containerName)
+    {
+        var act = () => _sut.DownloadAsync(containerName!, "blob.jpg");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DownloadAsync_WhenBlobNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? blobName)
+    {
+        var act = () => _sut.DownloadAsync("attachments", blobName!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task DownloadAsync_ShouldReturnNonEmptyPngBytes()
+    {
+        var result = await _sut.DownloadAsync("attachments", "ten_1/loc_1/sr_001/att_1_photo.jpg");
+
+        result.Should().NotBeNullOrEmpty();
+        // PNG magic number
+        result.Take(8).Should().Equal(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
+    }
 }

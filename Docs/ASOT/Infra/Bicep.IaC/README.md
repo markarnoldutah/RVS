@@ -353,9 +353,19 @@ The `cosmos-db.bicep` module creates 10 containers with optimized index policies
 The `storage-account.bicep` module creates:
 
 - **Storage account**: Standard LRS, TLS 1.2, no public blob access
-- **`rvs-attachments` container**: `PublicAccess = None`
+- **`rvs-attachments` container**: `PublicAccess = None` — holds intake file attachments and, since #434, generated packet PDFs under the `packets/` prefix
 - **CORS rules**: Configured per environment for browser-based SAS uploads
-- **Role assignments**: Storage Blob Data Contributor + Blob Delegator for the API managed identity
+- **Role assignments**: Storage Blob Data Contributor + Blob Delegator for the API managed identity (and the staging deployment slot's identity when present)
+
+### Developer / manual blob access (`devBlobAccessPrincipalId`)
+
+The running app authenticates with its managed identity. A **local API run uses `AzureCliCredential`**, i.e. the developer's own Entra identity, so that identity needs the same two data-plane roles on the storage account it talks to (packet generation is the first dev path that exercises Blob — a blank `BlobStorage:Endpoint` also makes `BlobServiceClient` throw at startup).
+
+`devBlobAccessPrincipalId` (main → `storage-account.bicep`) takes the **object ID of an Entra group** (`sg-rvs-dev-blob`); the module grants it Storage Blob Data Contributor + Storage Blob Delegator, scoped to that storage account only, with `principalType: 'Group'`. Add or remove developers via **group membership** — no redeploy.
+
+- **Set it only in non-prod parameter files.** `staging.bicepparam` carries a `TODO` placeholder plus the `az ad group create` / `member add` / `show` commands. Deploy succeeds with it left as `''`.
+- **Prod leaves it unset** (explicit comment in the prod param files). Humans get prod blob data access **just-in-time** (PIM-eligible activation) or via break-glass, never standing.
+- Granting the role assignment requires the deploying principal to hold *User Access Administrator* / *Owner* on the scope.
 
 ---
 

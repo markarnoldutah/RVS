@@ -4,9 +4,9 @@ using RVS.Domain.Entities;
 namespace RVS.Domain.Interfaces;
 
 /// <summary>
-/// Orchestrates the 7-step intake sequence that creates up to 5 Cosmos documents
+/// Orchestrates the 8-step intake sequence that creates up to 5 Cosmos documents
 /// (GlobalCustomerAcct, CustomerProfile, ServiceRequest, AssetLedgerEntry, updated linkages)
-/// in a single intake request.
+/// in a single intake request, then enqueues packet generation.
 /// </summary>
 public interface IIntakeOrchestrationService
 {
@@ -20,6 +20,7 @@ public interface IIntakeOrchestrationService
     ///   <item>Append AssetLedgerEntry (non-blocking on failure)</item>
     ///   <item>Update linkages (increment requestCount, rotate magic-link token)</item>
     ///   <item>Fire-and-forget notification</item>
+    ///   <item>Enqueue packet generation (never blocks the response — <c>Spec A-8</c> / <c>B-1</c>)</item>
     /// </list>
     /// </summary>
     /// <param name="slug">Location slug for resolving tenant and location.</param>

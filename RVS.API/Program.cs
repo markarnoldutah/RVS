@@ -6,6 +6,7 @@ using RVS.API.HealthChecks;
 using RVS.API.Integrations;
 using RVS.API.Middleware;
 using RVS.API.Packets;
+using RVS.API.Workers;
 using RVS.Infra.AzBlobRepository;
 using RVS.API.Services;
 using RVS.Domain.Integrations;
@@ -288,6 +289,12 @@ builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IIntakeOrchestrationService, IntakeOrchestrationService>();
 builder.Services.AddScoped<IPacketPhotoUrlResolver, PacketPhotoUrlResolver>();
+
+// Packet generation (issue #434): non-blocking in-process queue + background worker.
+// IPacketGenerationQueue is the seam for a future durable transport (e.g. Azure Storage Queue).
+builder.Services.AddSingleton<IPacketGenerationQueue, ChannelPacketGenerationQueue>();
+builder.Services.AddScoped<IPacketGenerationService, PacketGenerationService>();
+builder.Services.AddHostedService<PacketGenerationWorker>();
 #endregion
 
 #region Integration Clients

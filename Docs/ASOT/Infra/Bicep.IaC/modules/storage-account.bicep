@@ -36,6 +36,9 @@ param blobAccessPrincipalId string = ''
 @description('Principal ID of the staging slot managed identity for blob access. Leave empty to skip role assignments.')
 param stagingSlotBlobAccessPrincipalId string = ''
 
+@description('Object ID of an Entra ID group granted blob data access for developer / manual operations (e.g. sg-rvs-dev-blob). Members can read/write blobs and mint user-delegation SAS from a workstation via AzureCliCredential. Set only in non-production parameter files; leave empty to skip.')
+param devBlobAccessPrincipalId string = ''
+
 @description('Allowed CORS origins for browser-based SAS uploads (e.g. the Blazor WASM host URL). Pass an empty array to skip CORS configuration.')
 param corsAllowedOrigins string[] = []
 
@@ -169,6 +172,38 @@ resource stagingSlotBlobDelegatorRole 'Microsoft.Authorization/roleAssignments@2
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegatorRoleId)
     principalId: stagingSlotBlobAccessPrincipalId
     principalType: 'ServicePrincipal'
+  }
+}
+
+// ── Developer / Manual Access Role Assignments (Entra group) ───
+
+// The running application uses its managed identity (assignments above). This grants the same
+// two roles to an Entra ID group so developers can point a workstation at this account
+// (AzureCliCredential) for local runs and manual ops. Add/remove people via group membership —
+// no redeploy. Scoped to this storage account only; set only in non-prod parameter files.
+
+// Storage Blob Data Contributor — read/write blobs, create containers
+resource devBlobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(devBlobAccessPrincipalId)) {
+  name: guid(storageAccount.id, devBlobAccessPrincipalId, storageBlobDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      storageBlobDataContributorRoleId
+    )
+    principalId: devBlobAccessPrincipalId
+    principalType: 'Group'
+  }
+}
+
+// Storage Blob Delegator — required for GetUserDelegationKeyAsync (user delegation SAS)
+resource devBlobDelegatorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(devBlobAccessPrincipalId)) {
+  name: guid(storageAccount.id, devBlobAccessPrincipalId, storageBlobDelegatorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegatorRoleId)
+    principalId: devBlobAccessPrincipalId
+    principalType: 'Group'
   }
 }
 

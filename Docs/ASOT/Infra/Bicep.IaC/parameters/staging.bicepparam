@@ -26,6 +26,19 @@ param storageCorsOrigins = [
   'https://manager-staging.rvserviceflow.com'
 ]
 
+// Developer / manual blob access on the staging storage account. Local API runs
+// (AzureCliCredential) and ops inspection authenticate as the developer, so their
+// Entra identity needs Storage Blob Data Contributor + Storage Blob Delegator here.
+// Grant it to a group, manage access via membership.
+//
+// One-time setup:
+//   az ad group create --display-name sg-rvs-dev-blob --mail-nickname sg-rvs-dev-blob
+//   az ad group member add --group sg-rvs-dev-blob --member-id <your-user-object-id>
+//   az ad group show --group sg-rvs-dev-blob --query id -o tsv   # paste below
+//
+// Leave as '' to skip the grant (deploy still succeeds).
+param devBlobAccessPrincipalId = '' // TODO: object ID of the sg-rvs-dev-blob Entra group
+
 // Key Vault (RBAC model, API managed identity get + list)
 param deployKeyVault = true
 

@@ -11,12 +11,13 @@ public class ServiceRequestServiceTests
 {
     private readonly Mock<IServiceRequestRepository> _repoMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
+    private readonly Mock<IPacketGenerationService> _packetGenerationMock = new();
     private readonly ServiceRequestService _sut;
 
     public ServiceRequestServiceTests()
     {
         _userContextMock.Setup(u => u.UserId).Returns("usr_test");
-        _sut = new ServiceRequestService(_repoMock.Object, _userContextMock.Object);
+        _sut = new ServiceRequestService(_repoMock.Object, _userContextMock.Object, _packetGenerationMock.Object);
     }
 
     // ── GetByIdAsync ─────────────────────────────────────────────────────────
@@ -517,6 +518,39 @@ public class ServiceRequestServiceTests
         await _sut.DeleteAsync("ten_1", sr.Id);
 
         _repoMock.Verify(r => r.DeleteAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ── RegeneratePacketAsync ────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task RegeneratePacketAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.RegeneratePacketAsync(tenantId!, "sr_1");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task RegeneratePacketAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.RegeneratePacketAsync("ten_1", id!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task RegeneratePacketAsync_ShouldDelegateToPacketGenerationService()
+    {
+        await _sut.RegeneratePacketAsync("ten_1", "sr_42");
+
+        _packetGenerationMock.Verify(
+            p => p.RequestRegenerationAsync("ten_1", "sr_42", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

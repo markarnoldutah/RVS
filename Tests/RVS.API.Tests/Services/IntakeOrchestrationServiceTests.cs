@@ -6,6 +6,7 @@ using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Packets;
 
 namespace RVS.API.Tests.Services;
 
@@ -20,10 +21,13 @@ public class IntakeOrchestrationServiceTests
     private readonly Mock<ILookupRepository> _lookupRepoMock = new();
     private readonly Mock<ICategorizationService> _categorizationMock = new();
     private readonly Mock<INotificationOrchestrator> _notificationOrchestratorMock = new();
+    private readonly Mock<IPacketGenerationQueue> _packetQueueMock = new();
     private readonly IntakeOrchestrationService _sut;
 
     public IntakeOrchestrationServiceTests()
     {
+        _packetQueueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>())).Returns(true);
+
         _sut = new IntakeOrchestrationService(
             _slugLookupRepoMock.Object,
             _globalAcctRepoMock.Object,
@@ -34,6 +38,7 @@ public class IntakeOrchestrationServiceTests
             _lookupRepoMock.Object,
             _categorizationMock.Object,
             _notificationOrchestratorMock.Object,
+            _packetQueueMock.Object,
             Mock.Of<ILogger<IntakeOrchestrationService>>());
     }
 
@@ -771,6 +776,47 @@ public class IntakeOrchestrationServiceTests
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         result.Should().NotBeNull();
+    }
+
+    // ── Step 8: Enqueue packet generation (non-blocking) ─────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldEnqueuePacketGenerationForTheCreatedRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _packetQueueMock.Verify(q => q.TryEnqueue(
+            It.Is<PacketGenerationJob>(j =>
+                j.TenantId == "ten_test" &&
+                j.ServiceRequestId == result.ServiceRequest.Id &&
+                j.Trigger == "intake")),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenPacketEnqueueThrows_ShouldNotFailIntake()
+    {
+        SetupFullHappyPath();
+        _packetQueueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>()))
+            .Throws(new InvalidOperationException("queue disposed"));
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenPacketQueueIsFull_ShouldStillReturnServiceRequest()
+    {
+        SetupFullHappyPath();
+        _packetQueueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>())).Returns(false);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.Should().NotBeNull();
+        result.ServiceRequest.TenantId.Should().Be("ten_test");
     }
 
     // ── Full Orchestration ───────────────────────────────────────────────────

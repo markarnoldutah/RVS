@@ -40,6 +40,17 @@ public interface IBlobStorageService
     Task<string> GenerateReadSasUrlAsync(string containerName, string blobName, TimeSpan lifetime, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Downloads a blob's full content as a byte array. Used by packet generation (issue #434) to
+    /// turn photo attachments into image bytes for the PDF renderer, which embeds bytes rather
+    /// than URLs (<c>Spec B-3</c>).
+    /// </summary>
+    /// <param name="containerName">Blob container name.</param>
+    /// <param name="blobName">Target blob name.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The blob's bytes.</returns>
+    Task<byte[]> DownloadAsync(string containerName, string blobName, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Uploads a blob from a stream and returns the resulting blob URI.
     /// </summary>
     /// <param name="containerName">Blob container name.</param>

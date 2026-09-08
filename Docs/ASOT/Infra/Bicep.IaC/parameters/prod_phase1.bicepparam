@@ -34,6 +34,8 @@ param cosmosCapacityMode = 'Serverless'
 // Storage (rvs-attachments container + CORS for SAS uploads)
 param deployStorageAccount = true
 param storageAllowSharedKeyAccess = false
+// devBlobAccessPrincipalId intentionally unset for prod — the app uses its managed
+// identity; humans get blob data access just-in-time (PIM) or via break-glass, never standing.
 
 // Key Vault (RBAC model, API managed identity get + list)
 param deployKeyVault = true

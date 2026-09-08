@@ -47,6 +47,7 @@ The central document. Field groups:
 | Attachments | `attachments[]` | Core |
 | Diagnostics | `diagnosticResponses[]` | Core — this is the packet's most valuable block |
 | AI | `aiEnrichment` metadata | Core |
+| Packet | `packetGeneration` — `status`, `attemptCount`, `lastAttemptAtUtc`, `lastError`, `generatedAtUtc`, `packetVersion`, `pdfBlobPath`, `alertRaised` | Core (issue #434). Async packet-generation state; `lastError` never holds customer issue text (`Spec X-7`); `MaxAttempts` = 3 then a `LogCritical` alert |
 | Outcome | `serviceEvent` — component, failure mode, repair action, parts, labor | **Archived** — technician workflow |
 | Scheduling | `scheduledDateUtc`, `assignedBayId`, `assignedTechnicianId`, `requiredSkills` | **Archived** |
 | Messaging | `messages[]` | **Archived** — defined, referenced nowhere in the codebase |
@@ -97,9 +98,9 @@ At launch the Spec keeps **one** vocabulary: `issue-category`, roughly 10–14 c
 
 Single container `rvs-attachments` on a `Standard_LRS` StorageV2 account, Hot tier, `allowBlobPublicAccess: false`, shared-key access disabled.
 
-Access is entirely SAS-based and time-limited: the browser requests an upload URL, `PUT`s directly to blob with `x-ms-blob-type: BlockBlob`, then confirms. Read access is a per-request SAS, generated on demand and never persisted. Binaries never transit the API.
+Access is entirely SAS-based and time-limited: the browser requests an upload URL, `PUT`s directly to blob with `x-ms-blob-type: BlockBlob`, then confirms. Read access is a per-request SAS, generated on demand and never persisted. Binaries never transit the API — **except** generated packet PDFs, which the API renders in-process (`#434`) and writes server-side to the same container under the `packets/{tenantId}/{serviceRequestId}/v{n}.pdf` prefix; the path and version are recorded on `ServiceRequest.packetGeneration`.
 
-Accepted types: jpeg, png, mp4, m4a, wav, pdf. Cap is 10 files, 25 MB each.
+Accepted upload types: jpeg, png, mp4, m4a, wav, pdf. Cap is 10 files, 25 MB each.
 
 CORS on the blob service allows GET/HEAD/PUT from the Static Web App custom domains only.
 
