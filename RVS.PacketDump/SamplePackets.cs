@@ -1,6 +1,6 @@
 using RVS.Domain.Packets;
 
-namespace RVS.PacketDump.Html;
+namespace RVS.PacketDump;
 
 /// <summary>
 /// Representative <see cref="ServicePacket"/> instances for eyeballing and printing the

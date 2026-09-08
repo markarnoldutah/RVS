@@ -1,4 +1,4 @@
-namespace RVS.PacketDump.Html;
+namespace RVS.PacketDump;
 
 /// <summary>Where output should go, and whether that path is a directory or a single file.</summary>
 internal readonly record struct Target(string Value, bool IsDirectory);

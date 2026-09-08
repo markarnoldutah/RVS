@@ -1,15 +1,15 @@
 using RVS.API.Packets;
 using RVS.Domain.Packets;
-using RVS.PacketDump.Html;
+using RVS.PacketDump;
 
 // Renders sample service packets to standalone files so the print output can be checked
 // on a real shop printer at Letter and A4 (issues #431 HTML / #432 PDF, Spec B-3).
 // Dev utility only — not part of any deployable artifact.
 //
-//   dotnet run --project RVS.PacketDump.HTML                      # ./packet-*.html + .pdf
-//   dotnet run --project RVS.PacketDump.HTML -- ~/Desktop         # into a directory
-//   dotnet run --project RVS.PacketDump.HTML -- --pdf --full      # one PDF, full packet
-//   dotnet run --project RVS.PacketDump.HTML -- ~/Desktop/p.html  # extension fixes format
+//   dotnet run --project RVS.PacketDump                      # ./packet-*.html + .pdf
+//   dotnet run --project RVS.PacketDump -- ~/Desktop         # into a directory
+//   dotnet run --project RVS.PacketDump -- --pdf --full      # one PDF, full packet
+//   dotnet run --project RVS.PacketDump -- ~/Desktop/p.html  # extension fixes format
 //
 // Switches:
 //   --format html|pdf|both   (default both; also --html / --pdf)

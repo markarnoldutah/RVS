@@ -1,4 +1,4 @@
-# RVS.PacketDump.HTML
+# RVS.PacketDump
 
 Dev utility. Renders sample [`ServicePacket`](../RVS.Domain/Packets/ServicePacket.cs)
 instances to standalone files so the print output can be checked on a real shop printer
@@ -7,23 +7,23 @@ at Letter and A4 (`Spec B-3`):
 - **HTML** via [`PacketHtmlRenderer`](../RVS.Domain/Packets/PacketHtmlRenderer.cs) (issue #431)
 - **PDF** via [`PacketPdfRenderer`](../RVS.API/Packets/PacketPdfRenderer.cs) (issue #432)
 
-The name is historical — it now dumps both formats. Not referenced by any app and not
-part of a deployable artifact; it references `RVS.API` only to reach the PDF renderer.
+Dumps both formats. Not referenced by any app and not part of a deployable artifact;
+it references `RVS.API` only to reach the PDF renderer.
 
 ## Use
 
 ```bash
 # Both formats, both variants, into the current directory
-dotnet run --project RVS.PacketDump.HTML
+dotnet run --project RVS.PacketDump
 
 # Into a directory
-dotnet run --project RVS.PacketDump.HTML -- ~/Desktop
+dotnet run --project RVS.PacketDump -- ~/Desktop
 
 # One PDF of the full packet
-dotnet run --project RVS.PacketDump.HTML -- --pdf --full
+dotnet run --project RVS.PacketDump -- --pdf --full
 
 # A named file — the extension fixes the format
-dotnet run --project RVS.PacketDump.HTML -- ~/Desktop/packet.pdf
+dotnet run --project RVS.PacketDump -- ~/Desktop/packet.pdf
 ```
 
 ### Switches
