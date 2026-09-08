@@ -23,6 +23,7 @@ public class IntakeWizardStateTests
         state.LastName.Should().BeEmpty();
         state.Email.Should().BeEmpty();
         state.Phone.Should().BeNull();
+        state.PreferredContact.Should().BeNull();
         state.SmsOptOut.Should().BeFalse();
         state.EmailOptOut.Should().BeFalse();
         state.IsPrefilled.Should().BeFalse();
@@ -117,7 +118,8 @@ public class IntakeWizardStateTests
             FirstName = "Jane",
             LastName = "Doe",
             Email = "jane@example.com",
-            Phone = "555-1234"
+            Phone = "555-1234",
+            PreferredContact = "Text"
         };
 
         state.ApplyPrefill(prefill);
@@ -126,6 +128,7 @@ public class IntakeWizardStateTests
         state.LastName.Should().Be("Doe");
         state.Email.Should().Be("jane@example.com");
         state.Phone.Should().Be("555-1234");
+        state.PreferredContact.Should().Be("Text");
         state.IsPrefilled.Should().BeTrue();
     }
 
@@ -225,6 +228,7 @@ public class IntakeWizardStateTests
         state.FirstName = "Jane";
         state.LastName = "Doe";
         state.Email = "not-an-email";
+        state.PreferredContact = "Email";
 
         var errors = state.ValidateCurrentStep();
 
@@ -244,6 +248,66 @@ public class IntakeWizardStateTests
         state.FirstName = "Jane";
         state.LastName = "Doe";
         state.Email = "jane@example.com";
+        state.PreferredContact = "Email";
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step2_NoPreferredContact_ShouldReturnError()
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.PreferredContact = null;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().Contain(e => e.Contains("contact", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step2_PreferredContactPhone_WithoutPhoneNumber_ShouldReturnError()
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.PreferredContact = "Phone";
+        state.Phone = null;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().Contain(e => e.Contains("phone", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step2_PreferredContactText_WithPhoneNumber_ShouldReturnNoErrors()
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.PreferredContact = "Text";
+        state.Phone = "801-555-1234";
 
         var errors = state.ValidateCurrentStep();
 
@@ -397,6 +461,7 @@ public class IntakeWizardStateTests
         state.IssueDescription = "  Lights flickering  ";
         state.Urgency = "  High  ";
         state.RvUsage = "  Full-Time  ";
+        state.PreferredContact = "  Text  ";
 
         var request = state.BuildCreateRequest();
 
@@ -404,6 +469,7 @@ public class IntakeWizardStateTests
         request.Customer.LastName.Should().Be("Doe");
         request.Customer.Email.Should().Be("jane@example.com");
         request.Customer.Phone.Should().Be("555-1234");
+        request.Customer.PreferredContact.Should().Be("Text");
         request.Asset.AssetId.Should().Be("1HGBH41JXMN109186");
         request.Asset.Manufacturer.Should().Be("Winnebago");
         request.Asset.Model.Should().Be("Vista");
@@ -653,6 +719,7 @@ public class IntakeWizardStateTests
         state.FailedUploadCount = 3;
         state.SmsOptOut = true;
         state.EmailOptOut = true;
+        state.PreferredContact = "Phone";
         await state.GoToStepAsync(5);
 
         await state.ClearAsync();
@@ -670,6 +737,7 @@ public class IntakeWizardStateTests
         state.FailedUploadCount.Should().Be(0);
         state.SmsOptOut.Should().BeFalse();
         state.EmailOptOut.Should().BeFalse();
+        state.PreferredContact.Should().BeNull();
     }
 
     [Fact]

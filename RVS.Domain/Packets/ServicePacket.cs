@@ -71,9 +71,8 @@ public sealed record PacketCustomer
     public string? Email { get; init; }
 
     /// <summary>
-    /// Preferred contact method (<c>Spec A-2</c>). Not yet captured on any entity, so this
-    /// is always <c>null</c> today; the slot exists so a renderer needs no change once
-    /// intake records it.
+    /// Preferred contact method (<c>Spec A-2</c>) — one of <c>Phone</c>, <c>Text</c>, or
+    /// <c>Email</c>. <c>null</c> for service requests created before intake captured it.
     /// </summary>
     public string? PreferredContact { get; init; }
 }

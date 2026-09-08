@@ -32,6 +32,7 @@ public class PacketComposerTests
             LastName = "Gribble",
             Email = "dale@example.com",
             Phone = "555-0101",
+            PreferredContact = "Text",
         },
         AssetInfo = new AssetInfoEmbedded
         {
@@ -123,6 +124,7 @@ public class PacketComposerTests
         packet.Customer.FullName.Should().Be("Dale Gribble");
         packet.Customer.Phone.Should().Be("555-0101");
         packet.Customer.Email.Should().Be("dale@example.com");
+        packet.Customer.PreferredContact.Should().Be("Text");
 
         // 3. Location + timestamp + reference code
         packet.Origin.LocationName.Should().Be("Salt Lake Service Center");
@@ -167,6 +169,30 @@ public class PacketComposerTests
         var packet = PacketComposer.Compose(request, FullContext());
 
         packet.Origin.ReferenceCode.Should().Be("ABC123");
+    }
+
+    // ── Degradation: preferred contact ─────────────────────────────────────
+
+    [Fact]
+    public void Compose_WhenPreferredContactBlank_ShouldSetPreferredContactNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.PreferredContact = "   ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenPreferredContactNull_ShouldSetPreferredContactNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.PreferredContact = null;
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.PreferredContact.Should().BeNull();
     }
 
     // ── Degradation: VIN ────────────────────────────────────────────────────

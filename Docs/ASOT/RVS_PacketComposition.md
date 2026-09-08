@@ -90,7 +90,7 @@ It is a **pure transform**: guard clauses, then read-only mapping. No repository
 | # | Section | Degradation |
 |---|---|---|
 | 1 | Unit header — year / make / model / VIN | each field independent; `HasVin` lets the renderer drop the VIN line and keep the rest |
-| 2 | Customer — name, phone, email, preferred contact | fields null when absent; `PreferredContact` always null today (`#472`) |
+| 2 | Customer — name, phone, email, preferred contact | fields null when absent; `PreferredContact` is one of `Phone` / `Text` / `Email` (`PreferredContactMethod`), captured at intake (`#472`), null only for pre-existing requests |
 | 3 | Origin — location, submission timestamp, short reference code | location fields null if context omits them; reference code always present |
 | 4 | Issue category | null when unclassified — it is advisory |
 | 5 | AI summary | null when no summary; when present, always carries the AI-generated label; rendered **above** the complaint so the concise problem recreation is read first |
@@ -100,7 +100,7 @@ It is a **pure transform**: guard clauses, then read-only mapping. No repository
 | 9 | Paste block | from context; null until `#437` |
 | 10 | Status link | from context; null until `#427` |
 
-Short reference code: first hyphen-delimited segment of `ServiceRequest.Id`, upper-cased (`a1b2c3d4-…` → `A1B2C3D4`). Deterministic, stable across regenerations, no stored field. The Spec does not yet define a format — see `#472`.
+Short reference code: first hyphen-delimited segment of `ServiceRequest.Id`, upper-cased (`a1b2c3d4-…` → `A1B2C3D4`). Deterministic, stable across regenerations, no stored field or counter. Falls back to the whole id when it contains no `-`. Ratified in `Spec B-2` item 3 (`#472`); a human-friendlier sequential scheme would need a stored field + per-tenant counter + migration and remains a separate decision if ever wanted.
 
 ### 4. Render — `#431` (HTML, built) and `#432` (PDF, built)
 
@@ -140,7 +140,7 @@ Both renderers take one `ServicePacket` and read the same fields in the same ord
 | Photo SAS resolution (`PacketPhotoUrlResolver`) | `#433` | **Built** |
 | Generation orchestration (queue + worker + `PacketGenerationService`) | `#434` | **Built** |
 | Email delivery | `#435`–`#439` | Planned |
-| Preferred-contact + reference-code gaps | `#472` | Deferred |
+| Preferred-contact + reference-code gaps | `#472` | **Built** — preferred contact captured at intake (`Phone` / `Text` / `Email`); reference code ratified as the id-derived convention |
 
 ---
 

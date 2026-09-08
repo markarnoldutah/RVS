@@ -72,6 +72,22 @@
             </MudPaper>
 
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Preferred contact method</MudText>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                        How should the service team reach you first?
+                    </MudText>
+                    <MudRadioGroup T="string"
+                                   @bind-Value="State.PreferredContact"
+                                   Validation="@(new Func<string?, string?>(ValidatePreferredContact))">
+                        <MudRadio T="string" Value="@("Phone")" Color="Color.Primary">Phone call</MudRadio>
+                        <MudRadio T="string" Value="@("Text")" Color="Color.Primary">Text message</MudRadio>
+                        <MudRadio T="string" Value="@("Email")" Color="Color.Primary">Email</MudRadio>
+                    </MudRadioGroup>
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="2">
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Notification Preferences</MudText>
                     <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
@@ -127,6 +143,19 @@
         if (string.IsNullOrWhiteSpace(value)) return "Phone number is required";
         var digits = new string(value.Where(char.IsDigit).ToArray());
         return digits.Length < 10 ? "Phone number must have at least 10 digits" : null;
+    }
+
+    private string? ValidatePreferredContact(string? value)
+    {
+        if (!_submitted) return null;
+        if (string.IsNullOrWhiteSpace(value)) return "Preferred contact method is required";
+        if (value is "Phone" or "Text" && string.IsNullOrWhiteSpace(State.Phone))
+        {
+            return value == "Phone"
+                ? "Enter a phone number to be contacted by phone"
+                : "Enter a phone number to be contacted by text";
+        }
+        return null;
     }
 
     private async Task HandleNext()

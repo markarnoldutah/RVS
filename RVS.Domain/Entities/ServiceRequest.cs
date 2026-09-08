@@ -300,6 +300,15 @@ public class CustomerSnapshotEmbedded
     public string? Phone { get; set; }
 
     /// <summary>
+    /// The customer's preferred contact method at the time of intake — one of
+    /// <c>Phone</c>, <c>Text</c>, or <c>Email</c>
+    /// (see <see cref="Validation.PreferredContactMethod"/>). <c>null</c> for service
+    /// requests created before this field was captured.
+    /// </summary>
+    [JsonProperty("preferredContact")]
+    public string? PreferredContact { get; set; }
+
+    /// <summary>
     /// True if this customer had prior service requests at this dealership.
     /// </summary>
     [JsonProperty("isReturningCustomer")]

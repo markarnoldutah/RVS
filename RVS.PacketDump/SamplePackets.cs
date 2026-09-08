@@ -24,7 +24,7 @@ internal static class SamplePackets
             FullName = "Dale Gribble",
             Phone = "(801) 555-0101",
             Email = "dale@example.com",
-            PreferredContact = "Text message",
+            PreferredContact = "Text",
         },
         Origin = new PacketOrigin
         {

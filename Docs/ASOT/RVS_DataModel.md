@@ -42,12 +42,12 @@ The central document. Field groups:
 |---|---|---|
 | Workflow | `status`, `priority`, `boardSequence` | `boardSequence` is Kanban-only — **archived** |
 | Issue | issue text, `issueCategory`, `technicianSummary` | Core. `technicianSummary` is the closest thing to a paste block today |
-| Customer | embedded `customerSnapshot` | Core |
+| Customer | embedded `customerSnapshot` — name, email, phone, `preferredContact` (`Phone`/`Text`/`Email`, captured at intake per `#472`; null for pre-existing requests) | Core |
 | Asset | `assetInfo` — VIN, make, model, year | Core |
 | Attachments | `attachments[]` | Core |
 | Diagnostics | `diagnosticResponses[]` | Core — this is the packet's most valuable block |
 | AI | `aiEnrichment` metadata | Core |
-| Packet | `packetGeneration` — `status`, `attemptCount`, `lastAttemptAtUtc`, `lastError`, `generatedAtUtc`, `packetVersion`, `pdfBlobPath`, `alertRaised` | Core (issue #434). Async packet-generation state; `lastError` never holds customer issue text (`Spec X-7`); `MaxAttempts` = 3 then a `LogCritical` alert |
+| Packet | `packetGeneration` — `status`, `attemptCount`, `lastAttemptAtUtc`, `lastError`, `generatedAtUtc`, `packetVersion`, `pdfBlobPath`, `alertRaised` | Core (issue #434). Async packet-generation state; `lastError` never holds customer issue text (`Spec X-7`); `MaxAttempts` = 3 then a `LogCritical` alert. The packet's "short reference code" is **not stored** — it is derived at compose time as the first hyphen-delimited segment of `id`, upper-cased (`#472`) |
 | Outcome | `serviceEvent` — component, failure mode, repair action, parts, labor | **Archived** — technician workflow |
 | Scheduling | `scheduledDateUtc`, `assignedBayId`, `assignedTechnicianId`, `requiredSkills` | **Archived** |
 | Messaging | `messages[]` | **Archived** — defined, referenced nowhere in the codebase |

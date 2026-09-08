@@ -663,6 +663,16 @@
                                                   InputType="InputType.Telephone"
                                                   Class="compact-field" />
                                 </MudStack>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="@FieldLabelStyle">Preferred contact</MudText>
+                                    <MudSelect T="string" @bind-Value="_editCustomerPreferredContact"
+                                               Variant="Variant.Outlined" Margin="Margin.Dense"
+                                               Clearable="true" Class="compact-field">
+                                        <MudSelectItem T="string" Value="@("Phone")">Phone</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("Text")">Text</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("Email")">Email</MudSelectItem>
+                                    </MudSelect>
+                                </MudStack>
                                 @if (_customerError is not null)
                                 {
                                     <MudAlert Severity="Severity.Error" Dense="true">@_customerError</MudAlert>
@@ -677,6 +687,10 @@
                                 @if (!string.IsNullOrEmpty(_sr.Customer.Phone))
                                 {
                                     <MudText Typo="Typo.body2" Style="@ValueStyle">@_sr.Customer.Phone</MudText>
+                                }
+                                @if (!string.IsNullOrEmpty(_sr.Customer.PreferredContact))
+                                {
+                                    <MudText Typo="Typo.body2" Style="@ValueStyle">Prefers @_sr.Customer.PreferredContact</MudText>
                                 }
                             </MudStack>
                         }
@@ -855,6 +869,7 @@
     private string? _editCustomerLastName;
     private string? _editCustomerEmail;
     private string? _editCustomerPhone;
+    private string? _editCustomerPreferredContact;
 
     private bool _editingAsset;
     private bool _assetSaving;
@@ -1161,6 +1176,7 @@
         _editCustomerLastName  = _sr.Customer.LastName;
         _editCustomerEmail     = _sr.Customer.Email;
         _editCustomerPhone     = _sr.Customer.Phone;
+        _editCustomerPreferredContact = _sr.Customer.PreferredContact;
         _customerError = null;
         _editingCustomer = true;
     }
@@ -1190,7 +1206,8 @@
                     FirstName = _editCustomerFirstName ?? string.Empty,
                     LastName  = _editCustomerLastName  ?? string.Empty,
                     Email     = _editCustomerEmail     ?? string.Empty,
-                    Phone     = _editCustomerPhone
+                    Phone     = _editCustomerPhone,
+                    PreferredContact = string.IsNullOrWhiteSpace(_editCustomerPreferredContact) ? null : _editCustomerPreferredContact
                 }
             };
             _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
@@ -1395,7 +1412,8 @@
                     FirstName = firstName,
                     LastName  = lastName,
                     Email     = _sr.Customer.Email,
-                    Phone     = _sr.Customer.Phone
+                    Phone     = _sr.Customer.Phone,
+                    PreferredContact = _sr.Customer.PreferredContact
                 },
                 Asset = new AssetInfoDto
                 {

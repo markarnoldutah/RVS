@@ -235,7 +235,8 @@ public class ServiceRequestMapperApplyUpdateTests
                 FirstName = "  John  ",
                 LastName = "  Smith  ",
                 Email = "  john@example.com  ",
-                Phone = "  555-9999  "
+                Phone = "  555-9999  ",
+                PreferredContact = "  text  "
             }
         };
 
@@ -245,6 +246,7 @@ public class ServiceRequestMapperApplyUpdateTests
         entity.CustomerSnapshot.LastName.Should().Be("Smith");
         entity.CustomerSnapshot.Email.Should().Be("john@example.com");
         entity.CustomerSnapshot.Phone.Should().Be("555-9999");
+        entity.CustomerSnapshot.PreferredContact.Should().Be("Text");
     }
 
     [Fact]

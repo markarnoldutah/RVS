@@ -60,7 +60,7 @@ public static class PacketComposer
         FullName = $"{snapshot.FirstName} {snapshot.LastName}".Trim(),
         Phone = NullIfBlank(snapshot.Phone),
         Email = NullIfBlank(snapshot.Email),
-        PreferredContact = null,
+        PreferredContact = NullIfBlank(snapshot.PreferredContact),
     };
 
     private static IReadOnlyList<PacketDiagnosticEntry> ComposeDiagnostics(
