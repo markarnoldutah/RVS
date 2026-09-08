@@ -102,4 +102,33 @@ public class DealershipLocationDtoTests
         dto.AcceptedFileTypes.Should().BeEmpty();
         dto.AiContext.Should().BeNull();
     }
+
+    [Fact]
+    public void PacketConfigDto_DefaultsRequireOnlyARecipient()
+    {
+        var dto = new PacketConfigDto();
+
+        dto.Enabled.Should().BeTrue();
+        dto.Recipients.Should().BeEmpty();
+        dto.AttachPdf.Should().BeTrue();
+        dto.IncludePhotos.Should().BeTrue();
+        dto.PasteBlockCharacterCap.Should().Be(1000);
+        dto.StatusLinkTtlDays.Should().Be(30);
+        dto.LogoUrl.Should().BeNull();
+    }
+
+    [Fact]
+    public void LocationDetailDto_HasPacketConfigDefault()
+    {
+        var dto = new LocationDetailDto
+        {
+            Id = "loc-1",
+            TenantId = "tenant-1",
+            Name = "Main Service Center",
+            Slug = "main-service-center"
+        };
+
+        dto.PacketConfig.Should().NotBeNull();
+        dto.PacketConfig.Enabled.Should().BeTrue();
+    }
 }

@@ -658,6 +658,10 @@ static List<Location> BuildLocations() =>
             State = "UT",
             PostalCode = "84107",
         },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@blue-compass-slc.example.com"],
+        },
     },
     new Location
     {
@@ -674,6 +678,10 @@ static List<Location> BuildLocations() =>
             City = "Denver",
             State = "CO",
             PostalCode = "80231",
+        },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@blue-compass-den.example.com"],
         },
     },
     new Location
@@ -692,6 +700,10 @@ static List<Location> BuildLocations() =>
             State = "NV",
             PostalCode = "89121",
         },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@blue-compass-lv.example.com"],
+        },
     },
     new Location
     {
@@ -708,6 +720,10 @@ static List<Location> BuildLocations() =>
             City = "Phoenix",
             State = "AZ",
             PostalCode = "85015",
+        },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@blue-compass-phx.example.com"],
         },
     },
 
@@ -727,6 +743,10 @@ static List<Location> BuildLocations() =>
             City = "Boise",
             State = "ID",
             PostalCode = "83705",
+        },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@happy-trails-boise.example.com"],
         },
     },
 ];

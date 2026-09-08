@@ -25,4 +25,11 @@ public sealed record LocationCreateRequestDto
     /// for this location. Pass null to leave existing capabilities unchanged on update.
     /// </summary>
     public List<string>? EnabledCapabilities { get; init; }
+
+    /// <summary>
+    /// Per-location service-packet configuration (<c>Spec B-6</c> / <c>C-6</c>). When omitted on
+    /// create, defaults are applied. Pass null on update to leave the existing configuration
+    /// unchanged; a non-null value replaces it wholesale.
+    /// </summary>
+    public PacketConfigDto? PacketConfig { get; init; }
 }

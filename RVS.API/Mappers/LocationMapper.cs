@@ -25,6 +25,7 @@ public static class LocationMapper
             Address = entity.Address.ToDto(),
             IntakeConfig = entity.IntakeConfig.ToDto(),
             EnabledCapabilities = [.. entity.EnabledCapabilities],
+            PacketConfig = entity.PacketConfig.ToDto(),
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
@@ -81,7 +82,8 @@ public static class LocationMapper
             Phone = dto.Phone?.Trim(),
             Address = dto.Address is not null ? dto.Address.ToEmbedded() : new AddressEmbedded(),
             IntakeConfig = dto.IntakeConfig is not null ? dto.IntakeConfig.ToEmbedded() : new IntakeFormConfigEmbedded(),
-            EnabledCapabilities = dto.EnabledCapabilities is not null ? [.. dto.EnabledCapabilities] : []
+            EnabledCapabilities = dto.EnabledCapabilities is not null ? [.. dto.EnabledCapabilities] : [],
+            PacketConfig = dto.PacketConfig is not null ? dto.PacketConfig.ToEmbedded() : new PacketConfigEmbedded()
         };
     }
 
@@ -126,6 +128,11 @@ public static class LocationMapper
             entity.EnabledCapabilities = [.. dto.EnabledCapabilities];
         }
 
+        if (dto.PacketConfig is not null)
+        {
+            entity.PacketConfig = dto.PacketConfig.ToEmbedded();
+        }
+
         entity.MarkAsUpdated(updatedByUserId);
     }
 
@@ -160,6 +167,48 @@ public static class LocationMapper
             City = dto.City?.Trim(),
             State = dto.State?.Trim(),
             PostalCode = dto.PostalCode?.Trim()
+        };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="PacketConfigEmbedded"/> entity to a <see cref="PacketConfigDto"/>.
+    /// </summary>
+    public static PacketConfigDto ToDto(this PacketConfigEmbedded config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+
+        return new PacketConfigDto
+        {
+            Enabled = config.Enabled,
+            Recipients = [.. config.Recipients],
+            AttachPdf = config.AttachPdf,
+            IncludePhotos = config.IncludePhotos,
+            PasteBlockCharacterCap = config.PasteBlockCharacterCap,
+            StatusLinkTtlDays = config.StatusLinkTtlDays,
+            LogoUrl = config.LogoUrl
+        };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="PacketConfigDto"/> to a <see cref="PacketConfigEmbedded"/> entity,
+    /// trimming the recipient addresses and the logo URL. Range and address-shape rules are
+    /// enforced by <c>PacketConfigValidator</c> in the service, not here.
+    /// </summary>
+    public static PacketConfigEmbedded ToEmbedded(this PacketConfigDto dto)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        return new PacketConfigEmbedded
+        {
+            Enabled = dto.Enabled,
+            Recipients = dto.Recipients is not null
+                ? [.. dto.Recipients.Select(r => r?.Trim() ?? string.Empty)]
+                : [],
+            AttachPdf = dto.AttachPdf,
+            IncludePhotos = dto.IncludePhotos,
+            PasteBlockCharacterCap = dto.PasteBlockCharacterCap,
+            StatusLinkTtlDays = dto.StatusLinkTtlDays,
+            LogoUrl = string.IsNullOrWhiteSpace(dto.LogoUrl) ? null : dto.LogoUrl.Trim()
         };
     }
 

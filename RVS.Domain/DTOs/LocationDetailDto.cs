@@ -20,6 +20,11 @@ public sealed record LocationDetailDto
     /// </summary>
     public List<string> EnabledCapabilities { get; init; } = [];
 
+    /// <summary>
+    /// Per-location service-packet configuration (<c>Spec B-6</c> / <c>C-6</c>).
+    /// </summary>
+    public PacketConfigDto PacketConfig { get; init; } = new();
+
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
 }
