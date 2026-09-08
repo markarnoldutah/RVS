@@ -36,9 +36,9 @@ public static class PacketComposer
                 ReferenceCode = DeriveReferenceCode(request.Id),
             },
             IssueCategory = NullIfBlank(request.IssueCategory),
+            AiSummary = ComposeAiSummary(request.TechnicianSummary),
             IssueDescription = request.IssueDescription ?? string.Empty,
             Diagnostics = ComposeDiagnostics(request.DiagnosticResponses),
-            AiSummary = ComposeAiSummary(request.TechnicianSummary),
             Photos = ComposePhotos(request.Attachments, context.PhotoUrls),
             PasteBlock = NullIfBlank(context.PasteBlock),
             StatusLink = NullIfBlank(context.StatusLinkUrl) is { } url

@@ -25,14 +25,18 @@ public sealed record ServicePacket
     /// <summary>4. Issue category. <c>null</c> when unclassified (it is advisory, <c>Spec A-5</c>).</summary>
     public string? IssueCategory { get; init; }
 
-    /// <summary>5. The customer's description, verbatim — never trimmed or rewritten.</summary>
+    /// <summary>
+    /// 5. AI summary, always labelled as AI-generated. <c>null</c> when no summary exists.
+    /// Rendered above the customer's description so the concise recreation of the problem
+    /// is read first (<c>Spec B-2</c> item 5).
+    /// </summary>
+    public PacketAiSummary? AiSummary { get; init; }
+
+    /// <summary>6. The customer's description, verbatim — never trimmed or rewritten.</summary>
     public required string IssueDescription { get; init; }
 
-    /// <summary>6. Diagnostic Q&amp;A. Empty when no diagnostic responses were captured.</summary>
+    /// <summary>7. Diagnostic Q&amp;A. Empty when no diagnostic responses were captured.</summary>
     public required IReadOnlyList<PacketDiagnosticEntry> Diagnostics { get; init; }
-
-    /// <summary>7. AI summary, always labelled as AI-generated. <c>null</c> when no summary exists.</summary>
-    public PacketAiSummary? AiSummary { get; init; }
 
     /// <summary>8. Photo thumbnails. Empty when there are no image attachments with a resolved URL.</summary>
     public required IReadOnlyList<PacketPhoto> Photos { get; init; }

@@ -145,21 +145,31 @@ public class PacketHtmlRendererTests
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
+        // Spec B-2 order, with the AI assessment lifted above the complaint.
         var order = new[]
         {
             Order(html, "section:unit"),
             Order(html, "section:customer"),
             Order(html, "section:origin"),
             Order(html, "section:category"),
+            Order(html, "section:ai-summary"),
             Order(html, "section:description"),
             Order(html, "section:diagnostics"),
-            Order(html, "section:ai-summary"),
             Order(html, "section:photos"),
             Order(html, "section:paste-block"),
             Order(html, "section:status-link"),
         };
 
         order.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void Render_ShouldPlaceThePreliminaryAssessmentAboveTheComplaint()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        Order(html, "section:ai-summary").Should().BeLessThan(Order(html, "section:description"));
+        Order(html, "section:category").Should().BeLessThan(Order(html, "section:ai-summary"));
     }
 
     // ── 1. Unit header ─────────────────────────────────────────────────────
@@ -312,7 +322,7 @@ public class PacketHtmlRendererTests
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        html[Order(html, "section:category")..Order(html, "section:description")]
+        html[Order(html, "section:category")..Order(html, "section:ai-summary")]
             .Should().Contain("Electrical");
     }
 
@@ -323,7 +333,7 @@ public class PacketHtmlRendererTests
 
         var html = PacketHtmlRenderer.Render(packet);
 
-        html[Order(html, "section:category")..Order(html, "section:description")]
+        html[Order(html, "section:category")..Order(html, "section:ai-summary")]
             .Should().Contain("Uncategorized");
     }
 
@@ -381,14 +391,14 @@ public class PacketHtmlRendererTests
             .Should().Contain("No diagnostic questions were answered");
     }
 
-    // ── 7. AI summary ─────────────────────────────────────────────────────
+    // ── 5. AI summary (rendered above the complaint) ──────────────────────
 
     [Fact]
     public void Render_WhenAiSummaryPresent_ShouldRenderItLabelledAsAiGenerated()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        var block = html[Order(html, "section:ai-summary")..Order(html, "section:photos")];
+        var block = html[Order(html, "section:ai-summary")..Order(html, "section:description")];
         block.Should().Contain("Likely overheating on the generator windings.");
         block.ToLowerInvariant().Should().Contain("ai-generated");
     }

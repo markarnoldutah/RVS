@@ -17,11 +17,11 @@ namespace RVS.Domain.Packets;
 /// Layout follows the Integrated Dealer Systems (IDS) work-order idiom so a service
 /// manager reads it on daily muscle memory: a right-aligned tracking number in the
 /// masthead (<c>RVS #</c>, mirroring IDS <c>W/O #</c>), a three-column Customer / Location
-/// / Unit band, <c>COMPLAINT</c> as the heading over the verbatim customer text, and a
-/// running page footer carrying the reference and page count. It deliberately omits
-/// everything IDS uses for the repair-authorization contract — pricing, parts/labour
-/// tables, signatures, arbitration text — none of which belongs in an intake packet
-/// (<c>Spec B-2</c>).
+/// / Unit band, then the AI <c>Preliminary assessment</c> above <c>COMPLAINT</c> (the
+/// verbatim customer text) so the concise problem recreation is read first, and a running
+/// page footer carrying the reference and page count. It deliberately omits everything IDS
+/// uses for the repair-authorization contract — pricing, parts/labour tables, signatures,
+/// arbitration text — none of which belongs in an intake packet (<c>Spec B-2</c>).
 ///
 /// Design constraints, all verified structurally by the renderer's tests:
 /// <list type="bullet">
@@ -63,9 +63,12 @@ public static class PacketHtmlRenderer
 
         AppendMasthead(sb, packet, submittedUtc, submittedDate);
         AppendCategory(sb, packet.IssueCategory);
+        // The AI assessment sits above the verbatim complaint: a service manager should see
+        // the concise recreation of the problem first, then the customer's own words, then
+        // the diagnostic detail (issue #431 follow-up; Spec B-2).
+        AppendAiSummary(sb, packet.AiSummary);
         AppendDescription(sb, packet.IssueDescription);
         AppendDiagnostics(sb, packet.Diagnostics);
-        AppendAiSummary(sb, packet.AiSummary);
         AppendPhotos(sb, packet.Photos);
         AppendPasteBlock(sb, packet.PasteBlock);
         AppendStatusLink(sb, packet.StatusLink);
@@ -164,7 +167,7 @@ public static class PacketHtmlRenderer
         sb.Append("</section>\n");
     }
 
-    // ── 5. Complaint — the customer's words, verbatim (IDS "COMPLAINT") ────
+    // ── 6. Complaint — the customer's words, verbatim (IDS "COMPLAINT") ────
 
     private static void AppendDescription(StringBuilder sb, string description)
     {
@@ -175,7 +178,7 @@ public static class PacketHtmlRenderer
         sb.Append("</section>\n");
     }
 
-    // ── 6. Diagnostic Q&A — the expert block ─────────────────────────────
+    // ── 7. Diagnostic Q&A — the expert block ─────────────────────────────
 
     private static void AppendDiagnostics(StringBuilder sb, IReadOnlyList<PacketDiagnosticEntry> diagnostics)
     {
@@ -211,7 +214,9 @@ public static class PacketHtmlRenderer
         sb.Append("</section>\n");
     }
 
-    // ── 7. AI summary — a preliminary assessment, labelled AI-generated ───
+    // ── 5. AI summary — a preliminary assessment, labelled AI-generated ───
+    //     Positioned above the complaint (see Render): the manager reads the concise
+    //     problem recreation first.
 
     private static void AppendAiSummary(StringBuilder sb, PacketAiSummary? summary)
     {
