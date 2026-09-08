@@ -1,7 +1,7 @@
 # RVS — Packet Composition
 
-**Version:** 1.4 · September 8, 2026
-**Scope:** How a service packet is assembled and rendered, end to end. Covers what is built (`#430` composition, `#431` HTML render, `#432` PDF render, `#433` photo SAS resolution, `#434` generation orchestration, `#435` per-location packet config) and the design of the stage that is not yet (`#436`–`#439` email delivery).
+**Version:** 1.5 · September 8, 2026
+**Scope:** How a service packet is assembled and rendered, end to end. Covers what is built (`#430` composition, `#431` HTML render, `#432` PDF render, `#433` photo SAS resolution, `#434` generation orchestration, `#435` per-location packet config, `#436` DMS paste block) and the design of the stage that is not yet (`#437`–`#439` email delivery).
 
 Product canon is `../RVS_Overview.md`, `../RVS_Spec.md`, `../RVS_Plan.md`. Requirements referenced here as `Spec B-2` etc. live in `../RVS_Spec.md` section B. This document describes the intended mechanism; where a stage is not yet built it says so.
 
@@ -58,7 +58,7 @@ Packet generation is enqueued when a customer completes intake (`IntakeOrchestra
 
 **Queue — in-process, swap-ready.** `IPacketGenerationQueue` (`RVS.Domain/Interfaces/`) is the dispatch seam. The default `ChannelPacketGenerationQueue` (`RVS.API/Packets/`) is a bounded in-memory `System.Threading.Channels` queue — a singleton, drained by the `PacketGenerationWorker` `BackgroundService` (`RVS.API/Workers/`). `TryEnqueue` never blocks the caller; a saturated queue drops the write and the request stays `Pending`, recoverable by the regenerate endpoint. Jobs are not durable across a process restart — that is bounded by design: every request persists its `packetGeneration` state, so a lost job is visible in the manager app and re-runnable. Swapping in a durable transport (e.g. Azure Storage Queue) is a new implementation of `IPacketGenerationQueue` plus a DI change; no caller touches the channel. The worker runs one `PacketGenerationService.GenerateAsync` attempt per job in its own DI scope, and re-queues after a 5 s delay while attempts remain.
 
-### 2. Gather — `#434` (built), with `#427` / `#436` / `#433`
+### 2. Gather — `#434` (built), with `#436` / `#433` (built) and `#427` (pending)
 
 The orchestrator assembles everything the composer needs that is **not** on the `ServiceRequest`:
 
@@ -68,7 +68,7 @@ The orchestrator assembles everything the composer needs that is **not** on the 
 | Submission timestamp | `ServiceRequest.CreatedAtUtc` | `#434` (built) |
 | Per-photo read URLs | time-limited SAS, generated per request, never persisted, `Spec X-6` | `#433` (built) |
 | Status-link URL | minted anonymous token, `Spec X-1` / `X-5` | `#427` — context carries `null` until then |
-| DMS paste-block text | generated, ASCII-safe, `Spec B-5` | `#436` — context carries `null` until then |
+| DMS paste-block text | `PasteBlockGenerator.Generate` (`RVS.Domain/Packets/`) — ASCII-folded, fenced top and bottom, description truncated at a word boundary to the location's `pasteBlockCharacterCap` (default 1,000), `Spec B-5` | `#436` (built) — status line filled in once `#427` mints the link |
 
 These are packed into a `PacketCompositionContext` (`RVS.Domain/Packets/PacketCompositionContext.cs`) by `PacketGenerationService` (`RVS.API/Services/`). Photo URLs are a dictionary keyed by attachment id; an image attachment with no entry is dropped rather than rendered broken.
 
@@ -97,7 +97,7 @@ It is a **pure transform**: guard clauses, then read-only mapping. No repository
 | 6 | Customer's description | **verbatim** — never trimmed or rewritten |
 | 7 | Diagnostic Q&A | empty list when none; blank-question entries skipped |
 | 8 | Photos | empty list when no image attachment has a resolved URL |
-| 9 | Paste block | from context; null until `#437` |
+| 9 | Paste block | from context; `PasteBlockGenerator` (`#436`); the status line inside it stays absent until `#427` mints the link |
 | 10 | Status link | from context; null until `#427` |
 
 Short reference code: first hyphen-delimited segment of `ServiceRequest.Id`, upper-cased (`a1b2c3d4-…` → `A1B2C3D4`). Deterministic, stable across regenerations, no stored field or counter. Falls back to the whole id when it contains no `-`. Ratified in `Spec B-2` item 3 (`#472`); a human-friendlier sequential scheme would need a stored field + per-tenant counter + migration and remains a separate decision if ever wanted.
@@ -124,9 +124,9 @@ Both renderers take one `ServicePacket` and read the same fields in the same ord
   - **Determinism** — document metadata dates are pinned to the packet's submission time so the same packet renders byte-for-byte identically.
   - **Fonts** — QuestPDF's bundled Lato only; no font assets are vendored. Verbatim and paste blocks render in a bordered box rather than a monospace face (cosmetic; not a `Spec` requirement).
 
-### 5. Deliver — Feature 3 (`#436`–`#439`), planned
+### 5. Deliver — Feature 3 (`#437`–`#439`), planned
 
-`#434` stores the PDF and stamps `packetGeneration.packetVersion`; `#435` adds the per-location `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo) that delivery will read. Delivery itself is still to build: the HTML packet is emailed to the location's configured recipients via Azure Communication Services, with the PDF and the original photos attached per `packetConfig`. Subject `[RVS] {category} — {year} {make} {model} — {customer last name}`. Text-only clients degrade to the paste block. Delivery is idempotent per `(serviceRequestId, packetVersion)`, retried three times with exponential backoff, then alerted. `Spec B-4`.
+`#434` stores the PDF and stamps `packetGeneration.packetVersion`; `#435` adds the per-location `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo) that delivery will read; `#436` produces the paste block the text-only fallback uses. Delivery itself is still to build: the HTML packet is emailed to the location's configured recipients via Azure Communication Services, with the PDF and the original photos attached per `packetConfig`. Subject `[RVS] {category} — {year} {make} {model} — {customer last name}`. Text-only clients degrade to the paste block. Delivery is idempotent per `(serviceRequestId, packetVersion)`, retried three times with exponential backoff, then alerted. `Spec B-4`.
 
 ---
 
@@ -139,8 +139,9 @@ Both renderers take one `ServicePacket` and read the same fields in the same ord
 | PDF render (QuestPDF) | `#432` | **Built** |
 | Photo SAS resolution (`PacketPhotoUrlResolver`) | `#433` | **Built** |
 | Generation orchestration (queue + worker + `PacketGenerationService`) | `#434` | **Built** |
-| Per-location packet config (`Location.packetConfig`) | `#435` | **Built** — recipients (0–10), attach-PDF, include-photos, paste-block cap, status-link TTL, logo; read/written via `api/locations`. Not yet consumed |
-| Email delivery | `#436`–`#439` | Planned |
+| Per-location packet config (`Location.packetConfig`) | `#435` | **Built** — recipients (0–10), attach-PDF, include-photos, paste-block cap, status-link TTL, logo; read/written via `api/locations`. Paste-block cap now consumed by `#436`; the rest awaits delivery |
+| DMS paste block (`PasteBlockGenerator`) | `#436` | **Built** — fenced ASCII-safe block, order category → verbatim description → status link, description truncated at a word boundary to `pasteBlockCharacterCap`; assembled in `PacketGenerationService` into `PacketCompositionContext.PasteBlock` |
+| Email delivery | `#437`–`#439` | Planned |
 | Preferred-contact + reference-code gaps | `#472` | **Built** — preferred contact captured at intake (`Phone` / `Text` / `Email`); reference code ratified as the id-derived convention |
 
 ---

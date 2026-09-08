@@ -214,6 +214,42 @@ public class PacketGenerationServiceTests
         sr.PacketGeneration.Status.Should().Be("Succeeded");
     }
 
+    // ── Paste block (Spec B-5, issue #436) ─────────────────────────────────
+
+    [Fact]
+    public async Task GenerateAsync_WithAVeryLargeDescriptionAndASmallLocationCap_ShouldStillSucceed()
+    {
+        var sr = BuildRequest();
+        sr.IssueDescription = string.Join(" ", Enumerable.Repeat("wordword", 4000));
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_1",
+                TenantId = TenantId,
+                Name = "Salt Lake Service",
+                PacketConfig = new PacketConfigEmbedded { PasteBlockCharacterCap = 120 },
+            });
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        sr.PacketGeneration.Status.Should().Be("Succeeded");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenLocationIsMissing_ShouldStillSucceedUsingTheDefaultPasteBlockCap()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location?)null);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+    }
+
     // ── Failure isolation ──────────────────────────────────────────────────
 
     [Fact]
