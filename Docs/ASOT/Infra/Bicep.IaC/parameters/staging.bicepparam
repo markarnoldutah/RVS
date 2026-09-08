@@ -37,7 +37,7 @@ param storageCorsOrigins = [
 //   az ad group show --group sg-rvs-dev-blob --query id -o tsv   # paste below
 //
 // Leave as '' to skip the grant (deploy still succeeds).
-param devBlobAccessPrincipalId = '' // TODO: object ID of the sg-rvs-dev-blob Entra group
+param devBlobAccessPrincipalId = 'e7c21157-3e7a-4a31-9408-c4ccef22670e' 
 
 // Key Vault (RBAC model, API managed identity get + list)
 param deployKeyVault = true
