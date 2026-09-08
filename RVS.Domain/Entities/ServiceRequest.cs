@@ -158,6 +158,124 @@ public class ServiceRequest : EntityBase
     /// </summary>
     [JsonProperty("messages")]
     public List<MessageEmbedded> Messages { get; set; } = [];
+
+    /// <summary>
+    /// Tracks asynchronous service-packet generation for this request (<c>Spec B-1</c>, issue #434).
+    /// Generation is enqueued on intake submission and re-runnable on demand; a failure here never
+    /// rolls back the request. The manager app surfaces <see cref="PacketGenerationEmbedded.Status"/>
+    /// and a failure that has exhausted its retries.
+    /// </summary>
+    [JsonProperty("packetGeneration")]
+    public PacketGenerationEmbedded PacketGeneration { get; set; } = new();
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: PacketGenerationEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// State machine for asynchronous service-packet generation, embedded on a
+/// <see cref="ServiceRequest"/> (<c>Spec B-1</c>, issue #434).
+///
+/// The packet is composed and rendered off the intake request thread. This block records
+/// where that work is: whether it is pending, in flight, done, or failed; how many attempts
+/// have been made; the last error (never customer issue text, per <c>Spec X-7</c>); and the
+/// blob path and version of the most recent successful PDF. After
+/// <see cref="MaxAttempts"/> failed attempts an alert is raised once
+/// (<see cref="AlertRaised"/>) and the state stays <c>Failed</c> for the manager app to show.
+/// </summary>
+public class PacketGenerationEmbedded
+{
+    /// <summary>Maximum generation attempts before an alert is raised (<c>Spec B-1</c>).</summary>
+    public const int MaxAttempts = 3;
+
+    /// <summary>
+    /// Current generation state: <c>Pending</c> (enqueued, not started), <c>Generating</c>
+    /// (an attempt is in flight), <c>Succeeded</c>, or <c>Failed</c>.
+    /// </summary>
+    [JsonProperty("status")]
+    public string Status { get; set; } = "Pending";
+
+    /// <summary>Number of generation attempts made so far.</summary>
+    [JsonProperty("attemptCount")]
+    public int AttemptCount { get; set; }
+
+    /// <summary>UTC time the most recent attempt started. Null before the first attempt.</summary>
+    [JsonProperty("lastAttemptAtUtc")]
+    public DateTime? LastAttemptAtUtc { get; set; }
+
+    /// <summary>
+    /// Short exception type and message from the most recent failure, truncated. Never contains
+    /// customer issue text (<c>Spec X-7</c>). Null when the last attempt succeeded.
+    /// </summary>
+    [JsonProperty("lastError")]
+    public string? LastError { get; set; }
+
+    /// <summary>UTC time of the most recent successful generation. Null until the first success.</summary>
+    [JsonProperty("generatedAtUtc")]
+    public DateTime? GeneratedAtUtc { get; set; }
+
+    /// <summary>
+    /// Monotonic version of the generated packet, incremented on each success. <c>0</c> until the
+    /// first successful generation. Used to key idempotent delivery (<c>Spec B-4</c>).
+    /// </summary>
+    [JsonProperty("packetVersion")]
+    public int PacketVersion { get; set; }
+
+    /// <summary>
+    /// Blob name (within the attachments container) of the most recent successful packet PDF.
+    /// Null until the first success.
+    /// </summary>
+    [JsonProperty("pdfBlobPath")]
+    public string? PdfBlobPath { get; set; }
+
+    /// <summary>
+    /// True once the exhausted-retries alert has been raised for the current failure run, so it
+    /// is raised only once. Cleared by <see cref="ResetForRegeneration"/>.
+    /// </summary>
+    [JsonProperty("alertRaised")]
+    public bool AlertRaised { get; set; }
+
+    /// <summary>Begins a new attempt: marks <c>Generating</c>, increments the attempt count, stamps the time.</summary>
+    public void MarkGenerating()
+    {
+        Status = "Generating";
+        AttemptCount++;
+        LastAttemptAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>Records a successful generation: bumps <see cref="PacketVersion"/>, stores the PDF path, clears the error.</summary>
+    public void MarkSucceeded(string pdfBlobPath, DateTime generatedAtUtc)
+    {
+        Status = "Succeeded";
+        PacketVersion++;
+        PdfBlobPath = pdfBlobPath;
+        GeneratedAtUtc = generatedAtUtc;
+        LastError = null;
+    }
+
+    /// <summary>Records a failed attempt: marks <c>Failed</c> and stores the sanitized error.</summary>
+    public void MarkFailed(string error)
+    {
+        Status = "Failed";
+        LastError = error;
+    }
+
+    /// <summary>Marks that the exhausted-retries alert has been raised for this failure run.</summary>
+    public void MarkAlertRaised() => AlertRaised = true;
+
+    /// <summary>
+    /// Resets the attempt counter, error, and alert flag and returns the state to <c>Pending</c>
+    /// for an on-demand regeneration. The successful <see cref="PacketVersion"/> and
+    /// <see cref="PdfBlobPath"/> are retained until the next success replaces them.
+    /// </summary>
+    public void ResetForRegeneration()
+    {
+        Status = "Pending";
+        AttemptCount = 0;
+        LastError = null;
+        AlertRaised = false;
+    }
 }
 
 // ---------------------------------------------------------------------------

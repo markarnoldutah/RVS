@@ -112,6 +112,21 @@ public sealed class BlobStorageService : IBlobStorageService
     }
 
     /// <inheritdoc />
+    public async Task<byte[]> DownloadAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
+
+        var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+        var blobClient = containerClient.GetBlobClient(blobName);
+        var response = await blobClient.DownloadContentAsync(cancellationToken);
+
+        _logger.LogDebug("Downloaded blob {BlobName} from container {ContainerName}", blobName, containerName);
+
+        return response.Value.Content.ToArray();
+    }
+
+    /// <inheritdoc />
     public async Task<string> UploadAsync(string containerName, string blobName, Stream content, string contentType, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(containerName);

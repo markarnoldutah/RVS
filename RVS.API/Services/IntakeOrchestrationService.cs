@@ -2,14 +2,16 @@ using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Packets;
 using RVS.Domain.Validation;
 
 namespace RVS.API.Services;
 
 /// <summary>
-/// Core 7-step intake orchestration sequence that creates up to 5 Cosmos documents
+/// Core 8-step intake orchestration sequence that creates up to 5 Cosmos documents
 /// (GlobalCustomerAcct, CustomerProfile, ServiceRequest, AssetLedgerEntry, updated linkages)
-/// in a single intake request.
+/// in a single intake request, then enqueues packet generation (<c>Spec A-8</c>, <c>B-1</c>)
+/// without blocking the response.
 /// </summary>
 public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 {
@@ -22,6 +24,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     private readonly ILookupRepository _lookupRepository;
     private readonly ICategorizationService _categorizationService;
     private readonly INotificationOrchestrator _notificationOrchestrator;
+    private readonly IPacketGenerationQueue _packetGenerationQueue;
     private readonly ILogger<IntakeOrchestrationService> _logger;
 
     /// <summary>
@@ -37,6 +40,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         ILookupRepository lookupRepository,
         ICategorizationService categorizationService,
         INotificationOrchestrator notificationOrchestrator,
+        IPacketGenerationQueue packetGenerationQueue,
         ILogger<IntakeOrchestrationService> logger)
     {
         _slugLookupRepository = slugLookupRepository;
@@ -48,6 +52,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _lookupRepository = lookupRepository;
         _categorizationService = categorizationService;
         _notificationOrchestrator = notificationOrchestrator;
+        _packetGenerationQueue = packetGenerationQueue;
         _logger = logger;
     }
 
@@ -310,6 +315,23 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             request.Customer.Phone?.Trim(),
             serviceRequest.Id,
             slugLookup.DealershipName);
+
+        // ── Step 8: Enqueue packet generation (never blocks the 201) ─────────
+        // Spec A-8 / B-1 / X-7: the packet is generated asynchronously; nothing here may delay
+        // or roll back the submission. The request already carries PacketGeneration = Pending.
+        try
+        {
+            if (!_packetGenerationQueue.TryEnqueue(new PacketGenerationJob(tenantId, serviceRequest.Id, "intake")))
+            {
+                _logger.LogWarning(
+                    "Intake Step 8: packet generation queue full; SR {ServiceRequestId} stays Pending and can be regenerated on demand",
+                    serviceRequest.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Intake Step 8: failed to enqueue packet generation for SR {ServiceRequestId}", serviceRequest.Id);
+        }
 
         return (serviceRequest, globalAcct.MagicLinkToken);
     }

@@ -14,16 +14,21 @@ public sealed class ServiceRequestService : IServiceRequestService
 {
     private readonly IServiceRequestRepository _repository;
     private readonly IUserContextAccessor _userContext;
+    private readonly IPacketGenerationService _packetGenerationService;
 
     private const int MaxBatchSize = 25;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ServiceRequestService"/>.
     /// </summary>
-    public ServiceRequestService(IServiceRequestRepository repository, IUserContextAccessor userContext)
+    public ServiceRequestService(
+        IServiceRequestRepository repository,
+        IUserContextAccessor userContext,
+        IPacketGenerationService packetGenerationService)
     {
         _repository = repository;
         _userContext = userContext;
+        _packetGenerationService = packetGenerationService;
     }
 
     /// <inheritdoc />
@@ -189,5 +194,14 @@ public sealed class ServiceRequestService : IServiceRequestService
             ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
 
         await _repository.DeleteAsync(tenantId, id, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task RegeneratePacketAsync(string tenantId, string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        return _packetGenerationService.RequestRegenerationAsync(tenantId, id, cancellationToken);
     }
 }

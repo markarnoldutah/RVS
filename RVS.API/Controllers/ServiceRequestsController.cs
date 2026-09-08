@@ -138,4 +138,23 @@ public class ServiceRequestsController : ControllerBase
 
         return NoContent();
     }
+
+    /// <summary>
+    /// Regenerates the request's service packet on demand (<c>Spec B-1</c>, issue #434). Resets
+    /// packet-generation state to <c>Pending</c> and enqueues a fresh generation job; returns
+    /// <c>202 Accepted</c> immediately — generation runs in the background.
+    /// </summary>
+    /// <param name="dealershipId">Dealership identifier (route segment).</param>
+    /// <param name="srId">Service request identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpPost("{srId}/packet/regenerate")]
+    [Authorize(Policy = "CanUpdateServiceRequests")]
+    public async Task<IActionResult> RegeneratePacket(string dealershipId, string srId, CancellationToken ct)
+    {
+        var tenantId = _claimsService.GetTenantIdOrThrow();
+
+        await _service.RegeneratePacketAsync(tenantId, srId, ct);
+
+        return Accepted();
+    }
 }

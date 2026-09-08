@@ -107,6 +107,18 @@ public class ServiceRequestsControllerTests
         result.Should().BeOfType<NoContentResult>();
     }
 
+    [Fact]
+    public async Task RegeneratePacket_ShouldReturnAcceptedAndDelegateWithTenantFromClaims()
+    {
+        _serviceMock.Setup(s => s.RegeneratePacketAsync(TenantId, "sr_1", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await _sut.RegeneratePacket("dlr_1", "sr_1", CancellationToken.None);
+
+        result.Should().BeOfType<AcceptedResult>();
+        _serviceMock.Verify(s => s.RegeneratePacketAsync(TenantId, "sr_1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static ServiceRequest BuildServiceRequest() => new()
     {
         Id = "sr_test_1",
