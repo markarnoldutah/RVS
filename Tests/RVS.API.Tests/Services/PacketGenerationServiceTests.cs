@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
+using RVS.API.Options;
 using RVS.API.Packets;
 using RVS.API.Services;
 using RVS.Domain.Entities;
@@ -61,6 +63,8 @@ public class PacketGenerationServiceTests
             _queueMock.Object,
             _userContextMock.Object,
             _notificationMock.Object,
+            // Zero backoff so retry tests do not actually wait.
+            Microsoft.Extensions.Options.Options.Create(new PacketEmailOptions { RetryBaseDelay = TimeSpan.Zero }),
             Mock.Of<ILogger<PacketGenerationService>>());
     }
 
@@ -516,6 +520,128 @@ public class PacketGenerationServiceTests
         await _sut.GenerateAsync(TenantId, SrId);
 
         _notificationMock.Verify(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── Packet email idempotency + retry (Spec B-4, issue #438) ───────────
+
+    [Fact]
+    public async Task GenerateAsync_WhenEmailDelivers_ShouldRecordDeliveredForThePacketVersion()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sr.PacketEmailDelivery.Status.Should().Be("Delivered");
+        sr.PacketEmailDelivery.DeliveredPacketVersion.Should().Be(1);
+        sr.PacketEmailDelivery.AttemptCount.Should().Be(1);
+        sr.PacketEmailDelivery.DeliveredAtUtc.Should().NotBeNull();
+        sr.PacketEmailDelivery.LastError.Should().BeNull();
+        sr.PacketEmailDelivery.AlertRaised.Should().BeFalse();
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenFirstEmailAttemptFails_ShouldRetryAndDeliverOnTheSecond()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+        _notificationMock.SetupSequence(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("ACS 503"))
+            .Returns(Task.CompletedTask);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        sr.PacketEmailDelivery.Status.Should().Be("Delivered");
+        sr.PacketEmailDelivery.AttemptCount.Should().Be(2);
+        sr.PacketEmailDelivery.DeliveredPacketVersion.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenAllThreeEmailAttemptsFail_ShouldRecordFailedAndRaiseAlert()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("ACS rejected the message"));
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(PacketEmailDeliveryEmbedded.MaxAttempts));
+        sr.PacketEmailDelivery.Status.Should().Be("Failed");
+        sr.PacketEmailDelivery.AttemptCount.Should().Be(3);
+        sr.PacketEmailDelivery.AlertRaised.Should().BeTrue();
+        sr.PacketEmailDelivery.DeliveredPacketVersion.Should().Be(0);
+        sr.PacketEmailDelivery.LastError.Should().Contain("InvalidOperationException");
+        // Generation itself is untouched by a delivery failure.
+        sr.PacketGeneration.Status.Should().Be("Succeeded");
+        sr.PacketGeneration.PacketVersion.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenThePacketVersionWasAlreadyDelivered_ShouldNotSendAgain()
+    {
+        var sr = BuildRequest();
+        // A prior successful generation + delivery of v1; this run regenerates to v2.
+        sr.PacketGeneration.MarkSucceeded("packets/x/v1.pdf", DateTime.UtcNow);
+        sr.PacketEmailDelivery.MarkAttempt();
+        sr.PacketEmailDelivery.MarkDelivered(2, DateTime.UtcNow);
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        sr.PacketGeneration.PacketVersion.Should().Be(2);
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()), Times.Never);
+        sr.PacketEmailDelivery.AttemptCount.Should().Be(1, "the already-delivered run is left untouched");
+        sr.PacketEmailDelivery.DeliveredPacketVersion.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenEmailDelivers_ShouldPersistTheDeliveryStateOnTheRequest()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+        var deliveryStatusesAtEachSave = new List<string>();
+        _srRepoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest s, CancellationToken _) =>
+            {
+                deliveryStatusesAtEachSave.Add(s.PacketEmailDelivery.Status);
+                return s;
+            });
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        deliveryStatusesAtEachSave.Should().EndWith("Delivered", "the delivery outcome is persisted after the send");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenAnEmailRetryIsCancelled_ShouldPropagateOperationCanceled()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _sut.GenerateAsync(TenantId, SrId);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     // ── RequestRegenerationAsync ───────────────────────────────────────────

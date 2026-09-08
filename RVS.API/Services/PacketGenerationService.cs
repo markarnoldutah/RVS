@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Options;
+using RVS.API.Options;
 using RVS.API.Packets;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
@@ -26,6 +29,9 @@ public sealed class PacketGenerationService : IPacketGenerationService
     /// <summary>Event id for the exhausted-retries alert (<c>Spec B-1</c>).</summary>
     private static readonly EventId PacketGenerationExhausted = new(434_001, nameof(PacketGenerationExhausted));
 
+    /// <summary>Event id for the exhausted packet-email-delivery alert (<c>Spec B-4</c>, issue #438).</summary>
+    private static readonly EventId PacketEmailDeliveryExhausted = new(438_001, nameof(PacketEmailDeliveryExhausted));
+
     private const string SystemUserId = "system";
     private const int MaxErrorLength = 500;
 
@@ -36,6 +42,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
     private readonly IPacketGenerationQueue _queue;
     private readonly IUserContextAccessor _userContext;
     private readonly INotificationService _notificationService;
+    private readonly PacketEmailOptions _packetEmailOptions;
     private readonly ILogger<PacketGenerationService> _logger;
 
     /// <summary>Creates the packet generation orchestrator with its repositories, blob storage, queue, and notification transport.</summary>
@@ -47,6 +54,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         IPacketGenerationQueue queue,
         IUserContextAccessor userContext,
         INotificationService notificationService,
+        IOptions<PacketEmailOptions> packetEmailOptions,
         ILogger<PacketGenerationService> logger)
     {
         _serviceRequestRepository = serviceRequestRepository;
@@ -56,6 +64,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         _queue = queue;
         _userContext = userContext;
         _notificationService = notificationService;
+        _packetEmailOptions = packetEmailOptions.Value;
         _logger = logger;
     }
 
@@ -122,21 +131,15 @@ public sealed class PacketGenerationService : IPacketGenerationService
                 "Packet generation succeeded for SR {ServiceRequestId} (version {PacketVersion}, attempt {AttemptCount})",
                 request.Id, request.PacketGeneration.PacketVersion, request.PacketGeneration.AttemptCount);
 
-            // Deliver the packet by email (Spec B-4, #437). A delivery failure is logged and
-            // swallowed here: the packet is generated and stored, and re-delivery is #438's job.
+            // Deliver the packet by email (Spec B-4, #437 send, #438 idempotency + retry). A
+            // delivery failure never fails generation: the packet is generated and stored.
             await DeliverPacketEmailAsync(request, location, packet, html, pdf, photoImages, photoUrls, cancellationToken);
 
             return PacketGenerationOutcome.Succeeded;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var error = $"{ex.GetType().Name}: {ex.Message}";
-            if (error.Length > MaxErrorLength)
-            {
-                error = error[..MaxErrorLength];
-            }
-
-            request.PacketGeneration.MarkFailed(error);
+            request.PacketGeneration.MarkFailed(TrimError($"{ex.GetType().Name}: {ex.Message}"));
 
             var exhausted = request.PacketGeneration.AttemptCount >= PacketGenerationEmbedded.MaxAttempts;
             if (exhausted && !request.PacketGeneration.AlertRaised)
@@ -217,11 +220,17 @@ public sealed class PacketGenerationService : IPacketGenerationService
     }
 
     /// <summary>
-    /// Sends the finished packet to the location's configured recipients (<c>Spec B-4</c>,
-    /// issue #437). No-ops when the location has no packet config, delivery is disabled, or no
-    /// recipient is set. Attachments follow the location's <c>attachPdf</c> / <c>includePhotos</c>
-    /// flags. A send failure is logged and swallowed — generation has already succeeded and the
-    /// PDF is stored; idempotent re-delivery with backoff is issue #438.
+    /// Delivers the finished packet to the location's configured recipients (<c>Spec B-4</c>,
+    /// issues #437 and #438). No-ops when the location has no packet config, delivery is disabled,
+    /// or no recipient is set. Attachments follow the location's <c>attachPdf</c> /
+    /// <c>includePhotos</c> flags.
+    ///
+    /// Delivery is <b>idempotent</b> per <c>(serviceRequestId, packetVersion)</c>: if this exact
+    /// packet version is already recorded as delivered, the send is skipped. Otherwise it is
+    /// attempted up to <see cref="PacketEmailDeliveryEmbedded.MaxAttempts"/> times with an
+    /// exponential backoff between tries; every attempt logs under a delivery scope carrying the
+    /// correlation id, and exhausting all attempts logs a <c>LogCritical</c> alert once. A delivery
+    /// failure never fails generation — the packet is already generated and stored.
     /// </summary>
     private async Task DeliverPacketEmailAsync(
         ServiceRequest request,
@@ -253,6 +262,17 @@ public sealed class PacketGenerationService : IPacketGenerationService
             return;
         }
 
+        var packetVersion = request.PacketGeneration.PacketVersion;
+
+        // Idempotency (Spec B-4): this exact packet has already been emailed — never double-send.
+        if (request.PacketEmailDelivery.IsDeliveredFor(packetVersion))
+        {
+            _logger.LogInformation(
+                "Packet email skipped for SR {ServiceRequestId} v{PacketVersion}: already delivered",
+                request.Id, packetVersion);
+            return;
+        }
+
         var attachments = new List<PacketEmailAttachment>();
         if (config.AttachPdf)
         {
@@ -272,21 +292,73 @@ public sealed class PacketGenerationService : IPacketGenerationService
         var message = PacketEmailComposer.Compose(
             packet, html, request.CustomerSnapshot.LastName, recipients, attachments);
 
-        try
+        // One correlation id spans every retry of this delivery. Packet generation runs off the
+        // HTTP request thread, so fall back to the service request id when there is no ambient trace.
+        var correlationId = Activity.Current?.TraceId.ToString() ?? request.Id;
+        using var deliveryScope = _logger.BeginScope(new Dictionary<string, object>
         {
-            await _notificationService.SendPacketEmailAsync(message, cancellationToken);
-            _logger.LogInformation(
-                "Packet email dispatched for SR {ServiceRequestId} v{PacketVersion} to {RecipientCount} recipient(s) with {AttachmentCount} attachment(s)",
-                request.Id, request.PacketGeneration.PacketVersion, recipients.Count, attachments.Count);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+            ["CorrelationId"] = correlationId,
+            ["ServiceRequestId"] = request.Id,
+            ["PacketVersion"] = packetVersion,
+        });
+
+        request.PacketEmailDelivery.BeginRun();
+
+        for (var attempt = 1; attempt <= PacketEmailDeliveryEmbedded.MaxAttempts; attempt++)
         {
-            _logger.LogError(
-                ex,
-                "Packet email dispatch failed for SR {ServiceRequestId} v{PacketVersion}; packet generation is unaffected",
-                request.Id, request.PacketGeneration.PacketVersion);
+            request.PacketEmailDelivery.MarkAttempt();
+            try
+            {
+                await _notificationService.SendPacketEmailAsync(message, cancellationToken);
+                request.PacketEmailDelivery.MarkDelivered(packetVersion, DateTime.UtcNow);
+                _logger.LogInformation(
+                    "Packet email delivered for SR {ServiceRequestId} v{PacketVersion} on attempt {Attempt}/{MaxAttempts} to {RecipientCount} recipient(s) with {AttachmentCount} attachment(s)",
+                    request.Id, packetVersion, attempt, PacketEmailDeliveryEmbedded.MaxAttempts, recipients.Count, attachments.Count);
+                break;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                var isLastAttempt = attempt == PacketEmailDeliveryEmbedded.MaxAttempts;
+                _logger.LogWarning(
+                    ex,
+                    "Packet email attempt {Attempt}/{MaxAttempts} failed for SR {ServiceRequestId} v{PacketVersion}{Retrying}",
+                    attempt, PacketEmailDeliveryEmbedded.MaxAttempts, request.Id, packetVersion,
+                    isLastAttempt ? string.Empty : "; will retry after backoff");
+
+                if (isLastAttempt)
+                {
+                    request.PacketEmailDelivery.MarkFailed(TrimError($"{ex.GetType().Name}: {ex.Message}"));
+                    break;
+                }
+
+                await Task.Delay(BackoffFor(attempt), cancellationToken);
+            }
         }
+
+        if (request.PacketEmailDelivery.Status == "Failed" && !request.PacketEmailDelivery.AlertRaised)
+        {
+            _logger.LogCritical(
+                PacketEmailDeliveryExhausted,
+                "Packet email delivery exhausted after {AttemptCount} attempts for SR {ServiceRequestId} v{PacketVersion} in tenant {TenantId}",
+                request.PacketEmailDelivery.AttemptCount, request.Id, packetVersion, request.TenantId);
+            request.PacketEmailDelivery.MarkAlertRaised();
+        }
+
+        // Persist the delivery outcome so a repeat run sees it and does not re-send.
+        request.MarkAsUpdated(SystemUserId);
+        await _serviceRequestRepository.UpdateAsync(request, cancellationToken);
     }
+
+    /// <summary>
+    /// Exponential backoff before the retry that follows <paramref name="attempt"/>:
+    /// <c>RetryBaseDelay × 2^(attempt-1)</c> (attempt 1 → ×1, attempt 2 → ×2).
+    /// </summary>
+    private TimeSpan BackoffFor(int attempt) =>
+        _packetEmailOptions.RetryBaseDelay * (1L << (attempt - 1));
+
+    /// <summary>Caps an error string at <see cref="MaxErrorLength"/> for storage on the request.</summary>
+    private static string TrimError(string error) =>
+        error.Length > MaxErrorLength ? error[..MaxErrorLength] : error;
 
     /// <summary>
     /// Turns the already-downloaded original photo bytes into email attachments — the same
