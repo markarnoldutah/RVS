@@ -49,8 +49,8 @@ Enqueued on intake submission; must not block the `201`. Regenerated on demand. 
 One page, in this order:
 
 1. Unit header — year, make, model, VIN (degrades if VIN absent)
-2. Customer — name, phone, email, preferred contact
-3. Location, submission timestamp, short reference code
+2. Customer — name, phone, email, preferred contact. Preferred contact is one of `Phone` / `Text` / `Email`, required at intake; it is omitted from the packet only for requests created before it was captured
+3. Location, submission timestamp, short reference code. The reference code is the first hyphen-delimited segment of the service request id, upper-cased (e.g. `A1B2C3D4`) — deterministic, stable across regenerations, no stored field or counter
 4. Issue category
 5. AI summary, labeled as AI-generated — placed here so the service manager reads the concise recreation of the problem first
 6. **The customer's description, verbatim**

@@ -53,8 +53,14 @@ public sealed class IntakeWizardState
     /// <summary>Customer email address — required (Step 2).</summary>
     public string Email { get; set; } = string.Empty;
 
-    /// <summary>Customer phone number — optional (Step 2).</summary>
+    /// <summary>Customer phone number — optional unless <see cref="PreferredContact"/> is Phone or Text (Step 2).</summary>
     public string? Phone { get; set; }
+
+    /// <summary>
+    /// Preferred contact method — one of <c>Phone</c>, <c>Text</c>, or <c>Email</c>.
+    /// Required to advance past Step 2 (<c>Spec A-2</c>).
+    /// </summary>
+    public string? PreferredContact { get; set; }
 
     /// <summary>When <c>true</c>, customer has opted out of SMS notifications (Step 2).</summary>
     public bool SmsOptOut { get; set; }
@@ -227,6 +233,7 @@ public sealed class IntakeWizardState
         LastName = prefill.LastName;
         Email = prefill.Email;
         Phone = prefill.Phone;
+        PreferredContact = prefill.PreferredContact;
         IsPrefilled = true;
         NotifyStateChanged();
     }
@@ -278,7 +285,8 @@ public sealed class IntakeWizardState
                 FirstName = FirstName.Trim(),
                 LastName = LastName.Trim(),
                 Email = Email.Trim(),
-                Phone = string.IsNullOrWhiteSpace(Phone) ? null : Phone.Trim()
+                Phone = string.IsNullOrWhiteSpace(Phone) ? null : Phone.Trim(),
+                PreferredContact = string.IsNullOrWhiteSpace(PreferredContact) ? null : PreferredContact.Trim()
             },
             Asset = new AssetInfoDto
             {
@@ -323,6 +331,7 @@ public sealed class IntakeWizardState
             LastName = LastName,
             Email = Email,
             Phone = Phone,
+            PreferredContact = PreferredContact,
             SmsOptOut = SmsOptOut,
             EmailOptOut = EmailOptOut,
             IsPrefilled = IsPrefilled,
@@ -369,6 +378,7 @@ public sealed class IntakeWizardState
             LastName = data.LastName;
             Email = data.Email;
             Phone = data.Phone;
+            PreferredContact = data.PreferredContact;
             SmsOptOut = data.SmsOptOut;
             EmailOptOut = data.EmailOptOut;
             IsPrefilled = data.IsPrefilled;
@@ -412,6 +422,7 @@ public sealed class IntakeWizardState
         LastName = string.Empty;
         Email = string.Empty;
         Phone = null;
+        PreferredContact = null;
         SmsOptOut = false;
         EmailOptOut = false;
         IsPrefilled = false;
@@ -511,6 +522,18 @@ public sealed class IntakeWizardState
                 errors.Add(emailResult.ErrorMessage!);
                 FieldErrors["Email"] = emailResult.ErrorMessage!;
             }
+        }
+
+        if (string.IsNullOrWhiteSpace(PreferredContact))
+        {
+            errors.Add("Preferred contact method is required.");
+            FieldErrors["PreferredContact"] = "Preferred contact method is required.";
+        }
+        else if (PreferredContact is "Phone" or "Text" && string.IsNullOrWhiteSpace(Phone))
+        {
+            var msg = $"A phone number is required when the preferred contact method is {PreferredContact}.";
+            errors.Add(msg);
+            FieldErrors["Phone"] = msg;
         }
 
         return errors;
@@ -653,6 +676,7 @@ internal sealed class IntakeWizardStateData
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
+    public string? PreferredContact { get; set; }
     public bool SmsOptOut { get; set; }
     public bool EmailOptOut { get; set; }
     public bool IsPrefilled { get; set; }

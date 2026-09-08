@@ -204,6 +204,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 LastName = request.Customer.LastName.Trim(),
                 Email = request.Customer.Email.Trim(),
                 Phone = request.Customer.Phone?.Trim(),
+                PreferredContact = PreferredContactMethod.Normalize(request.Customer.PreferredContact),
                 IsReturningCustomer = priorRequestCount > 0,
                 PriorRequestCount = priorRequestCount,
             },

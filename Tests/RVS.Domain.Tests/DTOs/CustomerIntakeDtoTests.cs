@@ -13,13 +13,28 @@ public class CustomerIntakeDtoTests
             FirstName = "John",
             LastName = "Smith",
             Email = "john@example.com",
-            Phone = "555-1234"
+            Phone = "555-1234",
+            PreferredContact = "Phone"
         };
 
         dto.FirstName.Should().Be("John");
         dto.LastName.Should().Be("Smith");
         dto.Email.Should().Be("john@example.com");
         dto.Phone.Should().Be("555-1234");
+        dto.PreferredContact.Should().Be("Phone");
+    }
+
+    [Fact]
+    public void CustomerInfoDto_PreferredContactDefaultsToNull()
+    {
+        var dto = new CustomerInfoDto
+        {
+            FirstName = "John",
+            LastName = "Smith",
+            Email = "john@example.com"
+        };
+
+        dto.PreferredContact.Should().BeNull();
     }
 
     [Fact]

@@ -447,6 +447,7 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.CustomerSnapshot.LastName.Should().Be("Doe");
         result.ServiceRequest.CustomerSnapshot.Email.Should().Be("jane@example.com");
         result.ServiceRequest.CustomerSnapshot.Phone.Should().Be("801-555-1234");
+        result.ServiceRequest.CustomerSnapshot.PreferredContact.Should().Be("Phone");
     }
 
     [Fact]
@@ -892,6 +893,7 @@ public class IntakeOrchestrationServiceTests
                 LastName = "Doe",
                 Email = "jane@example.com",
                 Phone = "801-555-1234",
+                PreferredContact = "Phone",
             },
             Asset = new AssetInfoDto
             {

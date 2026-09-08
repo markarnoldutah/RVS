@@ -1,5 +1,6 @@
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Mappers;
 
@@ -112,7 +113,8 @@ public static class ServiceRequestMapper
                 FirstName = dto.Customer.FirstName.Trim(),
                 LastName = dto.Customer.LastName.Trim(),
                 Email = dto.Customer.Email.Trim(),
-                Phone = dto.Customer.Phone?.Trim()
+                Phone = dto.Customer.Phone?.Trim(),
+                PreferredContact = PreferredContactMethod.Normalize(dto.Customer.PreferredContact)
             },
             AssetInfo = new AssetInfoEmbedded
             {
@@ -167,7 +169,8 @@ public static class ServiceRequestMapper
                 FirstName = dto.Customer.FirstName.Trim(),
                 LastName = dto.Customer.LastName.Trim(),
                 Email = dto.Customer.Email.Trim(),
-                Phone = dto.Customer.Phone?.Trim()
+                Phone = dto.Customer.Phone?.Trim(),
+                PreferredContact = PreferredContactMethod.Normalize(dto.Customer.PreferredContact)
             };
         }
 
@@ -251,7 +254,8 @@ public static class ServiceRequestMapper
             FirstName = snapshot.FirstName,
             LastName = snapshot.LastName,
             Email = snapshot.Email,
-            Phone = snapshot.Phone
+            Phone = snapshot.Phone,
+            PreferredContact = snapshot.PreferredContact
         };
     }
 

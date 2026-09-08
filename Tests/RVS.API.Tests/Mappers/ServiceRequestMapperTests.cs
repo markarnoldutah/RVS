@@ -79,7 +79,8 @@ public class ServiceRequestMapperTests
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com",
-                Phone = "(801) 555-1234"
+                Phone = "(801) 555-1234",
+                PreferredContact = "Text"
             }
         };
 
@@ -89,6 +90,7 @@ public class ServiceRequestMapperTests
         dto.Customer.LastName.Should().Be("Doe");
         dto.Customer.Email.Should().Be("jane@example.com");
         dto.Customer.Phone.Should().Be("(801) 555-1234");
+        dto.Customer.PreferredContact.Should().Be("Text");
     }
 
     [Fact]
@@ -397,6 +399,64 @@ public class ServiceRequestMapperTests
         entity.CustomerSnapshot.LastName.Should().Be("Doe");
         entity.CustomerSnapshot.Email.Should().Be("jane@example.com");
         entity.CustomerSnapshot.Phone.Should().Be("(801) 555-1234");
+        entity.CustomerSnapshot.PreferredContact.Should().Be("Phone");
+    }
+
+    [Fact]
+    public void ToEntity_ShouldNormalizePreferredContactCasing()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com",
+                PreferredContact = "  email  "
+            }
+        };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.CustomerSnapshot.PreferredContact.Should().Be("Email");
+    }
+
+    [Fact]
+    public void ToEntity_WhenPreferredContactBlank_ShouldMapNull()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com",
+                PreferredContact = null
+            }
+        };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.CustomerSnapshot.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToEntity_WhenPreferredContactUnknown_ShouldThrowArgumentException()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com",
+                PreferredContact = "Smoke signal"
+            }
+        };
+
+        var act = () => dto.ToEntity("ten_1", "usr_1");
+
+        act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
@@ -554,7 +614,8 @@ public class ServiceRequestMapperTests
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com",
-                Phone = "(801) 555-1234"
+                Phone = "(801) 555-1234",
+                PreferredContact = "Phone"
             },
             Asset = new AssetInfoDto
             {
