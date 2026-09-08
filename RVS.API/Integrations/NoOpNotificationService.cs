@@ -28,4 +28,15 @@ public sealed class NoOpNotificationService : INotificationService
         _logger.LogDebug("NoOpNotificationService: Would send SR confirmation to {Recipient} for SR {ServiceRequestId}", toEmail, serviceRequestId);
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc />
+    public Task SendPacketEmailAsync(PacketEmailMessage message, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        _logger.LogDebug(
+            "NoOpNotificationService: Would send packet email '{Subject}' to {RecipientCount} recipient(s) with {AttachmentCount} attachment(s)",
+            message.Subject, message.Recipients.Count, message.Attachments.Count);
+        return Task.CompletedTask;
+    }
 }

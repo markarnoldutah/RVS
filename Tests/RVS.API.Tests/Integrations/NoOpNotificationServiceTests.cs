@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Integrations;
+using RVS.Domain.Integrations;
 
 namespace RVS.API.Tests.Integrations;
 
@@ -23,5 +24,29 @@ public class NoOpNotificationServiceTests
         var act = () => _sut.SendServiceRequestConfirmationAsync("user@example.com", "sr_001");
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SendPacketEmailAsync_ShouldCompleteWithoutThrowing()
+    {
+        var message = new PacketEmailMessage
+        {
+            Subject = "[RVS] Slide System — 2021 Jayco Eagle — Doe",
+            HtmlBody = "<p>Packet</p>",
+            PlainTextBody = "CATEGORY: SLIDE SYSTEM",
+            Recipients = ["service@dealer.example"],
+        };
+
+        var act = () => _sut.SendPacketEmailAsync(message);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SendPacketEmailAsync_WhenMessageIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => _sut.SendPacketEmailAsync(null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
     }
 }

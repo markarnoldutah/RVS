@@ -124,9 +124,13 @@ Both renderers take one `ServicePacket` and read the same fields in the same ord
   - **Determinism** — document metadata dates are pinned to the packet's submission time so the same packet renders byte-for-byte identically.
   - **Fonts** — QuestPDF's bundled Lato only; no font assets are vendored. Verbatim and paste blocks render in a bordered box rather than a monospace face (cosmetic; not a `Spec` requirement).
 
-### 5. Deliver — Feature 3 (`#437`–`#439`), planned
+### 5. Deliver — Feature 3 (`#437` built; `#438`–`#439` planned)
 
-`#434` stores the PDF and stamps `packetGeneration.packetVersion`; `#435` adds the per-location `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo) that delivery will read; `#436` produces the paste block the text-only fallback uses. Delivery itself is still to build: the HTML packet is emailed to the location's configured recipients via Azure Communication Services, with the PDF and the original photos attached per `packetConfig`. Subject `[RVS] {category} — {year} {make} {model} — {customer last name}`. Text-only clients degrade to the paste block. Delivery is idempotent per `(serviceRequestId, packetVersion)`, retried three times with exponential backoff, then alerted. `Spec B-4`.
+`#434` stores the PDF and stamps `packetGeneration.packetVersion`; `#435` adds the per-location `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo) that delivery reads; `#436` produces the paste block the text-only fallback uses.
+
+**`#437` — the send itself, built.** After a successful generation `PacketGenerationService` composes the email with `PacketEmailComposer` (`RVS.Domain/Packets/`, pure) and hands a transport-agnostic `PacketEmailMessage` (`RVS.Domain/Integrations/`) to `INotificationService.SendPacketEmailAsync`, implemented on the existing ACS integration (`AcsEmailNotificationService`) and the `NoOp` fallback — no new transport. Subject `[RVS] {category} — {year} {make} {model} — {customer last name}`, each segment degrading independently (`Uncategorized` / `Unknown vehicle` / `Unknown`). Body is the packet HTML inline with the paste block as the plain-text alternative for text-only clients. The rendered PDF and the original photo bytes (already downloaded for the PDF render) attach per `packetConfig.attachPdf` / `includePhotos`; the mail goes to `packetConfig.recipients`. Delivery no-ops when the location has no config, `enabled` is `false`, or the recipient list is empty. A send failure is logged and swallowed — generation has already succeeded and the PDF is stored.
+
+**`#438`–`#439` — planned.** Idempotency per `(serviceRequestId, packetVersion)`, three attempts with exponential backoff then an alert, and hard-bounce handling that disables a single recipient. Today the send is best-effort and fire-once from inside the generation attempt. `Spec B-4`.
 
 ---
 
@@ -141,7 +145,8 @@ Both renderers take one `ServicePacket` and read the same fields in the same ord
 | Generation orchestration (queue + worker + `PacketGenerationService`) | `#434` | **Built** |
 | Per-location packet config (`Location.packetConfig`) | `#435` | **Built** — recipients (0–10), attach-PDF, include-photos, paste-block cap, status-link TTL, logo; read/written via `api/locations`. Paste-block cap now consumed by `#436`; the rest awaits delivery |
 | DMS paste block (`PasteBlockGenerator`) | `#436` | **Built** — fenced ASCII-safe block, order category → verbatim description → status link, description truncated at a word boundary to `pasteBlockCharacterCap`; assembled in `PacketGenerationService` into `PacketCompositionContext.PasteBlock` |
-| Email delivery | `#437`–`#439` | Planned |
+| Packet email send (subject, inline HTML + paste-block text, PDF + photo attachments, recipient list) | `#437` | **Built** — `PacketEmailComposer` + `INotificationService.SendPacketEmailAsync` on the ACS integration; invoked from `PacketGenerationService` after a successful generation, best-effort |
+| Delivery idempotency + retry/backoff + hard-bounce handling | `#438`–`#439` | Planned |
 | Preferred-contact + reference-code gaps | `#472` | **Built** — preferred contact captured at intake (`Phone` / `Text` / `Email`); reference code ratified as the id-derived convention |
 
 ---

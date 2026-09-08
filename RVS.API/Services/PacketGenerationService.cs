@@ -35,8 +35,10 @@ public sealed class PacketGenerationService : IPacketGenerationService
     private readonly IBlobStorageService _blobStorage;
     private readonly IPacketGenerationQueue _queue;
     private readonly IUserContextAccessor _userContext;
+    private readonly INotificationService _notificationService;
     private readonly ILogger<PacketGenerationService> _logger;
 
+    /// <summary>Creates the packet generation orchestrator with its repositories, blob storage, queue, and notification transport.</summary>
     public PacketGenerationService(
         IServiceRequestRepository serviceRequestRepository,
         ILocationRepository locationRepository,
@@ -44,6 +46,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         IBlobStorageService blobStorage,
         IPacketGenerationQueue queue,
         IUserContextAccessor userContext,
+        INotificationService notificationService,
         ILogger<PacketGenerationService> logger)
     {
         _serviceRequestRepository = serviceRequestRepository;
@@ -52,6 +55,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         _blobStorage = blobStorage;
         _queue = queue;
         _userContext = userContext;
+        _notificationService = notificationService;
         _logger = logger;
     }
 
@@ -117,6 +121,10 @@ public sealed class PacketGenerationService : IPacketGenerationService
             _logger.LogInformation(
                 "Packet generation succeeded for SR {ServiceRequestId} (version {PacketVersion}, attempt {AttemptCount})",
                 request.Id, request.PacketGeneration.PacketVersion, request.PacketGeneration.AttemptCount);
+
+            // Deliver the packet by email (Spec B-4, #437). A delivery failure is logged and
+            // swallowed here: the packet is generated and stored, and re-delivery is #438's job.
+            await DeliverPacketEmailAsync(request, location, packet, html, pdf, photoImages, photoUrls, cancellationToken);
 
             return PacketGenerationOutcome.Succeeded;
         }
@@ -206,5 +214,116 @@ public sealed class PacketGenerationService : IPacketGenerationService
         }
 
         return images;
+    }
+
+    /// <summary>
+    /// Sends the finished packet to the location's configured recipients (<c>Spec B-4</c>,
+    /// issue #437). No-ops when the location has no packet config, delivery is disabled, or no
+    /// recipient is set. Attachments follow the location's <c>attachPdf</c> / <c>includePhotos</c>
+    /// flags. A send failure is logged and swallowed — generation has already succeeded and the
+    /// PDF is stored; idempotent re-delivery with backoff is issue #438.
+    /// </summary>
+    private async Task DeliverPacketEmailAsync(
+        ServiceRequest request,
+        Location? location,
+        ServicePacket packet,
+        string html,
+        byte[] pdf,
+        IReadOnlyDictionary<string, byte[]> photoImages,
+        IReadOnlyDictionary<string, string> photoUrls,
+        CancellationToken cancellationToken)
+    {
+        var config = location?.PacketConfig;
+        if (config is null || !config.Enabled)
+        {
+            _logger.LogInformation(
+                "Packet email skipped for SR {ServiceRequestId}: no location config or delivery disabled",
+                request.Id);
+            return;
+        }
+
+        var recipients = (config.Recipients ?? [])
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .ToList();
+        if (recipients.Count == 0)
+        {
+            _logger.LogWarning(
+                "Packet email skipped for SR {ServiceRequestId}: location {LocationId} has no recipients configured",
+                request.Id, location!.LocationId);
+            return;
+        }
+
+        var attachments = new List<PacketEmailAttachment>();
+        if (config.AttachPdf)
+        {
+            attachments.Add(new PacketEmailAttachment
+            {
+                FileName = $"service-packet-{packet.Origin.ReferenceCode}.pdf",
+                ContentType = "application/pdf",
+                Content = pdf,
+            });
+        }
+
+        if (config.IncludePhotos)
+        {
+            attachments.AddRange(BuildPhotoAttachments(request, photoImages, photoUrls));
+        }
+
+        var message = PacketEmailComposer.Compose(
+            packet, html, request.CustomerSnapshot.LastName, recipients, attachments);
+
+        try
+        {
+            await _notificationService.SendPacketEmailAsync(message, cancellationToken);
+            _logger.LogInformation(
+                "Packet email dispatched for SR {ServiceRequestId} v{PacketVersion} to {RecipientCount} recipient(s) with {AttachmentCount} attachment(s)",
+                request.Id, request.PacketGeneration.PacketVersion, recipients.Count, attachments.Count);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(
+                ex,
+                "Packet email dispatch failed for SR {ServiceRequestId} v{PacketVersion}; packet generation is unaffected",
+                request.Id, request.PacketGeneration.PacketVersion);
+        }
+    }
+
+    /// <summary>
+    /// Turns the already-downloaded original photo bytes into email attachments — the same
+    /// image attachments the packet renders as thumbnails (<c>Spec B-4</c>). A photo whose
+    /// bytes could not be fetched is simply left off the email.
+    /// </summary>
+    private static IEnumerable<PacketEmailAttachment> BuildPhotoAttachments(
+        ServiceRequest request,
+        IReadOnlyDictionary<string, byte[]> photoImages,
+        IReadOnlyDictionary<string, string> photoUrls)
+    {
+        var index = 0;
+        foreach (var attachment in request.Attachments)
+        {
+            var isImage = attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+            if (!isImage)
+            {
+                continue;
+            }
+
+            if (!photoUrls.TryGetValue(attachment.AttachmentId, out var url) ||
+                !photoImages.TryGetValue(url, out var bytes))
+            {
+                continue;
+            }
+
+            index++;
+            var fileName = string.IsNullOrWhiteSpace(attachment.FileName)
+                ? $"photo-{index}"
+                : attachment.FileName;
+
+            yield return new PacketEmailAttachment
+            {
+                FileName = fileName,
+                ContentType = attachment.ContentType!,
+                Content = bytes,
+            };
+        }
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Integrations;
+using RVS.Domain.Integrations;
 
 namespace RVS.API.Tests.Integrations;
 
@@ -87,6 +88,75 @@ public class AcsEmailNotificationServiceTests
 
         await act.Should().NotThrowAsync();
     }
+
+    // ── SendPacketEmailAsync (Spec B-4, issue #437) ───────────────────────
+
+    [Fact]
+    public async Task SendPacketEmailAsync_WhenMessageIsNull_ShouldThrowArgumentNullException()
+    {
+        var sut = CreateService();
+
+        var act = () => sut.SendPacketEmailAsync(null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SendPacketEmailAsync_WhenSubjectIsNullOrWhiteSpace_ShouldThrowArgumentException(string? subject)
+    {
+        var sut = CreateService();
+
+        var act = () => sut.SendPacketEmailAsync(BuildMessage() with { Subject = subject! });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SendPacketEmailAsync_WhenHtmlBodyIsNullOrWhiteSpace_ShouldThrowArgumentException(string? html)
+    {
+        var sut = CreateService();
+
+        var act = () => sut.SendPacketEmailAsync(BuildMessage() with { HtmlBody = html! });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SendPacketEmailAsync_WhenPlainTextBodyIsNullOrWhiteSpace_ShouldThrowArgumentException(string? text)
+    {
+        var sut = CreateService();
+
+        var act = () => sut.SendPacketEmailAsync(BuildMessage() with { PlainTextBody = text! });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task SendPacketEmailAsync_WhenThereAreNoRecipients_ShouldThrowArgumentException()
+    {
+        var sut = CreateService();
+
+        var act = () => sut.SendPacketEmailAsync(BuildMessage() with { Recipients = [] });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    private static PacketEmailMessage BuildMessage() => new()
+    {
+        Subject = "[RVS] Slide System — 2021 Jayco Eagle — Doe",
+        HtmlBody = "<p>Packet</p>",
+        PlainTextBody = "CATEGORY: SLIDE SYSTEM",
+        Recipients = ["service@dealer.example"],
+    };
 
     /// <summary>
     /// Creates an AcsEmailNotificationService with a mock EmailClient that throws on Send

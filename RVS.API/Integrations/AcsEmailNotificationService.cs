@@ -52,6 +52,50 @@ public sealed class AcsEmailNotificationService : INotificationService
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
+    public async Task SendPacketEmailAsync(PacketEmailMessage message, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message.Subject);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message.HtmlBody);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message.PlainTextBody);
+
+        var recipients = message.Recipients
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => new EmailAddress(r))
+            .ToList();
+
+        if (recipients.Count == 0)
+        {
+            throw new ArgumentException("A packet email needs at least one recipient.", nameof(message));
+        }
+
+        var emailMessage = new EmailMessage(
+            senderAddress: _fromAddress,
+            content: new EmailContent(message.Subject)
+            {
+                Html = message.HtmlBody,
+                PlainText = message.PlainTextBody,
+            },
+            recipients: new EmailRecipients(recipients));
+
+        foreach (var attachment in message.Attachments)
+        {
+            emailMessage.Attachments.Add(new EmailAttachment(
+                attachment.FileName,
+                attachment.ContentType,
+                BinaryData.FromBytes(attachment.Content)));
+        }
+
+        // Await the submit (WaitUntil.Started) and let failures propagate: the caller owns
+        // idempotency and retry-with-backoff (Spec B-4, issue #438).
+        var operation = await _emailClient.SendAsync(Azure.WaitUntil.Started, emailMessage, cancellationToken);
+
+        _logger.LogInformation(
+            "ACS packet email send initiated to {RecipientCount} recipient(s) with {AttachmentCount} attachment(s), operation {OperationId}",
+            recipients.Count, message.Attachments.Count, operation.Id);
+    }
+
     private async Task FireAndForgetAsync(string toEmail, string subject, string htmlBody)
     {
         try
