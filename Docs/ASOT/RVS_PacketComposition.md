@@ -1,7 +1,7 @@
 # RVS — Packet Composition
 
 **Version:** 1.4 · September 8, 2026
-**Scope:** How a service packet is assembled and rendered, end to end. Covers what is built (`#430` composition, `#431` HTML render, `#432` PDF render, `#433` photo SAS resolution, `#434` generation orchestration) and the design of the stage that is not yet (`#435`–`#439` email delivery).
+**Scope:** How a service packet is assembled and rendered, end to end. Covers what is built (`#430` composition, `#431` HTML render, `#432` PDF render, `#433` photo SAS resolution, `#434` generation orchestration, `#435` per-location packet config) and the design of the stage that is not yet (`#436`–`#439` email delivery).
 
 Product canon is `../RVS_Overview.md`, `../RVS_Spec.md`, `../RVS_Plan.md`. Requirements referenced here as `Spec B-2` etc. live in `../RVS_Spec.md` section B. This document describes the intended mechanism; where a stage is not yet built it says so.
 
@@ -124,9 +124,9 @@ Both renderers take one `ServicePacket` and read the same fields in the same ord
   - **Determinism** — document metadata dates are pinned to the packet's submission time so the same packet renders byte-for-byte identically.
   - **Fonts** — QuestPDF's bundled Lato only; no font assets are vendored. Verbatim and paste blocks render in a bordered box rather than a monospace face (cosmetic; not a `Spec` requirement).
 
-### 5. Deliver — Feature 3 (`#435`–`#439`), planned
+### 5. Deliver — Feature 3 (`#436`–`#439`), planned
 
-`#434` stores the PDF and stamps `packetGeneration.packetVersion`. Delivery is still to build: the HTML packet is emailed to the location's configured service address via Azure Communication Services, with the PDF and the original photos attached per the location's configuration. Subject `[RVS] {category} — {year} {make} {model} — {customer last name}`. Text-only clients degrade to the paste block. Delivery is idempotent per `(serviceRequestId, packetVersion)`, retried three times with exponential backoff, then alerted. `Spec B-4`.
+`#434` stores the PDF and stamps `packetGeneration.packetVersion`; `#435` adds the per-location `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo) that delivery will read. Delivery itself is still to build: the HTML packet is emailed to the location's configured recipients via Azure Communication Services, with the PDF and the original photos attached per `packetConfig`. Subject `[RVS] {category} — {year} {make} {model} — {customer last name}`. Text-only clients degrade to the paste block. Delivery is idempotent per `(serviceRequestId, packetVersion)`, retried three times with exponential backoff, then alerted. `Spec B-4`.
 
 ---
 
@@ -139,7 +139,8 @@ Both renderers take one `ServicePacket` and read the same fields in the same ord
 | PDF render (QuestPDF) | `#432` | **Built** |
 | Photo SAS resolution (`PacketPhotoUrlResolver`) | `#433` | **Built** |
 | Generation orchestration (queue + worker + `PacketGenerationService`) | `#434` | **Built** |
-| Email delivery | `#435`–`#439` | Planned |
+| Per-location packet config (`Location.packetConfig`) | `#435` | **Built** — recipients (0–10), attach-PDF, include-photos, paste-block cap, status-link TTL, logo; read/written via `api/locations`. Not yet consumed |
+| Email delivery | `#436`–`#439` | Planned |
 | Preferred-contact + reference-code gaps | `#472` | **Built** — preferred contact captured at intake (`Phone` / `Text` / `Email`); reference code ratified as the id-derived convention |
 
 ---

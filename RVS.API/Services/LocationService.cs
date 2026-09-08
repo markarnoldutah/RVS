@@ -59,6 +59,8 @@ public sealed class LocationService : ILocationService
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentNullException.ThrowIfNull(entity);
 
+        ValidatePacketConfig(entity);
+
         // Auto-generate a unique slug from the dealership ("org") slug + location name when
         // the caller did not supply one. This keeps slugs uniform, human-readable, and unique
         // per tenant without requiring the UI to pick a slug.
@@ -153,6 +155,8 @@ public sealed class LocationService : ILocationService
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentNullException.ThrowIfNull(entity);
 
+        ValidatePacketConfig(entity);
+
         var existing = await _locationRepository.GetByIdAsync(tenantId, id, cancellationToken)
             ?? throw new KeyNotFoundException($"Location '{id}' not found.");
 
@@ -192,9 +196,24 @@ public sealed class LocationService : ILocationService
         existing.Address = entity.Address;
         existing.IntakeConfig = entity.IntakeConfig;
         existing.EnabledCapabilities = entity.EnabledCapabilities;
+        existing.PacketConfig = entity.PacketConfig;
         existing.MarkAsUpdated(_userContext.UserId);
 
         return await _locationRepository.UpdateAsync(existing, cancellationToken);
+    }
+
+    /// <summary>
+    /// Rejects a location whose packet configuration breaks a <c>Spec B-6</c> rule — most notably
+    /// the 0–<see cref="PacketConfigEmbedded.MaxRecipients"/> recipient bound. Surfaces as a
+    /// <see cref="ArgumentException"/> (HTTP 400) via <c>ExceptionHandlingMiddleware</c>.
+    /// </summary>
+    private static void ValidatePacketConfig(Location entity)
+    {
+        var result = PacketConfigValidator.Validate(entity.PacketConfig);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(entity));
+        }
     }
 
     /// <inheritdoc />

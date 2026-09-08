@@ -104,13 +104,13 @@ This is the honest state of `../RVS_Spec.md`.
 | A-7 returning-customer prefill | **Built** | Keyed off the magic-link token, not email alone |
 | A-8 create + ledger + token + enqueue packet | **Built** | Create, ledger, token, and packet enqueue (`IntakeOrchestrationService` step 8) all built. Enqueue is non-blocking; issue #434 |
 | B-1 packet generation | **Built** | `IPacketGenerationQueue` (in-process channel) → `PacketGenerationWorker` → `PacketGenerationService`: compose, render HTML + PDF, store PDF, attempt-tracked on `ServiceRequest.packetGeneration`, 3-strikes `LogCritical` alert, on-demand regen endpoint. Issue #434 |
-| B-2 … B-7 packet contents, render, delivery | **Partial** | Composition (#430), HTML (#431), PDF (#432), photo SAS (#433), generation (#434) built. Email delivery (#435–#439), paste block (#436), per-location config (#435) not built. See `RVS_PacketComposition.md` |
+| B-2 … B-7 packet contents, render, delivery | **Partial** | Composition (#430), HTML (#431), PDF (#432), photo SAS (#433), generation (#434) built. Per-location packet config on `Location.packetConfig` + `api/locations` (#435) built but not yet consumed. Email delivery (#437–#439), paste block (#436) not built. See `RVS_PacketComposition.md` |
 | C-1 list, filter | **Built** | Far heavier than specced — 10 search fields |
 | C-2 detail + status + resend | **Partial** | Detail and status exist. **No resend** |
 | C-3 set status | **Built** | Vocabulary matches Spec C-3 / C-8 (aligned to code in issue #428) |
 | C-4 disposition + reason code | **Not built** | Only status → Cancelled |
 | C-5 resend packet | **Not built** | |
-| C-6 per-location settings | **Partial** | Location CRUD + capabilities exist; the B-6 packet settings do not |
+| C-6 per-location settings | **Partial** | Location CRUD + capabilities + B-6 `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo) read/written via `api/locations` (#435). No manager-app settings UI yet |
 | C-7 one-click email status links | **Not built** | |
 | X-1 customer status page | **Built, different design** | See token model below |
 | X-2 ledger write on submission | **Built** | `IntakeOrchestrationService` appends per intake, best-effort |
@@ -123,7 +123,7 @@ This is the honest state of `../RVS_Spec.md`.
 | A-11 issue insights (urgency, RV usage) | **Built** | `ai/suggest-insights`, step 5; persisted on `ServiceRequest` with provider/confidence. Specced in issue #429 |
 | A-12 capability pre-check | **Built** | `assess-capabilities`, step 5 → 6 boundary; non-blocking alert. Specced in issue #429 |
 
-**B is mostly built through generation; delivery is greenfield.** Composition, both renderers, photo SAS, and generation orchestration (#430–#434) are in. What remains: email exists but only ever sends a *customer confirmation* from the last intake step — nothing emails a service manager, and `Dealership.ServiceEmail` is populated and mapped but read by no code path (#437). The paste block (#436) and per-location packet config (#435) are also not built.
+**B is mostly built through generation; delivery is greenfield.** Composition, both renderers, photo SAS, and generation orchestration (#430–#434) are in. What remains: email exists but only ever sends a *customer confirmation* from the last intake step — nothing emails a service manager, and `Dealership.ServiceEmail` is populated and mapped but read by no code path (#437). Per-location packet config (#435) is now on `Location.packetConfig`, read/written via `api/locations`, but nothing consumes it yet. The paste block (#436) is also not built.
 
 ---
 

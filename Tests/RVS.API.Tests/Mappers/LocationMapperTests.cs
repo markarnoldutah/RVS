@@ -487,6 +487,167 @@ public class LocationMapperTests
         entity.EnabledCapabilities.Should().BeEquivalentTo(["diesel-service"]);
     }
 
+    // ── PacketConfigEmbedded ↔ PacketConfigDto ───────────────────────────────
+
+    [Fact]
+    public void PacketConfigToDto_WhenNull_ShouldThrowArgumentNullException()
+    {
+        PacketConfigEmbedded? config = null;
+
+        var act = () => config!.ToDto();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void PacketConfigToDto_ShouldMapAllFields()
+    {
+        var config = new PacketConfigEmbedded
+        {
+            Enabled = false,
+            Recipients = ["a@dealer.com", "b@dealer.com"],
+            AttachPdf = false,
+            IncludePhotos = false,
+            PasteBlockCharacterCap = 750,
+            StatusLinkTtlDays = 14,
+            LogoUrl = "https://cdn.dealer.com/logo.png"
+        };
+
+        var dto = config.ToDto();
+
+        dto.Enabled.Should().BeFalse();
+        dto.Recipients.Should().BeEquivalentTo(["a@dealer.com", "b@dealer.com"]);
+        dto.AttachPdf.Should().BeFalse();
+        dto.IncludePhotos.Should().BeFalse();
+        dto.PasteBlockCharacterCap.Should().Be(750);
+        dto.StatusLinkTtlDays.Should().Be(14);
+        dto.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+    }
+
+    [Fact]
+    public void PacketConfigToEmbedded_WhenNull_ShouldThrowArgumentNullException()
+    {
+        PacketConfigDto? dto = null;
+
+        var act = () => dto!.ToEmbedded();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void PacketConfigToEmbedded_ShouldTrimRecipientsAndLogoUrl()
+    {
+        var dto = new PacketConfigDto
+        {
+            Recipients = ["  a@dealer.com ", " b@dealer.com"],
+            LogoUrl = "  https://cdn.dealer.com/logo.png  "
+        };
+
+        var embedded = dto.ToEmbedded();
+
+        embedded.Recipients.Should().BeEquivalentTo(["a@dealer.com", "b@dealer.com"]);
+        embedded.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+    }
+
+    [Fact]
+    public void PacketConfigToEmbedded_WhenLogoUrlBlank_ShouldBeNull()
+    {
+        var dto = new PacketConfigDto { LogoUrl = "   " };
+
+        dto.ToEmbedded().LogoUrl.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenNoPacketConfigSet_ShouldReturnDefaults()
+    {
+        var entity = new Location { TenantId = "ten_1", Name = "Test Location" };
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketConfig.Should().NotBeNull();
+        dto.PacketConfig.Enabled.Should().BeTrue();
+        dto.PacketConfig.Recipients.Should().BeEmpty();
+        dto.PacketConfig.PasteBlockCharacterCap.Should().Be(1000);
+        dto.PacketConfig.StatusLinkTtlDays.Should().Be(30);
+    }
+
+    [Fact]
+    public void ToDetailDto_ShouldMapPacketConfig()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Test Location",
+            PacketConfig = new PacketConfigEmbedded { Recipients = ["svc@dealer.com"], AttachPdf = false }
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+        dto.PacketConfig.AttachPdf.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToEntity_WhenNoPacketConfig_ShouldUseDefaultEmbedded()
+    {
+        var dto = BuildValidCreateRequest() with { PacketConfig = null };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.PacketConfig.Should().NotBeNull();
+        entity.PacketConfig.Enabled.Should().BeTrue();
+        entity.PacketConfig.Recipients.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ToEntity_ShouldMapPacketConfig()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            PacketConfig = new PacketConfigDto { Recipients = ["svc@dealer.com"], StatusLinkTtlDays = 7 }
+        };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+        entity.PacketConfig.StatusLinkTtlDays.Should().Be(7);
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenPacketConfigProvided_ShouldReplaceIt()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Old Name",
+            PacketConfig = new PacketConfigEmbedded { Recipients = ["old@dealer.com"] }
+        };
+        var dto = BuildValidCreateRequest() with
+        {
+            PacketConfig = new PacketConfigDto { Recipients = ["new@dealer.com"] }
+        };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("new@dealer.com");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenPacketConfigNull_ShouldLeaveExistingUnchanged()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Old Name",
+            PacketConfig = new PacketConfigEmbedded { Recipients = ["keep@dealer.com"] }
+        };
+        var dto = BuildValidCreateRequest() with { PacketConfig = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("keep@dealer.com");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static LocationCreateRequestDto BuildValidCreateRequest() =>

@@ -72,9 +72,11 @@ This is Spec X-2. Nothing else reads it, and that is correct. It exists so the r
 
 ### Location — `locations`
 
-`slug`, address, phone, `intakeConfig`, `enabledCapabilities[]`. The slug is the public intake URL segment and is unique per tenant.
+`slug`, address, phone, `intakeConfig`, `enabledCapabilities[]`, `packetConfig`. The slug is the public intake URL segment and is unique per tenant.
 
-**Gap:** Spec B-6 requires per-location packet configuration — recipient list, attach-PDF, include-photos, paste-block cap, status-link TTL, logo. None of it exists. Today the only email address in the model is `Dealership.ServiceEmail`, which is dealership-level and read by no code.
+`packetConfig` (Spec B-6 / C-6, issue #435) is embedded: `enabled` (bool, default true), `recipients[]` (0–10 email addresses — validated by `PacketConfigValidator`), `attachPdf` (default true), `includePhotos` (default true), `pasteBlockCharacterCap` (default 1000, range 100–5000), `statusLinkTtlDays` (default 30, range 1–30), `logoUrl` (optional absolute http(s) URL). Defaults are chosen so a location only needs a recipient address set. Read and written through the existing `api/locations` endpoints; `Dealership.ServiceEmail` stays dealership-level and unread.
+
+**Gap:** nothing consumes `packetConfig` yet — the packet email path (Spec B-4, issue #418) is not built. `recipients` is bounded at 0–10 rather than the Spec's 1–10 so defaults stay usable before configuration.
 
 ### TenantConfig — `tenant-configs`
 

@@ -250,6 +250,44 @@ public class LocationServiceTests
         location.Slug.Should().Be("salt-lake-service-center");
     }
 
+    [Fact]
+    public async Task CreateAsync_WhenPacketConfigExceedsTenRecipients_ShouldThrowArgumentExceptionAndNotPersist()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = [.. Enumerable.Range(1, 11).Select(i => $"advisor{i}@dealer.com")],
+        };
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _slugRepoMock.Verify(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenPacketConfigHasTenRecipients_ShouldSucceed()
+    {
+        var location = BuildLocation();
+        location.Slug = "preset-slug";
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = [.. Enumerable.Range(1, 10).Select(i => $"advisor{i}@dealer.com")],
+        };
+
+        _slugRepoMock.Setup(r => r.GetBySlugAsync("preset-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.CreateAsync("ten_1", location);
+
+        result.Should().BeSameAs(location);
+    }
+
     // ── UpdateAsync ──────────────────────────────────────────────────────────
 
     [Theory]
@@ -340,6 +378,48 @@ public class LocationServiceTests
         _slugRepoMock.Verify(r => r.DeleteAsync(oldSlug, It.IsAny<CancellationToken>()), Times.Once);
         result.Name.Should().Be("Renamed Location");
         result.UpdatedByUserId.Should().Be("usr_test");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenPacketConfigExceedsTenRecipients_ShouldThrowArgumentException()
+    {
+        var updated = BuildLocation();
+        updated.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = [.. Enumerable.Range(1, 11).Select(i => $"advisor{i}@dealer.com")],
+        };
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldPersistPacketConfigOntoExistingLocation()
+    {
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["svc@dealer.com"],
+            AttachPdf = false,
+            StatusLinkTtlDays = 7,
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+        result.PacketConfig.AttachPdf.Should().BeFalse();
+        result.PacketConfig.StatusLinkTtlDays.Should().Be(7);
+        _locationRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<Location>(l => l.PacketConfig.Recipients.Contains("svc@dealer.com")),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── DeleteAsync ──────────────────────────────────────────────────────────

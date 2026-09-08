@@ -95,6 +95,42 @@ public class LocationsControllerTests
     }
 
     [Fact]
+    public async Task Create_ShouldPassPacketConfigThroughToService()
+    {
+        Location? captured = null;
+        _serviceMock.Setup(s => s.CreateAsync(TenantId, It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Location, CancellationToken>((_, l, _) => captured = l)
+            .ReturnsAsync(BuildLocation());
+
+        var request = new LocationCreateRequestDto
+        {
+            Name = "New Location",
+            Slug = "new-location",
+            PacketConfig = new PacketConfigDto { Recipients = ["svc@dealer.com"], IncludePhotos = false }
+        };
+        await _sut.Create(request, CancellationToken.None);
+
+        captured.Should().NotBeNull();
+        captured!.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+        captured.PacketConfig.IncludePhotos.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetById_ShouldReturnPacketConfigInDetailDto()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["svc@dealer.com"] };
+        _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.GetById(location.Id, CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<LocationDetailDto>().Subject;
+        dto.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+    }
+
+    [Fact]
     public async Task GetQrCode_ShouldReturnPngFileResult()
     {
         var location = BuildLocation();
