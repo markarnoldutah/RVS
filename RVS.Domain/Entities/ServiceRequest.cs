@@ -167,6 +167,126 @@ public class ServiceRequest : EntityBase
     /// </summary>
     [JsonProperty("packetGeneration")]
     public PacketGenerationEmbedded PacketGeneration { get; set; } = new();
+
+    /// <summary>
+    /// Tracks delivery of the generated packet by email to the location's service department
+    /// (<c>Spec B-4</c>, issue #438). Delivery is idempotent per
+    /// <c>(serviceRequestId, packetVersion)</c> and retried with exponential backoff; after
+    /// <see cref="PacketEmailDeliveryEmbedded.MaxAttempts"/> failed attempts an alert is logged
+    /// once. A delivery failure never affects packet generation, which has already succeeded.
+    /// </summary>
+    [JsonProperty("packetEmailDelivery")]
+    public PacketEmailDeliveryEmbedded PacketEmailDelivery { get; set; } = new();
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: PacketEmailDeliveryEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// State machine for idempotent, retried delivery of the generated service packet by email
+/// (<c>Spec B-4</c>, issue #438), embedded on a <see cref="ServiceRequest"/>.
+///
+/// The send runs from <c>PacketGenerationService</c> straight after a successful generation.
+/// This block records the current delivery run — whether it is pending, delivered, or failed;
+/// how many attempts it has made; the last error (never customer issue text, per <c>Spec X-7</c>);
+/// and the <see cref="DeliveredPacketVersion"/> that was last delivered. Delivery is skipped when
+/// <see cref="IsDeliveredFor"/> already reports the current packet version as delivered, so a
+/// repeat run never double-sends. After <see cref="MaxAttempts"/> failed attempts an alert is
+/// logged once (<see cref="AlertRaised"/>).
+/// </summary>
+public class PacketEmailDeliveryEmbedded
+{
+    /// <summary>Maximum delivery attempts before an alert is raised (<c>Spec B-4</c>).</summary>
+    public const int MaxAttempts = 3;
+
+    /// <summary>
+    /// Current delivery state: <c>Pending</c> (not yet attempted for the current run),
+    /// <c>Delivered</c>, or <c>Failed</c> (all attempts for the current run exhausted).
+    /// </summary>
+    [JsonProperty("status")]
+    public string Status { get; set; } = "Pending";
+
+    /// <summary>Number of send attempts made in the current run.</summary>
+    [JsonProperty("attemptCount")]
+    public int AttemptCount { get; set; }
+
+    /// <summary>UTC time the most recent attempt started. Null before the first attempt.</summary>
+    [JsonProperty("lastAttemptAtUtc")]
+    public DateTime? LastAttemptAtUtc { get; set; }
+
+    /// <summary>
+    /// The <see cref="PacketGenerationEmbedded.PacketVersion"/> that was last delivered
+    /// successfully. <c>0</c> until the first successful delivery. With the service request id
+    /// this is the idempotency key for delivery (<c>Spec B-4</c>).
+    /// </summary>
+    [JsonProperty("deliveredPacketVersion")]
+    public int DeliveredPacketVersion { get; set; }
+
+    /// <summary>UTC time of the most recent successful delivery. Null until the first success.</summary>
+    [JsonProperty("deliveredAtUtc")]
+    public DateTime? DeliveredAtUtc { get; set; }
+
+    /// <summary>
+    /// Short exception type and message from the most recent failed attempt, truncated. Never
+    /// contains customer issue text (<c>Spec X-7</c>). Null when the last run delivered.
+    /// </summary>
+    [JsonProperty("lastError")]
+    public string? LastError { get; set; }
+
+    /// <summary>
+    /// True once the exhausted-retries alert has been logged for the current failed run, so it is
+    /// logged only once. Cleared by <see cref="BeginRun"/>.
+    /// </summary>
+    [JsonProperty("alertRaised")]
+    public bool AlertRaised { get; set; }
+
+    /// <summary>
+    /// True when the current status is <c>Delivered</c> and the delivered version matches
+    /// <paramref name="packetVersion"/> — i.e. this exact packet has already been emailed and a
+    /// repeat send must be skipped.
+    /// </summary>
+    public bool IsDeliveredFor(int packetVersion) =>
+        Status == "Delivered" && DeliveredPacketVersion == packetVersion;
+
+    /// <summary>
+    /// Starts a fresh delivery run: clears the attempt counter, error, and alert flag and returns
+    /// the status to <c>Pending</c>. A prior <see cref="DeliveredPacketVersion"/> and
+    /// <see cref="DeliveredAtUtc"/> are retained.
+    /// </summary>
+    public void BeginRun()
+    {
+        Status = "Pending";
+        AttemptCount = 0;
+        LastError = null;
+        AlertRaised = false;
+    }
+
+    /// <summary>Begins a new attempt: increments the attempt count and stamps the time.</summary>
+    public void MarkAttempt()
+    {
+        AttemptCount++;
+        LastAttemptAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>Records a successful delivery: stores the delivered version and time, clears the error.</summary>
+    public void MarkDelivered(int packetVersion, DateTime deliveredAtUtc)
+    {
+        Status = "Delivered";
+        DeliveredPacketVersion = packetVersion;
+        DeliveredAtUtc = deliveredAtUtc;
+        LastError = null;
+    }
+
+    /// <summary>Records a failed run: marks <c>Failed</c> and stores the sanitized error.</summary>
+    public void MarkFailed(string error)
+    {
+        Status = "Failed";
+        LastError = error;
+    }
+
+    /// <summary>Marks that the exhausted-retries alert has been logged for this failed run.</summary>
+    public void MarkAlertRaised() => AlertRaised = true;
 }
 
 // ---------------------------------------------------------------------------

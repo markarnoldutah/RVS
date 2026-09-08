@@ -295,6 +295,9 @@ builder.Services.AddScoped<IPacketPhotoUrlResolver, PacketPhotoUrlResolver>();
 builder.Services.AddSingleton<IPacketGenerationQueue, ChannelPacketGenerationQueue>();
 builder.Services.AddScoped<IPacketGenerationService, PacketGenerationService>();
 builder.Services.AddHostedService<PacketGenerationWorker>();
+
+// Packet-email delivery tuning (Spec B-4, issue #438): retry backoff. Defaults work unset.
+builder.Services.Configure<RVS.API.Options.PacketEmailOptions>(builder.Configuration.GetSection("PacketEmail"));
 #endregion
 
 #region Integration Clients

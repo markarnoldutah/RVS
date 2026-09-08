@@ -48,6 +48,7 @@ The central document. Field groups:
 | Diagnostics | `diagnosticResponses[]` | Core — this is the packet's most valuable block |
 | AI | `aiEnrichment` metadata | Core |
 | Packet | `packetGeneration` — `status`, `attemptCount`, `lastAttemptAtUtc`, `lastError`, `generatedAtUtc`, `packetVersion`, `pdfBlobPath`, `alertRaised` | Core (issue #434). Async packet-generation state; `lastError` never holds customer issue text (`Spec X-7`); `MaxAttempts` = 3 then a `LogCritical` alert. The packet's "short reference code" is **not stored** — it is derived at compose time as the first hyphen-delimited segment of `id`, upper-cased (`#472`) |
+| Packet delivery | `packetEmailDelivery` — `status`, `attemptCount`, `lastAttemptAtUtc`, `deliveredPacketVersion`, `deliveredAtUtc`, `lastError`, `alertRaised` | Core (issue #438). Idempotent, retried packet-email state; delivery is skipped when `deliveredPacketVersion` already equals the current `packetGeneration.packetVersion` (idempotency per `(serviceRequestId, packetVersion)`, `Spec B-4`); `MaxAttempts` = 3 with exponential backoff, then a `LogCritical` alert; `lastError` never holds customer issue text (`Spec X-7`) |
 | Outcome | `serviceEvent` — component, failure mode, repair action, parts, labor | **Archived** — technician workflow |
 | Scheduling | `scheduledDateUtc`, `assignedBayId`, `assignedTechnicianId`, `requiredSkills` | **Archived** |
 | Messaging | `messages[]` | **Archived** — defined, referenced nowhere in the codebase |
@@ -76,7 +77,7 @@ This is Spec X-2. Nothing else reads it, and that is correct. It exists so the r
 
 `packetConfig` (Spec B-6 / C-6, issue #435) is embedded: `enabled` (bool, default true), `recipients[]` (0–10 email addresses — validated by `PacketConfigValidator`), `attachPdf` (default true), `includePhotos` (default true), `pasteBlockCharacterCap` (default 1000, range 100–5000), `statusLinkTtlDays` (default 30, range 1–30), `logoUrl` (optional absolute http(s) URL). Defaults are chosen so a location only needs a recipient address set. Read and written through the existing `api/locations` endpoints; `Dealership.ServiceEmail` stays dealership-level and unread.
 
-**Coverage:** `pasteBlockCharacterCap` is consumed by the paste-block generator (#436); `enabled`, `recipients`, `attachPdf`, and `includePhotos` are consumed by the packet email send (#437, `PacketGenerationService` → `PacketEmailComposer`). **Gap:** `statusLinkTtlDays` and `logoUrl` have no consumer yet; delivery idempotency + retry (#438) and hard-bounce recipient disabling (#439) are not built. `recipients` is bounded at 0–10 rather than the Spec's 1–10 so defaults stay usable before configuration.
+**Coverage:** `pasteBlockCharacterCap` is consumed by the paste-block generator (#436); `enabled`, `recipients`, `attachPdf`, and `includePhotos` are consumed by the packet email send (#437, `PacketGenerationService` → `PacketEmailComposer`), which is now idempotent per `(serviceRequestId, packetVersion)` and retried three times with exponential backoff then a `LogCritical` alert (#438, state on `ServiceRequest.packetEmailDelivery`). **Gap:** `statusLinkTtlDays` and `logoUrl` have no consumer yet; hard-bounce recipient disabling (#439) is not built. `recipients` is bounded at 0–10 rather than the Spec's 1–10 so defaults stay usable before configuration.
 
 ### TenantConfig — `tenant-configs`
 
