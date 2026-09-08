@@ -61,6 +61,9 @@ param storageCorsOrigins string[] = []
 @description('Allow storage account key (shared key) access. Set false in staging/prod to force Entra ID + user-delegation SAS only.')
 param storageAllowSharedKeyAccess bool = true
 
+@description('Optional. Object ID of an Entra ID group granted blob data access on the storage account for developer / manual operations (local runs via AzureCliCredential, ops inspection). Set only in non-production parameter files. Empty = no such grant.')
+param devBlobAccessPrincipalId string = ''
+
 // ── ACS Parameters ────────────────────────────────────────────
 
 @description('When true, deploys an Azure Communication Services resource with Email and SMS capabilities.')
@@ -366,6 +369,7 @@ module storage 'modules/storage-account.bicep' = if (deployStorageAccount) {
       : ''
     corsAllowedOrigins: resolvedCorsOrigins
     allowSharedKeyAccess: storageAllowSharedKeyAccess
+    devBlobAccessPrincipalId: devBlobAccessPrincipalId
     tags: sharedTags
   }
 }
