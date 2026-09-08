@@ -1,5 +1,14 @@
 # Copilot Instructions — ASP.NET Core API
 
+## Working an Issue
+
+When the user says **"Execute Issue #abc"** (where `abc` is a valid GitHub Issue number), before doing any work:
+
+1. Create a new branch off the current base branch (usually `main`) named `abc-some-meaningful-identifier` — `abc` is the issue number, followed by a short kebab-case slug describing the issue (e.g. `431-packet-html-render`).
+2. Check out that branch, then perform the work for the issue on it.
+
+Do not commit issue work directly to `main`. If the branch already exists, check it out and continue on it rather than creating a duplicate.
+
 ## Project Structure
 
 - `<App>.API` — Controllers, Services, Mappers, Middleware, Integrations

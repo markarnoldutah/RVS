@@ -25,6 +25,15 @@ There is no target number of these. One authoritative home per fact; a document 
 
 **Scope discipline.** The product was deliberately reduced to: anonymous intake → a one-page packet emailed to the service department → a thin manager app. Archived and out of scope: DMS integration, two-way SMS, technician/MAUI app, scheduling, benchmarking and analytics, billing tiers, OEM data licensing. Code for several of these still exists and is a descope target, not a feature — see the descope backlogs in the ASOT docs before extending anything in those areas.
 
+## Working an Issue
+
+When the user says **"Execute Issue #abc"** (where `abc` is a valid GitHub Issue number), before doing any work:
+
+1. Create a new branch off the current base branch (usually `main`) named `abc-some-meaningful-identifier` — `abc` is the issue number, followed by a short kebab-case slug describing the issue (e.g. `431-packet-html-render`).
+2. Check out that branch, then perform the work for the issue on it.
+
+Do not commit issue work directly to `main`. If the branch already exists, check it out and continue on it rather than creating a duplicate.
+
 ## Solution Layout
 
 Solution file is [RVS.slnx](RVS.slnx) (new SLNX format — `dotnet` CLI handles it; older `dotnet sln` subcommands may not).
