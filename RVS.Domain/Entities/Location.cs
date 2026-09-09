@@ -104,6 +104,87 @@ public class PacketConfigEmbedded
     [JsonProperty("recipients")]
     public List<string> Recipients { get; set; } = [];
 
+    /// <summary>
+    /// Recipient addresses that have been parked after a hard bounce (<c>Spec B-4</c>, issue #439).
+    /// A hard bounce disables <b>that one address</b> — it moves here from <see cref="Recipients"/>
+    /// so packets keep flowing to the rest — and stays visible so a manager can restore it from
+    /// location settings once the address is fixed. Never populated for a brand-new location.
+    /// </summary>
+    [JsonProperty("disabledRecipients")]
+    public List<DisabledRecipientEmbedded> DisabledRecipients { get; set; } = [];
+
+    /// <summary>
+    /// Parks <paramref name="email"/> after a hard bounce: removes it from the active
+    /// <see cref="Recipients"/> list and records it on <see cref="DisabledRecipients"/> with the
+    /// bounce <paramref name="reason"/> and <paramref name="disabledAtUtc"/>. Address matching is
+    /// case-insensitive and whitespace-insensitive. Idempotent — returns <c>false</c> without
+    /// changing anything when <paramref name="email"/> is not currently an active recipient
+    /// (already disabled, or never configured).
+    /// </summary>
+    /// <returns><c>true</c> when an active recipient was parked; otherwise <c>false</c>.</returns>
+    public bool DisableRecipient(string email, string? reason, DateTime disabledAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return false;
+        }
+
+        var target = email.Trim();
+        var match = Recipients.FirstOrDefault(r => Matches(r, target));
+        if (match is null)
+        {
+            return false;
+        }
+
+        Recipients.RemoveAll(r => Matches(r, target));
+
+        if (!DisabledRecipients.Any(d => Matches(d.Email, target)))
+        {
+            DisabledRecipients.Add(new DisabledRecipientEmbedded
+            {
+                Email = match.Trim(),
+                Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+                DisabledAtUtc = disabledAtUtc,
+            });
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Restores <paramref name="email"/> from <see cref="DisabledRecipients"/> back to the active
+    /// <see cref="Recipients"/> list. Case- and whitespace-insensitive. Idempotent — returns
+    /// <c>false</c> without changing anything when <paramref name="email"/> is not currently
+    /// disabled.
+    /// </summary>
+    /// <returns><c>true</c> when a disabled recipient was restored; otherwise <c>false</c>.</returns>
+    public bool ReEnableRecipient(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return false;
+        }
+
+        var target = email.Trim();
+        var match = DisabledRecipients.FirstOrDefault(d => Matches(d.Email, target));
+        if (match is null)
+        {
+            return false;
+        }
+
+        DisabledRecipients.RemoveAll(d => Matches(d.Email, target));
+
+        if (!Recipients.Any(r => Matches(r, target)))
+        {
+            Recipients.Add(match.Email.Trim());
+        }
+
+        return true;
+    }
+
+    private static bool Matches(string? a, string b) =>
+        !string.IsNullOrWhiteSpace(a) && string.Equals(a.Trim(), b, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Attach the rendered PDF to the packet email (<c>Spec B-4</c>).</summary>
     [JsonProperty("attachPdf")]
     public bool AttachPdf { get; set; } = true;
@@ -125,6 +206,33 @@ public class PacketConfigEmbedded
     /// <summary>Optional absolute URL to a location-specific logo rendered on the packet.</summary>
     [JsonProperty("logoUrl")]
     public string? LogoUrl { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: DisabledRecipientEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// A packet-email recipient address that has been disabled after a hard bounce
+/// (<c>Spec B-4</c>, issue #439), embedded on <see cref="PacketConfigEmbedded"/>.
+///
+/// It is kept rather than deleted so the disabled address stays visible in location settings
+/// and can be re-enabled once it is fixed. <see cref="Reason"/> never carries customer data
+/// (<c>Spec X-7</c>) — it is the bounce classification from the mail transport.
+/// </summary>
+public class DisabledRecipientEmbedded
+{
+    /// <summary>The email address that hard-bounced and was removed from active delivery.</summary>
+    [JsonProperty("email")]
+    public string Email { get; set; } = string.Empty;
+
+    /// <summary>Short, non-PII reason for the bounce (e.g. the transport's bounce classification). Optional.</summary>
+    [JsonProperty("reason")]
+    public string? Reason { get; set; }
+
+    /// <summary>UTC time the address was disabled.</summary>
+    [JsonProperty("disabledAtUtc")]
+    public DateTime DisabledAtUtc { get; set; }
 }
 
 // ---------------------------------------------------------------------------

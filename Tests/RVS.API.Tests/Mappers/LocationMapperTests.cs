@@ -525,6 +525,45 @@ public class LocationMapperTests
     }
 
     [Fact]
+    public void PacketConfigToDto_ShouldMapDisabledRecipients()
+    {
+        var when = new DateTime(2026, 9, 8, 0, 0, 0, DateTimeKind.Utc);
+        var config = new PacketConfigEmbedded
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients =
+            [
+                new DisabledRecipientEmbedded { Email = "dead@dealer.com", Reason = "Bounced", DisabledAtUtc = when },
+            ],
+        };
+
+        var dto = config.ToDto();
+
+        var disabled = dto.DisabledRecipients.Should().ContainSingle().Subject;
+        disabled.Email.Should().Be("dead@dealer.com");
+        disabled.Reason.Should().Be("Bounced");
+        disabled.DisabledAtUtc.Should().Be(when);
+    }
+
+    [Fact]
+    public void PacketConfigToDto_WhenNoDisabledRecipients_ShouldReturnEmptyList()
+    {
+        new PacketConfigEmbedded().ToDto().DisabledRecipients.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void PacketConfigToEmbedded_ShouldNotAcceptDisabledRecipientsFromCaller()
+    {
+        var dto = new PacketConfigDto
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients = [new DisabledRecipientDto { Email = "injected@dealer.com" }],
+        };
+
+        dto.ToEmbedded().DisabledRecipients.Should().BeEmpty();
+    }
+
+    [Fact]
     public void PacketConfigToEmbedded_WhenNull_ShouldThrowArgumentNullException()
     {
         PacketConfigDto? dto = null;
