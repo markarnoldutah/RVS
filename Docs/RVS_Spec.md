@@ -129,13 +129,23 @@ Cost is small: the tokens, endpoints, and audit logging are the same machinery a
 
 Transitions are unrestricted: any status may move to any other (self-transitions excepted). There is no `Received` or `Ready` state — the earlier suggested set in this doc is superseded.
 
----
+### C-9 — Customer-facing status notes
 
-## X. Cross-cutting
+**Decided (issue #500).** The manager can attach free-text notes to a service request that render on the customer status page (X-1), alongside the fixed C-3 status — a short human note like "waiting on a back-ordered slide motor, ETA Friday". This overrides the original X-1 restriction ("no conversation, no messaging, no file exchange"), which was never a deliberate decision — see the decision log.
+
+Constraints:
+
+- **Manager-authored only. One-directional.** The customer cannot reply, message, or upload anything — the status page stays display-only for the customer (X-1). This is the one hard line; everything else about the surface is free to change.
+- Notes are optional. The page reads cleanly with none.
+- Plain text, length-capped (default 280 characters), sanitised on input per the D-block character rules.
+- Never written to application logs (same rule as the customer's own free-text problem description).
+- Not the customer's problem description — that stays invisible to the customer-facing surface. This is a separate, deliberately-authored field.
+
+The entry surface is the manager app detail view (C-2). It also fits a C-7 deep link so the manager can land straight on it from the packet email.
 
 | # | Requirement |
 |---|---|
-| **X-1** | **Customer status page.** `rvintake.com/status/{token}`, anonymous, rate-limited. Shows unit, submission date, current status, and the location's phone number. No conversation, no messaging, no file exchange. |
+| **X-1** | **Customer status page.** `rvintake.com/status/{token}`, anonymous, rate-limited. Shows unit, submission date, current status, the location's phone number, and any manager-authored notes (C-9). The page is free to grow to show whatever is useful for the customer to see about their job. **One hard constraint: it is display-only for the customer.** There is no path for the customer to send anything back — no reply, no inbound message, no file upload. Communication is one-directional, manager → customer. (This does not reopen two-way messaging; see "Explicitly out of scope".) |
 | **X-2** | **Ledger write.** Append-only entry on intake submission: asset ID, tenant, location, category, timestamp, taxonomy version. Write-once; corrections are new entries referencing the original. Invisible to users. Persistent write failure raises an alert. *This exists solely so the record is there later. Nothing reads it today.* |
 | **X-3** | **Anonymization license.** Terms of service and any design-partner agreement must grant a perpetual, irrevocable license to use service data in anonymized, aggregated form. **Get this into the first customer's paperwork.** It cannot be added retroactively without renegotiating with every existing customer. |
 | **X-4** | **Tenancy.** Every query is tenant-scoped through the existing claims and gate middleware. Cross-tenant data never appears in any response. |
@@ -150,6 +160,6 @@ Intake submission P95 under 2s. Packet generated P95 under 10s, email delivered 
 
 ## Explicitly out of scope
 
-Two-way SMS or messaging · DMS API integration of any kind · offline mobile app · scheduling or calendars · quoting, invoicing, payments · parts and inventory · benchmarking or analytics dashboards · cross-location reporting · technician assignment and workload · SSO/SAML/SCIM · warranty claim workflows.
+Two-way SMS or messaging (one-directional manager → customer status notes are C-9) · DMS API integration of any kind · offline mobile app · scheduling or calendars · quoting, invoicing, payments · parts and inventory · benchmarking or analytics dashboards · cross-location reporting · technician assignment and workload · SSO/SAML/SCIM · warranty claim workflows.
 
 Some of these are specced in detail in the archive. Retrieval triggers are in `RVS_Archive_Index.md`. Adding any of them back is a decision that gets logged in `RVS_Plan.md`, not a thing that happens because a prospect asked.

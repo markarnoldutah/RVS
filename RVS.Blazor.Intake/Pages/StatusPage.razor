@@ -134,7 +134,7 @@ else if (_statusResponse is not null)
                                     </MudStack>
 
                                     <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
-                                        @GetStatusDescription(sr.Status)
+                                        @CustomerStatusFormatting.DescribeStatus(sr.Status)
                                     </MudText>
 
                                     <MudDivider />
@@ -151,7 +151,20 @@ else if (_statusResponse is not null)
                                             </tr>
                                             <tr>
                                                 <td><strong>Location Phone</strong></td>
-                                                <td>@(string.IsNullOrWhiteSpace(sr.LocationPhone) ? "—" : sr.LocationPhone)</td>
+                                                <td>
+                                                    @if (CustomerStatusFormatting.ToTelHref(sr.LocationPhone) is { } telHref)
+                                                    {
+                                                        <MudLink Href="@telHref"
+                                                                 Color="Color.Primary"
+                                                                 Underline="Underline.Always">
+                                                            @CustomerStatusFormatting.FormatPhoneForDisplay(sr.LocationPhone)
+                                                        </MudLink>
+                                                    }
+                                                    else
+                                                    {
+                                                        @(CustomerStatusFormatting.FormatPhoneForDisplay(sr.LocationPhone) ?? "—")
+                                                    }
+                                                </td>
                                             </tr>
                                         </tbody>
                                     </MudSimpleTable>
@@ -240,14 +253,4 @@ else if (_statusResponse is not null)
         ExpiredToken,
         Unexpected
     }
-
-    private static string GetStatusDescription(string status) => status?.Trim().ToLowerInvariant() switch
-    {
-        "new" => "Your request has been received and is awaiting review by a service advisor.",
-        "in progress" or "in-progress" => "A technician is actively working on your service request.",
-        "awaiting parts" or "awaiting-parts" => "Your repair requires parts that have been ordered. We'll update you when they arrive.",
-        "completed" => "Your service has been completed. Please contact the dealership for pickup details.",
-        "cancelled" => "This service request has been cancelled.",
-        _ => "Your request is being processed."
-    };
 }
