@@ -399,7 +399,7 @@ propagation can take a few minutes.
 Commands for each are in `deployment-cmds.azcli` §4e. Summary:
 
 1. **Verify the managed domain is provisioned and verified** (`az communication email domain show` → `provisioningState = Succeeded`). `AzureManaged` verification is automatic but can lag; sends fail with `DomainNotLinked` until it completes.
-2. **Read back the real sender domain** (`properties.fromSenderDomain`) and confirm the deployed `AzureCommunicationServices__Email__FromAddress` app setting is `DoNotReply@<that domain>`.
+2. **Read back the real sender domain** (`az communication email domain show … --query fromSenderDomain` — the preview `communication` extension flattens `properties.*` to the top level, so don't prefix `properties.`) and confirm the deployed `AzureCommunicationServices__Email__FromAddress` app setting is `DoNotReply@<that domain>`.
 3. **Confirm the RBAC grant landed** (`az role assignment list --scope <acs-resource-id>`). If not (older Bicep, or propagation), assign **Contributor** on the ACS resource by hand — §4e (1).
 4. **Check the ACS email send quota.** Azure-managed domains start low (~100 recipients/day, low rate). Request an increase via Azure support if a demo needs more.
 5. **Set a real recipient on a staging Location.** Seed data uses RFC 2606 `.example.com` addresses that hard-bounce. Point at least one location's `packetConfig.recipients` at a mailbox you control — `PUT /api/dealers/{dealerId}/locations/{locationId}` or directly in Cosmos. `packetConfig.enabled` defaults to `true`.
