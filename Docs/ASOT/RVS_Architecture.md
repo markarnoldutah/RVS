@@ -112,7 +112,8 @@ This is the honest state of `../RVS_Spec.md`.
 | C-5 resend packet | **Not built** | |
 | C-6 per-location settings | **Partial** | Location CRUD + capabilities + B-6 `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo) read/written via `api/locations` (#435). No manager-app settings UI yet |
 | C-7 one-click email status links | **Not built** | |
-| X-1 customer status page | **Built, different design** | See token model below. Payload trimmed to the specced four fields — unit, submission date, status, location phone — in #442 (`CustomerStatusItemResponseDto`); no customer identity or issue text crosses the boundary |
+| C-9 customer-facing status notes | **Not built** | Specced in issue #500 (overrides the original X-1 "no conversation, no messaging"). Manager-authored free-text note on `ServiceRequest`, one-directional, rendered on the customer status page |
+| X-1 customer status page | **Built, different design** | See token model below. Payload trimmed in #442 (`CustomerStatusItemResponseDto`) to unit, submission date, status, location phone; no customer identity or issue text crosses the boundary. #500 adds a manager-authored note field to the payload (C-9); the surface stays display-only for the customer — no inbound path |
 | X-2 ledger write on submission | **Built** | `IntakeOrchestrationService` appends per intake, best-effort |
 | X-3 anonymization license | **Paperwork** | Not a code item. Highest-leverage open item in the whole set |
 | X-4 tenancy | **Built** | |
