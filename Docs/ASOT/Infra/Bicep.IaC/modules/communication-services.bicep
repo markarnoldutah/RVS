@@ -22,10 +22,25 @@ param tags object
 @description('Data residency location for ACS. Must be a valid ACS data location (e.g. "United States", "Europe", "Asia Pacific", "Australia").')
 param dataLocation string = 'United States'
 
+@description('Principal ID (object ID) of the API App Service managed identity to grant ACS Email Send access. Leave empty to skip the role assignment.')
+param apiPrincipalId string = ''
+
+@description('Principal ID of the API staging deployment-slot managed identity (S1 only). Leave empty to skip the role assignment.')
+param stagingSlotPrincipalId string = ''
+
 // ── Variables ─────────────────────────────────────────────────
 
 // Email service name follows the ACS resource name with an '-email' suffix.
 var emailServiceName = '${resourceName}-email'
+
+// Contributor — AcsEmailNotificationService authenticates to ACS with the API's
+// managed identity (DefaultAzureCredential). ACS exposes no granular data-plane
+// "email sender" role as of writing; Contributor scoped to the ACS resource is
+// the documented minimum for EmailClient.SendAsync under Entra ID auth. Re-check
+// the ACS "authenticate with managed identity" docs for a narrower role before
+// widening this pattern.
+// https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/general#contributor
+var contributorRoleId = 'b24988ac-6180-42a0-ab88-20f7382dd24c'
 
 // ── Azure Communication Services Account ──────────────────────
 // 2025-05-01 does not exist; 2025-09-01 fails domain validation at deploy time.
@@ -68,6 +83,32 @@ resource azureManagedDomain 'Microsoft.Communication/emailServices/domains@2023-
   properties: {
     domainManagement: 'AzureManaged'
     userEngagementTracking: 'Disabled'
+  }
+}
+
+// ── Role Assignments ─────────────────────────────────────────
+// Grant the API managed identity (and the staging-slot identity on S1) the
+// rights to call ACS Email Send via managed identity. Scoped to the ACS
+// account only. Guarded by !empty(...) so the module still deploys when no
+// App Service is present.
+
+resource apiAcsContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(apiPrincipalId)) {
+  name: guid(acsAccount.id, apiPrincipalId, contributorRoleId)
+  scope: acsAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', contributorRoleId)
+    principalId: apiPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource stagingSlotAcsContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(stagingSlotPrincipalId)) {
+  name: guid(acsAccount.id, stagingSlotPrincipalId, contributorRoleId)
+  scope: acsAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', contributorRoleId)
+    principalId: stagingSlotPrincipalId
+    principalType: 'ServicePrincipal'
   }
 }
 
