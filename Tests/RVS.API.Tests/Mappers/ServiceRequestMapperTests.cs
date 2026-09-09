@@ -336,6 +336,84 @@ public class ServiceRequestMapperTests
         dto.HasOutcome.Should().BeTrue();
     }
 
+    // ── ToCustomerStatusItemDto (Spec X-1) ───────────────────────────────────
+
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenEntityIsNull_ShouldThrowArgumentNullException()
+    {
+        ServiceRequest? entity = null;
+
+        var act = () => entity!.ToCustomerStatusItemDto("555-0100");
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_ShouldMapUnitSubmissionDateStatusAndLocationPhone()
+    {
+        var submittedAt = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        var entity = new ServiceRequest
+        {
+            Status = "InProgress",
+            CreatedAtUtc = submittedAt,
+            AssetInfo = new AssetInfoEmbedded { Year = 2021, Manufacturer = "Forest River", Model = "XLR" }
+        };
+
+        var dto = entity.ToCustomerStatusItemDto("  555-0100  ");
+
+        dto.Unit.Should().Be("2021 Forest River XLR");
+        dto.SubmittedAtUtc.Should().Be(submittedAt);
+        dto.Status.Should().Be("InProgress");
+        dto.LocationPhone.Should().Be("555-0100");
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenAssetInfoIsEmpty_UnitShouldBeNull()
+    {
+        var entity = new ServiceRequest
+        {
+            AssetInfo = new AssetInfoEmbedded { AssetId = "1HGBH41JXMN109186" }
+        };
+
+        var dto = entity.ToCustomerStatusItemDto("555-0100");
+
+        dto.Unit.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToCustomerStatusItemDto_WhenLocationPhoneMissing_ShouldBeNull(string? phone)
+    {
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto(phone);
+
+        dto.LocationPhone.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_ShouldNotCarryFreeTextIssueDescription()
+    {
+        const string secret = "customer typed sensitive free text here";
+        var entity = new ServiceRequest
+        {
+            Status = "New",
+            IssueCategory = "Electrical",
+            IssueDescription = secret,
+            TechnicianSummary = secret,
+            CustomerSnapshot = new CustomerSnapshotEmbedded { FirstName = "Jane", LastName = "Doe" }
+        };
+
+        var dto = entity.ToCustomerStatusItemDto("555-0100");
+
+        var serialized = System.Text.Json.JsonSerializer.Serialize(dto);
+        serialized.Should().NotContain(secret);
+        serialized.Should().NotContain("Jane");
+        serialized.Should().NotContain("Electrical");
+    }
+
     // ── ToEntity (create) ────────────────────────────────────────────────────
 
     [Fact]

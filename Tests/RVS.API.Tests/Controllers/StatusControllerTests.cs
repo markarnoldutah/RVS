@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using RVS.API.Controllers;
-using RVS.API.Mappers;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
@@ -27,48 +26,45 @@ public class StatusControllerTests
     }
 
     [Fact]
-    public async Task GetStatus_WithValidToken_ShouldReturnOkWithCustomerStatus()
+    public async Task GetStatus_WithValidToken_ShouldReturnOnlyUnitDateStatusAndLocationPhone()
     {
-        var acct = BuildGlobalCustomerAcct();
-        _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        var profile = BuildCustomerProfile();
-        _profileServiceMock.Setup(s => s.GetByIdAsync("ten_1", "prof_1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(profile);
-
-        var sr = BuildServiceRequest();
-        _srServiceMock.Setup(s => s.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(sr);
-
-        var location = BuildLocation();
-        _locationServiceMock.Setup(s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(location);
+        ArrangeHappyPath();
 
         var result = await _sut.GetStatus("valid-token", CancellationToken.None);
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
-        dto.FirstName.Should().Be("Jane");
+
         dto.ServiceRequests.Should().HaveCount(1);
-        dto.ServiceRequests[0].LocationName.Should().Be("Salt Lake City, UT");
+        var item = dto.ServiceRequests[0];
+        item.Unit.Should().Be("2023 Thor Ace");
+        item.SubmittedAtUtc.Should().Be(new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+        item.Status.Should().Be("New");
+        item.LocationPhone.Should().Be("555-0100");
     }
 
     [Fact]
-    public async Task GetStatus_WhenLocationNotFound_ShouldReturnNullLocationName()
+    public async Task GetStatus_ShouldNotExposeCustomerIdentityOnTheResponse()
     {
-        var acct = BuildGlobalCustomerAcct();
-        _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
+        ArrangeHappyPath();
 
-        var profile = BuildCustomerProfile();
-        _profileServiceMock.Setup(s => s.GetByIdAsync("ten_1", "prof_1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(profile);
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
 
-        var sr = BuildServiceRequest();
-        _srServiceMock.Setup(s => s.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(sr);
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
 
+        // Spec X-1: nothing beyond the four permitted fields — no name, no issue text.
+        typeof(CustomerStatusResponseDto).GetProperty("FirstName").Should().BeNull();
+        var serialized = System.Text.Json.JsonSerializer.Serialize(dto);
+        serialized.Should().NotContain("Jane");
+        serialized.Should().NotContain("Battery not charging");
+        serialized.Should().NotContain("Electrical");
+    }
+
+    [Fact]
+    public async Task GetStatus_WhenLocationNotFound_ShouldReturnNullLocationPhone()
+    {
+        ArrangeHappyPath();
         _locationServiceMock.Setup(s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()))
             .ThrowsAsync(new KeyNotFoundException());
 
@@ -76,39 +72,21 @@ public class StatusControllerTests
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
-        dto.ServiceRequests[0].LocationName.Should().BeNull();
+        dto.ServiceRequests[0].LocationPhone.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetStatus_WhenLocationHasNoCityButHasSlug_ShouldUseHumanizedSlug()
+    public async Task GetStatus_WhenLocationHasNoPhone_ShouldReturnNullLocationPhone()
     {
-        var acct = BuildGlobalCustomerAcct();
-        _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        var profile = BuildCustomerProfile();
-        _profileServiceMock.Setup(s => s.GetByIdAsync("ten_1", "prof_1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(profile);
-
-        var sr = BuildServiceRequest();
-        _srServiceMock.Setup(s => s.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(sr);
-
-        var location = new Location
-        {
-            Id = "loc_1",
-            TenantId = "ten_1",
-            Slug = "camping-world-service-center",
-            CreatedByUserId = "system"
-        };
+        ArrangeHappyPath();
         _locationServiceMock.Setup(s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(location);
+            .ReturnsAsync(new Location { Id = "loc_1", TenantId = "ten_1", Slug = "slc", CreatedByUserId = "system", Phone = null });
 
         var result = await _sut.GetStatus("valid-token", CancellationToken.None);
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
-        dto.ServiceRequests[0].LocationName.Should().Be("Camping World Service Center");
+        dto.ServiceRequests[0].LocationPhone.Should().BeNull();
     }
 
     [Fact]
@@ -130,8 +108,19 @@ public class StatusControllerTests
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
-        dto.FirstName.Should().Be("Jane");
         dto.ServiceRequests.Should().BeEmpty();
+    }
+
+    private void ArrangeHappyPath()
+    {
+        _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildGlobalCustomerAcct());
+        _profileServiceMock.Setup(s => s.GetByIdAsync("ten_1", "prof_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCustomerProfile());
+        _srServiceMock.Setup(s => s.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildServiceRequest());
+        _locationServiceMock.Setup(s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildLocation());
     }
 
     private static GlobalCustomerAcct BuildGlobalCustomerAcct() => new()
@@ -178,6 +167,7 @@ public class StatusControllerTests
         IssueCategory = "Electrical",
         IssueDescription = "Battery not charging",
         CreatedByUserId = "intake",
+        CreatedAtUtc = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
         CustomerSnapshot = new CustomerSnapshotEmbedded
         {
             FirstName = "Jane",
@@ -199,6 +189,7 @@ public class StatusControllerTests
         TenantId = "ten_1",
         Slug = "salt-lake-service-center",
         CreatedByUserId = "system",
+        Phone = "555-0100",
         Address = new AddressEmbedded
         {
             City = "Salt Lake City",

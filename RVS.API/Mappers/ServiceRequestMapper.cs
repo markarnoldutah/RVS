@@ -56,11 +56,6 @@ public static class ServiceRequestMapper
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var year = entity.AssetInfo.Year.HasValue ? $"{entity.AssetInfo.Year} " : string.Empty;
-        var manufacturer = entity.AssetInfo.Manufacturer is not null ? $"{entity.AssetInfo.Manufacturer} " : string.Empty;
-        var model = entity.AssetInfo.Model ?? string.Empty;
-        var assetDisplay = (year + manufacturer + model).Trim();
-
         var hasOutcome = entity.ServiceEvent is not null
             && (!string.IsNullOrWhiteSpace(entity.ServiceEvent.FailureMode)
                 || !string.IsNullOrWhiteSpace(entity.ServiceEvent.RepairAction));
@@ -71,7 +66,7 @@ public static class ServiceRequestMapper
             LocationId = entity.LocationId,
             Status = entity.Status,
             CustomerFullName = $"{entity.CustomerSnapshot.FirstName} {entity.CustomerSnapshot.LastName}".Trim(),
-            AssetDisplay = string.IsNullOrWhiteSpace(assetDisplay) ? null : assetDisplay,
+            AssetDisplay = ComposeAssetDisplay(entity.AssetInfo),
             IssueCategory = entity.IssueCategory ?? string.Empty,
             TechnicianSummary = entity.TechnicianSummary,
             AttachmentCount = entity.Attachments.Count,
@@ -82,6 +77,41 @@ public static class ServiceRequestMapper
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="ServiceRequest"/> to the minimal customer-facing status view
+    /// (<c>Spec X-1</c>): the unit, the submission date, the current status, and the
+    /// servicing location's phone number. Nothing else — no customer identity, no
+    /// free-text issue description, no attachments — is carried across this boundary.
+    /// </summary>
+    /// <param name="entity">The service request.</param>
+    /// <param name="locationPhone">Phone number of the servicing location, if known.</param>
+    public static CustomerStatusItemResponseDto ToCustomerStatusItemDto(this ServiceRequest entity, string? locationPhone)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new CustomerStatusItemResponseDto
+        {
+            Unit = ComposeAssetDisplay(entity.AssetInfo),
+            SubmittedAtUtc = entity.CreatedAtUtc,
+            Status = entity.Status,
+            LocationPhone = string.IsNullOrWhiteSpace(locationPhone) ? null : locationPhone.Trim()
+        };
+    }
+
+    /// <summary>
+    /// Builds the "year make model" display string for a unit, or <c>null</c> when none
+    /// of those fields are populated.
+    /// </summary>
+    private static string? ComposeAssetDisplay(AssetInfoEmbedded assetInfo)
+    {
+        var year = assetInfo.Year.HasValue ? $"{assetInfo.Year} " : string.Empty;
+        var manufacturer = assetInfo.Manufacturer is not null ? $"{assetInfo.Manufacturer} " : string.Empty;
+        var model = assetInfo.Model ?? string.Empty;
+        var display = (year + manufacturer + model).Trim();
+
+        return string.IsNullOrWhiteSpace(display) ? null : display;
     }
 
     /// <summary>
