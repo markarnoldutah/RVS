@@ -14,6 +14,7 @@ using System.Net;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using RVS.Domain.Entities;
+using RVS.Domain.Security;
 using RVS.Domain.Shared;
 
 var switchMappings = new Dictionary<string, string>
@@ -264,7 +265,7 @@ static List<ContainerProperties> BuildContainerDefinitions()
                 IncludedPaths =
                 {
                     new IncludedPath { Path = "/email/?" },
-                    new IncludedPath { Path = "/magicLinkToken/?" },
+                    new IncludedPath { Path = "/magicLinkTokenHash/?" },
                     new IncludedPath { Path = "/type/?" },
                 },
                 ExcludedPaths =
@@ -819,7 +820,8 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         LastName = "Johnson",
         Phone = "(801) 555-1001",
         CreatedByUserId = "seed",
-        MagicLinkToken = "mlk_johnson_abc123def456",
+        // Dev status link: /status/mlk_johnson_abc123def456
+        MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("mlk_johnson_abc123def456"),
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
         AllKnownAssetIds = [AssetId1],
         LinkedProfiles =
@@ -842,7 +844,8 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         LastName = "Smith",
         Phone = "(303) 555-1002",
         CreatedByUserId = "seed",
-        MagicLinkToken = "mlk_smith_ghi789jkl012",
+        // Dev status link: /status/mlk_smith_ghi789jkl012
+        MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("mlk_smith_ghi789jkl012"),
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
         AllKnownAssetIds = [AssetId2],
         LinkedProfiles =
@@ -865,7 +868,8 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         LastName = "Martinez",
         Phone = "(702) 555-1003",
         CreatedByUserId = "seed",
-        MagicLinkToken = "mlk_martinez_mno345pqr678",
+        // Dev status link: /status/mlk_martinez_mno345pqr678
+        MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("mlk_martinez_mno345pqr678"),
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
         AllKnownAssetIds = [AssetId3],
         LinkedProfiles =
@@ -888,7 +892,8 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         LastName = "Williams",
         Phone = "(208) 555-1004",
         CreatedByUserId = "seed",
-        MagicLinkToken = "mlk_williams_stu901vwx234",
+        // Dev status link: /status/mlk_williams_stu901vwx234
+        MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("mlk_williams_stu901vwx234"),
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
         AllKnownAssetIds = [AssetId4],
         LinkedProfiles =
@@ -911,7 +916,8 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         LastName = "Thompson",
         Phone = "(208) 555-1005",
         CreatedByUserId = "seed",
-        MagicLinkToken = "mlk_thompson_yza567bcd890",
+        // Dev status link: /status/mlk_thompson_yza567bcd890
+        MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("mlk_thompson_yza567bcd890"),
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
         AllKnownAssetIds = [AssetId5],
         LinkedProfiles =
@@ -934,7 +940,8 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         LastName = "Chen",
         Phone = "(602) 555-1006",
         CreatedByUserId = "seed",
-        MagicLinkToken = "mlk_chen_efg123hij456",
+        // Dev status link: /status/mlk_chen_efg123hij456
+        MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("mlk_chen_efg123hij456"),
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
         AllKnownAssetIds = [AssetId6, AssetId7, AssetId8],
         LinkedProfiles =

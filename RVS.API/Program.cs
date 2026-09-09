@@ -165,19 +165,31 @@ builder.Services.AddOpenApi(options =>
     options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
 });
 
-// Rate limiting — protects public intake + status endpoints
+// Rate limiting — protects public intake + status endpoints.
+// Spec X-5: anonymous-token endpoints are rate-limited *per IP*, so both policies partition
+// on the caller's remote IP address rather than sharing one global bucket.
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("StatusEndpoint", cfg =>
-    {
-        cfg.PermitLimit = 10;
-        cfg.Window = TimeSpan.FromMinutes(1);
-    });
-    options.AddFixedWindowLimiter("IntakeEndpoint", cfg =>
-    {
-        cfg.PermitLimit = 20;
-        cfg.Window = TimeSpan.FromMinutes(1);
-    });
+    static string PartitionKeyForCaller(HttpContext httpContext) =>
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    options.AddPolicy("StatusEndpoint", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            PartitionKeyForCaller(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+            }));
+
+    options.AddPolicy("IntakeEndpoint", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            PartitionKeyForCaller(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+            }));
 });
 
 // Register Middleware

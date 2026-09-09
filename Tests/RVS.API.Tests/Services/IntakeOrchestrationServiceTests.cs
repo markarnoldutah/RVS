@@ -7,6 +7,7 @@ using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Packets;
+using RVS.Domain.Security;
 
 namespace RVS.API.Tests.Services;
 
@@ -659,13 +660,13 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenValidTokenExists_ShouldNotRotateMagicLinkToken()
+    public async Task ExecuteAsync_WhenValidTokenHashExists_ShouldStillRotateToAFreshStatusToken()
     {
         SetupFullHappyPath();
 
-        // Arrange: pre-populate a valid (non-expired) token on the global account
-        var existingToken = "existing:token";
-        var existingExpiry = DateTime.UtcNow.AddDays(60);
+        // Arrange: a still-valid token hash already on the account. Under Spec X-5 the raw token
+        // cannot be recovered from the hash, so every submission mints a fresh one.
+        var existingHash = AnonymousTokenHelper.ComputeHash("prefix:existing");
         _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GlobalCustomerAcct
             {
@@ -674,21 +675,42 @@ public class IntakeOrchestrationServiceTests
                 FirstName = "Jane",
                 LastName = "Doe",
                 CreatedByUserId = "intake",
-                MagicLinkToken = existingToken,
-                MagicLinkExpiresAtUtc = existingExpiry,
+                MagicLinkTokenHash = existingHash,
+                MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(60),
             });
 
         await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         _globalAcctRepoMock.Verify(r => r.UpdateAsync(
             It.Is<GlobalCustomerAcct>(a =>
-                a.MagicLinkToken == existingToken &&
-                a.MagicLinkExpiresAtUtc == existingExpiry),
+                a.MagicLinkTokenHash != null &&
+                a.MagicLinkTokenHash != existingHash &&
+                a.MagicLinkExpiresAtUtc.HasValue &&
+                a.MagicLinkExpiresAtUtc.Value > DateTime.UtcNow.AddDays(29) &&
+                a.MagicLinkExpiresAtUtc.Value <= DateTime.UtcNow.AddDays(31)),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenTokenIsNull_ShouldGenerateNewMagicLinkToken()
+    public async Task ExecuteAsync_ShouldPersistOnlyTheHashAndReturnAMatchingRawStatusToken()
+    {
+        SetupFullHappyPath();
+
+        GlobalCustomerAcct? persisted = null;
+        _globalAcctRepoMock.Setup(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
+            .Callback<GlobalCustomerAcct, CancellationToken>((a, _) => persisted = a)
+            .ReturnsAsync((GlobalCustomerAcct a, CancellationToken _) => a);
+
+        var (_, rawToken) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        rawToken.Should().NotBeNullOrWhiteSpace();
+        rawToken.Should().Contain(":");
+        persisted!.MagicLinkTokenHash.Should().Be(AnonymousTokenHelper.ComputeHash(rawToken!));
+        persisted.MagicLinkTokenHash.Should().NotBe(rawToken, "the raw token is never persisted");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldSetStatusTokenExpiryToThirtyDays()
     {
         SetupFullHappyPath();
 
@@ -696,38 +718,9 @@ public class IntakeOrchestrationServiceTests
 
         _globalAcctRepoMock.Verify(r => r.UpdateAsync(
             It.Is<GlobalCustomerAcct>(a =>
-                a.MagicLinkToken != null &&
                 a.MagicLinkExpiresAtUtc.HasValue &&
-                a.MagicLinkExpiresAtUtc.Value > DateTime.UtcNow.AddDays(89)),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenTokenIsExpired_ShouldGenerateNewMagicLinkToken()
-    {
-        SetupFullHappyPath();
-
-        // Arrange: pre-populate an expired token on the global account
-        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GlobalCustomerAcct
-            {
-                Id = "gca_test",
-                Email = "jane@example.com",
-                FirstName = "Jane",
-                LastName = "Doe",
-                CreatedByUserId = "intake",
-                MagicLinkToken = "old:expiredtoken",
-                MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(-1),
-            });
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a =>
-                a.MagicLinkToken != "old:expiredtoken" &&
-                a.MagicLinkToken != null &&
-                a.MagicLinkExpiresAtUtc.HasValue &&
-                a.MagicLinkExpiresAtUtc.Value > DateTime.UtcNow.AddDays(89)),
+                a.MagicLinkExpiresAtUtc.Value > DateTime.UtcNow.AddDays(29) &&
+                a.MagicLinkExpiresAtUtc.Value <= DateTime.UtcNow.AddDays(31)),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -1070,7 +1063,7 @@ public class IntakeOrchestrationServiceTests
     {
         SetupConfigHappyPath();
         var acct = BuildGlobalAcctWithMagicLink(expired: true, assetIds: ["1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("expired-token", It.IsAny<CancellationToken>()))
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(AnonymousTokenHelper.ComputeHash("expired-token"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
         var result = await _sut.GetIntakeConfigAsync("test-slug", "expired-token");
@@ -1085,7 +1078,7 @@ public class IntakeOrchestrationServiceTests
     {
         SetupConfigHappyPath();
         var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: []);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(AnonymousTokenHelper.ComputeHash("valid-token"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
         var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
@@ -1101,7 +1094,7 @@ public class IntakeOrchestrationServiceTests
     {
         SetupConfigHappyPath();
         var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(AnonymousTokenHelper.ComputeHash("valid-token"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
         var oldLedgerEntries = new List<AssetLedgerEntry>
@@ -1147,7 +1140,7 @@ public class IntakeOrchestrationServiceTests
     {
         SetupConfigHappyPath();
         var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(AnonymousTokenHelper.ComputeHash("valid-token"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
         _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
@@ -1177,7 +1170,7 @@ public class IntakeOrchestrationServiceTests
     {
         SetupConfigHappyPath();
         var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(AnonymousTokenHelper.ComputeHash("valid-token"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
         _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
@@ -1197,7 +1190,7 @@ public class IntakeOrchestrationServiceTests
     {
         SetupConfigHappyPath();
         var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186", "NO_LEDGER"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(AnonymousTokenHelper.ComputeHash("valid-token"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(acct);
 
         _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
@@ -1230,7 +1223,7 @@ public class IntakeOrchestrationServiceTests
     public async Task GetIntakeConfigAsync_WhenTokenNotFoundInDb_ShouldReturnNullPrefills()
     {
         SetupConfigHappyPath();
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("unknown-token", It.IsAny<CancellationToken>()))
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(AnonymousTokenHelper.ComputeHash("unknown-token"), It.IsAny<CancellationToken>()))
             .ReturnsAsync((GlobalCustomerAcct?)null);
 
         var result = await _sut.GetIntakeConfigAsync("test-slug", "unknown-token");
@@ -1432,7 +1425,7 @@ public class IntakeOrchestrationServiceTests
             FirstName = "Jane",
             LastName = "Doe",
             Phone = "801-555-1234",
-            MagicLinkToken = expired ? "expired-token" : "valid-token",
+            MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash(expired ? "expired-token" : "valid-token"),
             MagicLinkExpiresAtUtc = expired ? DateTime.UtcNow.AddDays(-1) : DateTime.UtcNow.AddDays(29),
             AllKnownAssetIds = assetIds,
             CreatedByUserId = "intake",

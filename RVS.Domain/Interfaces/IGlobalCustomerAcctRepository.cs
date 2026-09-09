@@ -40,10 +40,11 @@ public interface IGlobalCustomerAcctRepository
     Task<GlobalCustomerAcct> UpdateAsync(GlobalCustomerAcct entity, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Finds a global customer account by its magic-link token.
-    /// Returns <c>null</c> when no account matches.
+    /// Finds a global customer account by the SHA-256 hash (base64url) of its status token.
+    /// Returns <c>null</c> when no account matches. The raw token is never stored, so callers
+    /// must hash the incoming token (<c>AnonymousTokenHelper.ComputeHash</c>) before calling.
     /// </summary>
-    /// <param name="token">The magic-link token value.</param>
+    /// <param name="tokenHash">The hashed status token value.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<GlobalCustomerAcct?> GetByMagicLinkTokenAsync(string token, CancellationToken cancellationToken = default);
+    Task<GlobalCustomerAcct?> GetByMagicLinkTokenHashAsync(string tokenHash, CancellationToken cancellationToken = default);
 }

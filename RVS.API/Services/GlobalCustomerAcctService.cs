@@ -1,28 +1,42 @@
-using System.Security.Cryptography;
-using System.Text;
 using RVS.Domain.Entities;
 using RVS.Domain.Exceptions;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Security;
+using RVS.Domain.Shared;
 
 namespace RVS.API.Services;
 
 /// <summary>
 /// Service for managing <see cref="GlobalCustomerAcct"/> entities.
-/// Cross-tenant — resolves by email, generates magic-link tokens,
+/// Cross-tenant — resolves by email, issues per-customer status tokens (Spec X-5),
 /// and links tenant-scoped customer profiles.
 /// </summary>
 public sealed class GlobalCustomerAcctService : IGlobalCustomerAcctService
 {
+    /// <summary>Status-token TTL cap (Spec X-5: ≤ 30 days).</summary>
+    internal const int StatusTokenTtlDays = 30;
+
+    /// <summary>
+    /// Sliding-renewal threshold — a validated token is pushed back to the full TTL only once its
+    /// remaining lifetime drops below this, so the status page does not write on every load.
+    /// </summary>
+    internal const int RenewalThresholdDays = 29;
+
     private readonly IGlobalCustomerAcctRepository _repository;
     private readonly IUserContextAccessor _userContext;
+    private readonly ILogger<GlobalCustomerAcctService> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="GlobalCustomerAcctService"/>.
     /// </summary>
-    public GlobalCustomerAcctService(IGlobalCustomerAcctRepository repository, IUserContextAccessor userContext)
+    public GlobalCustomerAcctService(
+        IGlobalCustomerAcctRepository repository,
+        IUserContextAccessor userContext,
+        ILogger<GlobalCustomerAcctService> logger)
     {
         _repository = repository;
         _userContext = userContext;
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -93,7 +107,7 @@ public sealed class GlobalCustomerAcctService : IGlobalCustomerAcctService
     }
 
     /// <inheritdoc />
-    public async Task<GlobalCustomerAcct> GenerateMagicLinkTokenAsync(string email, DateTime? expiresAtUtc = null, CancellationToken cancellationToken = default)
+    public async Task<MagicLinkIssueResult> GenerateMagicLinkTokenAsync(string email, DateTime? expiresAtUtc = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
 
@@ -101,12 +115,13 @@ public sealed class GlobalCustomerAcctService : IGlobalCustomerAcctService
         var account = await _repository.GetByEmailAsync(normalizedEmail, cancellationToken)
             ?? throw new KeyNotFoundException($"Global customer account for email '{normalizedEmail}' not found.");
 
-        var token = GenerateMagicLinkToken(normalizedEmail);
-        account.MagicLinkToken = token;
-        account.MagicLinkExpiresAtUtc = expiresAtUtc ?? DateTime.UtcNow.AddDays(90);
+        var rawToken = AnonymousTokenHelper.GenerateStatusToken(normalizedEmail);
+        account.MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash(rawToken);
+        account.MagicLinkExpiresAtUtc = expiresAtUtc ?? DateTime.UtcNow.AddDays(StatusTokenTtlDays);
         account.MarkAsUpdated(_userContext.UserId);
 
-        return await _repository.UpdateAsync(account, cancellationToken);
+        var saved = await _repository.UpdateAsync(account, cancellationToken);
+        return new MagicLinkIssueResult(saved, rawToken);
     }
 
     /// <inheritdoc />
@@ -114,36 +129,42 @@ public sealed class GlobalCustomerAcctService : IGlobalCustomerAcctService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(token);
 
-        var account = await _repository.GetByMagicLinkTokenAsync(token, cancellationToken)
-            ?? throw new KeyNotFoundException("No account found for the provided magic-link token.");
+        var tokenHash = AnonymousTokenHelper.ComputeHash(token);
+        var account = await _repository.GetByMagicLinkTokenHashAsync(tokenHash, cancellationToken);
+
+        if (account is null)
+        {
+            _logger.LogInformation(
+                "Anonymous status token validation: outcome={Outcome}, tokenHash={TokenHash}",
+                "miss", tokenHash);
+            throw new KeyNotFoundException("No account found for the provided status token.");
+        }
+
+        var emailHash = AnonymousTokenHelper.ComputeHash(account.Email);
+        var tenantIds = string.Join(",", account.LinkedProfiles.Select(p => p.TenantId).Distinct());
 
         if (account.MagicLinkExpiresAtUtc.HasValue && account.MagicLinkExpiresAtUtc.Value < DateTime.UtcNow)
         {
-            throw new MagicLinkExpiredException("Magic-link token has expired.");
+            _logger.LogInformation(
+                "Anonymous status token validation: outcome={Outcome}, emailHash={EmailHash}, tenantIds={TenantIds}",
+                "expired", emailHash, tenantIds);
+            throw new MagicLinkExpiredException("Status token has expired.");
         }
 
+        // Sliding renewal — extend the TTL only once the token is within the renewal window,
+        // so a returning visitor keeps a live link without a write on every status-page load.
+        if (!account.MagicLinkExpiresAtUtc.HasValue ||
+            account.MagicLinkExpiresAtUtc.Value < DateTime.UtcNow.AddDays(RenewalThresholdDays))
+        {
+            account.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(StatusTokenTtlDays);
+            account.MarkAsUpdated(_userContext.UserId);
+            account = await _repository.UpdateAsync(account, cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Anonymous status token validation: outcome={Outcome}, emailHash={EmailHash}, tenantIds={TenantIds}",
+            "hit", emailHash, tenantIds);
+
         return account;
-    }
-
-    /// <summary>
-    /// Generates a magic-link token in the format <c>base64url(SHA256(email)[0..8]):random_bytes</c>.
-    /// The email-hash prefix enables O(1) partition-key derivation on read.
-    /// </summary>
-    internal static string GenerateMagicLinkToken(string email)
-    {
-        var emailHash = SHA256.HashData(Encoding.UTF8.GetBytes(email));
-        var prefix = Convert.ToBase64String(emailHash[..8])
-            .Replace('+', '-')
-            .Replace('/', '_')
-            .TrimEnd('=');
-
-        var randomBytes = new byte[16];
-        RandomNumberGenerator.Fill(randomBytes);
-        var suffix = Convert.ToBase64String(randomBytes)
-            .Replace('+', '-')
-            .Replace('/', '_')
-            .TrimEnd('=');
-
-        return $"{prefix}:{suffix}";
     }
 }

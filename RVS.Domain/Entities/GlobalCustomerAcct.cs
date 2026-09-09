@@ -76,14 +76,17 @@ public class GlobalCustomerAcct : EntityBase
     public List<string> AllKnownAssetIds { get; set; } = [];
 
     /// <summary>
-    /// Global magic-link token — resolves to the identity (not a single profile).
-    /// Status page shows requests across all dealerships.
+    /// SHA-256 hash (base64url) of the per-customer status token (Spec X-5, issue #427).
+    /// Resolves to the identity, not a single profile — the status page shows requests across
+    /// all dealerships. The raw token is handed to the customer once and never persisted;
+    /// validation hashes the incoming token and looks up by this field.
     /// </summary>
-    [JsonProperty("magicLinkToken")]
-    public string? MagicLinkToken { get; set; }
+    [JsonProperty("magicLinkTokenHash")]
+    public string? MagicLinkTokenHash { get; set; }
 
     /// <summary>
-    /// Expiration time for the magic-link token. Default 30 days, configurable per tenant.
+    /// Expiration time for the status token. TTL ≤ 30 days, extended on each successful
+    /// validation (sliding renewal).
     /// </summary>
     [JsonProperty("magicLinkExpiresAtUtc")]
     public DateTime? MagicLinkExpiresAtUtc { get; set; }

@@ -140,7 +140,7 @@ public class StatusControllerTests
         FirstName = "Jane",
         LastName = "Doe",
         Email = "jane@example.com",
-        MagicLinkToken = "valid-token",
+        MagicLinkTokenHash = "valid-token-hash",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
         CreatedByUserId = "system",
         LinkedProfiles =

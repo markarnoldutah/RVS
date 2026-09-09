@@ -59,9 +59,9 @@ Per-tenant customer record. Contact fields, email/SMS opt-out flags, `assetsOwne
 
 ### GlobalCustomerAcct — `global-customer-accounts`
 
-Cross-tenant, partitioned by email. Contact, opt-outs, `linkedProfiles[]`, `allKnownAssetIds[]`, `auth0UserId`, and `magicLinkToken` / expiry.
+Cross-tenant, partitioned by email. Contact, opt-outs, `linkedProfiles[]`, `allKnownAssetIds[]`, `auth0UserId`, and `magicLinkTokenHash` / expiry.
 
-This document is what powers both the customer status page and returning-customer prefill. Under the reduced scope its cross-tenant graph (`linkedProfiles`, `allKnownAssetIds`) exists to serve a multi-dealer customer history that the product no longer promises. The token fields are load-bearing. Per the X-5 decision (issue #427, closes Q7), `magicLinkToken` becomes `magicLinkTokenHash` (SHA-256, raw token never stored), TTL drops to ≤ 30 days with sliding renewal, and the status token stays per-customer while C-7 action links are per-request/per-action; see `RVS_Architecture.md` and `RVS_Identity.md`.
+This document is what powers both the customer status page and returning-customer prefill. Under the reduced scope its cross-tenant graph (`linkedProfiles`, `allKnownAssetIds`) exists to serve a multi-dealer customer history that the product no longer promises. The token fields are load-bearing. Per the X-5 decision (issue #427, closes Q7) and its implementation (#440), the field is `magicLinkTokenHash` (SHA-256 base64url, raw token never stored; indexed for the by-hash lookup), TTL is ≤ 30 days with sliding renewal, and the status token stays per-customer while C-7 action links (per-request/per-action) remain to be built. Existing plaintext `magicLinkToken` values are backfilled and dropped in #441. See `RVS_Architecture.md` and `RVS_Identity.md`.
 
 ### AssetLedgerEntry — `asset-ledger`
 

@@ -1,9 +1,11 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Services;
 using RVS.Domain.Entities;
 using RVS.Domain.Exceptions;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Security;
 
 namespace RVS.API.Tests.Services;
 
@@ -11,13 +13,26 @@ public class GlobalCustomerAcctServiceTests
 {
     private readonly Mock<IGlobalCustomerAcctRepository> _repoMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
+    private readonly Mock<ILogger<GlobalCustomerAcctService>> _loggerMock = new();
     private readonly GlobalCustomerAcctService _sut;
 
     public GlobalCustomerAcctServiceTests()
     {
         _userContextMock.Setup(u => u.UserId).Returns("usr_test");
-        _sut = new GlobalCustomerAcctService(_repoMock.Object, _userContextMock.Object);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GlobalCustomerAcct e, CancellationToken _) => e);
+        _sut = new GlobalCustomerAcctService(_repoMock.Object, _userContextMock.Object, _loggerMock.Object);
     }
+
+    private void VerifyAuditLogged(string outcome) =>
+        _loggerMock.Verify(
+            l => l.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("status token") && v.ToString()!.Contains("outcome=" + outcome)),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
 
     // ── GetByEmailAsync ──────────────────────────────────────────────────────
 
@@ -172,8 +187,6 @@ public class GlobalCustomerAcctServiceTests
         var account = BuildAccount();
         _repoMock.Setup(r => r.GetByIdAsync(account.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(account);
-        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((GlobalCustomerAcct e, CancellationToken _) => e);
 
         var result = await _sut.LinkProfileAsync(account.Id, "ten_1", "cp_1");
 
@@ -202,7 +215,7 @@ public class GlobalCustomerAcctServiceTests
         _repoMock.Verify(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── GenerateMagicLinkTokenAsync ──────────────────────────────────────────
+    // ── GenerateMagicLinkTokenAsync (Spec X-5: hashed, ≥128-bit, TTL ≤ 30d) ───
 
     [Theory]
     [InlineData(null)]
@@ -227,20 +240,21 @@ public class GlobalCustomerAcctServiceTests
     }
 
     [Fact]
-    public async Task GenerateMagicLinkTokenAsync_ShouldGenerateTokenInCorrectFormat()
+    public async Task GenerateMagicLinkTokenAsync_ShouldPersistOnlyTheHashAndReturnTheRawToken()
     {
         var account = BuildAccount();
         _repoMock.Setup(r => r.GetByEmailAsync("mike@test.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(account);
-        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((GlobalCustomerAcct e, CancellationToken _) => e);
 
         var result = await _sut.GenerateMagicLinkTokenAsync("Mike@Test.com");
 
-        result.MagicLinkToken.Should().NotBeNullOrWhiteSpace();
-        result.MagicLinkToken.Should().Contain(":");
-        result.MagicLinkExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddDays(90), TimeSpan.FromSeconds(5));
-        result.UpdatedByUserId.Should().Be("usr_test");
+        result.RawToken.Should().NotBeNullOrWhiteSpace();
+        result.RawToken.Should().Contain(":");
+        result.Account.MagicLinkTokenHash.Should().Be(AnonymousTokenHelper.ComputeHash(result.RawToken));
+        result.Account.MagicLinkTokenHash.Should().NotBe(result.RawToken, "the raw token is never persisted");
+        result.Account.MagicLinkExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddDays(30), TimeSpan.FromSeconds(5));
+        result.Account.UpdatedByUserId.Should().Be("usr_test");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -250,62 +264,38 @@ public class GlobalCustomerAcctServiceTests
         var customExpiry = DateTime.UtcNow.AddDays(7);
         _repoMock.Setup(r => r.GetByEmailAsync("mike@test.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(account);
-        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((GlobalCustomerAcct e, CancellationToken _) => e);
 
         var result = await _sut.GenerateMagicLinkTokenAsync("Mike@Test.com", customExpiry);
 
-        result.MagicLinkExpiresAtUtc.Should().Be(customExpiry);
+        result.Account.MagicLinkExpiresAtUtc.Should().Be(customExpiry);
     }
 
     [Fact]
-    public async Task GenerateMagicLinkTokenAsync_ShouldProduceDeterministicPrefixForSameEmail()
+    public async Task GenerateMagicLinkTokenAsync_ShouldProduceDeterministicPrefixButRotatingSuffix()
     {
         var account = BuildAccount();
         _repoMock.Setup(r => r.GetByEmailAsync("mike@test.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(account);
-        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((GlobalCustomerAcct e, CancellationToken _) => e);
 
-        var result1 = await _sut.GenerateMagicLinkTokenAsync("Mike@Test.com");
-        var token1 = result1.MagicLinkToken!;
+        var token1 = (await _sut.GenerateMagicLinkTokenAsync("Mike@Test.com")).RawToken;
+        var token2 = (await _sut.GenerateMagicLinkTokenAsync("Mike@Test.com")).RawToken;
 
-        var result2 = await _sut.GenerateMagicLinkTokenAsync("Mike@Test.com");
-        var token2 = result2.MagicLinkToken!;
-
-        var prefix1 = token1.Split(':')[0];
-        var prefix2 = token2.Split(':')[0];
-        prefix1.Should().Be(prefix2, "same email should produce the same hash prefix");
-
-        var suffix1 = token1.Split(':')[1];
-        var suffix2 = token2.Split(':')[1];
-        suffix1.Should().NotBe(suffix2, "random suffix should differ between calls");
+        token1.Split(':')[0].Should().Be(token2.Split(':')[0], "same email → same hash prefix");
+        token1.Split(':')[1].Should().NotBe(token2.Split(':')[1], "random suffix rotates per call");
     }
 
     [Fact]
     public async Task GenerateMagicLinkTokenAsync_ShouldProduceDifferentPrefixForDifferentEmails()
     {
-        var account1 = BuildAccount();
         _repoMock.Setup(r => r.GetByEmailAsync("mike@test.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(account1);
-
-        var account2 = new GlobalCustomerAcct
-        {
-            Email = "jane@test.com",
-            FirstName = "Jane",
-            LastName = "Doe",
-        };
+            .ReturnsAsync(BuildAccount());
         _repoMock.Setup(r => r.GetByEmailAsync("jane@test.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(account2);
-        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((GlobalCustomerAcct e, CancellationToken _) => e);
+            .ReturnsAsync(new GlobalCustomerAcct { Email = "jane@test.com", FirstName = "Jane", LastName = "Doe" });
 
         var result1 = await _sut.GenerateMagicLinkTokenAsync("Mike@Test.com");
         var result2 = await _sut.GenerateMagicLinkTokenAsync("Jane@Test.com");
 
-        var prefix1 = result1.MagicLinkToken!.Split(':')[0];
-        var prefix2 = result2.MagicLinkToken!.Split(':')[0];
-        prefix1.Should().NotBe(prefix2);
+        result1.RawToken.Split(':')[0].Should().NotBe(result2.RawToken.Split(':')[0]);
     }
 
     // ── ValidateMagicLinkTokenAsync ──────────────────────────────────────────
@@ -322,60 +312,111 @@ public class GlobalCustomerAcctServiceTests
     }
 
     [Fact]
-    public async Task ValidateMagicLinkTokenAsync_WhenTokenNotFound_ShouldThrowKeyNotFoundException()
+    public async Task ValidateMagicLinkTokenAsync_ShouldLookUpByHashOfTheIncomingToken()
     {
-        _repoMock.Setup(r => r.GetByMagicLinkTokenAsync("invalid:token", It.IsAny<CancellationToken>()))
+        var account = BuildAccount();
+        account.MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("prefix:suffix");
+        account.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(20);
+        _repoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(account);
+
+        await _sut.ValidateMagicLinkTokenAsync("prefix:suffix");
+
+        _repoMock.Verify(
+            r => r.GetByMagicLinkTokenHashAsync(AnonymousTokenHelper.ComputeHash("prefix:suffix"), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _repoMock.Verify(
+            r => r.GetByMagicLinkTokenHashAsync("prefix:suffix", It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ValidateMagicLinkTokenAsync_WhenHashNotFound_ShouldThrowKeyNotFoundExceptionAndAuditMiss()
+    {
+        _repoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((GlobalCustomerAcct?)null);
 
         var act = () => _sut.ValidateMagicLinkTokenAsync("invalid:token");
 
         await act.Should().ThrowAsync<KeyNotFoundException>();
+        VerifyAuditLogged("miss");
     }
 
     [Fact]
-    public async Task ValidateMagicLinkTokenAsync_WhenTokenExpired_ShouldThrowMagicLinkExpiredException()
+    public async Task ValidateMagicLinkTokenAsync_WhenTokenExpired_ShouldThrowMagicLinkExpiredExceptionAndAuditExpired()
     {
         var account = BuildAccount();
-        account.MagicLinkToken = "prefix:suffix";
+        account.MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("prefix:suffix");
         account.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(-1);
-
-        _repoMock.Setup(r => r.GetByMagicLinkTokenAsync("prefix:suffix", It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(account);
 
         var act = () => _sut.ValidateMagicLinkTokenAsync("prefix:suffix");
 
-        await act.Should().ThrowAsync<MagicLinkExpiredException>()
-            .WithMessage("*expired*");
+        await act.Should().ThrowAsync<MagicLinkExpiredException>().WithMessage("*expired*");
+        VerifyAuditLogged("expired");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task ValidateMagicLinkTokenAsync_WhenTokenValid_ShouldReturnAccount()
+    public async Task ValidateMagicLinkTokenAsync_WhenTokenValid_ShouldReturnAccountAndAuditHit()
     {
         var account = BuildAccount();
-        account.MagicLinkToken = "prefix:suffix";
-        account.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30);
-
-        _repoMock.Setup(r => r.GetByMagicLinkTokenAsync("prefix:suffix", It.IsAny<CancellationToken>()))
+        account.MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("prefix:suffix");
+        account.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(20);
+        _repoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(account);
 
         var result = await _sut.ValidateMagicLinkTokenAsync("prefix:suffix");
 
         result.Should().BeSameAs(account);
+        VerifyAuditLogged("hit");
     }
 
     [Fact]
-    public async Task ValidateMagicLinkTokenAsync_WhenExpiryIsNull_ShouldReturnAccount()
+    public async Task ValidateMagicLinkTokenAsync_WhenTokenNearingExpiry_ShouldSlideRenewalForwardAndPersist()
     {
         var account = BuildAccount();
-        account.MagicLinkToken = "prefix:suffix";
+        account.MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("prefix:suffix");
+        account.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(3);
+        _repoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(account);
+
+        var result = await _sut.ValidateMagicLinkTokenAsync("prefix:suffix");
+
+        result.MagicLinkExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddDays(30), TimeSpan.FromSeconds(5));
+        result.UpdatedByUserId.Should().Be("usr_test");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ValidateMagicLinkTokenAsync_WhenTokenComfortablyValid_ShouldNotWrite()
+    {
+        var account = BuildAccount();
+        account.MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("prefix:suffix");
+        account.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(29.5);
+        _repoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(account);
+
+        await _sut.ValidateMagicLinkTokenAsync("prefix:suffix");
+
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ValidateMagicLinkTokenAsync_WhenExpiryIsNull_ShouldRenewAndReturnAccount()
+    {
+        var account = BuildAccount();
+        account.MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash("prefix:suffix");
         account.MagicLinkExpiresAtUtc = null;
-
-        _repoMock.Setup(r => r.GetByMagicLinkTokenAsync("prefix:suffix", It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetByMagicLinkTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(account);
 
         var result = await _sut.ValidateMagicLinkTokenAsync("prefix:suffix");
 
         result.Should().BeSameAs(account);
+        result.MagicLinkExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddDays(30), TimeSpan.FromSeconds(5));
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

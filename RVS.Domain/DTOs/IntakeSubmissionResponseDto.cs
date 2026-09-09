@@ -10,8 +10,9 @@ public sealed record IntakeSubmissionResponseDto
     public ServiceRequestDetailResponseDto ServiceRequest { get; init; } = default!;
 
     /// <summary>
-    /// Magic-link token that can be used to check the status of the service request.
-    /// The token is generated or reused during the intake orchestration and has a 90-day expiry.
+    /// Raw per-customer status token for checking request status (Spec X-5). A fresh token is
+    /// issued on every submission; only its SHA-256 hash is persisted, and it expires after 30 days
+    /// (sliding renewal on use).
     /// </summary>
     public string? MagicLinkToken { get; init; }
 }

@@ -116,7 +116,7 @@ This is the honest state of `../RVS_Spec.md`.
 | X-2 ledger write on submission | **Built** | `IntakeOrchestrationService` appends per intake, best-effort |
 | X-3 anonymization license | **Paperwork** | Not a code item. Highest-leverage open item in the whole set |
 | X-4 tenancy | **Built** | |
-| X-5 tokens ≥128 bits, hashed, TTL | **Resolved, not yet built** | Model decided in issue #427 — SHA-256-hashed, per-customer status token + per-request C-7 links. Implementation and migration in #440 / #441 |
+| X-5 tokens ≥128 bits, hashed, TTL | **Status token built (#440); C-7 links pending** | `AnonymousTokenHelper` mints ≥128-bit base64url tokens; the per-customer status token is stored as `magicLinkTokenHash` (SHA-256, raw never persisted), 30-day TTL with sliding renewal, every validation audit-logged, both anonymous limiters partitioned per IP. Per-request C-7 links reuse the helper but are not built. Plaintext migration in #441 |
 | X-6 time-limited read SAS | **Built** | |
 | A-9 voice input (Whisper transcription) | **Built** | `ai/transcribe-issue`, steps 3 and 5; `VinTranscriptCleaner` on the VIN field. Specced in issue #429 |
 | A-10 VIN from photo (gpt-4o vision) | **Built** | `ai/extract-vin`, step 3; auto-fill ≥ 0.7, auto-decode ≥ 0.9. Specced in issue #429 |
@@ -129,7 +129,9 @@ This is the honest state of `../RVS_Spec.md`.
 
 ## Conflicts to resolve before building B
 
-**1. Token model — resolved (issue #427, closes Q7).** X-5 is met by: SHA-256-hashed storage with the raw token never persisted; the **status token staying per-customer** on `GlobalCustomerAcct` (TTL cut to ≤ 30 days, sliding renewal on use); and **C-7 one-click action links being per-request and per-action** (single-purpose, short fixed TTL or single-use). Both scopes share one generation / hash / TTL / audit helper — the "same machinery" the Plan calls for, at the X-5 bar. The prior ASOT decision that chose unhashed storage is overturned: its own stated trigger — a token that can write — is met by C-7. Migration (#441): backfill hashes from the current plaintext pre-GA, then drop the plaintext `magicLinkToken` field; issued links keep working. Still a code and data-migration change (#440), not a doc edit.
+**1. Token model — resolved (issue #427, closes Q7).** X-5 is met by: SHA-256-hashed storage with the raw token never persisted; the **status token staying per-customer** on `GlobalCustomerAcct` (TTL cut to ≤ 30 days, sliding renewal on use); and **C-7 one-click action links being per-request and per-action** (single-purpose, short fixed TTL or single-use). Both scopes share one generation / hash / TTL / audit helper — the "same machinery" the Plan calls for, at the X-5 bar. The prior ASOT decision that chose unhashed storage is overturned: its own stated trigger — a token that can write — is met by C-7. Migration (#441): backfill hashes from the current plaintext pre-GA, then drop the plaintext `magicLinkToken` field; issued links keep working.
+
+**Status: the shared helper (`RVS.Domain/Security/AnonymousTokenHelper.cs`) and the per-customer status token are built (#440)** — hashed `magicLinkTokenHash` storage, 30-day sliding-renewal TTL, per-attempt audit logging, per-IP rate limiting. Intake re-mints the status token each submission. The C-7 per-request/per-action links and the plaintext data migration (#441) are still open.
 
 **2. Voice and vision AI — resolved (issue #429, closes Q8).** `ai/transcribe-issue` (Whisper), `ai/extract-vin` (gpt-4o vision), `ai/suggest-insights`, and `assess-capabilities` are all in scope and are now specced as Spec A-9–A-12. Nothing archived; no descope sub-issue on #423. Each keeps its rule-based / no-op fallback and none blocks submission. The Whisper and gpt-4o accounts stay but move behind a `deployWhisper` (and gpt-4o) flag in issue #467, defaulted on, so the spend is per-environment and reversible.
 

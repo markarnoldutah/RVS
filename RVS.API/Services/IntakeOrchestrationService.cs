@@ -3,6 +3,7 @@ using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Packets;
+using RVS.Domain.Security;
 using RVS.Domain.Validation;
 
 namespace RVS.API.Services;
@@ -266,15 +267,12 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _logger.LogInformation("Intake Step 6: Updated CustomerProfile {ProfileId} requestCount={Count}",
             profile.Id, profile.TotalRequestCount);
 
-        var tokenIsAbsent = globalAcct.MagicLinkToken is null;
-        var tokenIsExpired = globalAcct.MagicLinkExpiresAtUtc.HasValue &&
-                             globalAcct.MagicLinkExpiresAtUtc.Value <= DateTime.UtcNow;
-
-        if (tokenIsAbsent || tokenIsExpired)
-        {
-            globalAcct.MagicLinkToken = GlobalCustomerAcctService.GenerateMagicLinkToken(normalizedEmail);
-            globalAcct.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(90);
-        }
+        // Spec X-5 (issue #427): the per-customer status token is hashed at rest, so a still-valid
+        // token cannot be handed back on a later submission — mint a fresh one each intake, persist
+        // only its hash, and return the raw token for this submission's confirmation link.
+        var rawStatusToken = AnonymousTokenHelper.GenerateStatusToken(normalizedEmail);
+        globalAcct.MagicLinkTokenHash = AnonymousTokenHelper.ComputeHash(rawStatusToken);
+        globalAcct.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(GlobalCustomerAcctService.StatusTokenTtlDays);
         if (!globalAcct.AllKnownAssetIds.Contains(assetId))
         {
             globalAcct.AllKnownAssetIds.Add(assetId);
@@ -303,9 +301,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         globalAcct.MarkAsUpdated("intake");
         await _globalCustomerAcctRepository.UpdateAsync(globalAcct, cancellationToken);
         _logger.LogInformation(
-            tokenIsAbsent || tokenIsExpired
-                ? "Intake Step 6: Generated new magic-link token for GlobalCustomerAcct {AcctId}"
-                : "Intake Step 6: Reused existing magic-link token for GlobalCustomerAcct {AcctId}",
+            "Intake Step 6: Issued fresh status token hash for GlobalCustomerAcct {AcctId}",
             globalAcct.Id);
 
         // ── Step 7: Fire-and-forget notification ─────────────────────────────
@@ -334,7 +330,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             _logger.LogWarning(ex, "Intake Step 8: failed to enqueue packet generation for SR {ServiceRequestId}", serviceRequest.Id);
         }
 
-        return (serviceRequest, globalAcct.MagicLinkToken);
+        return (serviceRequest, rawStatusToken);
     }
 
     /// <summary>
@@ -421,7 +417,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         var tokenExpired = false;
         if (!string.IsNullOrWhiteSpace(magicLinkToken))
         {
-            var acct = await _globalCustomerAcctRepository.GetByMagicLinkTokenAsync(magicLinkToken, cancellationToken);
+            var acct = await _globalCustomerAcctRepository.GetByMagicLinkTokenHashAsync(
+                AnonymousTokenHelper.ComputeHash(magicLinkToken), cancellationToken);
             if (acct is not null && acct.MagicLinkExpiresAtUtc > DateTime.UtcNow)
             {
                 prefillCustomer = new CustomerInfoDto

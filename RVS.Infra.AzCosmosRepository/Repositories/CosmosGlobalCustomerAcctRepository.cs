@@ -126,14 +126,14 @@ public sealed class CosmosGlobalCustomerAcctRepository : CosmosRepositoryBase, I
     }
 
     /// <inheritdoc />
-    public async Task<GlobalCustomerAcct?> GetByMagicLinkTokenAsync(string token, CancellationToken cancellationToken = default)
+    public async Task<GlobalCustomerAcct?> GetByMagicLinkTokenHashAsync(string tokenHash, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tokenHash);
 
-        // Cross-partition query — partition key is /email, magicLinkToken is unique.
+        // Cross-partition query — partition key is /email; magicLinkTokenHash is indexed and unique.
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.magicLinkToken = @token AND c.type = 'globalCustomerAcct'")
-            .WithParameter("@token", token);
+            "SELECT * FROM c WHERE c.magicLinkTokenHash = @tokenHash AND c.type = 'globalCustomerAcct'")
+            .WithParameter("@tokenHash", tokenHash);
 
         var options = new QueryRequestOptions { MaxItemCount = 1 };
         var iterator = _container.GetItemQueryIterator<GlobalCustomerAcct>(query, requestOptions: options);
@@ -148,12 +148,12 @@ public sealed class CosmosGlobalCustomerAcctRepository : CosmosRepositoryBase, I
             var item = page.FirstOrDefault();
             if (item is not null)
             {
-                _logger.LogDebug("GetByMagicLinkTokenAsync — RequestCharge: {Charge} RU", totalCharge);
+                _logger.LogDebug("GetByMagicLinkTokenHashAsync — RequestCharge: {Charge} RU", totalCharge);
                 return item;
             }
         }
 
-        _logger.LogDebug("GetByMagicLinkTokenAsync not found — RequestCharge: {Charge} RU", totalCharge);
+        _logger.LogDebug("GetByMagicLinkTokenHashAsync not found — RequestCharge: {Charge} RU", totalCharge);
         return null;
     }
 }
