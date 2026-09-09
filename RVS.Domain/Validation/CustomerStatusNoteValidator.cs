@@ -7,16 +7,20 @@ namespace RVS.Domain.Validation;
 ///
 /// The note is optional: a null, empty, or whitespace-only value is <b>valid</b> and means
 /// "clear the current note". A non-blank value must be at most <see cref="MaxLength"/> characters
-/// (measured after trimming) and must not contain any of the blocked characters
-/// (<c>&lt; &gt; ; ' " \ \0</c>) — the same sanitisation rule applied to search input and the
-/// customer's own free-text problem description.
+/// (measured after trimming). It is deliberately permissive about punctuation — apostrophes,
+/// quotation marks, and the like are ordinary in a human sentence ("We've ordered a
+/// replacement…") and the note is rendered through Blazor's output encoding, so it is inert
+/// against HTML injection. Only two classes of character are rejected: the angle brackets
+/// <c>&lt;</c> and <c>&gt;</c> (belt-and-braces against HTML; a status note never needs them),
+/// and control characters (<c>\0</c> and other C0 controls), which are never legitimately typed.
+/// Common whitespace — space, tab, carriage return, newline — is allowed.
 /// </summary>
 public static class CustomerStatusNoteValidator
 {
     /// <summary>Maximum length of the note, in characters, measured after trimming.</summary>
     public const int MaxLength = 280;
 
-    private static readonly HashSet<char> BlockedCharacters = ['<', '>', ';', '\'', '"', '\\', '\0'];
+    private static readonly HashSet<char> BlockedCharacters = ['<', '>'];
 
     /// <summary>
     /// Validates a status note. Blank input (null / empty / whitespace) is valid and signals
@@ -45,7 +49,13 @@ public static class CustomerStatusNoteValidator
             if (BlockedCharacters.Contains(c))
             {
                 return ValidationResult.Failure(
-                    $"Customer status note contains a blocked character: '{(c == '\0' ? "\\0" : c.ToString())}'.");
+                    $"Customer status note contains a blocked character: '{c}'.");
+            }
+
+            if (char.IsControl(c) && c is not ('\t' or '\r' or '\n'))
+            {
+                return ValidationResult.Failure(
+                    "Customer status note contains a control character that is not allowed.");
             }
         }
 

@@ -14,6 +14,9 @@ public class CustomerStatusNoteValidatorTests
     [InlineData("Parts arrived — tech starts Monday.")]
     [InlineData("Line one.\nLine two.")]
     [InlineData("Cost estimate is $1,250 (incl. tax).")]
+    [InlineData("This model water heater is recalled. We've ordered a replacement and will call when received.")]
+    [InlineData("Advisor said: \"parts ship Tuesday\"; pickup after that.")]
+    [InlineData("Path noted as C:\\jobs\\4821 in the DMS.")]
     public void Validate_CleanNote_ReturnsSuccess(string note)
     {
         var result = CustomerStatusNoteValidator.Validate(note);
@@ -37,18 +40,39 @@ public class CustomerStatusNoteValidatorTests
     [Theory]
     [InlineData("angle < bracket")]
     [InlineData("angle > bracket")]
-    [InlineData("semi; colon")]
-    [InlineData("it's broken")]
-    [InlineData("say \"hi\"")]
-    [InlineData("back\\slash")]
-    [InlineData("null\0char")]
-    public void Validate_BlockedCharacter_ReturnsFailure(string note)
+    [InlineData("<script>alert(1)</script>")]
+    public void Validate_AngleBracket_ReturnsFailure(string note)
     {
         var result = CustomerStatusNoteValidator.Validate(note);
 
         result.IsValid.Should().BeFalse();
-        result.ErrorMessage.Should().NotBeNullOrWhiteSpace();
         result.ErrorMessage.Should().Contain("blocked character");
+    }
+
+    [Theory]
+    [InlineData("null\0char")]
+    [InlineData("bell\achar")]
+    [InlineData("vertical\vtab")]
+    public void Validate_ControlCharacter_ReturnsFailure(string note)
+    {
+        var result = CustomerStatusNoteValidator.Validate(note);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("control character");
+    }
+
+    [Theory]
+    [InlineData("semi; colon")]
+    [InlineData("it's broken")]
+    [InlineData("say \"hi\"")]
+    [InlineData("back\\slash")]
+    [InlineData("tab\tseparated")]
+    public void Validate_OrdinaryPunctuationAndWhitespace_ReturnsSuccess(string note)
+    {
+        var result = CustomerStatusNoteValidator.Validate(note);
+
+        result.IsValid.Should().BeTrue();
+        result.ErrorMessage.Should().BeNull();
     }
 
     [Fact]

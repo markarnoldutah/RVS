@@ -137,7 +137,7 @@ Constraints:
 
 - **Manager-authored only. One-directional.** The customer cannot reply, message, or upload anything — the status page stays display-only for the customer (X-1). This is the one hard line; everything else about the surface is free to change.
 - Notes are optional. The page reads cleanly with none.
-- Plain text, length-capped (default 280 characters), sanitised on input per the D-block character rules.
+- Plain text, length-capped (default 280 characters). Sanitised on input: reject the angle brackets `<` `>` and control characters (`\0` and other C0 controls); ordinary punctuation — apostrophes, quotation marks, semicolons — is allowed, since the note is a human sentence and is rendered through output encoding.
 - Never written to application logs (same rule as the customer's own free-text problem description).
 - Not the customer's problem description — that stays invisible to the customer-facing surface. This is a separate, deliberately-authored field.
 
