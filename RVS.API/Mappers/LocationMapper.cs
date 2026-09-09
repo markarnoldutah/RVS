@@ -181,6 +181,14 @@ public static class LocationMapper
         {
             Enabled = config.Enabled,
             Recipients = [.. config.Recipients],
+            DisabledRecipients = config.DisabledRecipients is { Count: > 0 }
+                ? [.. config.DisabledRecipients.Select(d => new DisabledRecipientDto
+                    {
+                        Email = d.Email,
+                        Reason = d.Reason,
+                        DisabledAtUtc = d.DisabledAtUtc,
+                    })]
+                : [],
             AttachPdf = config.AttachPdf,
             IncludePhotos = config.IncludePhotos,
             PasteBlockCharacterCap = config.PasteBlockCharacterCap,
@@ -193,6 +201,10 @@ public static class LocationMapper
     /// Maps a <see cref="PacketConfigDto"/> to a <see cref="PacketConfigEmbedded"/> entity,
     /// trimming the recipient addresses and the logo URL. Range and address-shape rules are
     /// enforced by <c>PacketConfigValidator</c> in the service, not here.
+    ///
+    /// <see cref="PacketConfigDto.DisabledRecipients"/> is deliberately <b>not</b> read: the
+    /// disabled list is owned by the hard-bounce flow (<c>Spec B-4</c>, issue #439) and carried
+    /// across an update by <c>LocationService</c>, not set by an API caller.
     /// </summary>
     public static PacketConfigEmbedded ToEmbedded(this PacketConfigDto dto)
     {

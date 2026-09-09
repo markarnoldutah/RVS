@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Services;
 using RVS.Domain.Entities;
+using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 
 namespace RVS.API.Tests.Services;
@@ -13,6 +14,7 @@ public class LocationServiceTests
     private readonly Mock<ISlugLookupRepository> _slugRepoMock = new();
     private readonly Mock<IDealershipRepository> _dealershipRepoMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
+    private readonly Mock<INotificationService> _notificationMock = new();
     private readonly Mock<ILogger<LocationService>> _loggerMock = new();
     private readonly LocationService _sut;
 
@@ -24,6 +26,7 @@ public class LocationServiceTests
             _slugRepoMock.Object,
             _dealershipRepoMock.Object,
             _userContextMock.Object,
+            _notificationMock.Object,
             _loggerMock.Object);
     }
 
@@ -420,6 +423,254 @@ public class LocationServiceTests
         _locationRepoMock.Verify(r => r.UpdateAsync(
             It.Is<Location>(l => l.PacketConfig.Recipients.Contains("svc@dealer.com")),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldCarryDisabledRecipientsAcrossASettingsSave()
+    {
+        var existing = BuildLocation();
+        existing.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients =
+            [
+                new DisabledRecipientEmbedded { Email = "dead@dealer.com", Reason = "Bounced", DisabledAtUtc = DateTime.UtcNow },
+            ],
+        };
+
+        var updated = BuildLocation();
+        updated.PacketConfig = new PacketConfigEmbedded { Recipients = ["live@dealer.com", "second@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.PacketConfig.DisabledRecipients.Should().ContainSingle().Which.Email.Should().Be("dead@dealer.com");
+        result.PacketConfig.Recipients.Should().BeEquivalentTo(["live@dealer.com", "second@dealer.com"]);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenCallerAddsADisabledAddressBackToRecipients_ShouldTreatItAsAReEnable()
+    {
+        var existing = BuildLocation();
+        existing.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients = [new DisabledRecipientEmbedded { Email = "dead@dealer.com" }],
+        };
+
+        var updated = BuildLocation();
+        updated.PacketConfig = new PacketConfigEmbedded { Recipients = ["live@dealer.com", "dead@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.PacketConfig.DisabledRecipients.Should().BeEmpty();
+        result.PacketConfig.Recipients.Should().Contain("dead@dealer.com");
+    }
+
+    // ── DisableRecipientForBounceAsync (Spec B-4, issue #439) ─────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DisableRecipientForBounceAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.DisableRecipientForBounceAsync(tenantId!, "loc_1", "dead@dealer.com", "Bounced");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DisableRecipientForBounceAsync_WhenRecipientEmailIsNullOrWhiteSpace_ShouldThrowArgumentException(string? email)
+    {
+        var act = () => _sut.DisableRecipientForBounceAsync("ten_1", "loc_1", email!, "Bounced");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_WhenLocationNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", "loc_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location?)null);
+
+        var act = () => _sut.DisableRecipientForBounceAsync("ten_1", "loc_missing", "dead@dealer.com", "Bounced");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_ShouldDisableOnlyThatRecipientAndPersist()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["keep@dealer.com", "dead@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "SuppressedRecipient");
+
+        result.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("keep@dealer.com");
+        result.PacketConfig.DisabledRecipients.Should().ContainSingle().Which.Email.Should().Be("dead@dealer.com");
+        result.PacketConfig.Enabled.Should().BeTrue("a bounce never disables the whole configuration");
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_ShouldNotifyEachRemainingRecipient()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["a@dealer.com", "b@dealer.com", "dead@dealer.com"],
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "Bounced");
+
+        _notificationMock.Verify(n => n.SendEmailAsync("a@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notificationMock.Verify(n => n.SendEmailAsync("b@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notificationMock.Verify(n => n.SendEmailAsync("dead@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_WhenNoActiveRecipientsRemain_ShouldNotNotifyAnyone()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["dead@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "Bounced");
+
+        result.PacketConfig.Recipients.Should().BeEmpty();
+        result.PacketConfig.DisabledRecipients.Should().ContainSingle();
+        _notificationMock.Verify(
+            n => n.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_WhenAddressIsNotAnActiveRecipient_ShouldBeNoOp()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["keep@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "stranger@dealer.com", "Bounced");
+
+        result.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("keep@dealer.com");
+        result.PacketConfig.DisabledRecipients.Should().BeEmpty();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notificationMock.Verify(
+            n => n.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_WhenANotificationSendThrows_ShouldStillNotifyTheOthersAndSucceed()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["bad@dealer.com", "good@dealer.com", "dead@dealer.com"],
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+        _notificationMock
+            .Setup(n => n.SendEmailAsync("bad@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("transport down"));
+
+        var act = () => _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "Bounced");
+
+        await act.Should().NotThrowAsync();
+        _notificationMock.Verify(n => n.SendEmailAsync("good@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ── ReEnableRecipientAsync (Spec B-4, issue #439) ────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task ReEnableRecipientAsync_WhenRecipientEmailIsNullOrWhiteSpace_ShouldThrowArgumentException(string? email)
+    {
+        var act = () => _sut.ReEnableRecipientAsync("ten_1", "loc_1", email!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task ReEnableRecipientAsync_WhenLocationNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", "loc_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location?)null);
+
+        var act = () => _sut.ReEnableRecipientAsync("ten_1", "loc_missing", "dead@dealer.com");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task ReEnableRecipientAsync_ShouldMoveTheAddressBackToActiveAndPersist()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients = [new DisabledRecipientEmbedded { Email = "dead@dealer.com" }],
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.ReEnableRecipientAsync("ten_1", location.Id, "dead@dealer.com");
+
+        result.PacketConfig.Recipients.Should().BeEquivalentTo(["live@dealer.com", "dead@dealer.com"]);
+        result.PacketConfig.DisabledRecipients.Should().BeEmpty();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReEnableRecipientAsync_WhenAddressIsNotDisabled_ShouldBeNoOp()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["live@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        await _sut.ReEnableRecipientAsync("ten_1", location.Id, "stranger@dealer.com");
+
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── DeleteAsync ──────────────────────────────────────────────────────────

@@ -1,5 +1,7 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using RVS.Domain.Entities;
+using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Validation;
 
@@ -12,10 +14,17 @@ namespace RVS.API.Services;
 /// </summary>
 public sealed class LocationService : ILocationService
 {
+    /// <summary>Logged when one packet recipient is disabled after a hard bounce (<c>Spec B-4</c>, #439).</summary>
+    private static readonly EventId RecipientHardBounced = new(439_001, nameof(RecipientHardBounced));
+
+    /// <summary>Logged when a hard bounce leaves a location with no working packet recipients (<c>Spec B-4</c>, #439).</summary>
+    private static readonly EventId AllRecipientsBounced = new(439_002, nameof(AllRecipientsBounced));
+
     private readonly ILocationRepository _locationRepository;
     private readonly ISlugLookupRepository _slugLookupRepository;
     private readonly IDealershipRepository _dealershipRepository;
     private readonly IUserContextAccessor _userContext;
+    private readonly INotificationService _notificationService;
     private readonly ILogger<LocationService> _logger;
 
     /// <summary>
@@ -26,12 +35,14 @@ public sealed class LocationService : ILocationService
         ISlugLookupRepository slugLookupRepository,
         IDealershipRepository dealershipRepository,
         IUserContextAccessor userContext,
+        INotificationService notificationService,
         ILogger<LocationService> logger)
     {
         _locationRepository = locationRepository;
         _slugLookupRepository = slugLookupRepository;
         _dealershipRepository = dealershipRepository;
         _userContext = userContext;
+        _notificationService = notificationService;
         _logger = logger;
     }
 
@@ -190,6 +201,15 @@ public sealed class LocationService : ILocationService
             }
         }
 
+        // The disabled-recipient list (Spec B-4, #439) is owned by the hard-bounce flow, not the
+        // settings payload — carry it across the update. But an address the caller has put back
+        // into the active recipient list is an explicit re-enable, so drop it from the disabled
+        // list rather than letting it sit in both.
+        var carriedDisabled = existing.PacketConfig.DisabledRecipients
+            .Where(d => !entity.PacketConfig.Recipients.Any(r =>
+                string.Equals(r?.Trim(), d.Email?.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
         existing.Name = entity.Name;
         existing.Slug = entity.Slug;
         existing.Phone = entity.Phone;
@@ -197,9 +217,119 @@ public sealed class LocationService : ILocationService
         existing.IntakeConfig = entity.IntakeConfig;
         existing.EnabledCapabilities = entity.EnabledCapabilities;
         existing.PacketConfig = entity.PacketConfig;
+        existing.PacketConfig.DisabledRecipients = carriedDisabled;
         existing.MarkAsUpdated(_userContext.UserId);
 
+        ValidatePacketConfig(existing);
+
         return await _locationRepository.UpdateAsync(existing, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<Location> DisableRecipientForBounceAsync(
+        string tenantId, string id, string recipientEmail, string? reason, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(recipientEmail);
+
+        var location = await _locationRepository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Location '{id}' not found.");
+
+        var disabled = location.PacketConfig.DisableRecipient(recipientEmail, reason, DateTime.UtcNow);
+        if (!disabled)
+        {
+            _logger.LogInformation(
+                "Hard bounce for {Recipient} at location {LocationId} in tenant {TenantId}: not an active packet recipient, nothing to disable",
+                recipientEmail, id, tenantId);
+            return location;
+        }
+
+        location.MarkAsUpdated(_userContext.UserId);
+        var saved = await _locationRepository.UpdateAsync(location, cancellationToken);
+
+        var remaining = saved.PacketConfig.Recipients
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .ToList();
+
+        if (remaining.Count == 0)
+        {
+            _logger.LogCritical(
+                AllRecipientsBounced,
+                "Every packet recipient for location {LocationId} in tenant {TenantId} has now hard-bounced; no packets can be delivered for this location until an address is fixed in its settings",
+                id, tenantId);
+        }
+        else
+        {
+            _logger.LogWarning(
+                RecipientHardBounced,
+                "Packet recipient at location {LocationId} in tenant {TenantId} disabled after a hard bounce; notifying {RemainingCount} remaining recipient(s)",
+                id, tenantId, remaining.Count);
+
+            await NotifyRemainingRecipientsAsync(saved, recipientEmail, reason, remaining, cancellationToken);
+        }
+
+        return saved;
+    }
+
+    /// <inheritdoc />
+    public async Task<Location> ReEnableRecipientAsync(
+        string tenantId, string id, string recipientEmail, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(recipientEmail);
+
+        var location = await _locationRepository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Location '{id}' not found.");
+
+        if (!location.PacketConfig.ReEnableRecipient(recipientEmail))
+        {
+            _logger.LogInformation(
+                "Re-enable request for {Recipient} at location {LocationId} in tenant {TenantId}: not a disabled recipient, nothing to do",
+                recipientEmail, id, tenantId);
+            return location;
+        }
+
+        ValidatePacketConfig(location);
+        location.MarkAsUpdated(_userContext.UserId);
+        return await _locationRepository.UpdateAsync(location, cancellationToken);
+    }
+
+    /// <summary>
+    /// Tells the still-active recipients that one address was dropped from packet delivery after a
+    /// hard bounce (<c>Spec B-4</c>, issue #439). One send per recipient; a send that throws is
+    /// logged and skipped so a second bad address does not stop the rest. The body carries no
+    /// customer data (<c>Spec X-7</c>).
+    /// </summary>
+    private async Task NotifyRemainingRecipientsAsync(
+        Location location, string disabledEmail, string? reason, IReadOnlyList<string> remaining, CancellationToken cancellationToken)
+    {
+        var reasonSuffix = string.IsNullOrWhiteSpace(reason)
+            ? string.Empty
+            : $" ({WebUtility.HtmlEncode(reason.Trim())})";
+        var subject = "[RVS] A packet email recipient was disabled after a hard bounce";
+        var htmlBody =
+            $"<p>The address <strong>{WebUtility.HtmlEncode(disabledEmail)}</strong> was removed from the "
+            + $"service-packet recipients for <strong>{WebUtility.HtmlEncode(location.Name)}</strong> because "
+            + $"email to it hard-bounced{reasonSuffix}.</p>"
+            + "<p>Packets will keep going to the remaining recipients. Once the address is fixed, re-add it "
+            + "in the location's packet settings.</p>";
+
+        foreach (var recipient in remaining)
+        {
+            try
+            {
+                await _notificationService.SendEmailAsync(recipient, subject, htmlBody, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not notify remaining packet recipient at location {LocationId} that an address was disabled after a hard bounce",
+                    location.Id);
+            }
+        }
     }
 
     /// <summary>

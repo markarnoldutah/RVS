@@ -91,6 +91,60 @@ public class PacketConfigValidatorTests
         result.IsValid.Should().BeFalse();
     }
 
+    // ── Disabled recipients (Spec B-4, issue #439) ──────────────────────────
+
+    [Fact]
+    public void Validate_DisabledRecipientWithValidAddress_ReturnsSuccess()
+    {
+        var config = new PacketConfigEmbedded
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients =
+            [
+                new DisabledRecipientEmbedded { Email = "dead@dealer.com", Reason = "Bounced", DisabledAtUtc = DateTime.UtcNow },
+            ],
+        };
+
+        PacketConfigValidator.Validate(config).IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Validate_NullDisabledRecipients_ReturnsFailure()
+    {
+        var config = new PacketConfigEmbedded { DisabledRecipients = null! };
+
+        PacketConfigValidator.Validate(config).IsValid.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not-an-email")]
+    public void Validate_DisabledRecipientWithBadAddress_ReturnsFailure(string email)
+    {
+        var config = new PacketConfigEmbedded
+        {
+            DisabledRecipients = [new DisabledRecipientEmbedded { Email = email }],
+        };
+
+        PacketConfigValidator.Validate(config).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Validate_AddressInBothActiveAndDisabledLists_ReturnsFailure()
+    {
+        var config = new PacketConfigEmbedded
+        {
+            Recipients = ["dup@dealer.com"],
+            DisabledRecipients = [new DisabledRecipientEmbedded { Email = "DUP@dealer.com" }],
+        };
+
+        var result = PacketConfigValidator.Validate(config);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("both");
+    }
+
     // ── Paste-block cap (Spec B-5) ───────────────────────────────────────────
 
     [Theory]

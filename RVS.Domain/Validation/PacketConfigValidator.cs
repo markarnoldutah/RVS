@@ -58,6 +58,40 @@ public static class PacketConfigValidator
             }
         }
 
+        // Disabled recipients (Spec B-4, issue #439): addresses parked after a hard bounce. Same
+        // address shape as active recipients; an address is either active or disabled, never both.
+        if (config.DisabledRecipients is null)
+        {
+            return ValidationResult.Failure("Disabled recipient list must not be null.");
+        }
+
+        foreach (var disabled in config.DisabledRecipients)
+        {
+            if (disabled is null || string.IsNullOrWhiteSpace(disabled.Email))
+            {
+                return ValidationResult.Failure("Disabled recipient addresses must not be blank.");
+            }
+
+            if (disabled.Email.Length > MaxRecipientLength)
+            {
+                return ValidationResult.Failure(
+                    $"Disabled recipient address must not exceed {MaxRecipientLength} characters.");
+            }
+
+            if (disabled.Email.Any(char.IsWhiteSpace) || !EmailValidator.IsValid(disabled.Email))
+            {
+                return ValidationResult.Failure($"'{disabled.Email}' is not a valid email address.");
+            }
+        }
+
+        var conflictingAddress = config.Recipients.FirstOrDefault(r => config.DisabledRecipients.Any(
+            d => string.Equals(d.Email?.Trim(), r?.Trim(), StringComparison.OrdinalIgnoreCase)));
+        if (conflictingAddress is not null)
+        {
+            return ValidationResult.Failure(
+                $"'{conflictingAddress}' cannot be both an active and a disabled packet recipient.");
+        }
+
         if (config.PasteBlockCharacterCap < PacketConfigEmbedded.MinPasteBlockCharacterCap
             || config.PasteBlockCharacterCap > PacketConfigEmbedded.MaxPasteBlockCharacterCap)
         {
