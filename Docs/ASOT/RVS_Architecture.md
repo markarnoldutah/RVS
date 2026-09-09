@@ -29,7 +29,7 @@ Intake (anonymous) and Manager (bearer token) both call `RVS.API`. Middleware or
 1. Dev-only OpenAPI / Swagger UI
 2. HTTPS redirection (non-dev)
 3. CORS — named, environment-specific policy. Never `AllowAnyOrigin`
-4. Rate limiter — `IntakeEndpoint` (20/min), `StatusEndpoint` (10/min)
+4. Rate limiter — `IntakeEndpoint` (20/min), `StatusEndpoint` (10/min), each partitioned per caller IP (`X-Forwarded-For`, socket fallback); `429` on reject
 5. `ExceptionHandlingMiddleware` — `IMiddleware`, singleton
 6. Authentication → Authorization
 7. `CorrelationLoggingMiddleware` — after auth so claims are populated
@@ -112,7 +112,7 @@ This is the honest state of `../RVS_Spec.md`.
 | C-5 resend packet | **Not built** | |
 | C-6 per-location settings | **Partial** | Location CRUD + capabilities + B-6 `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo) read/written via `api/locations` (#435). No manager-app settings UI yet |
 | C-7 one-click email status links | **Not built** | |
-| X-1 customer status page | **Built, different design** | See token model below |
+| X-1 customer status page | **Built, different design** | See token model below. Payload trimmed to the specced four fields — unit, submission date, status, location phone — in #442 (`CustomerStatusItemResponseDto`); no customer identity or issue text crosses the boundary |
 | X-2 ledger write on submission | **Built** | `IntakeOrchestrationService` appends per intake, best-effort |
 | X-3 anonymization license | **Paperwork** | Not a code item. Highest-leverage open item in the whole set |
 | X-4 tenancy | **Built** | |

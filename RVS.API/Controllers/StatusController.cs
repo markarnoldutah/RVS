@@ -8,8 +8,10 @@ using RVS.Domain.Interfaces;
 namespace RVS.API.Controllers;
 
 /// <summary>
-/// Customer-facing status page accessed via magic-link token.
-/// All routes are anonymous — no authentication required.
+/// Customer-facing status page accessed via magic-link token (<c>Spec X-1</c>).
+/// All routes are anonymous — no authentication required — and rate-limited per IP.
+/// The response is deliberately minimal: unit, submission date, current status, and the
+/// servicing location's phone number. No conversation, messaging, or file exchange.
 /// </summary>
 [ApiController]
 [Route("api/status")]
@@ -39,7 +41,9 @@ public class StatusController : ControllerBase
 
     /// <summary>
     /// Returns the customer's service request status across all dealerships.
-    /// Validates the magic-link token and retrieves service request summaries.
+    /// Validates the magic-link token and retrieves one minimal summary per request:
+    /// unit, submission date, current status, and the servicing location's phone number
+    /// (<c>Spec X-1</c>). Free-text problem descriptions are never included, nor logged.
     /// </summary>
     /// <param name="token">Magic-link token for customer identification.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -51,7 +55,7 @@ public class StatusController : ControllerBase
     {
         var acct = await _globalCustomerAcctService.ValidateMagicLinkTokenAsync(token, ct);
 
-        var serviceRequests = new List<ServiceRequestSummaryResponseDto>();
+        var serviceRequests = new List<CustomerStatusItemResponseDto>();
 
         foreach (var link in acct.LinkedProfiles)
         {
@@ -60,61 +64,28 @@ public class StatusController : ControllerBase
             foreach (var srId in profile.ServiceRequestIds)
             {
                 var sr = await _serviceRequestService.GetByIdAsync(link.TenantId, srId, ct);
-                var dto = sr.ToSummaryDto();
+                var locationPhone = await ResolveLocationPhoneAsync(link.TenantId, sr.LocationId, ct);
 
-                dto = dto with { LocationName = await ResolveLocationNameAsync(link.TenantId, sr.LocationId, ct) };
-
-                serviceRequests.Add(dto);
+                serviceRequests.Add(sr.ToCustomerStatusItemDto(locationPhone));
             }
         }
 
         return Ok(new CustomerStatusResponseDto
         {
-            FirstName = acct.FirstName,
             ServiceRequests = serviceRequests
         });
     }
 
-    private async Task<string?> ResolveLocationNameAsync(string tenantId, string locationId, CancellationToken ct)
+    private async Task<string?> ResolveLocationPhoneAsync(string tenantId, string locationId, CancellationToken ct)
     {
         try
         {
             var location = await _locationService.GetByIdAsync(tenantId, locationId, ct);
-            if (location.Address is not null && !string.IsNullOrWhiteSpace(location.Address.City))
-            {
-                return string.IsNullOrWhiteSpace(location.Address.State)
-                    ? location.Address.City.Trim()
-                    : $"{location.Address.City.Trim()}, {location.Address.State.Trim()}";
-            }
-
-            return HumanizeSlug(location.Slug);
+            return location.Phone;
         }
         catch (KeyNotFoundException)
         {
             return null;
         }
-    }
-
-    private static string HumanizeSlug(string slug)
-    {
-        if (string.IsNullOrWhiteSpace(slug))
-        {
-            return string.Empty;
-        }
-
-        var words = slug.Split('-', StringSplitOptions.RemoveEmptyEntries);
-        for (var i = 0; i < words.Length; i++)
-        {
-            if (words[i].Length > 1)
-            {
-                words[i] = char.ToUpperInvariant(words[i][0]) + words[i][1..];
-            }
-            else if (words[i].Length == 1)
-            {
-                words[i] = char.ToUpperInvariant(words[i][0]).ToString();
-            }
-        }
-
-        return string.Join(' ', words);
     }
 }

@@ -6,6 +6,7 @@ using RVS.API.HealthChecks;
 using RVS.API.Integrations;
 using RVS.API.Middleware;
 using RVS.API.Packets;
+using RVS.API.RateLimiting;
 using RVS.API.Workers;
 using RVS.Infra.AzBlobRepository;
 using RVS.API.Services;
@@ -165,19 +166,30 @@ builder.Services.AddOpenApi(options =>
     options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
 });
 
-// Rate limiting — protects public intake + status endpoints
+// Rate limiting — protects the public intake + status endpoints. Partitioned per caller
+// IP (Spec X-5) so a single abusive client cannot exhaust the fixed window for everyone;
+// the client IP is read from X-Forwarded-For since the API sits behind Azure infra.
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("StatusEndpoint", cfg =>
-    {
-        cfg.PermitLimit = 10;
-        cfg.Window = TimeSpan.FromMinutes(1);
-    });
-    options.AddFixedWindowLimiter("IntakeEndpoint", cfg =>
-    {
-        cfg.PermitLimit = 20;
-        cfg.Window = TimeSpan.FromMinutes(1);
-    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("StatusEndpoint", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientIpResolver.Resolve(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    options.AddPolicy("IntakeEndpoint", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientIpResolver.Resolve(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 });
 
 // Register Middleware

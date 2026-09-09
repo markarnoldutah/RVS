@@ -93,4 +93,35 @@ public class CustomerIntakeDtoTests
 
         dto.ServiceRequests.Should().BeEmpty();
     }
+
+    [Fact]
+    public void CustomerStatusItemResponseDto_ExposesOnlyTheSpecX1Fields()
+    {
+        // Spec X-1: the customer status page shows unit, submission date, current
+        // status, and the location's phone number — nothing more.
+        var properties = typeof(CustomerStatusItemResponseDto)
+            .GetProperties()
+            .Select(p => p.Name)
+            .OrderBy(n => n);
+
+        properties.Should().Equal("LocationPhone", "Status", "SubmittedAtUtc", "Unit");
+    }
+
+    [Fact]
+    public void CustomerStatusItemResponseDto_CanSetAllFields()
+    {
+        var submittedAt = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var dto = new CustomerStatusItemResponseDto
+        {
+            Unit = "2023 Thor Ace",
+            SubmittedAtUtc = submittedAt,
+            Status = "InProgress",
+            LocationPhone = "555-0100"
+        };
+
+        dto.Unit.Should().Be("2023 Thor Ace");
+        dto.SubmittedAtUtc.Should().Be(submittedAt);
+        dto.Status.Should().Be("InProgress");
+        dto.LocationPhone.Should().Be("555-0100");
+    }
 }

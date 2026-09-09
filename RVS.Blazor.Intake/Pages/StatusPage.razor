@@ -131,12 +131,6 @@ else if (_statusResponse is not null)
                                 <MudStack Spacing="3">
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
                                         <StatusBadge Status="@sr.Status" />
-                                        @if (!string.IsNullOrWhiteSpace(sr.LocationName))
-                                        {
-                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
-                                                @sr.LocationName
-                                            </MudText>
-                                        }
                                     </MudStack>
 
                                     <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
@@ -148,27 +142,16 @@ else if (_statusResponse is not null)
                                     <MudSimpleTable Elevation="0" Class="review-table">
                                         <tbody>
                                             <tr>
-                                                <td><strong>Issue Category</strong></td>
-                                                <td>@(string.IsNullOrWhiteSpace(sr.IssueCategory) ? "—" : sr.IssueCategory)</td>
+                                                <td><strong>Unit</strong></td>
+                                                <td>@(string.IsNullOrWhiteSpace(sr.Unit) ? "—" : sr.Unit)</td>
                                             </tr>
-                                            @if (!string.IsNullOrWhiteSpace(sr.AssetDisplay))
-                                            {
-                                                <tr>
-                                                    <td><strong>Vehicle</strong></td>
-                                                    <td>@sr.AssetDisplay</td>
-                                                </tr>
-                                            }
                                             <tr>
                                                 <td><strong>Submitted</strong></td>
-                                                <td>@sr.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
+                                                <td>@sr.SubmittedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
                                             </tr>
                                             <tr>
-                                                <td><strong>Last Updated</strong></td>
-                                                <td>
-                                                    @(sr.UpdatedAtUtc.HasValue
-                                                        ? sr.UpdatedAtUtc.Value.ToLocalTime().ToString("MMM d, yyyy")
-                                                        : "—")
-                                                </td>
+                                                <td><strong>Location Phone</strong></td>
+                                                <td>@(string.IsNullOrWhiteSpace(sr.LocationPhone) ? "—" : sr.LocationPhone)</td>
                                             </tr>
                                         </tbody>
                                     </MudSimpleTable>
