@@ -560,9 +560,3 @@ az bicep upgrade
 
 # Tail live App Service logs
 az webapp log tail --name app-rvs-api-staging-wus3 --resource-group rg-rvs-staging-westus3
-
-# Testing #489
-
-ACS_ID=$(az communication show \
-  --name acs-rvs-notify-staging-wus3-s01-001 \
-  --resource-group rg-rvs-staging-westus3 --query id -o tsv)
