@@ -26,7 +26,7 @@ Shell is `Pages/IntakeWizard.razor`, routed at `/{Slug}` with an optional `?toke
 | 7 | `Step7_AttachmentUploadStep` | Up to 10 files at 25 MB, buffered in-browser. Drop zone with an overlaid `InputFile` |
 | 8 | `Step8_ReviewSubmitStep` | Review tables with per-section edit; `POST service-requests`; then per-file **direct-to-blob SAS upload** — request upload URL, `PUT` to SAS with `x-ms-blob-type: BlockBlob`, confirm. Tracks failed uploads |
 
-Supporting pages: `Confirmation`, `Status` (confirmation-number entry), `StatusPage` (`/status/{Token}` → `GET api/status/{token}`), `Home`, `Error`, `NotFound`. `Intake.razor` at `/intake` is a static "use your dealer's link" notice and a dead end.
+Supporting pages: `Confirmation`, `Status` (confirmation-number entry), `StatusPage` (`/status/{Token}` → `GET api/status/{token}`; shows unit, submitted date, status sentence, location `tel:` link, and the manager-authored status note when present — C-9, #500), `Home`, `Error`, `NotFound`. `Intake.razor` at `/intake` is a static "use your dealer's link" notice and a dead end.
 
 **Steps 3 and 5 depend on AI capability now specced as Spec A-9–A-12** — Whisper transcription, gpt-4o VIN extraction, urgency/usage insights, capability pre-check. All four are in scope (issue #429, closes Q8); nothing here is archived. See `RVS_Architecture.md`.
 
@@ -39,7 +39,7 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 | Route | Component | In Spec C scope |
 |---|---|---|
 | `/service-requests` | `ServiceRequestQueue` | Yes — but with a ten-field search panel (keyword, status, category, location, technician, bay, VIN, priority, two dates) against a specced "filter by status" |
-| drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, inline edit, comment thread, attachment viewing via read-SAS, diagnostic responses |
+| drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, customer status note (C-9, #500), inline edit, comment thread, attachment viewing via read-SAS, diagnostic responses |
 | `/locations` | `Locations` | Yes — location CRUD, capability checkboxes, QR download |
 | `/` | `Home` | Partly — embeds `OutcomeComplianceWidget`, which is archived scope |
 | `/settings` | `Settings` | Partly — tenant-level config and access gate, not the per-location packet settings B-6 needs |

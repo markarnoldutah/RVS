@@ -4,6 +4,7 @@ using RVS.API.Mappers;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Controllers;
 
@@ -137,6 +138,35 @@ public class ServiceRequestsController : ControllerBase
         await _service.DeleteAsync(tenantId, srId, ct);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Sets or clears the manager-authored customer status note (<c>Spec C-9</c>). The note renders
+    /// on the anonymous customer status page alongside the current status. Send a null or blank
+    /// <see cref="ServiceRequestStatusNoteRequestDto.Note"/> to clear it. An over-long note or one
+    /// containing a blocked character returns <c>422</c>. The note is never written to logs.
+    /// </summary>
+    /// <param name="dealershipId">Dealership identifier (route segment).</param>
+    /// <param name="srId">Service request identifier.</param>
+    /// <param name="request">The note payload.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpPut("{srId}/status-note")]
+    [Authorize(Policy = "CanUpdateServiceRequests")]
+    public async Task<ActionResult<ServiceRequestDetailResponseDto>> SetStatusNote(
+        string dealershipId, string srId, [FromBody] ServiceRequestStatusNoteRequestDto request, CancellationToken ct)
+    {
+        var tenantId = _claimsService.GetTenantIdOrThrow();
+
+        var noteValidation = CustomerStatusNoteValidator.Validate(request.Note);
+        if (!noteValidation.IsValid)
+        {
+            ModelState.AddModelError(nameof(request.Note), noteValidation.ErrorMessage!);
+            return UnprocessableEntity(ModelState);
+        }
+
+        var updated = await _service.SetCustomerStatusNoteAsync(tenantId, srId, request.Note, ct);
+
+        return Ok(updated.ToDetailDto());
     }
 
     /// <summary>

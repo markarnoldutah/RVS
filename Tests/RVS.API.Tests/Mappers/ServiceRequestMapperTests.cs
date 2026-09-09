@@ -414,6 +414,50 @@ public class ServiceRequestMapperTests
         serialized.Should().NotContain("Electrical");
     }
 
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenStatusNoteSet_ShouldCarryNoteText()
+    {
+        var entity = new ServiceRequest { Status = "WaitingOnParts" };
+        entity.SetCustomerStatusNote("Slide motor on back order, ETA Friday.", "usr_mgr");
+
+        var dto = entity.ToCustomerStatusItemDto("555-0100");
+
+        dto.StatusNote.Should().Be("Slide motor on back order, ETA Friday.");
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenNoStatusNote_ShouldBeNull()
+    {
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto("555-0100");
+
+        dto.StatusNote.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenStatusNoteSet_ShouldMapTextAndTimestamp()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.SetCustomerStatusNote("Parts arrived — tech starts Monday.", "usr_mgr");
+
+        var dto = entity.ToDetailDto();
+
+        dto.CustomerStatusNote.Should().NotBeNull();
+        dto.CustomerStatusNote!.Text.Should().Be("Parts arrived — tech starts Monday.");
+        dto.CustomerStatusNote.UpdatedAtUtc.Should().Be(entity.CustomerStatusNote!.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenNoStatusNote_ShouldReturnNullCustomerStatusNote()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+
+        var dto = entity.ToDetailDto();
+
+        dto.CustomerStatusNote.Should().BeNull();
+    }
+
     // ── ToEntity (create) ────────────────────────────────────────────────────
 
     [Fact]

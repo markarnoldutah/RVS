@@ -9,7 +9,10 @@
       "Bash(powershell -Command '$ErrorActionPreference='\\\\''SilentlyContinue'\\\\''; $dll = '\\\\''C:\\\\Users\\\\Mark Arnold\\\\.nuget\\\\packages\\\\mudblazor\\\\9.2.0\\\\lib\\\\net10.0\\\\MudBlazor.dll'\\\\''; $asm = [System.Reflection.Assembly]::LoadFile\\($dll\\); $tt = $null; try { $tt = $asm.GetTypes\\(\\) } catch [System.Reflection.ReflectionTypeLoadException] { $tt = $_.Exception.Types }; Write-Host \"TypeCount: $\\($tt.Count\\)\"; foreach \\($x in $tt\\) { if \\($x -and $x.Name -eq '\\\\''InputMode'\\\\''\\) { Write-Host \"FOUND: $\\($x.FullName\\) IsEnum=$\\($x.IsEnum\\)\"; if \\($x.IsEnum\\) { Write-Host \\([System.Enum]::GetNames\\($x\\) -join '\\\\'', '\\\\''\\) } } }')",
       "Bash(powershell -Command '$ErrorActionPreference='\\\\''SilentlyContinue'\\\\''; $dll = '\\\\''C:\\\\Users\\\\Mark Arnold\\\\.nuget\\\\packages\\\\mudblazor\\\\9.2.0\\\\lib\\\\net10.0\\\\MudBlazor.dll'\\\\''; $asm = [System.Reflection.Assembly]::LoadFile\\($dll\\); $tt = $null; try { $tt = $asm.GetTypes\\(\\) } catch [System.Reflection.ReflectionTypeLoadException] { $tt = $_.Exception.Types }; foreach \\($x in $tt\\) { if \\($x -and $x.Name -like '\\\\''*Mode*'\\\\''\\) { Write-Host $x.FullName } }')",
       "Bash(gh repo *)",
-      "mcp__github__issue_read"
+      "mcp__github__issue_read",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(dotnet exec *)"
     ]
   }
 }

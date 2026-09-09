@@ -549,6 +549,69 @@
                             <MudDivider Class="my-4" />
                         }
 
+                        @* Customer status note (Spec C-9) *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Customer status note</MudText>
+                            <MudSpacer />
+                            @if (_statusNoteSaving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                            else if (_editingStatusNote)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Primary"
+                                               Class="section-icon-btn"
+                                               aria-label="Save customer status note" OnClick="SaveStatusNoteAsync" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Cancel editing customer status note" OnClick="CancelEditStatusNote" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.TwoTone.Settings" Size="Size.Small"
+                                               Class="section-icon-btn"
+                                               aria-label="Edit customer status note" OnClick="BeginEditStatusNote" />
+                            }
+                        </MudStack>
+                        @if (_editingStatusNote)
+                        {
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.caption" Style="@IssueLabelStyle">
+                                    Shown to the customer on their status page. One note per request; saving replaces it.
+                                </MudText>
+                                <MudTextField T="string" @bind-Value="_editStatusNote"
+                                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                                              Lines="3"
+                                              MaxLength="280"
+                                              Counter="280"
+                                              Immediate="true"
+                                              Placeholder="e.g. Waiting on a back-ordered slide motor, ETA Friday"
+                                              Class="compact-field" />
+                                @if (_statusNoteError is not null)
+                                {
+                                    <MudAlert Severity="Severity.Error" Dense="true">@_statusNoteError</MudAlert>
+                                }
+                                <MudStack Row="true" Spacing="2">
+                                    <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Delete"
+                                               OnClick="ClearStatusNoteAsync"
+                                               Disabled="@(_statusNoteSaving || string.IsNullOrWhiteSpace(_sr.CustomerStatusNote?.Text))">
+                                        Clear note
+                                    </MudButton>
+                                </MudStack>
+                            </MudStack>
+                        }
+                        else if (string.IsNullOrWhiteSpace(_sr.CustomerStatusNote?.Text))
+                        {
+                            <MudText Typo="Typo.body2" Style="@LabelStyle">No note shown to the customer.</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Style="@StatusNoteValueStyle">@_sr.CustomerStatusNote!.Text</MudText>
+                        }
+
+                        <MudDivider Class="my-4" />
+
                         @* Assigned Tech *@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
                             <MudText Typo="Typo.body2" Style="font-weight: 700;">Assigned Tech</MudText>
@@ -884,6 +947,11 @@
     private string? _techError;
     private string? _editTechId;
 
+    private bool _editingStatusNote;
+    private bool _statusNoteSaving;
+    private string? _statusNoteError;
+    private string? _editStatusNote;
+
     private bool _editingTitle;
     private bool _titleSaving;
     private string? _titleError;
@@ -954,6 +1022,8 @@
     private string TimelineTimestampStyle => "color: var(--mud-palette-text-secondary);";
 
     private string IssueLabelStyle => "color: var(--mud-palette-text-secondary);";
+
+    private string StatusNoteValueStyle => $"white-space: pre-wrap; color: {ValueColor};";
 
     private string HeaderFooterStyle =>
         $"position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--mud-palette-divider); background: {ColumnBackground};";
@@ -1371,6 +1441,40 @@
         }
         catch (Exception ex) { _techError = ex.Message; }
         finally { _techSaving = false; }
+    }
+
+    private void BeginEditStatusNote()
+    {
+        if (_sr is null) return;
+        _editStatusNote = _sr.CustomerStatusNote?.Text;
+        _statusNoteError = null;
+        _editingStatusNote = true;
+    }
+
+    private void CancelEditStatusNote()
+    {
+        _editingStatusNote = false;
+        _statusNoteError = null;
+    }
+
+    private Task SaveStatusNoteAsync() => PersistStatusNoteAsync(_editStatusNote);
+
+    private Task ClearStatusNoteAsync() => PersistStatusNoteAsync(null);
+
+    private async Task PersistStatusNoteAsync(string? note)
+    {
+        if (_sr is null || _dealershipId is null) return;
+        _statusNoteSaving = true;
+        _statusNoteError = null;
+        StateHasChanged();
+        try
+        {
+            _sr = await SrClient.SetStatusNoteAsync(_dealershipId, _sr.Id, note);
+            _editingStatusNote = false;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) { _statusNoteError = ex.Message; }
+        finally { _statusNoteSaving = false; }
     }
 
     private void BeginEditTitle()

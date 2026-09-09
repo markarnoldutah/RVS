@@ -137,6 +137,15 @@ else if (_statusResponse is not null)
                                         @CustomerStatusFormatting.DescribeStatus(sr.Status)
                                     </MudText>
 
+                                    @if (!string.IsNullOrWhiteSpace(sr.StatusNote))
+                                    {
+                                        <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined"
+                                                  Icon="@Icons.Material.Outlined.Info"
+                                                  Style="white-space: pre-wrap;">
+                                            @sr.StatusNote
+                                        </MudAlert>
+                                    }
+
                                     <MudDivider />
 
                                     <MudSimpleTable Elevation="0" Class="review-table">

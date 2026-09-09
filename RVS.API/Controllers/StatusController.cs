@@ -10,8 +10,9 @@ namespace RVS.API.Controllers;
 /// <summary>
 /// Customer-facing status page accessed via magic-link token (<c>Spec X-1</c>).
 /// All routes are anonymous — no authentication required — and rate-limited per IP.
-/// The response is deliberately minimal: unit, submission date, current status, and the
-/// servicing location's phone number. No conversation, messaging, or file exchange.
+/// The response carries the unit, submission date, current status, the servicing location's
+/// phone number, and any manager-authored status note (<c>Spec C-9</c>). It is display-only for
+/// the customer: there is no inbound path here — no reply, no message, no file upload.
 /// </summary>
 [ApiController]
 [Route("api/status")]

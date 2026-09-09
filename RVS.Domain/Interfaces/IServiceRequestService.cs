@@ -78,6 +78,23 @@ public interface IServiceRequestService
     Task DeleteAsync(string tenantId, string id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Sets or clears the manager-authored customer status note (<c>Spec C-9</c>). The note renders
+    /// on the anonymous customer status page alongside the fixed status. Passing a null, empty, or
+    /// whitespace-only <paramref name="note"/> clears the current note. The text is validated
+    /// (length cap + blocked characters) and is never written to application logs.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="note">The note text, or null/blank to clear.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="tenantId"/> or <paramref name="id"/> is blank, or when the note
+    /// exceeds the length cap or contains a blocked character.
+    /// </exception>
+    /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
+    Task<ServiceRequest> SetCustomerStatusNoteAsync(string tenantId, string id, string? note, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Requests on-demand regeneration of the request's service packet (<c>Spec B-1</c>, issue #434):
     /// resets the packet-generation state to <c>Pending</c> and enqueues a fresh generation job.
     /// Returns as soon as the job is enqueued — generation runs in the background.

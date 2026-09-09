@@ -197,6 +197,28 @@ public sealed class ServiceRequestService : IServiceRequestService
     }
 
     /// <inheritdoc />
+    public async Task<ServiceRequest> SetCustomerStatusNoteAsync(string tenantId, string id, string? note, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        // C-9: validate before touching the store. The note text is never included in the
+        // exception message, an activity tag, or a log entry.
+        var validation = CustomerStatusNoteValidator.Validate(note);
+        if (!validation.IsValid)
+        {
+            throw new ArgumentException(validation.ErrorMessage, nameof(note));
+        }
+
+        var existing = await _repository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
+
+        existing.SetCustomerStatusNote(note, _userContext.UserId);
+
+        return await _repository.UpdateAsync(existing, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task RegeneratePacketAsync(string tenantId, string id, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);

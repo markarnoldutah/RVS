@@ -42,6 +42,7 @@ The central document. Field groups:
 |---|---|---|
 | Workflow | `status`, `priority`, `boardSequence` | `boardSequence` is Kanban-only — **archived** |
 | Issue | issue text, `issueCategory`, `technicianSummary` | Core. `technicianSummary` is the closest thing to a paste block today |
+| Customer status note | `customerStatusNote` — `text`, `updatedAtUtc`, `updatedByUserId`; nullable, one per request, overwritten on edit | Core (issue #500, `Spec C-9`). Manager-authored, one-directional; rendered on the customer status page next to the status. `CustomerStatusNoteValidator` caps `text` at 280 chars and blocks `< > ; ' " \ \0`; the text is never written to application logs (same rule as issue text, `Spec X-7`) |
 | Customer | embedded `customerSnapshot` — name, email, phone, `preferredContact` (`Phone`/`Text`/`Email`, captured at intake per `#472`; null for pre-existing requests) | Core |
 | Asset | `assetInfo` — VIN, make, model, year | Core |
 | Attachments | `attachments[]` | Core |
