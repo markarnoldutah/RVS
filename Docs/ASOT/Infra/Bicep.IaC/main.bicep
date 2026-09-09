@@ -334,6 +334,8 @@ module appServiceConfig 'modules/app-service-config.bicep' = if (deployAppServic
     appInsightsConnectionString: (deployAppService && deployObservability) ? appInsights.outputs.connectionString : ''
     #disable-next-line BCP318
     keyVaultUri: (deployAppService && deployKeyVault) ? keyVault.outputs.vaultUri : ''
+    #disable-next-line BCP318
+    acsEmailFromAddress: (deployAppService && deployAcs) ? 'DoNotReply@${communicationServices.outputs.azureManagedMailFrom}' : ''
     configureStagingSlot: deployStagingSlot
   }
 }
@@ -466,6 +468,10 @@ module communicationServices 'modules/communication-services.bicep' = if (deploy
     #disable-next-line BCP318
     tags: deployAcs ? acsNaming.outputs.tags : {}
     dataLocation: acsDataLocation
+    #disable-next-line BCP318
+    apiPrincipalId: (deployAcs && deployAppService) ? appService.outputs.principalId : ''
+    #disable-next-line BCP318
+    stagingSlotPrincipalId: (deployAcs && deployAppService && deployStagingSlot) ? appService.outputs.stagingSlotPrincipalId : ''
   }
 }
 

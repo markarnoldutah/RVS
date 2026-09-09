@@ -378,6 +378,39 @@ The `app-insights.bicep` module creates:
 
 ---
 
+## Communication Services — Email
+
+`communication-services.bicep` provisions the ACS account, an Email Service, and
+an **Azure-managed email domain** (`<guid>.azurecomm.net`). `AcsEmailNotificationService`
+sends the service-department packet email (`#437`) and authenticates with the API
+**managed identity** (`DefaultAzureCredential`), so two things must line up with
+the deployed resource — both now handled by Bicep:
+
+| Concern | How Bicep handles it |
+|---|---|
+| **Send permission** | `communication-services.bicep` grants the API managed identity (and the S1 staging-slot identity) **Contributor scoped to the ACS resource** — ACS has no granular data-plane "email sender" role yet. Wired from `main.bicep` (`apiPrincipalId` / `stagingSlotPrincipalId`) exactly like the Key Vault / Storage grants. |
+| **Sender address** | `app-service-config.bicep` sets the app setting `AzureCommunicationServices__Email__FromAddress` to `DoNotReply@<communicationServices.outputs.azureManagedMailFrom>`. The hardcoded `DoNotReply@<guid>.azurecomm.net` was removed from `RVS.API/appsettings.json` so a stale value cannot shadow it. |
+
+A plain [idempotent redeploy](#quick-start-deployment) applies both. RBAC
+propagation can take a few minutes.
+
+### Manual steps after the deploy (not expressible in Bicep)
+
+Commands for each are in `deployment-cmds.azcli` §4e. Summary:
+
+1. **Verify the managed domain is provisioned and verified** (`az communication email domain show` → `provisioningState = Succeeded`). `AzureManaged` verification is automatic but can lag; sends fail with `DomainNotLinked` until it completes.
+2. **Read back the real sender domain** (`properties.fromSenderDomain`) and confirm the deployed `AzureCommunicationServices__Email__FromAddress` app setting is `DoNotReply@<that domain>`.
+3. **Confirm the RBAC grant landed** (`az role assignment list --scope <acs-resource-id>`). If not (older Bicep, or propagation), assign **Contributor** on the ACS resource by hand — §4e (1).
+4. **Check the ACS email send quota.** Azure-managed domains start low (~100 recipients/day, low rate). Request an increase via Azure support if a demo needs more.
+5. **Set a real recipient on a staging Location.** Seed data uses RFC 2606 `.example.com` addresses that hard-bounce. Point at least one location's `packetConfig.recipients` at a mailbox you control — `PUT /api/dealers/{dealerId}/locations/{locationId}` or directly in Cosmos. `packetConfig.enabled` defaults to `true`.
+6. **Run the end-to-end check.** Complete a staging intake; App Insights should show `ACS packet email send initiated …` from `AcsEmailNotificationService`. A failure logs `Packet email dispatch failed …` from `PacketGenerationService` and is otherwise swallowed (packet generation still reports `Succeeded`; retry/idempotency is `#438`). Confirm the mail arrives with the PDF + photo attachments, subject `[RVS] {category} — {year} {make} {model} — {customer last name}`.
+
+> **Prod follow-up (not this change):** production should move off the Azure-managed
+> domain to a custom verified domain (`notifications.rvserviceflow.com`) — the
+> managed domain has low quotas and no sender reputation.
+
+---
+
 ## Estimated Monthly Costs
 
 | Environment | Estimated Monthly Cost | Notes |

@@ -31,7 +31,7 @@
 #         4b. Cross-env DNS Zone Contributor (zone-scoped, least privilege)
 #         4c. Developer blob-access group (sg-rvs-dev-blob)
 #         4d. Key Vault manual secrets
-#         4e. PENDING — Issue #489 ACS Email send grant  ← DO NOT RUN YET
+#         4e. ACS Email send grant (now in Bicep) + post-deploy checks — Issue #489
 #   5.  Post-deploy verification
 #   6.  SWA deployment tokens → GitHub secrets
 #   7.  Misc one-offs
@@ -347,53 +347,102 @@ az keyvault secret set --vault-name kv-rvs-staging-wus3 \
 az keyvault secret set --vault-name kv-rvs-prod-wus3 \
   --name "Stripe--WebhookSecret" --value "<YOUR_STRIPE_WEBHOOK_SECRET>"
 
-# ── 4e. PENDING — Issue #489: ACS Email send grant  ── DO NOT RUN YET ───────
+# ── 4e. ACS Email send grant + enablement checks — Issue #489 ───────────────
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │ Tracked by GitHub Issue #489 ("Enable ACS email sending from staging").    │
-# │ Do NOT execute until #489 is scheduled. Recorded here so the commands are  │
-# │ in one place when it is. The permanent fix is a Bicep role assignment in   │
-# │ modules/communication-services.bicep (or a new modules/acs-rbac.bicep);    │
-# │ the commands below are the manual stopgap the issue describes.             │
+# │ The RBAC grant and the sender-address config are now BICEP (shipped with   │
+# │ #489):                                                                     │
+# │   - modules/communication-services.bicep grants the API managed identity   │
+# │     (and the S1 staging-slot identity) Contributor ON THE ACS RESOURCE,    │
+# │     wired from main.bicep like the Key Vault / Storage grants.             │
+# │   - modules/app-service-config.bicep sets the app setting                  │
+# │     AzureCommunicationServices__Email__FromAddress =                       │
+# │     DoNotReply@<communicationServices.outputs.azureManagedMailFrom>,       │
+# │     so the hardcoded DoNotReply@<guid>.azurecomm.net is gone from          │
+# │     RVS.API/appsettings.json.                                              │
+# │ So a plain Section 1 redeploy applies both. The commands below are the     │
+# │ manual fallback (grant not yet propagated, or applying to an env whose     │
+# │ Bicep pre-dates #489) plus the post-deploy checks that CANNOT be Bicep.    │
 # └────────────────────────────────────────────────────────────────────────────┘
 #
-# Why: AcsEmailNotificationService authenticates to ACS with the API's
-# system-assigned managed identity (DefaultAzureCredential). That identity has
-# roles for Key Vault + Storage only — none on the ACS resource — so
-# EmailClient.SendAsync returns 403. ACS has no granular "email sender"
-# data-plane role as of writing; the documented minimum is Contributor scoped
-# to the ACS resource. Re-check the current ACS "authenticate with managed
-# identity" docs before running in case a narrower role now exists.
-#
+# Why the grant is needed: AcsEmailNotificationService authenticates to ACS with
+# the API's system-assigned managed identity (DefaultAzureCredential). Before
+# #489 that identity held roles for Key Vault + Storage only — none on the ACS
+# resource — so EmailClient.SendAsync returned 403. ACS has no granular "email
+# sender" data-plane role as of writing; the documented minimum is Contributor
+# scoped to the ACS resource. Re-check the current ACS "authenticate with managed
+# identity" docs periodically in case a narrower role appears.
+
+# ── (0) Redeploy — applies the Bicep grant + sender-address app setting ──────
+# STAGING: Section 1a.  PROD: Section 1b.
+
+# ── (1) MANUAL FALLBACK — grant Contributor on the ACS resource by hand ─────
+# Only if the Bicep grant has not propagated or the target env's Bicep is older.
+# Run the Section 0 setup block first ($ROLE_CONTRIBUTOR etc.).
+
 # STAGING (API on B1 — primary identity only):
-#   ACS_ID=$(az communication show \
-#     --name acs-rvs-notify-staging-wus3-s01-001 \
-#     --resource-group rg-rvs-staging-westus3 --query id -o tsv)
-#   API_MI=$(az webapp show \
-#     --name app-rvs-api-staging-wus3 \
-#     --resource-group rg-rvs-staging-westus3 --query identity.principalId -o tsv)
-#   az role assignment create \
-#     --assignee "$API_MI" --role "$ROLE_CONTRIBUTOR" --scope "$ACS_ID"
-#
+ACS_ID=$(az communication show \
+  --name acs-rvs-notify-staging-wus3-s01-001 \
+  --resource-group rg-rvs-staging-westus3 --query id -o tsv)
+API_MI=$(az webapp show \
+  --name app-rvs-api-staging-wus3 \
+  --resource-group rg-rvs-staging-westus3 --query identity.principalId -o tsv)
+az role assignment create \
+  --assignee "$API_MI" --role "$ROLE_CONTRIBUTOR" --scope "$ACS_ID"
+
 # PROD (API on S1 — also grant the deployment-slot identity):
-#   ACS_ID=$(az communication show \
-#     --name acs-rvs-notify-prod-wus3-s01-001 \
-#     --resource-group rg-rvs-prod-westus3 --query id -o tsv)
-#   API_MI=$(az webapp show \
-#     --name app-rvs-api-prod-wus3 \
-#     --resource-group rg-rvs-prod-westus3 --query identity.principalId -o tsv)
-#   SLOT_MI=$(az webapp identity show \
-#     --name app-rvs-api-prod-wus3 --slot staging \
-#     --resource-group rg-rvs-prod-westus3 --query principalId -o tsv)
-#   az role assignment create --assignee "$API_MI"  --role "$ROLE_CONTRIBUTOR" --scope "$ACS_ID"
-#   az role assignment create --assignee "$SLOT_MI" --role "$ROLE_CONTRIBUTOR" --scope "$ACS_ID"
-#
-# Also part of #489 (config, not RBAC — do in Bicep/appsettings, not here):
-#   - source AzureCommunicationServices:Email:FromAddress from the deployed
-#     managed domain (communicationServices.outputs.azureManagedMailFrom),
-#     drop the hardcoded DoNotReply@<guid>.azurecomm.net in RVS.API/appsettings.json
-#   - point a staging Location's packetConfig.recipients at a real mailbox
-#   - read back the real sender domain:
-#       az communication email domain show ... --query "properties.fromSenderDomain"
+ACS_ID=$(az communication show \
+  --name acs-rvs-notify-prod-wus3-s01-001 \
+  --resource-group rg-rvs-prod-westus3 --query id -o tsv)
+API_MI=$(az webapp show \
+  --name app-rvs-api-prod-wus3 \
+  --resource-group rg-rvs-prod-westus3 --query identity.principalId -o tsv)
+SLOT_MI=$(az webapp identity show \
+  --name app-rvs-api-prod-wus3 --slot staging \
+  --resource-group rg-rvs-prod-westus3 --query principalId -o tsv)
+az role assignment create --assignee "$API_MI"  --role "$ROLE_CONTRIBUTOR" --scope "$ACS_ID"
+az role assignment create --assignee "$SLOT_MI" --role "$ROLE_CONTRIBUTOR" --scope "$ACS_ID"
+
+# Verify the grant (expect Contributor for the API MI, + the slot MI in prod):
+az role assignment list --scope "$ACS_ID" \
+  --query '[].{principal:principalId, role:roleDefinitionName}' -o table
+
+# ── (2) POST-DEPLOY CHECKS — not expressible in Bicep ───────────────────────
+
+# (a) Managed domain provisioned + verified (AzureManaged verification can lag a
+#     few minutes; sends fail with DomainNotLinked until it is Succeeded):
+az communication email domain show \
+  --domain-name AzureManagedDomain \
+  --email-service-name acs-rvs-notify-staging-wus3-s01-001-email \
+  --resource-group rg-rvs-staging-westus3 \
+  --query '{state:properties.provisioningState, verification:properties.verificationStates}' -o json
+
+# (b) Read back the real sender domain and confirm the deployed app setting
+#     matches DoNotReply@<domain>:
+az communication email domain show \
+  --domain-name AzureManagedDomain \
+  --email-service-name acs-rvs-notify-staging-wus3-s01-001-email \
+  --resource-group rg-rvs-staging-westus3 \
+  --query 'properties.fromSenderDomain' -o tsv
+az webapp config appsettings list \
+  --name app-rvs-api-staging-wus3 --resource-group rg-rvs-staging-westus3 \
+  --query "[?name=='AzureCommunicationServices__Email__FromAddress'].value" -o tsv
+
+# (c) ACS email send quota — Azure-managed domains start low (~100 recipients/day,
+#     low rate). Request an increase via Azure support if the demo needs more.
+#     Portal → ACS → Email → Domains → AzureManagedDomain → (quota shown there).
+
+# (d) Point at least one staging Location's packetConfig.recipients at a REAL
+#     mailbox you control (seed data uses RFC 2606 .example.com addresses that
+#     hard-bounce). packetConfig.enabled already defaults to true.
+#       PUT /api/dealers/{dealerId}/locations/{locationId}   (body: packetConfig.recipients)
+#     or edit the locations container directly in Cosmos.
+
+# (e) End-to-end: complete a staging intake, then in App Insights expect
+#     "ACS packet email send initiated ..." (info) from AcsEmailNotificationService.
+#     A failure logs "Packet email dispatch failed ..." (error) from
+#     PacketGenerationService and is otherwise swallowed (retry/idempotency = #438).
+#     Confirm the mail arrives with the PDF + photo attachments, subject
+#     "[RVS] {category} — {year} {make} {model} — {customer last name}".
 
 
 # ══════════════════════════════════════════════════════════════════════════════

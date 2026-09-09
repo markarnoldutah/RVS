@@ -29,7 +29,7 @@
 | Key Vault + role assignments | `key-vault.bicep` | `deployKeyVault` |
 | Cosmos account, database, 10 containers | `cosmos-db.bicep` | `deployCosmosDb` |
 | Storage account, CORS, `rvs-attachments`, 4 role assignments | `storage-account.bicep` | `deployStorageAccount` |
-| ACS + Email Service + managed domain | `communication-services.bicep` | `deployAcs` |
+| ACS + Email Service + managed domain + 2 role assignments | `communication-services.bicep` | `deployAcs`; role assignments only when an App Service principal is supplied |
 | Two Static Web Apps + custom domains | `static-web-app.bicep` | `deploySwa` |
 | DNS zones + record sets | `dns.bicep` | `deploySwa && deployDns` |
 | DNS Zone Contributor grants | `dns-zone-contributor.bicep` | `deploySwa && deployDns && env=='prod' && principals supplied` |
@@ -85,13 +85,14 @@ Role assignments:
 
 - **Key Vault Secrets User** → app + slot, at vault scope
 - **Storage Blob Data Contributor** and **Storage Blob Delegator** → app + slot, at account scope
+- **Contributor** → app + slot, at ACS resource scope (ACS has no granular email-send data-plane role; the API sends the packet email via managed identity)
 - **DNS Zone Contributor** → supplied principals, at zone scope
 
 There is no RBAC grant to Cosmos or OpenAI. Both are consumed by key, read from Key Vault.
 
 Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint, key, vision/text/whisper deployment names, Whisper endpoint and key), `CosmosDb--Endpoint/Key/DatabaseId`, `BlobStorage--Endpoint`, `AzureCommunicationServices--Endpoint/ConnectionString`, `ApplicationInsights--ConnectionString`, `Auth0--*`.
 
-`app-service-config.bicep` sets only three app settings — `ASPNETCORE_ENVIRONMENT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `KeyVault__VaultUri`. Everything else is pulled by the Key Vault configuration provider at startup using the managed identity. Locally, development uses `appsettings.Development.json` plus `dotnet user-secrets`, and Blob uses `AzureCliCredential` directly to avoid the managed-identity probe timeout.
+`app-service-config.bicep` sets four app settings — `ASPNETCORE_ENVIRONMENT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `KeyVault__VaultUri`, and (when `deployAcs`) `AzureCommunicationServices__Email__FromAddress` = `DoNotReply@<ACS managed domain>`, so the packet-email sender tracks the deployed ACS resource instead of a hardcoded value. Everything else is pulled by the Key Vault configuration provider at startup using the managed identity. Locally, development uses `appsettings.Development.json` plus `dotnet user-secrets`, and Blob uses `AzureCliCredential` directly to avoid the managed-identity probe timeout.
 
 ---
 

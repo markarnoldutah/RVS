@@ -25,6 +25,9 @@ param environmentName string
 @description('Key Vault URI for configuration provider. Leave empty to skip.')
 param keyVaultUri string = ''
 
+@description('Packet-email sender address, sourced from the deployed ACS Azure-managed domain (e.g. DoNotReply@<guid>.azurecomm.net). Leave empty to skip — the API then falls back to its built-in default.')
+param acsEmailFromAddress string = ''
+
 @description('When true, also applies settings to the staging deployment slot with ASPNETCORE_ENVIRONMENT=Staging.')
 param configureStagingSlot bool = false
 
@@ -54,6 +57,11 @@ resource appSettings 'Microsoft.Web/sites/config@2024-11-01' = {
       ? {
           KeyVault__VaultUri: keyVaultUri
         }
+      : {},
+    !empty(acsEmailFromAddress)
+      ? {
+          AzureCommunicationServices__Email__FromAddress: acsEmailFromAddress
+        }
       : {}
   )
 }
@@ -80,6 +88,11 @@ resource stagingSlotAppSettings 'Microsoft.Web/sites/slots/config@2024-11-01' = 
     !empty(keyVaultUri)
       ? {
           KeyVault__VaultUri: keyVaultUri
+        }
+      : {},
+    !empty(acsEmailFromAddress)
+      ? {
+          AzureCommunicationServices__Email__FromAddress: acsEmailFromAddress
         }
       : {}
   )
