@@ -99,12 +99,16 @@ builder.Services.AddHttpClient("Auth0.Token");
 // Decorate the default IAccessTokenProvider with refresh_token-backed renewal
 // so users stay signed in for the full 15-day rolling refresh-token lifetime
 // (RVS_Technical_PRD.md §10.1) instead of being bounced to login when the
-// iframe silent-renewal path fails. The concrete RemoteAuthenticationService<>
-// registered by AddOidcAuthentication is resolved directly to avoid a circular
-// IAccessTokenProvider lookup.
+// iframe silent-renewal path fails.
+//
+// The inner provider is the RemoteAuthenticationService<> that AddOidcAuthentication
+// registers as the AuthenticationStateProvider implementation. It is NOT registered
+// under its own concrete type, so we resolve AuthenticationStateProvider and cast to
+// IAccessTokenProvider (the framework's own idiom). Resolving IAccessTokenProvider
+// here would recurse into this very factory.
 builder.Services.AddScoped<IAccessTokenProvider>(sp =>
     new RefreshingAccessTokenProvider(
-        sp.GetRequiredService<RemoteAuthenticationService<RemoteAuthenticationState, RemoteUserAccount, OidcProviderOptions>>(),
+        (IAccessTokenProvider)sp.GetRequiredService<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider>(),
         sp.GetRequiredService<IHttpClientFactory>(),
         sp.GetRequiredService<IJSRuntime>(),
         builder.Configuration,
