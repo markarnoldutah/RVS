@@ -553,6 +553,119 @@ public class ServiceRequestServiceTests
             p => p.RequestRegenerationAsync("ten_1", "sr_42", It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // ── SetCustomerStatusNoteAsync (Spec C-9) ────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SetCustomerStatusNoteAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.SetCustomerStatusNoteAsync(tenantId!, "sr_1", "note");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SetCustomerStatusNoteAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.SetCustomerStatusNoteAsync("ten_1", id!, "note");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WhenNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest?)null);
+
+        var act = () => _sut.SetCustomerStatusNoteAsync("ten_1", "sr_missing", "note");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WhenNoteExceedsMaxLength_ShouldThrowArgumentException()
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var act = () => _sut.SetCustomerStatusNoteAsync("ten_1", existing.Id, new string('a', 281));
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WhenNoteHasBlockedCharacter_ShouldThrowArgumentException()
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var act = () => _sut.SetCustomerStatusNoteAsync("ten_1", existing.Id, "waiting on <part>");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WhenNoteIsInvalid_ShouldNotLeakNoteTextInExceptionMessage()
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var secret = "SECRET-CUSTOMER-DETAIL-" + new string('a', 280);
+
+        var thrown = await Assert.ThrowsAsync<ArgumentException>(
+            () => _sut.SetCustomerStatusNoteAsync("ten_1", existing.Id, secret));
+
+        thrown.Message.Should().NotContain("SECRET-CUSTOMER-DETAIL");
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WithValidNote_ShouldPersistTrimmedNoteWithAuditIdentity()
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.SetCustomerStatusNoteAsync(
+            "ten_1", existing.Id, "  Waiting on a back-ordered slide motor, ETA Friday.  ");
+
+        result.CustomerStatusNote.Should().NotBeNull();
+        result.CustomerStatusNote!.Text.Should().Be("Waiting on a back-ordered slide motor, ETA Friday.");
+        result.CustomerStatusNote.UpdatedByUserId.Should().Be("usr_test");
+        result.UpdatedByUserId.Should().Be("usr_test");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SetCustomerStatusNoteAsync_WithBlankNote_ShouldClearExistingNoteAndPersist(string? note)
+    {
+        var existing = BuildServiceRequest();
+        existing.SetCustomerStatusNote("An earlier note.", "usr_prev");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.SetCustomerStatusNoteAsync("ten_1", existing.Id, note);
+
+        result.CustomerStatusNote.Should().BeNull();
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static ServiceRequest BuildServiceRequest(string? id = null, string tenantId = "ten_1") => new()

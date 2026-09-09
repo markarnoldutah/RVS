@@ -95,16 +95,17 @@ public class CustomerIntakeDtoTests
     }
 
     [Fact]
-    public void CustomerStatusItemResponseDto_ExposesOnlyTheSpecX1Fields()
+    public void CustomerStatusItemResponseDto_ExposesOnlyTheSpecX1AndC9Fields()
     {
-        // Spec X-1: the customer status page shows unit, submission date, current
-        // status, and the location's phone number — nothing more.
+        // Spec X-1 shows unit, submission date, current status, and the location's phone
+        // number; Spec C-9 adds the manager-authored status note. Nothing customer-identifying
+        // and no free-text problem description crosses this boundary.
         var properties = typeof(CustomerStatusItemResponseDto)
             .GetProperties()
             .Select(p => p.Name)
             .OrderBy(n => n);
 
-        properties.Should().Equal("LocationPhone", "Status", "SubmittedAtUtc", "Unit");
+        properties.Should().Equal("LocationPhone", "Status", "StatusNote", "SubmittedAtUtc", "Unit");
     }
 
     [Fact]
@@ -116,12 +117,14 @@ public class CustomerIntakeDtoTests
             Unit = "2023 Thor Ace",
             SubmittedAtUtc = submittedAt,
             Status = "InProgress",
-            LocationPhone = "555-0100"
+            LocationPhone = "555-0100",
+            StatusNote = "Waiting on a back-ordered slide motor, ETA Friday."
         };
 
         dto.Unit.Should().Be("2023 Thor Ace");
         dto.SubmittedAtUtc.Should().Be(submittedAt);
         dto.Status.Should().Be("InProgress");
         dto.LocationPhone.Should().Be("555-0100");
+        dto.StatusNote.Should().Be("Waiting on a back-ordered slide motor, ETA Friday.");
     }
 }

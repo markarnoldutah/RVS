@@ -119,6 +119,62 @@ public class ServiceRequestsControllerTests
         _serviceMock.Verify(s => s.RegeneratePacketAsync(TenantId, "sr_1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task SetStatusNote_WithValidNote_ShouldReturnOkAndDelegateWithTenantFromClaims()
+    {
+        var sr = BuildServiceRequest();
+        sr.SetCustomerStatusNote("Waiting on a back-ordered slide motor, ETA Friday.", "usr_mgr");
+        _serviceMock.Setup(s => s.SetCustomerStatusNoteAsync(
+                TenantId, sr.Id, "Waiting on a back-ordered slide motor, ETA Friday.", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var request = new ServiceRequestStatusNoteRequestDto { Note = "Waiting on a back-ordered slide motor, ETA Friday." };
+        var result = await _sut.SetStatusNote("dlr_1", sr.Id, request, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = ok.Value.Should().BeOfType<ServiceRequestDetailResponseDto>().Subject;
+        dto.CustomerStatusNote.Should().NotBeNull();
+        dto.CustomerStatusNote!.Text.Should().Be("Waiting on a back-ordered slide motor, ETA Friday.");
+        _serviceMock.Verify(s => s.SetCustomerStatusNoteAsync(
+            TenantId, sr.Id, "Waiting on a back-ordered slide motor, ETA Friday.", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetStatusNote_WithNullNote_ShouldReturnOkAndClear()
+    {
+        var sr = BuildServiceRequest();
+        _serviceMock.Setup(s => s.SetCustomerStatusNoteAsync(TenantId, sr.Id, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var result = await _sut.SetStatusNote("dlr_1", sr.Id, new ServiceRequestStatusNoteRequestDto { Note = null }, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeOfType<ServiceRequestDetailResponseDto>()
+            .Which.CustomerStatusNote.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetStatusNote_WhenNoteTooLong_ShouldReturn422AndNotCallService()
+    {
+        var request = new ServiceRequestStatusNoteRequestDto { Note = new string('a', 281) };
+
+        var result = await _sut.SetStatusNote("dlr_1", "sr_1", request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+        _serviceMock.Verify(s => s.SetCustomerStatusNoteAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SetStatusNote_WhenNoteHasBlockedCharacter_ShouldReturn422()
+    {
+        var request = new ServiceRequestStatusNoteRequestDto { Note = "waiting on <part>" };
+
+        var result = await _sut.SetStatusNote("dlr_1", "sr_1", request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+    }
+
     private static ServiceRequest BuildServiceRequest() => new()
     {
         Id = "sr_test_1",

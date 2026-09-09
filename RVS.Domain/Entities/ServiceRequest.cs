@@ -177,6 +177,66 @@ public class ServiceRequest : EntityBase
     /// </summary>
     [JsonProperty("packetEmailDelivery")]
     public PacketEmailDeliveryEmbedded PacketEmailDelivery { get; set; } = new();
+
+    /// <summary>
+    /// The current manager-authored note shown to the customer on the status page
+    /// (<c>Spec C-9</c>). <c>null</c> when no note is set — the default, and the state after a
+    /// note is cleared. Exactly one note per request; editing overwrites it (no thread, no
+    /// customer-visible history). One-directional: the customer can never write here.
+    /// The text is never written to application logs (same rule as <see cref="IssueDescription"/>).
+    /// </summary>
+    [JsonProperty("customerStatusNote")]
+    public CustomerStatusNoteEmbedded? CustomerStatusNote { get; set; }
+
+    /// <summary>
+    /// Sets or clears the customer-facing status note (<c>Spec C-9</c>). A null, empty, or
+    /// whitespace-only <paramref name="note"/> clears it; otherwise the trimmed text is stored
+    /// with an audit stamp. Either way the entity is marked updated by <paramref name="userId"/>.
+    /// Callers are responsible for validating the note first
+    /// (<see cref="Validation.CustomerStatusNoteValidator"/>).
+    /// </summary>
+    /// <param name="note">The note text, or null/blank to clear.</param>
+    /// <param name="userId">The manager making the change (audit identity).</param>
+    public void SetCustomerStatusNote(string? note, string? userId)
+    {
+        var trimmed = note?.Trim();
+
+        CustomerStatusNote = string.IsNullOrEmpty(trimmed)
+            ? null
+            : new CustomerStatusNoteEmbedded
+            {
+                Text = trimmed,
+                UpdatedAtUtc = DateTime.UtcNow,
+                UpdatedByUserId = userId
+            };
+
+        MarkAsUpdated(userId);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: CustomerStatusNoteEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// The single manager-authored note that renders on the customer status page (<c>Spec C-9</c>),
+/// embedded on a <see cref="ServiceRequest"/>. One-directional (manager → customer); the customer
+/// has no path to write or reply. Overwritten on edit — there is no history. The text is never
+/// written to application logs.
+/// </summary>
+public class CustomerStatusNoteEmbedded
+{
+    /// <summary>The note text, trimmed and sanitised on write. Shown verbatim to the customer.</summary>
+    [JsonProperty("text")]
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>UTC time the note was last set or edited.</summary>
+    [JsonProperty("updatedAtUtc")]
+    public DateTime UpdatedAtUtc { get; set; }
+
+    /// <summary>The manager who last set or edited the note. Null only for legacy/system writes.</summary>
+    [JsonProperty("updatedByUserId")]
+    public string? UpdatedByUserId { get; set; }
 }
 
 // ---------------------------------------------------------------------------

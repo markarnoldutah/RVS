@@ -28,6 +28,25 @@ public sealed record ServiceRequestDetailResponseDto
     public List<DiagnosticResponseDto> DiagnosticResponses { get; init; } = [];
     public List<AttachmentDto> Attachments { get; init; } = [];
     public AiEnrichmentMetadataDto? AiEnrichment { get; init; }
+
+    /// <summary>
+    /// The current manager-authored customer status note (<c>Spec C-9</c>), or <c>null</c> when
+    /// none is set. Shown to the customer on the status page; editable only from the manager app.
+    /// </summary>
+    public CustomerStatusNoteDto? CustomerStatusNote { get; init; }
+
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
+}
+
+/// <summary>
+/// The manager-authored customer status note (<c>Spec C-9</c>) as returned to the manager app.
+/// </summary>
+public sealed record CustomerStatusNoteDto
+{
+    /// <summary>The note text shown to the customer.</summary>
+    public string Text { get; init; } = default!;
+
+    /// <summary>UTC time the note was last set or edited.</summary>
+    public DateTime UpdatedAtUtc { get; init; }
 }

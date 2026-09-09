@@ -44,6 +44,9 @@ public static class ServiceRequestMapper
             DiagnosticResponses = entity.DiagnosticResponses.Select(d => d.ToDto()).ToList(),
             Attachments = entity.Attachments.Select(a => a.ToDto()).ToList(),
             AiEnrichment = entity.AiEnrichment?.ToDto(),
+            CustomerStatusNote = entity.CustomerStatusNote is { } note
+                ? new CustomerStatusNoteDto { Text = note.Text, UpdatedAtUtc = note.UpdatedAtUtc }
+                : null,
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
@@ -80,10 +83,10 @@ public static class ServiceRequestMapper
     }
 
     /// <summary>
-    /// Maps a <see cref="ServiceRequest"/> to the minimal customer-facing status view
-    /// (<c>Spec X-1</c>): the unit, the submission date, the current status, and the
-    /// servicing location's phone number. Nothing else — no customer identity, no
-    /// free-text issue description, no attachments — is carried across this boundary.
+    /// Maps a <see cref="ServiceRequest"/> to the customer-facing status view
+    /// (<c>Spec X-1</c> / <c>C-9</c>): the unit, the submission date, the current status, the
+    /// servicing location's phone number, and any manager-authored status note. No customer
+    /// identity and no free-text problem description are carried across this boundary.
     /// </summary>
     /// <param name="entity">The service request.</param>
     /// <param name="locationPhone">Phone number of the servicing location, if known.</param>
@@ -96,7 +99,10 @@ public static class ServiceRequestMapper
             Unit = ComposeAssetDisplay(entity.AssetInfo),
             SubmittedAtUtc = entity.CreatedAtUtc,
             Status = entity.Status,
-            LocationPhone = string.IsNullOrWhiteSpace(locationPhone) ? null : locationPhone.Trim()
+            LocationPhone = string.IsNullOrWhiteSpace(locationPhone) ? null : locationPhone.Trim(),
+            StatusNote = string.IsNullOrWhiteSpace(entity.CustomerStatusNote?.Text)
+                ? null
+                : entity.CustomerStatusNote.Text
         };
     }
 

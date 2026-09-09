@@ -62,6 +62,39 @@ public class StatusControllerTests
     }
 
     [Fact]
+    public async Task GetStatus_WhenServiceRequestHasStatusNote_ShouldIncludeItOnTheItem()
+    {
+        _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildGlobalCustomerAcct());
+        _profileServiceMock.Setup(s => s.GetByIdAsync("ten_1", "prof_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCustomerProfile());
+        _locationServiceMock.Setup(s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildLocation());
+        var sr = BuildServiceRequest();
+        sr.SetCustomerStatusNote("Slide motor on back order, ETA Friday.", "usr_mgr");
+        _srServiceMock.Setup(s => s.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
+        dto.ServiceRequests[0].StatusNote.Should().Be("Slide motor on back order, ETA Friday.");
+    }
+
+    [Fact]
+    public async Task GetStatus_WhenServiceRequestHasNoStatusNote_ShouldReturnNullStatusNote()
+    {
+        ArrangeHappyPath();
+
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
+        dto.ServiceRequests[0].StatusNote.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetStatus_WhenLocationNotFound_ShouldReturnNullLocationPhone()
     {
         ArrangeHappyPath();

@@ -107,6 +107,31 @@ public sealed class ServiceRequestApiClient
     }
 
     /// <summary>
+    /// Sets or clears the manager-authored customer status note (<c>Spec C-9</c>) for a service
+    /// request. Pass <paramref name="note"/> as null or blank to clear it. The server caps the
+    /// length at 280 characters and rejects blocked characters with <c>422</c>.
+    /// </summary>
+    public async Task<ServiceRequestDetailResponseDto> SetStatusNoteAsync(
+        string dealershipId,
+        string serviceRequestId,
+        string? note,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+
+        var response = await _httpClient.PutAsJsonAsync(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/status-note",
+            new ServiceRequestStatusNoteRequestDto { Note = note },
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<ServiceRequestDetailResponseDto>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize status-note response.");
+    }
+
+    /// <summary>
     /// Applies outcome fields to multiple service requests in a single batch.
     /// </summary>
     public async Task<BatchOutcomeResponseDto> BatchOutcomeAsync(
