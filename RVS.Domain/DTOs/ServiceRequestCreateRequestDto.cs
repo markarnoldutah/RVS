@@ -34,4 +34,12 @@ public sealed record ServiceRequestCreateRequestDto
     /// Null when the assessment matched or was not performed.
     /// </summary>
     public string? CapabilityMismatchNote { get; init; }
+
+    /// <summary>
+    /// How many attachments the client is about to upload (issue #516). Attachments are
+    /// confirmed after this submission returns, so packet generation waits for this many to
+    /// arrive before rendering — otherwise the packet ships with no photos. Leave at <c>0</c>
+    /// when there is nothing to upload; the packet then generates immediately.
+    /// </summary>
+    public int ExpectedAttachmentCount { get; init; }
 }

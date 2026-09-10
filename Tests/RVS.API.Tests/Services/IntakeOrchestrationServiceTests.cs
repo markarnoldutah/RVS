@@ -850,6 +850,41 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.TenantId.Should().Be("ten_test");
     }
 
+    // ── Expected attachment count (issue #516) ───────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldRecordHowManyAttachmentsIntakePromised()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with { ExpectedAttachmentCount = 3 };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.PacketGeneration.ExpectedAttachmentCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNoAttachmentsArePromised_ShouldRecordZero()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.PacketGeneration.ExpectedAttachmentCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenPromisedAttachmentCountIsNegative_ShouldClampToZero()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with { ExpectedAttachmentCount = -2 };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.PacketGeneration.ExpectedAttachmentCount.Should().Be(
+            0, "a negative promise must never stall packet generation");
+    }
+
     // ── Full Orchestration ───────────────────────────────────────────────────
 
     [Fact]

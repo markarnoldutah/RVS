@@ -7,7 +7,8 @@ namespace RVS.API.Workers;
 /// Background consumer for <see cref="IPacketGenerationQueue"/> (issue #434). Drains queued
 /// <see cref="PacketGenerationJob"/>s, runs one <see cref="IPacketGenerationService.GenerateAsync"/>
 /// attempt each in its own DI scope, and re-queues after a short delay while attempts remain
-/// (<see cref="Entities.PacketGenerationEmbedded.MaxAttempts"/>). Generation failures are handled
+/// (<see cref="Entities.PacketGenerationEmbedded.MaxAttempts"/>) or while the service is still
+/// waiting on intake attachments to finish uploading (issue #516). Generation failures are handled
 /// inside the service; only an unexpected fault reaches this loop, and it is logged and dropped
 /// rather than re-queued, so one poison job cannot spin.
 /// </summary>
@@ -39,12 +40,21 @@ public sealed class PacketGenerationWorker : BackgroundService
         {
             var outcome = await ProcessOnceAsync(job, stoppingToken);
 
-            if (outcome == PacketGenerationOutcome.Retry)
+            if (ShouldRequeue(outcome))
             {
                 ScheduleRetry(job, stoppingToken);
             }
         }
     }
+
+    /// <summary>
+    /// Whether <paramref name="outcome"/> expects the job to come back round: a failed attempt
+    /// with attempts remaining, or a wait for intake attachments that have not finished
+    /// uploading (issue #516). <c>null</c> — an unexpected fault — is never re-queued, so one
+    /// poison job cannot spin.
+    /// </summary>
+    internal static bool ShouldRequeue(PacketGenerationOutcome? outcome) =>
+        outcome is PacketGenerationOutcome.Retry or PacketGenerationOutcome.WaitingForAttachments;
 
     /// <summary>
     /// Runs one generation attempt for <paramref name="job"/> in its own DI scope. Returns the
@@ -75,7 +85,8 @@ public sealed class PacketGenerationWorker : BackgroundService
 
     /// <summary>
     /// Re-queues <paramref name="job"/> after <see cref="RetryDelay"/> on a detached task so the
-    /// worker keeps draining other jobs meanwhile.
+    /// worker keeps draining other jobs meanwhile. Serves both a failed-but-retryable attempt
+    /// and a wait for in-flight intake uploads — the delay doubles as the poll interval.
     /// </summary>
     private void ScheduleRetry(PacketGenerationJob job, CancellationToken stoppingToken)
     {

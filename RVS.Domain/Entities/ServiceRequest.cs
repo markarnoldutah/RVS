@@ -416,6 +416,18 @@ public class PacketGenerationEmbedded
     [JsonProperty("alertRaised")]
     public bool AlertRaised { get; set; }
 
+    /// <summary>
+    /// How many attachments the intake client said it was about to upload (issue #516).
+    /// The customer's photos are uploaded <b>after</b> the submission that creates this request,
+    /// so generation started the instant the job is enqueued would render a packet with no
+    /// photos. Generation holds off while <see cref="ServiceRequest.Attachments"/> is short of
+    /// this number and the upload window is still open, then renders whatever arrived.
+    /// <c>0</c> for requests with no attachments and for every non-intake origin — those
+    /// generate immediately.
+    /// </summary>
+    [JsonProperty("expectedAttachmentCount")]
+    public int ExpectedAttachmentCount { get; set; }
+
     /// <summary>Begins a new attempt: marks <c>Generating</c>, increments the attempt count, stamps the time.</summary>
     public void MarkGenerating()
     {

@@ -255,6 +255,10 @@
 
         try
         {
+            // The submission carries State.PendingUploadCount so the API knows how many
+            // attachments are still coming and defers packet generation until they land
+            // (issue #516). The upload loop below must stay in step with that promise —
+            // both use the same "buffered but not yet uploaded" predicate.
             var request = State.BuildCreateRequest();
             var result = await IntakeApi.SubmitServiceRequestAsync(State.Slug, request);
 
