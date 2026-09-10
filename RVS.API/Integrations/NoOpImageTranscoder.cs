@@ -4,9 +4,9 @@ namespace RVS.API.Integrations;
 
 /// <summary>
 /// Inert <see cref="IImageTranscoder"/> for the <c>Integrations:UseMocks</c> path: it claims
-/// nothing and transcodes nothing, so every upload is stored exactly as received. HEIC
+/// nothing and normalises nothing, so every upload is stored exactly as received. HEIC
 /// uploads then fall back to the packet's labelled placeholder, matching pre-<c>#508</c>
-/// behaviour.
+/// behaviour, and full-resolution photos flow through at native size as before <c>#562</c>.
 /// </summary>
 public sealed class NoOpImageTranscoder : IImageTranscoder
 {
@@ -16,12 +16,12 @@ public sealed class NoOpImageTranscoder : IImageTranscoder
     public NoOpImageTranscoder(ILogger<NoOpImageTranscoder> logger) => _logger = logger;
 
     /// <inheritdoc />
-    public bool CanTranscode(string? contentType) => false;
+    public bool CanNormalize(string? contentType) => false;
 
     /// <inheritdoc />
-    public ImageTranscodeResult? TranscodeToJpeg(byte[] source, CancellationToken cancellationToken = default)
+    public ImageTranscodeResult? Normalize(byte[] source, string? contentType, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("NoOpImageTranscoder: would transcode {SourceBytes} bytes; keeping the original", source?.Length ?? 0);
+        _logger.LogDebug("NoOpImageTranscoder: would normalise {SourceBytes} bytes; keeping the original", source?.Length ?? 0);
         return null;
     }
 }

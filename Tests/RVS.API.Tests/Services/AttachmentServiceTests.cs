@@ -20,7 +20,7 @@ public class AttachmentServiceTests
     public AttachmentServiceTests()
     {
         _userContextMock.Setup(u => u.UserId).Returns("usr_test");
-        _transcoderMock.Setup(t => t.CanTranscode(It.IsAny<string>())).Returns(false);
+        _transcoderMock.Setup(t => t.CanNormalize(It.IsAny<string>())).Returns(false);
         _sut = new AttachmentService(
             _repoMock.Object,
             _blobMock.Object,
@@ -339,7 +339,7 @@ public class AttachmentServiceTests
     }
 
     [Fact]
-    public async Task ConfirmAttachmentAsync_WhenNonHeicImage_ShouldNotTouchBlobBytesOrTranscode()
+    public async Task ConfirmAttachmentAsync_WhenTranscoderDeclinesTheType_ShouldNotTouchBlobBytesOrNormalize()
     {
         var sr = BuildServiceRequest();
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
@@ -353,7 +353,7 @@ public class AttachmentServiceTests
 
         result.ContentType.Should().Be("image/jpeg");
         result.BlobUri.Should().Be("ten_1/sr_1/att_photo.jpg");
-        _transcoderMock.Verify(t => t.TranscodeToJpeg(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Never);
+        _transcoderMock.Verify(t => t.Normalize(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _blobMock.Verify(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _blobMock.Verify(b => b.UploadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _blobMock.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -372,11 +372,11 @@ public class AttachmentServiceTests
 
         var heicBytes = new byte[] { 1, 2, 3, 4 };
         var jpegBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0x10, 0x20, 0x30 };
-        _transcoderMock.Setup(t => t.CanTranscode("image/heic")).Returns(true);
+        _transcoderMock.Setup(t => t.CanNormalize("image/heic")).Returns(true);
         _blobMock.Setup(b => b.DownloadAsync("rvs-attachments", "ten_1/sr_1/att_photo.heic", It.IsAny<CancellationToken>()))
             .ReturnsAsync(heicBytes);
-        _transcoderMock.Setup(t => t.TranscodeToJpeg(heicBytes, It.IsAny<CancellationToken>()))
-            .Returns(new ImageTranscodeResult(jpegBytes, 4032, 3024));
+        _transcoderMock.Setup(t => t.Normalize(heicBytes, "image/heic", It.IsAny<CancellationToken>()))
+            .Returns(new ImageTranscodeResult(jpegBytes, "image/jpeg", 4032, 3024));
 
         var request = BuildConfirmRequest() with
         {
@@ -405,7 +405,7 @@ public class AttachmentServiceTests
     }
 
     [Fact]
-    public async Task ConfirmAttachmentAsync_WhenHeicTranscodeFails_ShouldKeepOriginalUpload()
+    public async Task ConfirmAttachmentAsync_WhenFullResolutionJpeg_ShouldStoreNormalisedBytesInPlace()
     {
         var sr = BuildServiceRequest();
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
@@ -415,26 +415,92 @@ public class AttachmentServiceTests
         _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
 
-        _transcoderMock.Setup(t => t.CanTranscode("image/heic")).Returns(true);
-        _blobMock.Setup(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new byte[] { 1, 2, 3, 4 });
-        _transcoderMock.Setup(t => t.TranscodeToJpeg(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
-            .Returns((ImageTranscodeResult?)null);
+        var originalBytes = new byte[4_000_000];
+        var smallerJpeg = new byte[] { 0xFF, 0xD8, 0xFF, 1, 2, 3, 4, 5 };
+        _transcoderMock.Setup(t => t.CanNormalize("image/jpeg")).Returns(true);
+        _blobMock.Setup(b => b.DownloadAsync("rvs-attachments", "ten_1/sr_1/att_photo.jpg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(originalBytes);
+        _transcoderMock.Setup(t => t.Normalize(originalBytes, "image/jpeg", It.IsAny<CancellationToken>()))
+            .Returns(new ImageTranscodeResult(smallerJpeg, "image/jpeg", 1600, 1200));
+
+        var result = await _sut.ConfirmAttachmentAsync("ten_1", sr.Id, BuildConfirmRequest());
+
+        result.ContentType.Should().Be("image/jpeg");
+        result.FileName.Should().Be("photo.jpg");
+        result.BlobUri.Should().Be("ten_1/sr_1/att_photo.jpg", "a JPEG that stays a JPEG is overwritten under the same blob name");
+        result.SizeBytes.Should().Be(smallerJpeg.Length);
+
+        _blobMock.Verify(b => b.UploadAsync(
+            "rvs-attachments", "ten_1/sr_1/att_photo.jpg", It.IsAny<Stream>(), "image/jpeg", It.IsAny<CancellationToken>()),
+            Times.Once);
+        _blobMock.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never, "an in-place overwrite has no separate original to delete");
+    }
+
+    [Fact]
+    public async Task ConfirmAttachmentAsync_WhenPngUpload_ShouldStayPngAndOverwriteInPlace()
+    {
+        var sr = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        _blobMock.Setup(b => b.BlobExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var originalBytes = new byte[2_000_000];
+        var smallerPng = new byte[] { 0x89, 0x50, 0x4E, 0x47, 1, 2, 3 };
+        _transcoderMock.Setup(t => t.CanNormalize("image/png")).Returns(true);
+        _blobMock.Setup(b => b.DownloadAsync("rvs-attachments", "ten_1/sr_1/att_shot.png", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(originalBytes);
+        _transcoderMock.Setup(t => t.Normalize(originalBytes, "image/png", It.IsAny<CancellationToken>()))
+            .Returns(new ImageTranscodeResult(smallerPng, "image/png", 1600, 900));
 
         var request = BuildConfirmRequest() with
         {
-            BlobName = "ten_1/sr_1/att_photo.heic",
-            FileName = "photo.heic",
-            ContentType = "image/heic",
-            SizeBytes = 900_000
+            BlobName = "ten_1/sr_1/att_shot.png",
+            FileName = "shot.png",
+            ContentType = "image/png",
+            SizeBytes = 2_000_000
         };
 
         var result = await _sut.ConfirmAttachmentAsync("ten_1", sr.Id, request);
 
-        result.ContentType.Should().Be("image/heic");
-        result.FileName.Should().Be("photo.heic");
-        result.BlobUri.Should().Be("ten_1/sr_1/att_photo.heic");
-        result.SizeBytes.Should().Be(900_000);
+        result.ContentType.Should().Be("image/png");
+        result.FileName.Should().Be("shot.png");
+        result.BlobUri.Should().Be("ten_1/sr_1/att_shot.png");
+        result.SizeBytes.Should().Be(smallerPng.Length);
+
+        _blobMock.Verify(b => b.UploadAsync(
+            "rvs-attachments", "ten_1/sr_1/att_shot.png", It.IsAny<Stream>(), "image/png", It.IsAny<CancellationToken>()),
+            Times.Once);
+        _blobMock.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ConfirmAttachmentAsync_WhenNormaliserReturnsNull_ShouldKeepOriginalUpload()
+    {
+        var sr = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        _blobMock.Setup(b => b.BlobExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        _transcoderMock.Setup(t => t.CanNormalize("image/jpeg")).Returns(true);
+        _blobMock.Setup(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new byte[] { 1, 2, 3, 4 });
+        _transcoderMock.Setup(t => t.Normalize(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((ImageTranscodeResult?)null);
+
+        var result = await _sut.ConfirmAttachmentAsync("ten_1", sr.Id, BuildConfirmRequest());
+
+        result.ContentType.Should().Be("image/jpeg");
+        result.FileName.Should().Be("photo.jpg");
+        result.BlobUri.Should().Be("ten_1/sr_1/att_photo.jpg");
+        result.SizeBytes.Should().Be(2048);
 
         _blobMock.Verify(b => b.UploadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _blobMock.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
