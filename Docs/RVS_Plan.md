@@ -1,10 +1,12 @@
 # RVS — Plan
 
-**Version:** 1.3 · September 7, 2026
+**Version:** 1.4 · September 9, 2026
 
 ---
 
 ## Build order
+
+### The eight items (stable reference — other docs cite these numbers)
 
 | # | Work | Rough size |
 |---|---|---|
@@ -17,15 +19,47 @@
 | **7** | Stripe billing + trial | 2 sprints — **do not start until three shops are running.** The first five customers get a hand-sent invoice and a Stripe payment link. Two sprints off the critical path, and you learn what to build |
 | **8** | Descope: delete archived-scope code — analytics, Kanban board, batch-outcome, SMS, technician/scheduling fields, `build-mobile.yml` | ~1 sprint, can run in parallel |
 
-Items 1–2 are the demo. You can pitch both prospects the moment those work end to end, before the manager app exists — that's the point of the design.
+### Sequenced for the first mobile technician (operative plan)
 
-Item 6 runs alongside everything and is the only thing on this list that isn't code. Don't let it slip to the end; the fallback question bank is what makes the packet read as expert rather than generic, and it's the cheapest quality lever in the product.
+The target is **one mobile technician live on a paid 60-day pilot in the fewest working days**. He never opens the manager app and has no DMS, so build item 4 and the DMS-verification half of item 2 come off the critical path entirely. Items 1–3 are substantially shipped already (see the merged issues on `main`); what is left is the packet reading as expert, landing by email every time, and deploying to production.
+
+**Critical path — nothing here is parallelisable away, roughly in order:**
+
+| Step | Work | Issues | Why it gates the first tech |
+|---|---|---|---|
+| 1 | Packet layout + PDF photos render | #492 (items 1–6, 8) | A packet with no photos, or an "RV ServiceFlow" masthead, is not shippable. **Defer** #492 item 7 (structured-assessment spike) and the per-location branding UI — neither blocks him. |
+| 2 | Finalise the issue-category vocabulary | #452 | The packet's most differentiating section. Domain work — start day one, alongside everything. |
+| 3 | Per-category fallback diagnostic questions | #453 | The cheapest quality lever in the product; makes the packet read as expert with the AI switched off. Needs #452. |
+| 4 | Retire the four technician-side vocabularies | #454 | Removes the "Not yet classified" fields from the packet. Small, and it improves what lands in the inbox. |
+| 5 | Hide the AI summary + diagnostics from the customer at intake | #483 | The tech gets the assessment; the customer should not be shown a machine guess about their rig. |
+| 6 | Production infra: reachable Azure OpenAI, real parameter values | #463, #466 | The Bicep as written cannot reach Azure OpenAI in prod and ships placeholder values. Hard deploy blockers. |
+| 7 | Whisper behind a flag; tenant access gate proven end to end | #467, #465 | #467 makes the AI spend per-environment and reversible; #465 proves the disabled-tenant path before a real tenant depends on it. |
+| 8 | Packet-email reliability: bounce wiring + LogCritical alert | #497, #494 | The whole model is "runs on email alone." A silently dropped packet email is the one unrecoverable failure. |
+| 9 | Customer confirmation email layout; voice-recording indicator | #496, #479 | Customer-facing polish on the intake path. Small, do last. |
+
+Non-code blocker, unchanged: the one-page, phone-signable design-partner agreement carrying the X-3 anonymisation licence (decision log, Sep 6 2026). It gates go-live alongside the steps above.
+
+**Runs fully in parallel — not gated by the critical path, does not gate go-live:**
+
+- Descope (epic #423 → #455–#461): analytics, Kanban, batch-outcome, SMS, scheduling/assignment fields, `build-mobile.yml`. ~1 sprint, start any time.
+- Cosmos client-config reconcile (#477).
+
+**Deferred until the first mobile tech is live:**
+
+| Work | Issues | Trigger to start |
+|---|---|---|
+| Manager app to thin scope (build item 4) | epic #420 → #443–#448, plus #498, #468, #470 | The dealer-group pitch. The mobile tech does not use it. |
+| One-click status links in the packet email (build item 5, C-7) | reuses #440 token machinery | After the manager app. |
+| Stripe billing + trial (build item 7) | epic #425, #478 | Three shops running. First five customers get a hand-sent invoice + Stripe link. |
+| Intake dealer-capability search when no slug is supplied | #471 | Explicitly future state. |
+
+Item 6 (steps 2–4 above) runs alongside everything and is the only thing on this list that isn't code. Don't let it slip to the end; the fallback question bank is what makes the packet read as expert rather than generic, and it's the cheapest quality lever in the product.
 
 ## Ship criteria
 
 - A customer completes intake on a phone and the service manager has a readable email with photos and a printable PDF within a minute.
 - The PDF prints legibly on a shop printer in greyscale.
-- The paste block goes into a real DMS complaint field without reformatting. **Verify against an actual DMS, not a mock.**
+- The paste block goes into a real DMS complaint field without reformatting. **Verify against an actual DMS, not a mock.** — *not a gate for the first mobile technician (he has no DMS); it becomes a gate before the dealer-group pilot.*
 - The customer can check status from the link without logging in.
 - A service manager can run a full week on email alone, never opening the manager app.
 
@@ -115,6 +149,7 @@ Honest note on both: one interested mobile technician is a design partner and a 
 | Sep 7 2026 | **Added `RVS_Money.md` to the canon** | Unit economics and cost structure have no other home: not product scope (`RVS_Spec.md`), not build order (this file), not a sales argument (`Marketing/`), and the archived model in `ARCHIVE/ASOT/RVS_Implementation_Plan_v2.md` §7 priced the four-tier product. Folding it here would have doubled this file with material nobody reads while deciding what to build next. Registered in `CLAUDE.md`, `RVS_Overview.md` and `.github/copilot-instructions.md` so it cannot drift unnoticed. |
 | Sep 7 2026 | **Removed the document-count rule from canon** | Origin was the Sep 4 2026 entry below — *"rebuilt as four documents"* — which recorded what happened. `RVS_Overview.md` then restated it as a standing rule (*"That is the whole set"*, plus a test to apply before adding a fifth), and `CLAUDE.md` and `.github/copilot-instructions.md` mirrored the Overview. Nobody decided a count was the constraint; it hardened from a description into a rule by being copied. It was also actively wrong: two of the four copies still said *four* and omitted `RVS_Money.md`, so the rule generated exactly the drift it claimed to prevent. What the Sep 4 rebuild was actually solving was version drift across files, colliding identifier series, and specs for capability years from being built — none of which is a function of how many files there are. Replaced with a placement rule in `RVS_Overview.md`: one authoritative home per fact, a document earns its place by answering a question someone asks, unbuilt capability lives in `ARCHIVE/`, and a new document is registered in all three places on the same commit. Splitting an overgrown document is now as legitimate as merging two redundant ones. |
 | Sep 7 2026 | **The financial shape is known and written down** (`RVS_Money.md`) | Serving cost is ~$0.03 per service request and fixed infrastructure is ~$117/month, so hard costs are covered by five shop locations and margins run 80–88% in every scenario. The base case still does not reach a founder salary inside 24 months; a $8,000/month draw needs ~135 locations. One 25-location dealer group is worth nineteen independent shops won one at a time, which makes the live dealer-group prospect the only genuinely load-bearing item in GTM. Ceiling at current scope and prices is under $1M ARR — recorded so no hire is ever made against a revenue curve that was not going to arrive. Two assumptions carry the whole model and neither is observed: requests per location, and founder close rate. The first three paying shops settle both; re-run the document then. |
+| Sep 9 2026 | **Build order re-sequenced around the first mobile technician** (see "Sequenced for the first mobile technician") | The eight-item list is a topic order, not a delivery order, and read literally it front-loads work the first customer never touches. That customer has no DMS and never opens the manager app, so build item 4 and the "verify against a real DMS" half of item 2 leave the critical path. Items 1–3 are already substantially merged. The remaining gate is nine steps: packet layout + PDF photos (#492, minus the item-7 spike and the branding UI), the category vocabulary and fallback question bank (#452 → #453 → #454), hiding the AI assessment from the customer at intake (#483), two prod-deploy blockers (#463, #466), the Whisper flag and tenant-gate proof (#467, #465), packet-email reliability (#497, #494), and intake polish (#496, #479). Descope (#423) and the Cosmos reconcile (#477) run in parallel and gate nothing. The manager app (#420), C-7 links, billing (#425) and #471 are explicitly deferred until the first tech is live. No scope added or removed — this is ordering only; the DMS paste-block verification stays a gate before the dealer-group pilot. |
 | Sep 9 2026 | **Customer status page opened up; manager-authored notes added** (issue #500, closes Q9) | Spec X-1's "no conversation, no messaging, no file exchange" was never a deliberate decision — it hardened into the Spec unattributed, the same failure mode as the Sep 7 document-count rule. Removed. The status page is now free to show whatever is useful to the customer about their job, and the manager can attach free-text notes that render there (new Spec C-9). The one invariant kept: the page is display-only for the customer — no reply, no inbound message, no file upload — so there is no customer → manager channel and this does not reopen two-way messaging (still out of scope). Notes are manager-authored only, optional, length-capped (default 280 chars), sanitised on input, and never written to application logs. Spec X-1 rewritten, C-9 added, ASOT `RVS_Architecture.md` X-1 coverage note updated. Implementation in #500. |
 | Sep 6 2026 | **Recorded, not solved: the scope filter has no category for "protects revenue"** | A product designed so nobody logs in has no usage signal and nothing to renew against; in month four an invoice reaches someone with no recent memory of the value. The obvious fix — a monthly recap email — fails filter #1 outright, since it makes no individual packet better. Not building it. The invoice line item does the same job for zero product work. Logged so that the filter gets an honest amendment when something harder needs this category, rather than making a commercial decision by accident. | |
 
