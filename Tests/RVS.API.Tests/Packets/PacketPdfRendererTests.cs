@@ -2,8 +2,12 @@ using System.Diagnostics;
 using System.Net;
 using System.Text;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Moq;
+using RVS.API.Integrations;
 using RVS.API.Packets;
 using RVS.Domain.Packets;
+using MsOptions = Microsoft.Extensions.Options.Options;
 
 namespace RVS.API.Tests.Packets;
 
@@ -189,6 +193,31 @@ public class PacketPdfRendererTests
 
         act.Should().NotThrow("an undecodable image must fall back to a placeholder, never fail the whole PDF");
         PacketPdfRenderer.Render(packet, images).Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public void Render_WhenPhotoBytesAreAHeicTranscodedToJpeg_ShouldEmbedTheImage_NotAPlaceholder()
+    {
+        // #508: once AttachmentService transcodes the HEIC upload, the packet pipeline hands
+        // the renderer a JPEG the SkiaSharp decoder reads — so the photo embeds instead of
+        // falling back to the labelled placeholder that a raw HEIC still triggers.
+        var transcoder = new MagickImageTranscoder(
+            MsOptions.Create(new ImageTranscodeOptions()),
+            Mock.Of<ILogger<MagickImageTranscoder>>());
+        var jpeg = transcoder.TranscodeToJpeg(SampleImages.Heic96x64());
+        jpeg.Should().NotBeNull("the HEIC fixture must transcode for this regression to be meaningful");
+
+        var packet = FullPacket();
+        var withJpeg = packet.Photos.ToDictionary(p => p.Url, _ => jpeg!.JpegBytes);
+        var withHeic = packet.Photos.ToDictionary(p => p.Url, _ => SampleImages.Heic96x64());
+
+        var jpegPdf = PacketPdfRenderer.Render(packet, withJpeg);
+        var heicPdf = PacketPdfRenderer.Render(packet, withHeic);
+
+        jpegPdf.Should().NotBeNullOrEmpty();
+        // The embedded photo makes the JPEG rendering materially larger than the
+        // placeholder-only rendering of the same packet.
+        jpegPdf.Length.Should().BeGreaterThan(heicPdf.Length);
     }
 
     [Fact]

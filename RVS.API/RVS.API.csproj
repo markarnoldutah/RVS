@@ -22,6 +22,7 @@
     <PackageReference Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.5.0" />
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="3.1.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.7" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.17.1" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.5.0" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.15.3" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
@@ -34,6 +35,23 @@
   <ItemGroup>
     <ProjectReference Include="..\RVS.Infra.AzBlobRepository\RVS.Infra.AzBlobRepository.csproj" />
     <ProjectReference Include="..\RVS.Infra.AzCosmosRepository\RVS.Infra.AzCosmosRepository.csproj" />
+  </ItemGroup>
+
+  <!--
+    Ship the third-party open-source notices next to the binaries they cover
+    (ImageMagick / Magick.NET native delegates incl. LGPL libheif/libde265,
+    QuestPDF + its native deps). Copied into build AND publish output so the
+    deployed App Service artifact carries them. See /THIRD-PARTY-NOTICES.md.
+  -->
+  <ItemGroup>
+    <None Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="..\licenses\**\*" LinkBase="licenses">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

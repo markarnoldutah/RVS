@@ -23,6 +23,14 @@
     <ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
   </ItemGroup>
 
+  <!-- Serve the OSS third-party notices with the published bundle (covers MudBlazor,
+       the Blazor WASM runtime, and the other MIT components in this app). -->
+  <ItemGroup>
+    <Content Include="..\THIRD-PARTY-NOTICES.md" Link="wwwroot\THIRD-PARTY-NOTICES.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <Folder Include="Docs\" />
   </ItemGroup>

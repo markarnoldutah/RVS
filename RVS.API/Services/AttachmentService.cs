@@ -15,6 +15,8 @@ public sealed class AttachmentService : IAttachmentService
     private readonly IServiceRequestRepository _repository;
     private readonly IBlobStorageService _blobStorage;
     private readonly IUserContextAccessor _userContext;
+    private readonly IImageTranscoder _imageTranscoder;
+    private readonly ILogger<AttachmentService> _logger;
 
     private static readonly TimeSpan UploadSasDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan ReadSasDuration = TimeSpan.FromHours(1);
@@ -31,6 +33,7 @@ public sealed class AttachmentService : IAttachmentService
         "image/gif",
         "image/webp",
         "image/heic",
+        "image/heif",
         "video/mp4",
         "video/quicktime",
         "video/webm",
@@ -47,11 +50,15 @@ public sealed class AttachmentService : IAttachmentService
     public AttachmentService(
         IServiceRequestRepository repository,
         IBlobStorageService blobStorage,
-        IUserContextAccessor userContext)
+        IUserContextAccessor userContext,
+        IImageTranscoder imageTranscoder,
+        ILogger<AttachmentService> logger)
     {
         _repository = repository;
         _blobStorage = blobStorage;
         _userContext = userContext;
+        _imageTranscoder = imageTranscoder;
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -149,13 +156,29 @@ public sealed class AttachmentService : IAttachmentService
             throw new ArgumentException($"Blob '{request.BlobName}' has not been uploaded. Complete the direct upload before confirming.");
         }
 
+        var blobName = request.BlobName;
+        var fileName = request.FileName;
+        var contentType = request.ContentType;
+        var sizeBytes = request.SizeBytes;
+
+        // HEIC/HEIF renders on Apple clients only: the HTML packet shows a blank <img>, the
+        // PDF decoder cannot read it, and emailed .heic files will not preview in most desktop
+        // mail clients. Transcode once here so the stored blob — and every downstream consumer —
+        // is a universally-renderable JPEG (issue #508, finishes #492 item 8). A transcode
+        // failure keeps the original upload; the packet then shows its labelled placeholder.
+        if (_imageTranscoder.CanTranscode(contentType))
+        {
+            (blobName, fileName, contentType, sizeBytes) = await TranscodeToJpegAsync(
+                serviceRequestId, blobName, fileName, contentType, sizeBytes, cancellationToken);
+        }
+
         var attachment = new ServiceRequestAttachmentEmbedded
         {
             AttachmentId = Guid.NewGuid().ToString(),
-            BlobUri = request.BlobName,
-            FileName = request.FileName,
-            ContentType = request.ContentType,
-            SizeBytes = request.SizeBytes
+            BlobUri = blobName,
+            FileName = fileName,
+            ContentType = contentType,
+            SizeBytes = sizeBytes
         };
 
         sr.Attachments.Add(attachment);
@@ -189,5 +212,75 @@ public sealed class AttachmentService : IAttachmentService
         sr.MarkAsUpdated(_userContext.UserId);
 
         await _repository.UpdateAsync(sr, cancellationToken);
+    }
+
+    /// <summary>
+    /// Downloads the just-uploaded HEIC/HEIF blob, transcodes it to JPEG, stores the JPEG under
+    /// a sibling <c>.jpg</c> blob name, and best-effort deletes the original. Returns the blob
+    /// name, file name, content type, and size to record on the attachment. Any failure —
+    /// download error, or an undecodable payload — logs a warning and returns the original
+    /// values unchanged, so a bad transcode never blocks the upload from being confirmed.
+    /// </summary>
+    private async Task<(string BlobName, string FileName, string ContentType, long SizeBytes)> TranscodeToJpegAsync(
+        string serviceRequestId,
+        string blobName,
+        string fileName,
+        string contentType,
+        long sizeBytes,
+        CancellationToken cancellationToken)
+    {
+        byte[] original;
+        try
+        {
+            original = await _blobStorage.DownloadAsync(ContainerName, blobName, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "HEIC transcode: could not download blob {BlobName} for SR {ServiceRequestId}; keeping the original upload",
+                blobName, serviceRequestId);
+            return (blobName, fileName, contentType, sizeBytes);
+        }
+
+        var result = _imageTranscoder.TranscodeToJpeg(original, cancellationToken);
+        if (result is null)
+        {
+            _logger.LogWarning(
+                "HEIC transcode failed for blob {BlobName} on SR {ServiceRequestId}; keeping the original upload (packet will show a placeholder)",
+                blobName, serviceRequestId);
+            return (blobName, fileName, contentType, sizeBytes);
+        }
+
+        var jpegBlobName = Path.ChangeExtension(blobName, ".jpg");
+        if (string.Equals(jpegBlobName, blobName, StringComparison.Ordinal))
+        {
+            jpegBlobName = $"{blobName}.jpg";
+        }
+
+        using (var jpegStream = new MemoryStream(result.JpegBytes, writable: false))
+        {
+            await _blobStorage.UploadAsync(ContainerName, jpegBlobName, jpegStream, "image/jpeg", cancellationToken);
+        }
+
+        try
+        {
+            await _blobStorage.DeleteAsync(ContainerName, blobName, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "HEIC transcode: JPEG stored as {JpegBlobName} but the original {BlobName} could not be deleted",
+                jpegBlobName, blobName);
+        }
+
+        var jpegFileName = Path.ChangeExtension(fileName, ".jpg");
+
+        _logger.LogInformation(
+            "HEIC transcode: SR {ServiceRequestId} upload {OriginalName} -> {JpegName} ({Width}x{Height}, {Bytes} bytes)",
+            serviceRequestId, fileName, jpegFileName, result.Width, result.Height, result.JpegBytes.Length);
+
+        return (jpegBlobName, jpegFileName, "image/jpeg", result.JpegBytes.Length);
     }
 }

@@ -84,6 +84,7 @@ One flag, `Integrations:UseMocks`, read once at startup. **It is `false` in ever
 | Categorization + diagnostic questions | Azure OpenAI | `RuleBasedCategorizationService` |
 | Email | Azure Communication Services | NoOp |
 | SMS | Azure Communication Services | NoOp — **archived scope** |
+| HEIC/HEIF → JPEG transcode (`#508`) | `MagickImageTranscoder` (Magick.NET + libheif, in-process) | `NoOpImageTranscoder` — keeps the original; packet shows the placeholder |
 
 All external clients use `AddStandardResilienceHandler` with per-client timeouts.
 
