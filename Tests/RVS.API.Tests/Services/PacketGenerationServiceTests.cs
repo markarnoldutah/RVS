@@ -809,4 +809,162 @@ public class PacketGenerationServiceTests
             It.Is<PacketGenerationJob>(j => j.TenantId == TenantId && j.ServiceRequestId == SrId && j.Trigger == "regeneration")),
             Times.Once);
     }
+
+    // ── Email size budget (Spec B-4, issue #521) ───────────────────────────
+    //
+    // ACS rejects a send whose whole request exceeds 10 MB with attachments base64 encoded.
+    // Spec A-6 allows ten 25 MB uploads, so a photo-heavy submission used to fail all three
+    // delivery attempts and leave the shop a service request with no packet. Delivery now
+    // trims the attachment set to fit and sends anyway.
+
+    /// <summary>
+    /// A service wired to a deliberately small email budget so a couple of test photos
+    /// overflow it without allocating megabytes.
+    /// </summary>
+    private PacketGenerationService BuildSutWithEmailBudget(long maxRequestBytes) =>
+        new(_srRepoMock.Object,
+            _locationRepoMock.Object,
+            _photoResolverMock.Object,
+            _blobMock.Object,
+            _queueMock.Object,
+            _userContextMock.Object,
+            _notificationMock.Object,
+            Microsoft.Extensions.Options.Options.Create(new PacketEmailOptions
+            {
+                RetryBaseDelay = TimeSpan.Zero,
+                MaxRequestBytes = maxRequestBytes,
+            }),
+            Mock.Of<ILogger<PacketGenerationService>>());
+
+    /// <summary>
+    /// Sets up two resolvable photos whose downloaded bytes are <paramref name="photoBytes"/>
+    /// each, and returns the message the notification service was handed.
+    /// </summary>
+    private PacketEmailMessage? CaptureSentMessageWithTwoPhotos(
+        PacketGenerationService sut, int photoBytes, out ServiceRequest request)
+    {
+        var sr = BuildRequest(
+            Image("att_1", "ten_acme/sr/one.jpg"),
+            Image("att_2", "ten_acme/sr/two.jpg"));
+        SetupRequest(sr);
+        request = sr;
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients(attachPdf: true, includePhotos: true));
+        _photoResolverMock.Setup(r => r.ResolveAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>
+            {
+                ["att_1"] = "https://blob/one.jpg?sas",
+                ["att_2"] = "https://blob/two.jpg?sas",
+            });
+        _blobMock.Setup(b => b.DownloadAsync(AttachmentsContainer, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new byte[photoBytes]);
+
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        sut.GenerateAsync(TenantId, SrId).GetAwaiter().GetResult();
+        return sent;
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenPhotosOverflowTheEmailBudget_ShouldStillSendTheEmail()
+    {
+        var sut = BuildSutWithEmailBudget(200_000);
+
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 500_000, out _);
+
+        await Task.CompletedTask;
+        sent.Should().NotBeNull("an oversized submission must deliver a trimmed packet, not nothing");
+        sent!.HtmlBody.Should().NotBeNullOrWhiteSpace();
+        sent.PlainTextBody.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenPhotosOverflowTheEmailBudget_ShouldDropPhotosButKeepThePdf()
+    {
+        // Budget fits the bodies and the small test PDF, but not a 500 KB photo on top.
+        var sut = BuildSutWithEmailBudget(200_000);
+
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 500_000, out _);
+
+        await Task.CompletedTask;
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().ContainSingle()
+            .Which.ContentType.Should().Be("application/pdf");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenPhotosOverflowTheEmailBudget_ShouldStillRecordDeliverySucceeded()
+    {
+        var sut = BuildSutWithEmailBudget(200_000);
+
+        CaptureSentMessageWithTwoPhotos(sut, photoBytes: 500_000, out var sr);
+
+        await Task.CompletedTask;
+        sr.PacketEmailDelivery.Status.Should().Be("Delivered");
+        sr.PacketEmailDelivery.AlertRaised.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenEverythingFitsTheEmailBudget_ShouldAttachThePdfAndEveryPhoto()
+    {
+        var sut = BuildSutWithEmailBudget(PacketEmailSizeFitter.DefaultMaxRequestBytes);
+
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 50_000, out _);
+
+        await Task.CompletedTask;
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().HaveCount(3);
+        sent.Attachments.Should().ContainSingle(a => a.ContentType == "application/pdf");
+        sent.Attachments.Count(a => a.ContentType == "image/jpeg").Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenEvenThePdfCannotFitTheEmailBudget_ShouldSendABodyOnlyEmail()
+    {
+        // A budget below the HTML body itself: nothing can be attached, but the packet HTML is
+        // the email body and still carries every photo by SAS URL, so the send is worth making.
+        var sut = BuildSutWithEmailBudget(1_000);
+
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 50_000, out var sr);
+
+        await Task.CompletedTask;
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().BeEmpty();
+        sr.PacketEmailDelivery.Status.Should().Be("Delivered");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenPhotosAreExcludedByConfig_ShouldNotBeAffectedByTheBudget()
+    {
+        var sut = BuildSutWithEmailBudget(PacketEmailSizeFitter.DefaultMaxRequestBytes);
+        var sr = BuildRequest(Image("att_1", "ten_acme/sr/one.jpg"));
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients(attachPdf: true, includePhotos: false));
+
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await sut.GenerateAsync(TenantId, SrId);
+
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().ContainSingle(a => a.ContentType == "application/pdf");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheBudgetIsUnset_ShouldUseTheDocumentedAcsDefault()
+    {
+        // The option has a working default, so a deployment that configures nothing is still
+        // protected against the ACS ceiling.
+        new PacketEmailOptions().MaxRequestBytes
+            .Should().Be(PacketEmailSizeFitter.DefaultMaxRequestBytes);
+
+        await Task.CompletedTask;
+    }
 }

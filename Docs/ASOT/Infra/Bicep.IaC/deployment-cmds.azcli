@@ -450,9 +450,17 @@ az webapp config appsettings list \
   --name app-rvs-api-staging-wus3 --resource-group rg-rvs-staging-westus3 \
   --query "[?name=='AzureCommunicationServices__Email__FromAddress'].value" -o tsv
 
-# (c) ACS email send quota — Azure-managed domains start low (~100 recipients/day,
-#     low rate). Request an increase via Azure support if the demo needs more.
-#     Portal → ACS → Email → Domains → AzureManagedDomain → (quota shown there).
+# (c) ACS email send quota — HARD CEILING, read this before promising pilot volume (#521).
+#     The deployed domain is Azure-managed (domainManagement: 'AzureManaged'), which
+#     Microsoft limits to 5 emails/min and 10 emails/hour — and those limits are NOT
+#     raisable: higher quotas are offered only for verified custom domains.
+#     So the sequence before any real volume is:
+#       1. Add and verify a custom sending subdomain (issue #532: SPF, DKIM, DMARC).
+#       2. THEN request a quota increase (Azure Portal → Help+Support → Service and
+#          Subscription Limits (Quotas)). Approval takes up to 72 HOURS, longer if
+#          filed on a Friday, and requires a failure rate under 1%.
+#     Budget three days of slack. Do not schedule a pilot launch inside that window.
+#     Portal → ACS → Email → Domains → AzureManagedDomain → (current quota shown there).
 
 # (d) Point at least one staging Location's packetConfig.recipients at a REAL
 #     mailbox you control (seed data uses RFC 2606 .example.com addresses that

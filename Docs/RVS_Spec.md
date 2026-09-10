@@ -73,12 +73,21 @@ HTML with an embedded print stylesheet is the primary rendering; it must print c
 | Recipients | 1–10 addresses configured per location |
 | Subject | `[RVS] {category} — {year} {make} {model} — {customer last name}` |
 | Body | The packet as inline HTML, degrading to the paste block for text-only clients |
-| Attachments | The PDF, plus the original photos as image attachments |
+| Attachments | The PDF, plus the original photos as image attachments — trimmed to fit the transport's message ceiling, PDF first |
+| Size ceiling | The send is budgeted at 9.5 MB of a 10 MB transport limit, counting both bodies and attachments **after** base64 encoding. Over budget, attachments are dropped to fit rather than failing the send: photos go first, from the last one back, then the PDF. An email always goes out |
 | Target | Delivered within 60 seconds of submission, P99 |
 | Retry | 3 attempts, exponential backoff, then alert |
 | Bounce | A hard bounce disables that recipient and notifies the owner — never the whole configuration |
+| Sending rate | The transport's per-subscription send quota is a deployment constraint, not a code one. A quota too low for pilot volume must be raised before launch, not after — see `RVS_Infrastructure.md` |
 
 Idempotent per `(serviceRequestId, packetVersion)`.
+
+Dropping an attachment costs the recipient a local copy, not the content: `A-6` allows ten
+25 MB uploads and the PDF embeds the photo bytes as well, so a photo-heavy submission can
+exceed the ceiling on its own, but `B-3` already embeds every photo in the HTML body as a
+time-limited SAS URL (`X-6`), and the PDF stays downloadable from the manager app. A submission
+that overruns the ceiling must still deliver a packet — silently failing every retry and leaving
+the service department a request with no packet at all is the outcome this rule exists to prevent.
 
 ### B-5 — Paste block
 

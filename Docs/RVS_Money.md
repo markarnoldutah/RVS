@@ -17,10 +17,15 @@ Per service request, from intake through delivered packet:
 |---|---|
 | Azure OpenAI gpt-4o — five calls (A-4 follow-ups, A-5 category, A-11 insights, packet summary, A-10 VIN vision) | $0.023 |
 | Whisper transcription (A-9), ~1 minute of dictation | $0.006 |
-| ACS email + ~15 MB of image attachments (B-4) | $0.002 |
+| ACS email + attachments, capped at ~9.5 MB per send (B-4) | $0.002 |
 | Blob storage and egress, ~15 MB | $0.002 |
 | Cosmos RU — intake write, ledger append (X-2), reads | <$0.001 |
 | **Total** | **~$0.03** |
+
+The two size figures differ on purpose. Blob keeps every original upload — `A-6` allows ten
+25 MB files — while one email is budgeted at 9.5 MB under ACS's 10 MB request ceiling, base64
+included (`Spec B-4`). Storage cost tracks what the customer uploaded; email cost tracks what
+actually ships. Neither number moves the total, which rounds to $0.03 either way.
 
 A location submitting 100 requests a month costs **$3.21** to serve against $79 of revenue. Gross margin 96%.
 

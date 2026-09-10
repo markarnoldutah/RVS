@@ -71,6 +71,21 @@ Two things to know before using these:
 
 **ACS** — location `global`, data location United States, Email Service with an Azure-managed domain, engagement tracking disabled.
 
+**ACS Email quotas and the managed-domain ceiling (`#521`).** `communication-services.bicep` declares `domainManagement: 'AzureManaged'`, and Microsoft's published limits treat an Azure-managed domain as a trial tier, not a small custom one:
+
+| | Azure-managed domain (what is deployed) | Verified custom domain |
+|---|---|---|
+| Send rate | **5 emails/min, 10 emails/hour** | 30/min, 100/hour |
+| Raisable via support? | **No** | Yes, up to 1–2 M/hour |
+| Request size incl. attachments | 10 MB (≈7.5 MB raw, base64 inflates ~33%) | 10 MB, up to 30 MB on request |
+
+Two consequences worth stating plainly:
+
+- **Ten packets an hour is the hard ceiling today, and no support ticket lifts it.** Higher quotas are available only for verified custom domains. `#521`'s framing — "30/min and 100/hour, quota increase takes up to 72 hours" — describes the *custom-domain* tier we have not deployed. The 72-hour lead time is real, but it applies only once a custom domain exists.
+- **The custom sending subdomain in `#532` is therefore a launch prerequisite, not a deliverability nicety.** It has to land, verify, and then carry a quota-increase request with 72 hours of slack before pilot volume arrives. Sequence: custom domain → verify SPF/DKIM/DMARC → request the increase → wait out approval → launch.
+
+Ten an hour is survivable for a single mobile technician and will not survive the local cluster (`#527`).
+
 **Key Vault** — standard SKU, RBAC authorization, 90-day soft delete, purge protection on, public access enabled.
 
 **Static Web Apps** — Standard, staging environments enabled, config file updates allowed, enterprise CDN off.
@@ -129,6 +144,7 @@ Auth: the API uses Azure OIDC federated credentials, no long-lived secrets. Stat
 |---|---|
 | `build-mobile.yml` | Builds `RVS.MAUI.Tech` on `mobile-v*` tags. That project is not in the repo and the offline mobile app is archived. Delete the workflow |
 | `deployment-cmds.azcli` | References a `parameters/dev.bicepparam` that does not exist. It also carries a manual `Stripe--WebhookSecret` vault write — harmless, but premature: billing is build item 7 and nothing reads that secret yet |
+| ACS send quota caps delivery at 10 packets/hour (`#521`) | The deployed Email domain is Azure-managed, which Microsoft limits to 5 emails/min and 10/hour **with no support path to raise it**. Not a code defect and not fixable in code — `#521`'s size handling is built, but the rate half needs the verified custom domain from `#532` before any quota increase can even be requested. Blocks the local-cluster launch (`#527`); tolerable for one mobile technician |
 
 ---
 
