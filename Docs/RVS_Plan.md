@@ -1,6 +1,6 @@
 # RVS — Plan
 
-**Version:** 1.4 · September 9, 2026
+**Version:** 1.5 · September 10, 2026
 
 ---
 
@@ -56,6 +56,8 @@ Non-code blocker, unchanged: the one-page, phone-signable design-partner agreeme
 | Packet "Received" line in dealership-local time | #506 | Cosmetic; falls back to a `… UTC` string until a Location timezone field exists. |
 | Structured preliminary assessment (probable cause / fix / parts) | #507 | Spike, then its own issue(s). Architecture where the #452/#453 craft work is cheaper first (scope filter #3). |
 | Intake dealer-capability search when no slug is supplied | #471 | Explicitly future state. |
+
+Work deferred on a condition *other* than "first tech is live" — including potential work that has no issue yet — is in the **Future-state register** below.
 
 Steps 3–5 (the issue-category and question-bank work, build item 6) run alongside everything and are barely engineering — mostly domain judgement. Don't let them slip to the end; the fallback question bank is what makes the packet read as expert rather than generic, and it's the cheapest quality lever in the product.
 
@@ -120,6 +122,41 @@ The archived strategy carried a Yes/No filter that kept scope honest for a year.
 
 ---
 
+## Future-state register
+
+Potential work that is **deliberately not being done now**, each row carrying an explicit condition for reconsidering it. This is the home for "we thought about X — here is why we parked it, and here is what would make us look again." It is not a roadmap and not a wishlist: a row earns its place only by naming a trigger.
+
+It complements what this document already tracks. The **"Deferred until the first mobile tech is live"** table covers work gated on that one event. This register covers work gated on a *different* condition — a metric crossing a threshold, a dependency shipping, a date, a repeated ask — and, unlike that table, it also holds items that do not yet have a GitHub issue.
+
+**Trigger types** — every row names one; a second is optional:
+
+| Type | Fires when |
+|---|---|
+| **Event** | A named thing ships or happens — "manager app (#420) ships", "first dealer-group pilot signed" |
+| **Signal** | A recurring observation crosses a threshold — "≥ 2 pilots ask for it", "packet-email hard-bounce rate > 0 over any 7-day window". Tie it to an existing alert (#494) or the metrics ledger (#528); do not invent a mechanism |
+| **Threshold** | A scale or performance number — "tenant access gate read p95 > ~40 ms sustained", "Cosmos RU/month > X" |
+| **Dependency** | Another piece of work lands and a condition still holds — "#498 shipped and 'open app → board' still reported as friction" |
+| **Date** | A calendar point — "RVDA Convention, Nov 2026", "annual infra review" |
+
+**Rules:**
+
+- **Adding a row** is subject to scope-filter question 4 — name what it trades against — and requires a written trigger and a "lands as". No trigger, no row.
+- **When a trigger fires**, the item graduates: file the issue (or a Spec change plus an issue), then strike the row and link it, exactly as the resolved `Q-n` entries above are struck. Rows leave the register; it does not grow without bound.
+- **Killing a row** is allowed too — strike it as *Rejected (decision-log YYYY-MM-DD)* when a decision is taken not to do it. The "we considered it" record stays.
+- **Review cadence:** scan this table at each plan phase boundary (P0 → P1 → P2) and whenever a parent Feature (`type:feature`) closes.
+
+| ID | Item | Deferred because | Revisit trigger | Origin | Lands as |
+|---|---|---|---|---|---|
+| **FS-1** | Cosmos dedicated gateway + integrated cache | MVP request volume needs no read cache; an in-memory cache (archived `O-4`) is the cheaper first move if one is ever needed | **Threshold:** tenant access gate read p95 > ~40 ms sustained, **or** a second hot Cosmos read path appears | #477 | #557 — filed, parked pending the trigger |
+| **FS-2** | `rv-warranty-rules` → warranty / likely-parts hints in the assessment | The container is seeded but has no repository and is a descope candidate; the value is unproven | **Dependency:** the #507 structured-assessment spike concludes warranty data materially improves the packet **and** the container is kept | #507 | Spec requirement (A-n) + API issue |
+| **FS-3** | Hardened anonymous C-7 deep-links — `GET` landing → `POST` confirm, idempotent transitions, scanner tagging, warmed action domain | Authenticated deep-links from #498 may remove the friction on their own | **Dependency:** #498 shipped **and** "open app → board" still reported as friction by ≥ 1 pilot | #498 (old Q2) | Engineering issue |
+| **FS-4** | Competitor-referral / network-effects behaviour on a disabled or no-match intake slug | Out of scope, and an open legal question | **Event:** a deliberate decision to pursue network effects as a product feature | #478 | `type:decision` issue + legal check |
+| **FS-5** | Manager UI to upload per-location branding (logo + display name) | The backend (#505) is not yet landed and branding-in-pilot-scope is not yet decided (#470) | **Dependency:** #505 backend merged **and** #470 decides branding is in pilot scope | #505 / #470 | Fold into #470, or a new manager issue |
+| **FS-6** | Alert coverage for `EventId` 438001 / 434001 in the packet pipeline | May already be covered by #494's alert mechanism | **Event:** #494 closes without covering both event IDs | #494 | Extend #494, or a new observability issue |
+| **FS-7** | In-room deliverability check ritual for pilots after the first | Only matters once a second pilot is onboarding | **Event:** second pilot onboarding begins | #532 | Pilot-recruitment issue under #523 |
+
+---
+
 ## Pitches
 
 **Mobile tech — lead with wasted trips, not with data.** He drives out, the failure is a different component than the phone call suggested, and he eats the trip: call it $100–200 in time and fuel. Structured intake with photos and a decoded VIN before he leaves means the right part is on the truck. He never logs into anything; the write-up hits his email.
@@ -156,6 +193,7 @@ Honest note on both: one interested mobile technician is a design partner and a 
 | Sep 9 2026 | **Build order re-sequenced around the first mobile technician** (see "Sequenced for the first mobile technician") | The eight-item list is a topic order, not a delivery order, and read literally it front-loads work the first customer never touches. That customer has no DMS and never opens the manager app, so build item 4 and the "verify against a real DMS" half of item 2 leave the critical path. Items 1–3 are already substantially merged. The remaining gate is ten steps: packet layout + masthead (#492), HEIC→JPEG transcode so iPhone photos actually render (#508 — confirmed root cause of the "photos don't appear" report), the category vocabulary and fallback question bank (#452 → #453 → #454), hiding the AI assessment from the customer at intake (#483), two prod-deploy blockers (#463, #466), the Whisper flag and tenant-gate proof (#467, #465), packet-email reliability (#497, #494), and intake polish (#496, #479). Descope (#423) and the Cosmos reconcile (#477) run in parallel and gate nothing. The manager app (#420), C-7 links, billing (#425), #471, and the three #492 follow-ups split off as their own issues — per-location branding UI (#505), packet local-time (#506), structured-assessment spike (#507) — are explicitly deferred until the first tech is live. No scope added or removed — this is ordering only; the DMS paste-block verification stays a gate before the dealer-group pilot. |
 | Sep 9 2026 | **Customer status page opened up; manager-authored notes added** (issue #500, closes Q9) | Spec X-1's "no conversation, no messaging, no file exchange" was never a deliberate decision — it hardened into the Spec unattributed, the same failure mode as the Sep 7 document-count rule. Removed. The status page is now free to show whatever is useful to the customer about their job, and the manager can attach free-text notes that render there (new Spec C-9). The one invariant kept: the page is display-only for the customer — no reply, no inbound message, no file upload — so there is no customer → manager channel and this does not reopen two-way messaging (still out of scope). Notes are manager-authored only, optional, length-capped (default 280 chars), sanitised on input, and never written to application logs. Spec X-1 rewritten, C-9 added, ASOT `RVS_Architecture.md` X-1 coverage note updated. Implementation in #500. |
 | Sep 6 2026 | **Recorded, not solved: the scope filter has no category for "protects revenue"** | A product designed so nobody logs in has no usage signal and nothing to renew against; in month four an invoice reaches someone with no recent memory of the value. The obvious fix — a monthly recap email — fails filter #1 outright, since it makes no individual packet better. Not building it. The invoice line item does the same job for zero product work. Logged so that the filter gets an honest amendment when something harder needs this category, rather than making a commercial decision by accident. | |
+| Sep 10 2026 | **Added a future-state register to this document** | Deferred sub-items were surviving only inside other issues' bodies (the `rv-warranty-rules` hint sub-task in #507, a hardened C-7 in #498, competitor-referral in #478) or inside a closing issue's checklist (the Cosmos integrated cache in #477), with no condition recorded for revisiting them. Leaving GitHub issues open for parked work makes them accrete and invites scope creep; this document already tracked one deferral class ("Deferred until the first mobile tech is live"). The register generalises it: one table, every row carrying a typed trigger and a "lands as", graduating the same way the resolved `Q-n` entries do, entry gated by scope-filter question 4. Seeded from an open-issue sweep done the same day. A matching issue-body template is in `.github/skills/github-issues/references/templates.md`. |
 
 ---
 
