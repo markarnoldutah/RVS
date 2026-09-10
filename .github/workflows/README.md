@@ -221,3 +221,5 @@ az staticwebapp secrets list \
 | `Artifact not found` in production | Staging run didn't upload that artifact (app wasn't changed) | Re-run staging with changes, or deploy only the apps that changed |
 | `Artifact not found` + correct staging run | Artifact expired (>30 day retention) | Re-run `deploy-staging.yml` to regenerate artifacts |
 | SWA deploy `401 Unauthorized` | Token is wrong or was rotated | Re-retrieve token and update GitHub secret |
+| Test step logs `No test is available` but the job is green | `TestingPlatformDotnetTestSupport` missing, so `dotnet test` uses VSTest and can't read xUnit v3 | Keep `Tests/Directory.Build.props`; pass trx/coverage flags as MTP syntax after `--` (issue #560) |
+| `dotnet test -- --report-trx` fails with `TypeLoadException` on `IDataConsumer` | MTP extension package version doesn't match the `Microsoft.Testing.Platform` that `xunit.v3` pulls (v1) | Pin `Microsoft.Testing.Extensions.*` to a v1-aligned version (TrxReport 1.9.1, CodeCoverage 18.0.6) |

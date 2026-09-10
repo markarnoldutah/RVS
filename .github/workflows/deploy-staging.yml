@@ -105,20 +105,45 @@ jobs:
       - name: Build solution
         run: dotnet build RVS.slnx --configuration Release
 
+      # Tests run on Microsoft.Testing.Platform (see Tests/Directory.Build.props and
+      # issue #560). A test failure here fails this job, which every deploy-* job
+      # below `needs:`, so a red suite blocks the staging deploy.
       - name: Run Domain tests
         run: >-
           dotnet test Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj
           --configuration Release --no-build
+          --
+          --report-trx --report-trx-filename domain-results.trx
+          --coverage --coverage-output-format cobertura --coverage-output domain.cobertura.xml
+          --results-directory ${{ github.workspace }}/TestResults
 
       - name: Run API tests
         run: >-
           dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj
           --configuration Release --no-build
+          --
+          --report-trx --report-trx-filename api-results.trx
+          --coverage --coverage-output-format cobertura --coverage-output api.cobertura.xml
+          --results-directory ${{ github.workspace }}/TestResults
 
       - name: Run UI Shared tests
         run: >-
           dotnet test Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj
           --configuration Release --no-build
+          --
+          --report-trx --report-trx-filename ui-shared-results.trx
+          --coverage --coverage-output-format cobertura --coverage-output ui-shared.cobertura.xml
+          --results-directory ${{ github.workspace }}/TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-test-results
+          path: |
+            ./TestResults/**/*.trx
+            ./TestResults/**/*.cobertura.xml
+          retention-days: 14
 
       # --- Publish only the changed apps ---
 
