@@ -332,10 +332,11 @@ public sealed class PacketGenerationService : IPacketGenerationService
         }
 
         // Trim the attachment set to what ACS will accept (Spec B-4, #521). Spec A-6 allows ten
-        // 25 MB uploads and the PDF embeds the photo bytes as well, so a photo-heavy submission
-        // can exceed the 10 MB request ceiling; before this it failed every attempt and left the
-        // shop a request with no packet. The PDF outranks the photos, and the photos stay
-        // visible inline in the HTML body by SAS URL either way.
+        // 25 MB uploads, so a photo-heavy submission's original photos can exceed the 10 MB
+        // request ceiling on their own; before this it failed every attempt and left the shop a
+        // request with no packet. The PDF is not the problem (QuestPDF resamples embedded images,
+        // keeping it at roughly 1.5–3 MB) and outranks the photos, which stay visible inline in
+        // the HTML body by SAS URL either way.
         var plainTextBody = PacketEmailComposer.BuildPlainTextBody(packet);
         var fit = PacketEmailSizeFitter.Fit(attachments, html, plainTextBody, _packetEmailOptions.MaxRequestBytes);
 
@@ -350,9 +351,11 @@ public sealed class PacketGenerationService : IPacketGenerationService
 
         if (fit.PdfDropped)
         {
-            // The printable artifact could not be emailed at all. The packet is still stored and
-            // downloadable from the manager app, but an operator should know the email went
-            // without it — it usually means the photos need a tighter transcode.
+            // The printable artifact could not be emailed. This should be impossible: even a
+            // ten-photo PDF is about 3.8 MB on the wire, and startup validation keeps
+            // MaxRequestBytes at 5 MB or more. So it signals a regression — the renderer stopped resampling images, or
+            // something large landed in the HTML body. Any photos that fit were still attached,
+            // and the packet is stored and downloadable from the manager app.
             _logger.LogCritical(
                 PacketEmailOversized,
                 "Packet email for SR {ServiceRequestId} v{PacketVersion} in tenant {TenantId} went out with no PDF: it did not fit the {BudgetBytes}-byte ACS budget on its own",

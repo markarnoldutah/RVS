@@ -74,7 +74,7 @@ HTML with an embedded print stylesheet is the primary rendering; it must print c
 | Subject | `[RVS] {category} — {year} {make} {model} — {customer last name}` |
 | Body | The packet as inline HTML, degrading to the paste block for text-only clients |
 | Attachments | The PDF, plus the original photos as image attachments — trimmed to fit the transport's message ceiling, PDF first |
-| Size ceiling | The send is budgeted at 9.5 MB of a 10 MB transport limit, counting both bodies and attachments **after** base64 encoding. Over budget, attachments are dropped to fit rather than failing the send: photos go first, from the last one back, then the PDF. An email always goes out |
+| Size ceiling | The send is budgeted at 9.5 MB of a 10 MB transport limit, counting both bodies and attachments **after** base64 encoding. Over budget, attachments are dropped to fit rather than failing the send: the PDF is kept first if it fits, then photos fill what is left in order, dropping from the last one back. An email always goes out. The budget is checked at startup — at least 5 MB so the PDF always fits, and never above the transport limit, where every send would fail again |
 | Target | Delivered within 60 seconds of submission, P99 |
 | Retry | 3 attempts, exponential backoff, then alert |
 | Bounce | A hard bounce disables that recipient and notifies the owner — never the whole configuration |
@@ -83,9 +83,10 @@ HTML with an embedded print stylesheet is the primary rendering; it must print c
 Idempotent per `(serviceRequestId, packetVersion)`.
 
 Dropping an attachment costs the recipient a local copy, not the content: `A-6` allows ten
-25 MB uploads and the PDF embeds the photo bytes as well, so a photo-heavy submission can
-exceed the ceiling on its own, but `B-3` already embeds every photo in the HTML body as a
-time-limited SAS URL (`X-6`), and the PDF stays downloadable from the manager app. A submission
+25 MB uploads, so a photo-heavy submission's original photos can exceed the ceiling on their
+own, but `B-3` already embeds every photo in the HTML body as a time-limited SAS URL (`X-6`),
+and the PDF stays downloadable from the manager app. The PDF itself stays small — its renderer
+resamples embedded images — so in practice it is the photos that get dropped. A submission
 that overruns the ceiling must still deliver a packet — silently failing every retry and leaving
 the service department a request with no packet at all is the outcome this rule exists to prevent.
 
