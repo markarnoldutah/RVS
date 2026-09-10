@@ -79,7 +79,10 @@ if (!string.Equals(environment, "Local", StringComparison.OrdinalIgnoreCase))
 
 Console.WriteLine("Starting Cosmos seed...\n");
 
-using var client = new CosmosClient(endpointUri, key);
+// Gateway mode is set explicitly (the .NET SDK default is Direct) to match the API's
+// CosmosClient configuration. See RVS.API/Program.cs for the rationale.
+var clientOptions = new CosmosClientOptions { ConnectionMode = ConnectionMode.Gateway };
+using var client = new CosmosClient(endpointUri, key, clientOptions);
 
 try
 {

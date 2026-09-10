@@ -117,7 +117,7 @@ WASM workload is required for Blazor projects. CI installs it via `dotnet worklo
 
 ### Cosmos DB (10 containers, kebab-case)
 
-`service-requests`, `customer-profiles`, `global-customer-accounts`, `asset-ledger`, `dealerships`, `locations`, `slug-lookups`, `tenant-configs`, `lookup-sets`, `rv-warranty-rules`. `ConnectionMode.Gateway` (server-side caching enabled). Container creation + seeding lives in [RVS.Data.Cosmos.Seed/Program.cs](RVS.Data.Cosmos.Seed/Program.cs); the same set is declared in `modules/cosmos-db.bicep`. Partition keys and entity shapes are in [Docs/ASOT/RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md).
+`service-requests`, `customer-profiles`, `global-customer-accounts`, `asset-ledger`, `dealerships`, `locations`, `slug-lookups`, `tenant-configs`, `lookup-sets`, `rv-warranty-rules`. `ConnectionMode.Gateway`, set explicitly in [RVS.API/Program.cs](RVS.API/Program.cs) and the seeder (the .NET SDK default is Direct). No integrated cache: that needs a provisioned dedicated gateway (`SqlDedicatedGateway`), which `modules/cosmos-db.bicep` does not declare. Container creation + seeding lives in [RVS.Data.Cosmos.Seed/Program.cs](RVS.Data.Cosmos.Seed/Program.cs); the same set is declared in `modules/cosmos-db.bicep`. Partition keys and entity shapes are in [Docs/ASOT/RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md).
 
 Most containers partition on `/tenantId`. The exceptions are deliberate: `global-customer-accounts` on `/email`, `asset-ledger` on `/assetId`, `slug-lookups` on `/slug`, `lookup-sets` on `/category`, `rv-warranty-rules` on `/manufacturer`. `rv-warranty-rules` is seeded but has no repository and is never read.
 
