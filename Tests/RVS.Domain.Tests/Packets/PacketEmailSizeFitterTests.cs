@@ -11,8 +11,9 @@ namespace RVS.Domain.Tests.Packets;
 ///
 /// Contract under test: the PDF outranks every photo; photos survive as a contiguous prefix
 /// so the ones the packet shows on page one are the ones that ship; base64 inflation and both
-/// message bodies are counted against the budget; a PDF that cannot fit on its own takes the
-/// whole attachment set with it; and the kept set never exceeds the budget. The transform is
+/// message bodies are counted against the budget; a PDF that cannot fit is dropped while photos
+/// still fill the budget (a regression shape — a real PDF is roughly 1.5–3 MB); and the kept set
+/// never exceeds the budget. The transform is
 /// deterministic and never throws over a merely oversized input — dropping an attachment is
 /// the designed outcome, not an error.
 /// </summary>
@@ -182,18 +183,35 @@ public class PacketEmailSizeFitterTests
     // ── The PDF that cannot fit at all ─────────────────────────────────────
 
     [Fact]
-    public void Fit_WhenThePdfAloneExceedsTheBudget_ShouldDropEveryAttachment()
+    public void Fit_WhenThePdfCannotFit_ShouldStillAttachThePhotosThatFit()
     {
-        // The PDF embeds the photo bytes, so a six-photo packet PDF really can overrun ACS
-        // on its own. Photos cannot rescue that email — they are what made it large.
+        // QuestPDF keeps a real packet PDF at roughly 1.5–3 MB, so this is a regression shape, not
+        // traffic: something made the PDF large (a renderer change, an embedded logo). The PDF
+        // is still decided first; when it cannot fit, the photos that do fit are worth more to
+        // the reader than a bare email.
         IReadOnlyList<PacketEmailAttachment> candidates =
             [Pdf(9_000_000), Photo(1, 100_000), Photo(2, 100_000)];
 
         var result = PacketEmailSizeFitter.Fit(candidates, Html, PlainText, 5_000_000);
 
-        result.Attachments.Should().BeEmpty();
-        result.Dropped.Should().HaveCount(3);
         result.PdfDropped.Should().BeTrue();
+        result.Attachments.Select(a => a.FileName).Should().Equal("photo-1.jpg", "photo-2.jpg");
+        result.Dropped.Should().ContainSingle().Which.ContentType.Should().Be("application/pdf");
+    }
+
+    [Fact]
+    public void Fit_WhenThePdfCannotFit_ShouldStillKeepPhotosAsAContiguousPrefix()
+    {
+        // 2 MB photos cost ~2.67 MB each under base64: a 5 MB budget holds one, not three.
+        IReadOnlyList<PacketEmailAttachment> candidates =
+            [Pdf(9_000_000), Photo(1, 2_000_000), Photo(2, 2_000_000), Photo(3, 2_000_000)];
+
+        var result = PacketEmailSizeFitter.Fit(candidates, Html, PlainText, 5_000_000);
+
+        result.PdfDropped.Should().BeTrue();
+        result.Attachments.Select(a => a.FileName).Should().Equal("photo-1.jpg");
+        result.Dropped.Select(a => a.FileName).Should().Equal(
+            "service-packet-A1B2C3D4.pdf", "photo-2.jpg", "photo-3.jpg");
     }
 
     [Fact]
@@ -285,9 +303,11 @@ public class PacketEmailSizeFitterTests
     [Fact]
     public void Fit_AtTheDefaultBudget_ShouldPassTheSixIphonePhotoCaseThatUsedToFailDelivery()
     {
-        // Issue #521: six ~3 MB iPhone photos plus the PDF that embeds them overran ACS and
-        // the request delivered with no packet at all. It must now deliver, trimmed.
-        var pdf = Pdf(2_000_000);
+        // Issue #521: six ~3 MB iPhone photos attached as originals overran ACS and the request
+        // delivered with no packet at all. It must now deliver, trimmed. The PDF is sized as
+        // measured with six real 12 MP photos: QuestPDF resamples embedded images, so it is about
+        // 1.6 MB regardless of source resolution.
+        var pdf = Pdf(1_600_000);
         IReadOnlyList<PacketEmailAttachment> candidates =
             [pdf, .. Enumerable.Range(1, 6).Select(i => Photo(i, 3_000_000))];
 

@@ -12,16 +12,22 @@ namespace RVS.Domain.Packets;
 /// attachments together — at <see cref="AcsMaxRequestBytes"/>, and attachments travel base64
 /// encoded, which inflates them by about a third. Microsoft's own guidance puts the realistic
 /// payload of raw attachment bytes at roughly 7.5 MB. <c>Spec A-6</c> lets a customer upload
-/// ten 25 MB files, and the packet PDF embeds the photo bytes as well, so six phone photos
-/// could exceed the cap on their own. Before this, ACS rejected the send, all three delivery
-/// attempts failed the same way, and the shop got a service request with no packet.</para>
+/// ten 25 MB files, so six full-resolution phone photos attached as originals exceed the cap on
+/// their own — six real 12 MP photos measured about 14.9 MB before base64. Before this, ACS
+/// rejected the send, all three delivery attempts failed the same way, and the shop got a service
+/// request with no packet. The packet PDF is not the problem: QuestPDF resamples embedded images
+/// to their placed size, so the PDF is roughly 1.5–3 MB for six to ten detailed photos regardless
+/// of source resolution (measured with real photos: 1.60 MB for six, 2.83 MB for ten).</para>
 ///
 /// <para><b>What gets dropped, in order.</b> The PDF outranks every photo — it is the printable
-/// artifact and the reason the email exists. Photos are then kept as a <i>contiguous prefix</i>
-/// of the order they arrive in, which is the same order the packet renders them in, so the
-/// photos on page one of the packet are the photos that ship. A PDF too large to fit on its own
-/// takes the whole attachment set with it: the photo bytes are what made the PDF large, so
-/// attaching them instead would not fit either.</para>
+/// artifact and the reason the email exists, so it is decided first. Photos then fill what is
+/// left as a <i>contiguous prefix</i> of the order they arrive in, which is the same order the
+/// packet renders them in, so the photos on page one of the packet are the photos that ship. A
+/// PDF that cannot fit is dropped and the photos still fill the budget. That should be
+/// impossible — even a ten-photo PDF is about 3.8 MB on the wire, and
+/// <c>PacketEmailBudgetValidator</c> keeps the budget at 5 MB or more — so it signals a
+/// regression, and the photos that fit are still worth more to the reader than a bare
+/// email.</para>
 ///
 /// <para><b>Nothing is lost.</b> The email body is the packet HTML, which references every
 /// photo by time-limited read SAS URL (<c>#433</c>, <c>Spec X-6</c>), so a recipient still sees
@@ -122,29 +128,28 @@ public static class PacketEmailSizeFitter
             }
         }
 
-        // A PDF that could not fit means the photo bytes inside it are already too large to
-        // attach, so stop here and send a body-only email rather than a misleading subset.
-        if (pdfIndex < 0 || pdfKept)
+        // Photos fill whatever the PDF left — or the whole budget when the PDF could not fit. A
+        // dropped PDF should be impossible (even a ten-photo PDF is under 4 MB on the wire and startup
+        // validation guarantees room for it), but if a regression ever makes it large, the photos
+        // that fit are still worth more to the reader than a bare email.
+        for (var i = 0; i < candidates.Count; i++)
         {
-            for (var i = 0; i < candidates.Count; i++)
+            if (i == pdfIndex)
             {
-                if (i == pdfIndex)
-                {
-                    continue;
-                }
-
-                var cost = CostOf(candidates[i]);
-                if (used + cost > maxRequestBytes)
-                {
-                    // Stop at the first photo that does not fit: survivors stay a contiguous
-                    // prefix, which is predictable for the reader and matches the packet's own
-                    // page-one ordering. Packing a later, smaller photo into the gap would not.
-                    break;
-                }
-
-                used += cost;
-                keptIndices.Add(i);
+                continue;
             }
+
+            var cost = CostOf(candidates[i]);
+            if (used + cost > maxRequestBytes)
+            {
+                // Stop at the first photo that does not fit: survivors stay a contiguous prefix,
+                // which is predictable for the reader and matches the packet's own page-one
+                // ordering. Packing a later, smaller photo into the gap would not.
+                break;
+            }
+
+            used += cost;
+            keptIndices.Add(i);
         }
 
         // Preserve the caller's order in both sets — the orchestrator built it to match the
@@ -218,7 +223,11 @@ public sealed record PacketEmailFitResult
 
     /// <summary>
     /// <c>true</c> when a PDF was offered but could not fit — the packet email goes out without
-    /// its printable artifact, which is worth an operator's attention.
+    /// its printable artifact, though any photos that fit are still attached. Even a ten-photo PDF
+    /// is about 3.8 MB on the wire and startup validation keeps the budget at 5 MB or more, so this
+    /// points at
+    /// a regression — the renderer stopped resampling, or the HTML body grew — rather than at
+    /// large photos, and is worth an operator's attention.
     /// </summary>
     public required bool PdfDropped { get; init; }
 

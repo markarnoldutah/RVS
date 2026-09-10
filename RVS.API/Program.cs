@@ -316,8 +316,14 @@ builder.Services.AddSingleton<IPacketGenerationQueue, ChannelPacketGenerationQue
 builder.Services.AddScoped<IPacketGenerationService, PacketGenerationService>();
 builder.Services.AddHostedService<PacketGenerationWorker>();
 
-// Packet-email delivery tuning (Spec B-4, issue #438): retry backoff. Defaults work unset.
-builder.Services.Configure<RVS.API.Options.PacketEmailOptions>(builder.Configuration.GetSection("PacketEmail"));
+// Packet-email delivery tuning (Spec B-4, issues #438, #521): retry backoff and the ACS size
+// budget. Defaults work unset; an out-of-range MaxRequestBytes stops the app at startup.
+builder.Services.AddOptions<RVS.API.Options.PacketEmailOptions>()
+    .Bind(builder.Configuration.GetSection("PacketEmail"))
+    .ValidateOnStart();
+builder.Services.AddSingleton<
+    Microsoft.Extensions.Options.IValidateOptions<RVS.API.Options.PacketEmailOptions>,
+    RVS.API.Options.PacketEmailOptionsValidator>();
 #endregion
 
 #region Integration Clients

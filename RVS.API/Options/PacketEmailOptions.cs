@@ -25,7 +25,10 @@ public sealed class PacketEmailOptions
     /// ACS rejects a request over <see cref="PacketEmailSizeFitter.AcsMaxRequestBytes"/>
     /// (10 MB), and base64 inflates attachment bytes by about a third, so the realistic
     /// payload of raw photo bytes is near 7.5 MB. The default leaves a 500 KB margin under
-    /// the hard cap. Raise it only alongside an approved ACS attachment-size increase.
+    /// the hard cap. Validated at startup by <see cref="PacketEmailOptionsValidator"/>: at least
+    /// 5 MB so the PDF always fits, and never above the ACS ceiling. Going past 10 MB takes a
+    /// deliberate change to <see cref="PacketEmailSizeFitter.AcsMaxRequestBytes"/> after an
+    /// approved ACS limit increase.
     /// </summary>
     public long MaxRequestBytes { get; set; } = PacketEmailSizeFitter.DefaultMaxRequestBytes;
 }
