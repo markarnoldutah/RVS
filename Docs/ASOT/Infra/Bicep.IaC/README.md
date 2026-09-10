@@ -184,8 +184,10 @@ az deployment sub create `
 
 When it finishes: `manager.rvserviceflow.com` is bound and serving;
 `rvintake.com` resolves (the ALIAS record is in place) but the SWA does not
-yet accept that hostname, so the apex returns an Azure placeholder page until
-step 2.
+yet accept that hostname, so the apex returns an Azure placeholder page —
+and `https://` fails with a cert-name mismatch — until step 2. The
+deployment's `intakeApexAction` output repeats this reminder (it is a
+non-empty string only for prod).
 
 **Step 2 — register the apex (once, ~5 minutes).** Portal path, which does
 the whole TXT-token handshake for you:

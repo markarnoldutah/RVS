@@ -831,3 +831,8 @@ output intakeFqdn string = environmentName == 'prod' ? intakeZoneName : '${intak
 
 @description('FQDN for the Manager SWA custom domain.')
 output managerFqdn string = '${managerDnsPrefix}.${managerZoneName}'
+
+@description('Manual follow-up after a prod deploy. Bicep writes the rvintake.com apex ALIAS record but cannot bind the apex custom domain — Azure mints the ownership token only at registration time. Until this one-time step is done, rvintake.com resolves but https:// fails with a cert error. Empty for non-prod (subdomain CNAMEs bind in-template).')
+output intakeApexAction string = (deploySwa && deployDns && environmentName == 'prod')
+  ? 'ACTION REQUIRED: register the rvintake.com apex on the Intake SWA (dns-txt-token) — see Infra/Bicep.IaC/README.md "Deploy Production" step 2.'
+  : ''
