@@ -533,6 +533,18 @@ else
 {
     builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
 }
+
+// Image transcoding (issue #508): HEIC/HEIF uploads -> JPEG on confirm so every packet
+// consumer gets a universally-renderable raster. Defaults work unset.
+builder.Services.Configure<RVS.API.Integrations.ImageTranscodeOptions>(builder.Configuration.GetSection("ImageTranscode"));
+if (useMockIntegrations)
+{
+    builder.Services.AddSingleton<IImageTranscoder, NoOpImageTranscoder>();
+}
+else
+{
+    builder.Services.AddSingleton<IImageTranscoder, MagickImageTranscoder>();
+}
 #endregion
 
 // Claims Management

@@ -4,6 +4,12 @@
 * text=auto
 
 ###############################################################################
+# Vendored third-party license/notice files: keep byte-identical to the
+# upstream package originals — do not normalize line endings.
+###############################################################################
+licenses/** -text
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by
