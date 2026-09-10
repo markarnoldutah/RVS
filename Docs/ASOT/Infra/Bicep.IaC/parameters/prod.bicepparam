@@ -1,19 +1,17 @@
 using '../main.bicep'
 
 // ──────────────────────────────────────────────────────────────
-// PROD — Phase 1 of 2 (initial deploy)
+// PROD — the one and only production parameter file
 // ──────────────────────────────────────────────────────────────
-// Creates all primary resources, both SWAs, and the rvintake.com
-// DNS zone (empty — no apex A/TXT yet). The Intake apex custom
-// domain is NOT bound to the SWA in this phase.
+// Deployable as committed, first time and every time. There is no
+// phase 1 / phase 2 and nothing in here to fill in after the fact.
 //
-// After this deploy completes:
-//   1. In the Azure Portal (or `az staticwebapp hostname add`),
-//      register `rvintake.com` against the prod Intake SWA. Azure
-//      issues a TXT validation token and lists the regional apex
-//      anycast IPv4 addresses.
-//   2. Copy those values into prod_phase2.bicepparam.
-//   3. Re-run with prod_phase2.bicepparam.
+// The single thing Bicep does not do is the one-time registration
+// of the rvintake.com apex against the Intake SWA: Azure mints the
+// ownership token at registration time, so it cannot be authored
+// here. That handshake is a portal (or CLI) step you run once,
+// after the first deploy — README.md "Deploy Production", step 2.
+// Redeploys never touch it.
 // ──────────────────────────────────────────────────────────────
 
 param environmentName = 'prod'
@@ -22,8 +20,10 @@ param whisperLocation = 'northcentralus'
 param primaryResourceGroupName = 'rg-rvs-prod-westus3'
 param whisperResourceGroupName = 'rg-rvs-prod-ncus'
 param openAiCapacity = 30
+param whisperCapacity = 2
 
-// App Service (API) — Standard S1: Always On, deployment slots (staging), autoscale ready
+// App Service (API) — Standard S1: Always On, deployment slots (staging), autoscale ready.
+// Cost-conscious alternative: appServiceSkuName = 'B1' (see prod_basic.bicepparam).
 param deployAppService = true
 param appServiceSkuName = 'S1'
 
@@ -32,8 +32,13 @@ param deployCosmosDb = true
 param cosmosCapacityMode = 'Serverless'
 
 // Storage (rvs-attachments container + CORS for SAS uploads)
+// Custom domains only — default SWA hostnames intentionally excluded.
 param deployStorageAccount = true
 param storageAllowSharedKeyAccess = false
+param storageCorsOrigins = [
+  'https://rvintake.com'
+  'https://manager.rvserviceflow.com'
+]
 // devBlobAccessPrincipalId intentionally unset for prod — the app uses its managed
 // identity; humans get blob data access just-in-time (PIM) or via break-glass, never standing.
 
@@ -53,9 +58,9 @@ param swaLocation = 'westus2'
 param swaResourceGroupName = 'rg-rvs-prod-westus2'
 param swaSkuName = 'Standard'
 
-// DNS — Manager: CNAME manager.rvserviceflow.com binds in this phase.
-// Intake apex stays UNBOUND in phase 1 (intakeApex* params left empty);
-// the rvintake.com zone is created so Azure can issue the TXT token.
+// DNS — Manager: CNAME manager.rvserviceflow.com, bound by Bicep.
+//       Intake:  ALIAS A record at the rvintake.com apex → Intake SWA, written by
+//                Bicep; the apex *binding* is the one-time out-of-band step above.
 param deployDns = true
 
 // Grant DNS Zone Contributor (zone-scoped, NOT RG-wide) to the staging

@@ -20,11 +20,11 @@
 #   0.  One-time shell setup — subscription + well-known IDs
 #   1.  IDEMPOTENT REDEPLOY  ← run after every committed .bicep change
 #         1a. Staging
-#         1b. Production (steady state = phase 2 params)
+#         1b. Production
 #         1c. what-if preview (dry run, optional)
 #   2.  First-time / infrequent deploys
 #         2a. Resource-group scaffold
-#         2b. Production two-phase bring-up (apex domain binding)
+#         2b. Production first bring-up — the one-time apex registration
 #   3.  SKU upgrades (single-param redeploys)
 #   4.  PERMISSIONS / RBAC
 #         4a. GitHub Actions OIDC deployer SP — federated creds + Contributor
@@ -80,7 +80,7 @@ DEV_BLOB_GROUP_OBJECT_ID="e7c21157-3e7a-4a31-9408-c4ccef22670e"
 #
 # ── DNS zones (both live in the PROD primary RG, shared across envs) ──────────
 #   rvserviceflow.com  → Manager SWA   (manager-staging.* CNAME, manager.* CNAME)
-#   rvintake.com       → Intake SWA    (staging.* CNAME in staging; apex A+TXT in prod)
+#   rvintake.com       → Intake SWA    (staging.* CNAME in staging; apex ALIAS-A in prod)
 #   ...both in rg-rvs-prod-westus3
 #
 # ── Resource names by environment (from main.bicep name vars / naming-tags) ───
@@ -127,15 +127,16 @@ az deployment sub create `
   --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam `
   --name "rvs-staging-$ts"
 
-# ── 1b. PRODUCTION — steady state ────────────────────────────────────────────
-# Use prod_phase2.bicepparam for ALL routine prod redeploys (it carries the
-# bound Intake apex A + TXT values captured during first bring-up, Section 2b).
-# prod_phase1.bicepparam is ONLY for the very first prod deploy.
+# ── 1b. PRODUCTION ───────────────────────────────────────────────────────────
+# One file, prod.bicepparam, first time and every time. It is deployable as
+# committed — nothing in it is a placeholder. The very first run also needs the
+# one-time apex registration afterwards (Section 2b); redeploys never touch it.
+# Auth0 values are passed on the CLI, not stored in the file (Section 4d).
 # bash / zsh
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
   --name "rvs-prod-$(date +%Y%m%d%H%M)"
 
 # PowerShell
@@ -143,12 +144,12 @@ $ts = Get-Date -Format "yyyyMMddHHmm"
 az deployment sub create `
   --location westus3 `
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam `
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam `
   --name "rvs-prod-$ts"
 
 # prod_basic.bicepparam is the cost-conscious alternate (App Service B1 instead
-# of S1, no deployment slot). Swap it in place of prod_phase2 only if you have
-# deliberately downgraded prod.
+# of S1, no deployment slot). Swap it in place of prod.bicepparam only if you
+# have deliberately downgraded prod.
 
 # ── 1c. what-if preview (dry run — inspect the change set before committing) ──
 # Same args as the deploy, `create` → `what-if`. No `--name` needed.
@@ -160,7 +161,7 @@ az deployment sub what-if \
 az deployment sub what-if \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -182,42 +183,64 @@ az deployment sub create `
   --template-file Docs/ASOT/Infra/Bicep.IaC/rg-scaffold.bicep `
   --name "rvs-rg-scaffold-$ts"
 
-# ── 2b. PRODUCTION two-phase bring-up (only needed once) ─────────────────────
-# The rvintake.com apex can't bind to the Intake SWA until Azure has issued the
-# SWA a TXT validation token + anycast apex IPs, which only happens after the
-# SWA exists. So: phase 1 stands everything up with the apex UNBOUND, you
-# register the apex and capture the values, then phase 2 binds it.
+# ── 2b. PRODUCTION first bring-up — the one-time apex registration ───────────
+# Full narrative with the portal path: README.md "Deploy Production". Summary:
+#
+#   Bicep (Section 1b) creates everything, binds manager.rvserviceflow.com, and
+#   writes an ALIAS A record at the rvintake.com apex → Intake SWA. Azure DNS
+#   tracks the SWA's address itself, so no IP is pinned anywhere.
+#
+#   What Bicep deliberately does NOT do is *register* the apex with the SWA:
+#   Azure mints the TXT ownership token at registration time, so it cannot be
+#   authored in a param file — which is exactly what the old prod_phase2
+#   placeholders were trying (and failing) to do. Register once, by hand, after
+#   the first Section 1b run. Incremental redeploys leave it alone forever.
+#
+# Easiest: Portal → stapp-rvs-intake-prod → Settings → Custom domains → + Add
+#          → "Custom Domain on Azure DNS" → zone rvintake.com → Add. Azure writes
+#          the TXT, confirms the ALIAS, validates. Wait for Status = Ready.
+#
+# CLI equivalent (NOTE: the command is `hostname set`; `hostname add` does not
+# exist. NOTE: prod Intake SWA lives in rg-rvs-prod-westus2, the zone in
+# rg-rvs-prod-westus3):
 
-# Phase 1 — all resources + empty rvintake.com zone, apex unbound
-az deployment sub create \
-  --location westus3 \
-  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase1.bicepparam \
-  --name "rvs-prod-phase1-$(date +%Y%m%d%H%M)"
-
-# Between phases — register the apex against the prod Intake SWA, then read back
-# the validation token + apex IPv4 list. NOTE: prod Intake SWA lives in
-# rg-rvs-prod-westus2 (the earlier version of this file had the wrong RG here).
-az staticwebapp hostname add \
+# 1. Register. --no-wait because the operation blocks until the TXT validates,
+#    and the TXT does not exist yet.
+az staticwebapp hostname set \
   --name stapp-rvs-intake-prod \
+  --resource-group rg-rvs-prod-westus2 \
   --hostname rvintake.com \
-  --resource-group rg-rvs-prod-westus2
+  --validation-method dns-txt-token \
+  --no-wait
 
+# 2. Read the token. This is the only value `hostname show` returns — it has no
+#    IP-address field, and none is needed with the ALIAS record.
+TOKEN=$(az staticwebapp hostname show \
+  --name stapp-rvs-intake-prod \
+  --resource-group rg-rvs-prod-westus2 \
+  --hostname rvintake.com \
+  --query validationToken -o tsv)
+echo "$TOKEN"
+
+# 3. Publish the token at the apex.
+az network dns record-set txt add-record \
+  --resource-group rg-rvs-prod-westus3 \
+  --zone-name rvintake.com \
+  --record-set-name @ \
+  --value "$TOKEN"
+
+# 4. Poll until status = Ready (minutes — the zone is on Azure DNS, so the
+#    "up to 72 h" in Microsoft's doc does not apply in practice).
 az staticwebapp hostname show \
   --name stapp-rvs-intake-prod \
+  --resource-group rg-rvs-prod-westus2 \
   --hostname rvintake.com \
-  --resource-group rg-rvs-prod-westus2
-# → paste "validationToken" into  intakeApexValidationValues
-# → paste "ipAddresses"     into  intakeApexIpv4Addresses
-#   in Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam
+  --query '{status:status, error:errorMessage}' -o json
 
-# Phase 2 — bind the apex (A + TXT). From here on, all prod deploys use
-# prod_phase2.bicepparam (Section 1b).
-az deployment sub create \
-  --location westus3 \
-  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam \
-  --name "rvs-prod-phase2-$(date +%Y%m%d%H%M)"
+# 5. Verify end to end.
+dig +short rvintake.com A
+az staticwebapp hostname list --name stapp-rvs-intake-prod  --resource-group rg-rvs-prod-westus2 -o table
+az staticwebapp hostname list --name stapp-rvs-manager-prod --resource-group rg-rvs-prod-westus2 -o table
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -240,7 +263,7 @@ az deployment sub create \
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
   --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 \
   --name "rvs-prod-cosmos-$(date +%Y%m%d%H%M)"
 
@@ -300,7 +323,7 @@ az role assignment list --assignee "$DEPLOYER_APP_ID" --all \
 # Contributor on the prod RG.
 #
 # This grant is normally made BY Bicep: dnsZoneContributorPrincipalIds in
-# prod_phase1/phase2.bicepparam already contains the deployer SP object id
+# prod.bicepparam already contains the deployer SP object id
 # ($DEPLOYER_SP_OBJECT_ID), and modules/dns-zone-contributor.bicep creates the
 # assignment at zone scope during a prod deploy. The manual equivalent:
 

@@ -6,7 +6,7 @@ param whisperLocation = 'northcentralus'
 param primaryResourceGroupName = 'rg-rvs-staging-westus3'
 param whisperResourceGroupName = 'rg-rvs-staging-ncus'
 param openAiCapacity = 10
-param whisperCapacity = 3
+param whisperCapacity = 1
 
 // App Service (API) — Basic B1 ($13.14/mo), upgrade path: B1 → S1
 param deployAppService = true

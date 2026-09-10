@@ -39,20 +39,22 @@
 
 ## Environments
 
-All four parameter files set every deploy flag to `true`, `cosmosCapacityMode='Serverless'`, `storageAllowSharedKeyAccess=false`, `swaSkuName='Standard'`, `swaLocation='westus2'`. The differences are small:
+All three parameter files set every deploy flag to `true`, `cosmosCapacityMode='Serverless'`, `storageAllowSharedKeyAccess=false`, `swaSkuName='Standard'`, `swaLocation='westus2'`. The differences are small:
 
-| | `staging` | `prod_basic` | `prod_phase1` | `prod_phase2` |
-|---|---|---|---|---|
-| App Service SKU | `B1` | `B1` | `S1` | `S1` |
-| Staging slot | no | no | yes | yes |
-| OpenAI capacity | 10 | 30 | 30 | 30 |
-| Whisper capacity | 3 | 1 | 1 | 1 |
-| DNS RBAC principals | — | — | set | set |
-| Apex A/TXT records | — | — | — | placeholders |
+| | `staging` | `prod` | `prod_basic` |
+|---|---|---|---|
+| App Service SKU | `B1` | `S1` | `B1` |
+| Staging slot | no | yes | no |
+| OpenAI capacity | 10 | 30 | 30 |
+| Whisper capacity | 1 | 2 | 2 |
+| Storage CORS origins | set | set | default |
+| DNS RBAC principals | — | set | — |
+
+Every file is deployable as committed. Prod is a single file with no phases; the only thing it leaves to a human is the one-time registration of the `rvintake.com` apex with the Intake SWA, which needs a token Azure mints at registration time — the sequence is in `Infra/Bicep.IaC/README.md` "Deploy Production". Redeploys never touch it.
 
 Two things to know before using these:
 
-- **`prod_phase2` is not deployable as committed.** `intakeApexIpv4Addresses` is `['0.0.0.0']` and `intakeApexValidationValues` is `['REPLACE_WITH_AZURE_TXT_TOKEN']`. The apex binding is a deliberate two-phase dance: deploy, read the TXT token Azure issues, fill it in, deploy again.
+- **Prod has not been deployed yet** (as of 2026-09-10 the prod resource groups hold only the two DNS zones, which the staging deploy created). The first prod run is the README sequence, start to finish. The northcentralus Whisper quota is 3 units subscription-wide; `staging = 1` + `prod = 2` fits it exactly with no headroom, so if staging is still deployed at its old `whisperCapacity = 3` it must be redeployed before the prod pre-flight will pass.
 - **No parameter file sets the Auth0 values.** `auth0Domain`, `auth0Audience`, `auth0ClientId`, `auth0ClientSecret` are empty, so `auth0-keyvault-secrets.bicep` never runs from a param file. Those secrets must be passed on the CLI or written to the vault by hand.
 
 ---
@@ -98,7 +100,7 @@ Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint,
 
 ## Networking and DNS
 
-Two public DNS zones — `rvserviceflow.com` (Manager) and `rvintake.com` (Intake) — both living in `rg-rvs-prod-westus3`. Subdomains bind to the Static Web Apps by CNAME delegation; the production apex uses the two-phase A + TXT token flow. `dns-zone-contributor.bicep` grants the staging deployer zone-scoped rights so it can write records into prod-owned zones.
+Two public DNS zones — `rvserviceflow.com` (Manager) and `rvintake.com` (Intake) — both living in `rg-rvs-prod-westus3`. Subdomains bind to the Static Web Apps by CNAME delegation, with the binding (`swa-custom-domain.bicep`) ordered after the record it validates against. The production apex is an ALIAS A record that tracks the Intake SWA resource — no IP is pinned — plus a one-time out-of-band TXT-token registration that Bicep does not declare. `dns-zone-contributor.bicep` grants the staging deployer zone-scoped rights so it can write records into prod-owned zones.
 
 **There are no VNets, no private endpoints, and no private DNS zones anywhere.** Cosmos, Key Vault, Storage, Log Analytics, App Insights and both Azure OpenAI accounts (GPT-4o + Whisper) are all reachable publicly, with Storage, Key Vault and the OpenAI accounts' network ACLs defaulting to `Allow` (`bypass: AzureServices`). Blob CORS permits GET/HEAD/PUT from the Static Web App custom domains only.
 
@@ -127,7 +129,6 @@ Auth: the API uses Azure OIDC federated credentials, no long-lived secrets. Stat
 |---|---|
 | `build-mobile.yml` | Builds `RVS.MAUI.Tech` on `mobile-v*` tags. That project is not in the repo and the offline mobile app is archived. Delete the workflow |
 | `deployment-cmds.azcli` | References a `parameters/dev.bicepparam` that does not exist. It also carries a manual `Stripe--WebhookSecret` vault write — harmless, but premature: billing is build item 7 and nothing reads that secret yet |
-| `prod_phase2` placeholders | See Environments above |
 
 ---
 
