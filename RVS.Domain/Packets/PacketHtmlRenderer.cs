@@ -33,6 +33,12 @@ namespace RVS.Domain.Packets;
 ///   labels, never by colour alone.</item>
 ///   <item>The diagnostic Q&amp;A block is the visually dominant one; it is the block that
 ///   must read as expert.</item>
+///   <item>Email-client-safe layout: this HTML is used verbatim as the packet delivery
+///   email body, and Gmail/Outlook silently drop <c>display:flex</c> and
+///   <c>display:grid</c>. Every horizontal band (masthead top, the Customer / Location /
+///   Unit identity band, the static footer) is therefore a presentational
+///   <c>&lt;table&gt;</c> with its column geometry carried in <c>style=</c> attributes so
+///   it still reads as columns when the <c>&lt;style&gt;</c> block is stripped.</item>
 /// </list>
 /// </summary>
 public static class PacketHtmlRenderer
@@ -84,8 +90,10 @@ public static class PacketHtmlRenderer
     // IDS puts the tracking number top-right and identifies the job in a three-column
     // Customer / Dates / Unit band. We mirror that: RVS # + full received timestamp in the
     // refbox, the customer name (Last, First) above the year/make/model headline, then a
-    // Customer | Location | Unit grid. The Spec B-2 section markers stay in order (unit,
-    // customer, origin) so the ordering contract is unchanged.
+    // Customer | Location | Unit band. The band and the refbox row are presentational
+    // <table>s, not flex/grid — mail clients drop those and the columns would stack. The
+    // Spec B-2 section markers stay in order (unit, customer, origin) so the ordering
+    // contract is unchanged.
 
     private static void AppendMasthead(
         StringBuilder sb, ServicePacket packet, string submittedUtc)
@@ -96,32 +104,38 @@ public static class PacketHtmlRenderer
         var branding = packet.Branding;
 
         sb.Append("<!-- section:unit -->\n");
-        sb.Append("<header class=\"masthead\">\n");
+        sb.Append("<header class=\"masthead\" style=\"border-bottom:2px solid #000;padding-bottom:3mm;\">\n");
 
         // Masthead top: optional logo + brand letterhead left, tracking number right.
-        sb.Append("<div class=\"masthead-top\">\n");
-        sb.Append("<div class=\"brand\">\n");
+        // A presentational <table>, never flexbox: this HTML is used verbatim as the packet
+        // delivery email body, and Gmail/Outlook drop `display:flex`, which would collapse
+        // this row into a single stacked column. Column geometry is carried inline so it
+        // survives even when the <style> block is stripped.
+        sb.Append("<table role=\"presentation\" class=\"masthead-top\" width=\"100%\" style=\"width:100%;border-collapse:collapse;\">\n<tr>\n");
+        sb.Append("<td class=\"brand\" style=\"vertical-align:top;\">\n");
         if (branding.HasLogo)
         {
-            sb.Append("<img class=\"masthead-logo\" src=\"").Append(Attr(branding.LogoDataUri!)).Append("\" alt=\"\">\n");
+            sb.Append("<img class=\"masthead-logo\" src=\"").Append(Attr(branding.LogoDataUri!))
+                .Append("\" alt=\"\" style=\"height:12mm;width:auto;vertical-align:middle;margin-right:4mm;\">\n");
         }
 
-        sb.Append("<div class=\"letterhead\">").Append(Text(branding.BrandName))
-            .Append("<span class=\"doctype\">Service intake packet</span></div>\n");
-        sb.Append("</div>\n");
-        sb.Append("<div class=\"refbox\">\n");
-        sb.Append("<p class=\"rvsno\">RVS #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
+        sb.Append("<div class=\"letterhead\" style=\"font-size:13pt;font-weight:700;\">").Append(Text(branding.BrandName))
+            .Append("<span class=\"doctype\" style=\"display:block;font-size:8.5pt;font-weight:400;text-transform:uppercase;letter-spacing:0.06em;\">Service intake packet</span></div>\n");
+        sb.Append("</td>\n");
+        sb.Append("<td class=\"refbox\" style=\"vertical-align:top;text-align:right;white-space:nowrap;\">\n");
+        sb.Append("<p class=\"rvsno\" style=\"margin:0;font-size:12pt;\">RVS #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
         // Received line carries the full timestamp (date + time, UTC) — it is the one
         // Received line on the packet (the Location column no longer repeats it).
-        sb.Append("<p class=\"received\">Received: ").Append(Text(submittedUtc)).Append("</p>\n");
-        sb.Append("</div>\n</div>\n");
+        sb.Append("<p class=\"received\" style=\"margin:0.5mm 0 0;font-size:9pt;\">Received: ").Append(Text(submittedUtc)).Append("</p>\n");
+        sb.Append("</td>\n</tr>\n</table>\n");
 
         // Customer name, family-name-first, above the unit descriptor headline
         // (mirrors the ServiceRequestDetail title).
         var sortableName = customer.SortableName;
         if (!string.IsNullOrWhiteSpace(sortableName))
         {
-            sb.Append("<p class=\"customer-headline\">").Append(Text(sortableName)).Append("</p>\n");
+            sb.Append("<p class=\"customer-headline\" style=\"font-size:11.5pt;font-weight:700;margin:3mm 0 0;\">")
+                .Append(Text(sortableName)).Append("</p>\n");
         }
 
         // Unit descriptor headline — useful in a cold inbox; IDS omits it only because the
@@ -134,41 +148,44 @@ public static class PacketHtmlRenderer
             .Append(string.IsNullOrWhiteSpace(descriptor) ? "Unit details not provided" : Text(descriptor))
             .Append("</h1>\n");
 
-        // Three-column identity band.
-        sb.Append("<div class=\"idcols\">\n");
+        // Three-column identity band — a presentational <table>, never CSS grid (same
+        // email-client reason as the masthead top). Each column carries its width and top
+        // alignment inline so the band still reads as three columns when the <style> block
+        // is discarded by a mail client.
+        sb.Append("<table role=\"presentation\" class=\"idcols\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:3mm;\">\n<tr>\n");
 
         sb.Append("<!-- section:customer -->\n");
-        sb.Append("<section class=\"col customer\">\n<h2>Customer</h2>\n");
-        sb.Append("<p class=\"name\">").Append(Text(customer.FullName)).Append("</p>\n");
+        sb.Append("<td class=\"col customer\" style=\"vertical-align:top;width:34%;padding-right:6mm;font-size:9.5pt;\">\n<h2>Customer</h2>\n");
+        sb.Append("<p class=\"name\" style=\"font-weight:700;margin:0 0 1mm;\">").Append(Text(customer.FullName)).Append("</p>\n");
         AppendRow(sb, "Phone", customer.Phone);
         AppendRow(sb, "Email", customer.Email);
         AppendRow(sb, "Preferred contact", customer.PreferredContact);
-        sb.Append("</section>\n");
+        sb.Append("</td>\n");
 
         sb.Append("<!-- section:origin -->\n");
-        sb.Append("<section class=\"col origin\">\n<h2>Location</h2>\n");
+        sb.Append("<td class=\"col origin\" style=\"vertical-align:top;width:33%;padding-right:6mm;font-size:9.5pt;\">\n<h2>Location</h2>\n");
         AppendRow(sb, "Location", origin.LocationName);
         AppendRow(sb, "Location phone", origin.LocationPhone);
-        sb.Append("</section>\n");
+        sb.Append("</td>\n");
 
-        sb.Append("<section class=\"col unit\">\n<h2>Unit</h2>\n");
+        sb.Append("<td class=\"col unit\" style=\"vertical-align:top;width:33%;font-size:9.5pt;\">\n<h2>Unit</h2>\n");
         var hasUnitRow = false;
         hasUnitRow |= AppendRow(sb, "Year", unit.Year?.ToString(CultureInfo.InvariantCulture));
         hasUnitRow |= AppendRow(sb, "Manufacturer", unit.Make);
         hasUnitRow |= AppendRow(sb, "Model", unit.Model);
         if (unit.HasVin)
         {
-            sb.Append("<p class=\"row\">Serial# (VIN): <span>").Append(Text(unit.Vin!)).Append("</span></p>\n");
+            sb.Append("<p class=\"row\" style=\"margin:0 0 1mm;\">Serial# (VIN): <span>").Append(Text(unit.Vin!)).Append("</span></p>\n");
             hasUnitRow = true;
         }
 
         if (!hasUnitRow)
         {
-            sb.Append("<p class=\"empty\">Not recorded</p>\n");
+            sb.Append("<p class=\"empty\" style=\"font-style:italic;margin:0 0 1mm;\">Not recorded</p>\n");
         }
 
-        sb.Append("</section>\n");
-        sb.Append("</div>\n");
+        sb.Append("</td>\n");
+        sb.Append("</tr>\n</table>\n");
         sb.Append("</header>\n");
     }
 
@@ -329,11 +346,12 @@ public static class PacketHtmlRenderer
     {
         // A static end-of-flow footer for engines that ignore @page margin boxes
         // (Safari); the @page rule in the stylesheet repeats the same line on every
-        // printed page where supported.
-        sb.Append("<footer class=\"packet-foot\">\n");
-        sb.Append("<span>RVS #").Append(Text(referenceCode)).Append(" · ").Append(Text(submittedUtc)).Append("</span>\n");
-        sb.Append("<span>").Append(Text(brandName)).Append(" — service intake packet</span>\n");
-        sb.Append("</footer>\n");
+        // printed page where supported. A presentational <table> so the two ends stay on
+        // one line in a mail client (no flexbox).
+        sb.Append("<table role=\"presentation\" class=\"packet-foot\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:8mm;border-top:1px solid #000;font-size:8pt;\">\n<tr>\n");
+        sb.Append("<td style=\"padding-top:2mm;vertical-align:top;\">RVS #").Append(Text(referenceCode)).Append(" · ").Append(Text(submittedUtc)).Append("</td>\n");
+        sb.Append("<td style=\"padding-top:2mm;vertical-align:top;text-align:right;\">").Append(Text(brandName)).Append(" — service intake packet</td>\n");
+        sb.Append("</tr>\n</table>\n");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -346,7 +364,7 @@ public static class PacketHtmlRenderer
             return false;
         }
 
-        sb.Append("<p class=\"row\">").Append(label).Append(": <span>")
+        sb.Append("<p class=\"row\" style=\"margin:0 0 1mm;\">").Append(label).Append(": <span>")
             .Append(Text(value)).Append("</span></p>\n");
         return true;
     }
@@ -428,11 +446,13 @@ public static class PacketHtmlRenderer
 
         section, header { margin: 0 0 6mm; break-inside: avoid; }
 
-        /* Masthead — IDS-style letterhead + top-right tracking number + 3-column band. */
+        /* Masthead — IDS-style letterhead + top-right tracking number + 3-column band.
+           Bands are presentational <table>s, not flex/grid: the same HTML is used as the
+           packet delivery email body and mail clients drop flex/grid layout. */
         .masthead { border-bottom: 2px solid #000; padding-bottom: 3mm; }
-        .masthead-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
-        .brand { display: flex; align-items: center; gap: 4mm; }
-        .masthead-logo { height: 12mm; width: auto; }
+        .masthead-top { width: 100%; border-collapse: collapse; }
+        .masthead-top .brand { vertical-align: top; }
+        .masthead-logo { height: 12mm; width: auto; vertical-align: middle; margin-right: 4mm; }
         .letterhead { font-size: 13pt; font-weight: 700; }
         .letterhead .doctype {
           display: block;
@@ -441,18 +461,16 @@ public static class PacketHtmlRenderer
           text-transform: uppercase;
           letter-spacing: 0.06em;
         }
-        .refbox { text-align: right; white-space: nowrap; }
+        .refbox { text-align: right; white-space: nowrap; vertical-align: top; }
         .refbox .rvsno { margin: 0; font-size: 12pt; }
         .refbox .rvsno strong { font-size: 13pt; }
         .refbox .received { margin: 0.5mm 0 0; font-size: 9pt; }
 
-        .idcols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6mm; margin-top: 3mm; }
-        .idcols .customer { grid-column: 1; }
-        .idcols .origin { grid-column: 2; }
-        .idcols .unit { grid-column: 3; }
-        .idcols .col { margin: 0; }
+        .idcols { width: 100%; border-collapse: collapse; margin-top: 3mm; }
+        .idcols .col { vertical-align: top; font-size: 9.5pt; }
+        .idcols .col.customer, .idcols .col.origin { padding-right: 6mm; }
         .idcols .col h2 { font-size: 8.5pt; margin-bottom: 1.5mm; }
-        .idcols .col p { margin: 0 0 1mm; font-size: 9.5pt; }
+        .idcols .col p { margin: 0 0 1mm; }
         .idcols .col .name { font-weight: 700; }
         .idcols .col .empty { font-style: italic; }
 
@@ -515,14 +533,13 @@ public static class PacketHtmlRenderer
         .status-link a { color: #000; }
 
         .packet-foot {
+          width: 100%;
+          border-collapse: collapse;
           margin-top: 8mm;
-          padding-top: 2mm;
           border-top: 1px solid #000;
           font-size: 8pt;
-          display: flex;
-          justify-content: space-between;
-          gap: 6mm;
         }
+        .packet-foot td { padding-top: 2mm; }
 
         @media print {
           body { font-size: 10pt; }
