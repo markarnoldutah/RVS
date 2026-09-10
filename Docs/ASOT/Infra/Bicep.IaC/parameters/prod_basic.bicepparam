@@ -1,11 +1,17 @@
 using '../main.bicep'
 
+// PROD — cost-conscious alternate to prod.bicepparam (App Service B1 instead of S1:
+// no Always On, no deployment slot). Keep the two files in step; the only intended
+// difference is appServiceSkuName. Does not set dnsZoneContributorPrincipalIds —
+// deploy prod.bicepparam at least once so the zone-scoped grants exist.
+
 param environmentName = 'prod'
 param location = 'westus3'
 param whisperLocation = 'northcentralus'
 param primaryResourceGroupName = 'rg-rvs-prod-westus3'
 param whisperResourceGroupName = 'rg-rvs-prod-ncus'
 param openAiCapacity = 30
+param whisperCapacity = 2
 
 // App Service (API) — Basic B1 (~$12/mo): cost-conscious production, no Always On / slots
 param deployAppService = true
@@ -37,7 +43,7 @@ param swaLocation = 'westus2'
 param swaResourceGroupName = 'rg-rvs-prod-westus2'
 param swaSkuName = 'Standard'
 
-// DNS — Manager: CNAME manager.rvserviceflow.com. Intake: apex A-record for rvintake.com (separate zone).
-// Apex binding is two-phase: first deploy creates the zone; register the SWA custom domain, then set
-// intakeApexIpv4Addresses + intakeApexValidationValues (from Azure portal / `az staticwebapp hostname`) and redeploy.
+// DNS — Manager: CNAME manager.rvserviceflow.com, bound by Bicep.
+//       Intake:  ALIAS A record at the rvintake.com apex → Intake SWA. The apex *binding*
+//                is a one-time out-of-band step — README.md "Deploy Production", step 2.
 param deployDns = true

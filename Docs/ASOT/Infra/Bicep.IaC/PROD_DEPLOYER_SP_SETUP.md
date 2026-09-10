@@ -3,8 +3,7 @@
 This runbook walks you through provisioning the GitHub Actions OIDC service
 principal that the **production** deploy workflow uses, and confirms the value
 that goes into `dnsZoneContributorPrincipalIds` in
-[parameters/prod_phase1.bicepparam](parameters/prod_phase1.bicepparam) and
-[parameters/prod_phase2.bicepparam](parameters/prod_phase2.bicepparam).
+[parameters/prod.bicepparam](parameters/prod.bicepparam).
 
 > **Companion doc:** [.github/workflows/README.md](../../../../.github/workflows/README.md)
 > covers the SWA tokens, federated credentials, and GitHub environment variables
@@ -187,8 +186,7 @@ SP gets RG-wide Contributor in B.3, so a zone-scoped grant is technically
 redundant — but include it for explicit-intent and so the assignment exists if
 the prod SP is ever downgraded off RG Contributor.
 
-Edit both [prod_phase1.bicepparam](parameters/prod_phase1.bicepparam) and
-[prod_phase2.bicepparam](parameters/prod_phase2.bicepparam):
+Edit [prod.bicepparam](parameters/prod.bicepparam):
 
 ```bicep
 param dnsZoneContributorPrincipalIds = [
@@ -206,7 +204,7 @@ param dnsZoneContributorPrincipalIds = [
 
 ## Verification (both options)
 
-After running `prod_phase1.bicepparam`, confirm the role assignments landed at
+After running `prod.bicepparam`, confirm the role assignments landed at
 **zone scope** (not RG scope):
 
 ```bash

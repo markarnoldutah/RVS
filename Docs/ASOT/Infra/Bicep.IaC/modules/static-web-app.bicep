@@ -2,6 +2,10 @@
 // Module: Azure Static Web App
 // Deploys a single SWA resource and surfaces the deployment token
 // for storage as a GitHub Secret (SWA_TOKEN_*).
+//
+// Custom-domain bindings are NOT declared here — they live in
+// swa-custom-domain.bicep so main.bicep can order them after the
+// DNS records they validate against.
 // ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
@@ -23,9 +27,6 @@ param tags object
 ])
 param skuName string = 'Free'
 
-@description('Custom domain hostnames to bind. Each entry: { hostname: string, validationMethod: string }. Use "cname-delegation" for subdomain CNAMEs or "dns-txt-token" for apex domains.')
-param customDomains array = []
-
 // ── Resources ─────────────────────────────────────────────────
 
 resource staticSite 'Microsoft.Web/staticSites@2024-11-01' = {
@@ -45,14 +46,6 @@ resource staticSite 'Microsoft.Web/staticSites@2024-11-01' = {
     enterpriseGradeCdnStatus: 'Disabled'
   }
 }
-
-resource customDomainBindings 'Microsoft.Web/staticSites/customDomains@2024-11-01' = [for domain in customDomains: {
-  parent: staticSite
-  name: domain.hostname
-  properties: {
-    validationMethod: domain.validationMethod
-  }
-}]
 
 // ── Outputs ───────────────────────────────────────────────────
 

@@ -74,12 +74,12 @@ Docs/ASOT/Infra/Bicep.IaC/
 │   ├── communication-services.bicep        # Azure Communication Services (Email + SMS)
 │   ├── acs-keyvault-secrets.bicep          # Stores ACS secrets in Key Vault
 │   ├── storage-account.bicep               # Storage account + rvs-attachments container
-│   ├── static-web-app.bicep                # Azure Static Web App
-│   └── dns.bicep                           # DNS zone + CNAME/A/TXT record sets (called once per zone)
+│   ├── static-web-app.bicep                # Azure Static Web App (resource only — no bindings)
+│   ├── swa-custom-domain.bicep             # SWA custom-domain binding, ordered after its DNS record
+│   └── dns.bicep                           # DNS zone + CNAME / A / ALIAS-A / TXT record sets (called once per zone)
 ├── parameters/
 │   ├── staging.bicepparam                  # Staging parameter values (full)
-│   ├── prod_phase1.bicepparam              # Production phase 1: all resources + DNS zones, Intake apex unbound
-│   ├── prod_phase2.bicepparam              # Production phase 2: binds Intake apex (A + TXT), requires values from phase 1
+│   ├── prod.bicepparam                     # Production — the one prod file, deployable as committed
 │   └── prod_basic.bicepparam               # Production with B1 App Service (cost-conscious alt)
 └── README.md                               # This file
 ```
@@ -120,53 +120,133 @@ az deployment sub create \
   --name "rvs-staging-${TS}"
 ```
 
-### Deploy Production (two-phase)
+### Deploy Production
 
-Production is deployed in **two phases** because the `rvintake.com` apex SWA
-custom domain requires Azure to issue a TXT validation token and apex anycast
-IPs *after* the SWA is created. Phase 1 stands up all resources plus the empty
-DNS zone; phase 2 binds the apex.
+One parameter file, `prod.bicepparam`, deployable as committed — there is no
+phase 1 / phase 2 and nothing to fill in afterwards. Bicep stands up every
+resource, binds `manager.rvserviceflow.com`, and writes an **ALIAS** A record
+at the `rvintake.com` apex that tracks the Intake SWA (no pinned IP). The one
+thing it does not do is *register* the apex with the SWA: Azure mints the
+ownership token at registration time, so that is a one-time step you do by
+hand after the first deploy (step 2). Redeploys never touch it.
 
-**Phase 1 — initial provisioning (apex unbound)**
+Prerequisites, all already true for this subscription as of 2026-09-10:
+the six resource groups exist (`rg-scaffold.bicep`), both DNS zones exist in
+`rg-rvs-prod-westus3`, and both apex domains are delegated to Azure DNS at
+the registrar (`dig NS rvintake.com` → `ns1-08.azure-dns.com` …).
 
-```powershell
-$ts = Get-Date -Format "yyyyMMddHHmm"
-az deployment sub create `
-  --location westus3 `
-  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase1.bicepparam `
-  --name "rvs-prod-phase1-$ts"
-```
+**Step 0 — pre-flight (read-only).** See the change set before you commit
+to it. On a first bring-up expect a wall of `Create`; on a redeploy expect
+`NoChange` almost everywhere.
 
-**Between phases — register the apex with Azure and capture the values:**
+> **Whisper quota — northcentralus is capped at 3 units, subscription-wide.**
+> `staging.bicepparam` now takes `whisperCapacity = 1` and `prod.bicepparam`
+> takes `2`, so the two environments fit the cap exactly (1 + 2 = 3). This
+> leaves no headroom: raising either value, or adding a third environment in
+> that region, needs a quota increase first (Portal → Azure OpenAI → Quotas →
+> *Whisper* / *North Central US*). If staging is still deployed at its old
+> `whisperCapacity = 3`, redeploy staging before the prod pre-flight — the
+> what-if fails `InsufficientQuota` until staging releases those 2 units.
 
 ```bash
-az staticwebapp hostname add \
-  --name stapp-rvs-intake-prod \
-  --hostname rvintake.com \
-  --resource-group rg-rvs-prod-westus2
-
-az staticwebapp hostname show \
-  --name stapp-rvs-intake-prod \
-  --hostname rvintake.com \
-  --resource-group rg-rvs-prod-westus2
+az deployment sub what-if \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam
 ```
 
-Copy the validation token and apex IPv4 list into `prod_phase2.bicepparam`
-(`intakeApexValidationValues` and `intakeApexIpv4Addresses`).
+**Step 1 — deploy.** Pass the Auth0 values on the command line (they are
+deliberately not in the parameter file — see *Key Vault Configuration*), or
+omit them and write the secrets to the vault by hand afterwards.
 
-**Phase 2 — bind the apex**
+```bash
+TS=$(date +%Y%m%d%H%M)
+az deployment sub create \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
+  --parameters auth0Domain='https://<tenant>.us.auth0.com/' \
+               auth0Audience='https://api.rvserviceflow.com' \
+               auth0ClientId='<client id>' \
+               auth0ClientSecret='<client secret>' \
+  --name "rvs-prod-${TS}"
+```
 
 ```powershell
 $ts = Get-Date -Format "yyyyMMddHHmm"
 az deployment sub create `
   --location westus3 `
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam `
-  --name "rvs-prod-phase2-$ts"
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam `
+  --parameters auth0Domain='https://<tenant>.us.auth0.com/' auth0Audience='https://api.rvserviceflow.com' auth0ClientId='<client id>' auth0ClientSecret='<client secret>' `
+  --name "rvs-prod-$ts"
 ```
 
-All subsequent prod deploys use `prod_phase2.bicepparam`.
+When it finishes: `manager.rvserviceflow.com` is bound and serving;
+`rvintake.com` resolves (the ALIAS record is in place) but the SWA does not
+yet accept that hostname, so the apex returns an Azure placeholder page —
+and `https://` fails with a cert-name mismatch — until step 2. The
+deployment's `intakeApexAction` output repeats this reminder (it is a
+non-empty string only for prod).
+
+**Step 2 — register the apex (once, ~5 minutes).** Portal path, which does
+the whole TXT-token handshake for you:
+
+1. Portal → `stapp-rvs-intake-prod` (in `rg-rvs-prod-westus2`) → *Settings* →
+   **Custom domains** → **+ Add** → **Custom Domain on Azure DNS**.
+2. Pick the `rvintake.com` zone, leave the hostname as the apex, **Add**.
+3. Azure writes the TXT ownership record into the zone, confirms the ALIAS
+   record, and validates. Watch *Status* on the row go `Validating` → `Ready`.
+
+If the portal objects that an `@` A record already exists in the zone (it
+should accept it — Bicep wrote the same ALIAS the portal would), delete it and
+retry; the next Bicep redeploy re-creates it as a no-op:
+
+```bash
+az network dns record-set a delete -g rg-rvs-prod-westus3 -z rvintake.com -n @ --yes
+```
+
+CLI path, equivalent (note `hostname set` — there is no `hostname add`):
+
+```bash
+# 1. Register — --no-wait, because the operation blocks until the TXT validates
+az staticwebapp hostname set -n stapp-rvs-intake-prod -g rg-rvs-prod-westus2 \
+  --hostname rvintake.com --validation-method dns-txt-token --no-wait
+
+# 2. Read the token Azure minted (this is the ONLY value `hostname show` returns —
+#    it does not return IP addresses; none are needed with the ALIAS record)
+TOKEN=$(az staticwebapp hostname show -n stapp-rvs-intake-prod -g rg-rvs-prod-westus2 \
+  --hostname rvintake.com --query validationToken -o tsv)
+
+# 3. Publish it
+az network dns record-set txt add-record -g rg-rvs-prod-westus3 -z rvintake.com \
+  -n @ -v "$TOKEN"
+
+# 4. Wait for Ready (re-run until it flips; minutes, not the 72 h the docs quote,
+#    because the zone is on Azure DNS)
+az staticwebapp hostname show -n stapp-rvs-intake-prod -g rg-rvs-prod-westus2 \
+  --hostname rvintake.com --query '{status:status,error:errorMessage}' -o json
+```
+
+**Step 3 — verify.**
+
+```bash
+dig +short rvintake.com A                       # resolves via the ALIAS
+dig +short manager.rvserviceflow.com CNAME      # → <name>.azurestaticapps.net
+az staticwebapp hostname list -n stapp-rvs-intake-prod  -g rg-rvs-prod-westus2 -o table
+az staticwebapp hostname list -n stapp-rvs-manager-prod -g rg-rvs-prod-westus2 -o table
+curl -sSI https://rvintake.com | head -1        # 200 once the app is deployed by CI
+curl -sS  https://<api hostname>/health
+```
+
+The SWAs serve Azure's placeholder until `deploy-production.yml` pushes the
+apps; that workflow needs the two deployment tokens from this deployment's
+outputs stored as GitHub secrets — see *SWA deployment tokens* in
+`deployment-cmds.azcli` §6.
+
+**Redeploys** are step 1 again, verbatim. ARM incremental mode leaves the
+TXT record and the apex binding alone because the template does not declare
+them; it re-asserts everything it does declare.
 
 ### Pre-Provision Resource Groups (all environments)
 
@@ -234,7 +314,7 @@ $ts = Get-Date -Format "yyyyMMddHHmm"
 az deployment sub create `
   --location westus3 `
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep `
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam `
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam `
   --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 `
   --name "rvs-prod-cosmos-upgrade-$ts"
 ```
@@ -245,7 +325,7 @@ TS=$(date +%Y%m%d%H%M)
 az deployment sub create \
   --location westus3 \
   --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
-  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
   --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 \
   --name "rvs-prod-cosmos-upgrade-${TS}"
 ```
@@ -297,8 +377,7 @@ We grant **DNS Zone Contributor** (`befefa01-2a29-4197-83a8-272ff33ce314`)
    ```bash
    az ad sp show --id <STAGING_APP_REG_APPID> --query id -o tsv
    ```
-2. Add it to `dnsZoneContributorPrincipalIds` in `prod_phase1.bicepparam`
-   (and `prod_phase2.bicepparam`).
+2. Add it to `dnsZoneContributorPrincipalIds` in `prod.bicepparam`.
 3. Re-run the prod deploy. The role assignments are created at zone scope.
 
 The staging principal can now upsert record sets in both zones but holds

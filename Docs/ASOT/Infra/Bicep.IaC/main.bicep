@@ -110,12 +110,6 @@ param managerDnsPrefix string = environmentName == 'prod' ? 'manager' : 'manager
 @description('Subdomain prefix for the Intake SWA CNAME record in non-prod envs (e.g. "staging" -> staging.rvintake.com). Ignored in prod where Intake binds to the apex.')
 param intakeDnsPrefix string = environmentName == 'prod' ? '' : environmentName
 
-@description('IPv4 addresses for the Intake apex A record (prod only). SWA does not support Azure DNS alias targeting — Microsoft advertises the regional anycast IPs via the portal after the SWA custom-domain registration is accepted. Leave empty for non-prod; required for prod DNS to resolve to Intake.')
-param intakeApexIpv4Addresses array = []
-
-@description('TXT record values for the Intake apex domain-ownership validation (prod only). Provided by Azure after the SWA customDomains registration request; typically a single-entry list. Leave empty for non-prod.')
-param intakeApexValidationValues array = []
-
 @description('Object IDs of principals (e.g. the staging GitHub Actions service principal) that need DNS Zone Contributor on the shared zones. Granted at zone scope so they cannot touch other prod resources. Set this in prod params, not staging.')
 param dnsZoneContributorPrincipalIds string[] = []
 
@@ -544,26 +538,8 @@ module appInsightsKeyVaultSecrets 'modules/appinsights-keyvault-secrets.bicep' =
 
 // ── Static Web Apps (Intake + Manager) ────────────────────────
 
-var managerCustomDomains = deployDns ? [
-  {
-    hostname: '${managerDnsPrefix}.${managerZoneName}'
-    validationMethod: 'cname-delegation'
-  }
-] : []
-
-// Intake apex (prod) is two-phase: only bind the custom domain once intakeApexValidationValues
-// has been populated (after Azure generates the SWA ownership token on first deploy).
-var intakeCustomDomains = deployDns && environmentName == 'prod' && !empty(intakeApexValidationValues) ? [
-  {
-    hostname: intakeZoneName
-    validationMethod: 'dns-txt-token'
-  }
-] : deployDns && environmentName != 'prod' ? [
-  {
-    hostname: '${intakeDnsPrefix}.${intakeZoneName}'
-    validationMethod: 'cname-delegation'
-  }
-] : []
+// Custom-domain bindings are declared further down, AFTER the DNS modules —
+// see "SWA custom-domain bindings". The SWA resources themselves carry none.
 
 module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
   name: 'deploy-swa-intake-${environmentName}'
@@ -573,7 +549,6 @@ module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
     resourceName: swaIntakeName
     skuName: swaSkuName
     tags: sharedTags
-    customDomains: intakeCustomDomains
   }
 }
 
@@ -585,7 +560,6 @@ module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
     resourceName: swaManagerName
     skuName: swaSkuName
     tags: sharedTags
-    customDomains: managerCustomDomains
   }
 }
 
@@ -608,11 +582,22 @@ module dnsManager 'modules/dns.bicep' = if (deploySwa && deployDns) {
 }
 
 // ── DNS: Intake zone (rvintake.com) ────────────────────────────
-// Prod:    apex A-record + TXT validation (CNAME at apex is invalid per RFC 1034).
-//          intakeApexIpv4Addresses + intakeApexValidationValues must be set before
-//          the apex resolves — they come from Azure after the SWA customDomains
-//          registration is accepted (two-phase deploy).
-// Non-prod: subdomain CNAME (e.g. staging.rvintake.com → default SWA hostname).
+// Non-prod: subdomain CNAME (e.g. staging.rvintake.com → default SWA hostname),
+//           bound below via cname-delegation like the Manager zone.
+// Prod:     the apex. CNAME at apex is invalid (RFC 1034), so this declares an
+//           ALIAS A record targeting the Intake SWA resource — Azure DNS tracks
+//           the SWA's address itself, nothing is pinned in source.
+//
+//           What is deliberately NOT declared for the apex:
+//             • the TXT ownership record  — its value is a token Azure mints
+//               when the custom domain is first registered, so it cannot be
+//               known at authoring time; and
+//             • the customDomains binding — its PUT waits for that TXT to
+//               validate, and re-issuing it from Bicep on every redeploy is a
+//               risk with no benefit once it is Ready.
+//           Both are created ONCE, out of band, by the portal's "Custom Domain
+//           on Azure DNS" flow (or the CLI equivalent) — README.md "Deploy
+//           Production". Incremental deploys leave them alone thereafter.
 
 module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
   name: 'deploy-dns-intake-${environmentName}'
@@ -626,18 +611,51 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         target: swaIntake.outputs.defaultHostname
       }
     ]
-    aRecords: (environmentName == 'prod' && !empty(intakeApexIpv4Addresses)) ? [
+    aRecords: environmentName == 'prod' ? [
       {
         name: '@'
-        ipv4Addresses: intakeApexIpv4Addresses
+        #disable-next-line BCP318
+        targetResourceId: swaIntake.outputs.id
       }
     ] : []
-    txtRecords: (environmentName == 'prod' && !empty(intakeApexValidationValues)) ? [
-      {
-        name: '@'
-        values: intakeApexValidationValues
-      }
-    ] : []
+  }
+}
+
+// ── SWA custom-domain bindings ─────────────────────────────────
+// Ordered AFTER the dns modules on purpose: the customDomains PUT is a
+// long-running operation that waits for the CNAME to validate, so the record
+// must exist before the binding is requested (a first bring-up otherwise
+// deadlocks waiting for a record a later module would write). Idempotent on
+// redeploy — an already-Ready binding is a no-op.
+//
+// Intake in prod binds the apex with dns-txt-token and is handled out of band
+// (see the Intake zone comment above), hence the environmentName guard.
+
+module swaManagerDomain 'modules/swa-custom-domain.bicep' = if (deploySwa && deployDns) {
+  name: 'deploy-swa-manager-domain-${environmentName}'
+  scope: rgSwa
+  dependsOn: [
+    dnsManager
+  ]
+  params: {
+    #disable-next-line BCP318
+    staticSiteName: swaManager.outputs.name
+    hostname: '${managerDnsPrefix}.${managerZoneName}'
+    validationMethod: 'cname-delegation'
+  }
+}
+
+module swaIntakeDomain 'modules/swa-custom-domain.bicep' = if (deploySwa && deployDns && environmentName != 'prod') {
+  name: 'deploy-swa-intake-domain-${environmentName}'
+  scope: rgSwa
+  dependsOn: [
+    dnsIntake
+  ]
+  params: {
+    #disable-next-line BCP318
+    staticSiteName: swaIntake.outputs.name
+    hostname: '${intakeDnsPrefix}.${intakeZoneName}'
+    validationMethod: 'cname-delegation'
   }
 }
 
@@ -813,3 +831,8 @@ output intakeFqdn string = environmentName == 'prod' ? intakeZoneName : '${intak
 
 @description('FQDN for the Manager SWA custom domain.')
 output managerFqdn string = '${managerDnsPrefix}.${managerZoneName}'
+
+@description('Manual follow-up after a prod deploy. Bicep writes the rvintake.com apex ALIAS record but cannot bind the apex custom domain — Azure mints the ownership token only at registration time. Until this one-time step is done, rvintake.com resolves but https:// fails with a cert error. Empty for non-prod (subdomain CNAMEs bind in-template).')
+output intakeApexAction string = (deploySwa && deployDns && environmentName == 'prod')
+  ? 'ACTION REQUIRED: register the rvintake.com apex on the Intake SWA (dns-txt-token) — see Infra/Bicep.IaC/README.md "Deploy Production" step 2.'
+  : ''
