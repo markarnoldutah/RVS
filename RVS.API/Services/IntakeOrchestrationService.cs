@@ -338,7 +338,10 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     }
 
     /// <summary>
-    /// Builds a technician summary from the issue description and diagnostic responses.
+    /// Builds the preliminary-assessment seed text: the verbatim issue description, with the
+    /// capability-mismatch note prepended when one was raised. The diagnostic Q&amp;A is
+    /// deliberately <b>not</b> repeated here — the packet renders it in full in its own
+    /// "Reported symptoms &amp; diagnostic Q&amp;A" section (issue #492 item 6).
     /// </summary>
     private static string BuildTechnicianSummary(ServiceRequestCreateRequestDto request)
     {
@@ -351,18 +354,6 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         }
 
         parts.Add($"Issue: {request.IssueDescription.Trim()}");
-
-        if (request.DiagnosticResponses is { Count: > 0 })
-        {
-            parts.Add("Diagnostic Responses:");
-            foreach (var response in request.DiagnosticResponses)
-            {
-                var answer = response.SelectedOptions.Count > 0
-                    ? string.Join(", ", response.SelectedOptions)
-                    : response.FreeTextResponse ?? "No response";
-                parts.Add($"  Q: {response.QuestionText.Trim()} → A: {answer}");
-            }
-        }
 
         return string.Join("\n", parts);
     }

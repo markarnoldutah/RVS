@@ -44,6 +44,24 @@ public static class PacketComposer
             StatusLink = NullIfBlank(context.StatusLinkUrl) is { } url
                 ? new PacketStatusLink { Url = url }
                 : null,
+            Branding = ComposeBranding(context),
+        };
+    }
+
+    private static PacketBranding ComposeBranding(PacketCompositionContext context)
+    {
+        var brandName = NullIfBlank(context.BrandName)?.Trim();
+        var logoDataUri = NullIfBlank(context.LogoDataUri)?.Trim();
+
+        if (brandName is null && logoDataUri is null)
+        {
+            return PacketBranding.Default;
+        }
+
+        return new PacketBranding
+        {
+            BrandName = brandName ?? PacketBranding.Default.BrandName,
+            LogoDataUri = logoDataUri,
         };
     }
 
@@ -58,6 +76,8 @@ public static class PacketComposer
     private static PacketCustomer ComposeCustomer(CustomerSnapshotEmbedded snapshot) => new()
     {
         FullName = $"{snapshot.FirstName} {snapshot.LastName}".Trim(),
+        FirstName = NullIfBlank(snapshot.FirstName),
+        LastName = NullIfBlank(snapshot.LastName),
         Phone = NullIfBlank(snapshot.Phone),
         Email = NullIfBlank(snapshot.Email),
         PreferredContact = NullIfBlank(snapshot.PreferredContact),

@@ -23,6 +23,19 @@ internal sealed record PacketPdfLayout
 
     public required IReadOnlyList<PacketPdfLayoutSection> Sections { get; init; }
 
+    /// <summary>
+    /// The submission timestamp for the top-of-masthead <c>Received</c> line, formatted
+    /// <c>yyyy-MM-dd HH:mm UTC</c>. This is the one Received line on the packet — the
+    /// Location column no longer repeats it (issue #492 items 4–5).
+    /// </summary>
+    public required string ReceivedDisplay { get; init; }
+
+    /// <summary>
+    /// The customer name for the masthead headline, family-name-first (<c>Last, First</c>),
+    /// rendered above the year/make/model line. <c>null</c> when no name is available.
+    /// </summary>
+    public string? CustomerHeadline { get; init; }
+
     public static PacketPdfLayout Build(ServicePacket packet)
     {
         ArgumentNullException.ThrowIfNull(packet);
@@ -63,7 +76,20 @@ internal sealed record PacketPdfLayout
             sections.Add(statusLink);
         }
 
-        return new PacketPdfLayout { Sections = sections };
+        var received = packet.Origin.SubmittedAtUtc
+            .ToUniversalTime()
+            .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
+
+        var customerHeadline = string.IsNullOrWhiteSpace(packet.Customer.SortableName)
+            ? null
+            : packet.Customer.SortableName;
+
+        return new PacketPdfLayout
+        {
+            Sections = sections,
+            ReceivedDisplay = received,
+            CustomerHeadline = customerHeadline,
+        };
     }
 
     // ── 1. Unit header ────────────────────────────────────────────────────
@@ -118,16 +144,15 @@ internal sealed record PacketPdfLayout
         AddRow(rows, "Location", origin.LocationName);
         AddRow(rows, "Location phone", origin.LocationPhone);
 
-        var submitted = origin.SubmittedAtUtc
-            .ToUniversalTime()
-            .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-        rows.Add(new PacketPdfLayoutRow("Received", submitted + " UTC"));
+        // The Received line moved to the top of the masthead (issue #492 items 4–5); the
+        // RVS # row is kept for the layout's plain-text projection but the painter draws
+        // it in the top refbox, not this column.
         rows.Add(new PacketPdfLayoutRow("RVS #", origin.ReferenceCode));
 
         return new PacketPdfLayoutSection
         {
             Id = "origin",
-            Heading = "Location & received",
+            Heading = "Location",
             Rows = rows,
         };
     }
@@ -261,7 +286,16 @@ internal sealed record PacketPdfLayout
     /// </summary>
     public string ToPlainText()
     {
-        var blocks = Sections.Select(RenderSectionText);
+        // Masthead preamble: the top-of-packet Received line and the family-name-first
+        // customer headline, in the order the renderer paints them above the sections.
+        var preambleLines = new List<string> { $"Received: {ReceivedDisplay}" };
+        if (CustomerHeadline is not null)
+        {
+            preambleLines.Add(CustomerHeadline);
+        }
+
+        var blocks = new List<string> { string.Join("\n", preambleLines) };
+        blocks.AddRange(Sections.Select(RenderSectionText));
         return string.Join("\n\n", blocks) + "\n";
     }
 

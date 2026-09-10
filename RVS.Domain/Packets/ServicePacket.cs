@@ -46,6 +46,13 @@ public sealed record ServicePacket
 
     /// <summary>10. Customer status link (<c>Spec X-1</c>). <c>null</c> until a token is minted upstream.</summary>
     public PacketStatusLink? StatusLink { get; init; }
+
+    /// <summary>
+    /// Displayed brand identity for the masthead, footer, and PDF author. Defaults to the
+    /// product brand (<see cref="PacketBranding.Default"/>); the future per-location override
+    /// (issue <c>#470</c>) supplies it via <see cref="PacketCompositionContext"/>.
+    /// </summary>
+    public PacketBranding Branding { get; init; } = PacketBranding.Default;
 }
 
 /// <summary>
@@ -66,7 +73,15 @@ public sealed record PacketUnitHeader
 /// <summary>Customer identity and contact preference.</summary>
 public sealed record PacketCustomer
 {
+    /// <summary>Display name, first-name-first (e.g. <c>Dale Gribble</c>). Used in the customer column.</summary>
     public required string FullName { get; init; }
+
+    /// <summary>Given name, when captured discretely. Feeds <see cref="SortableName"/>.</summary>
+    public string? FirstName { get; init; }
+
+    /// <summary>Family name, when captured discretely. Feeds <see cref="SortableName"/>.</summary>
+    public string? LastName { get; init; }
+
     public string? Phone { get; init; }
     public string? Email { get; init; }
 
@@ -75,6 +90,32 @@ public sealed record PacketCustomer
     /// <c>Email</c>. <c>null</c> for service requests created before intake captured it.
     /// </summary>
     public string? PreferredContact { get; init; }
+
+    /// <summary>
+    /// The customer name for the masthead headline, family-name-first: <c>Last, First</c>
+    /// when both parts are present, otherwise whichever discrete part exists, otherwise
+    /// <see cref="FullName"/>. Rendered above the year/make/model line by both renderers.
+    /// </summary>
+    public string SortableName
+    {
+        get
+        {
+            var last = LastName?.Trim();
+            var first = FirstName?.Trim();
+
+            if (!string.IsNullOrEmpty(last) && !string.IsNullOrEmpty(first))
+            {
+                return $"{last}, {first}";
+            }
+
+            if (!string.IsNullOrEmpty(last))
+            {
+                return last;
+            }
+
+            return string.IsNullOrEmpty(first) ? FullName : first;
+        }
+    }
 }
 
 /// <summary>Where and when the request originated, plus a short human-quotable code.</summary>

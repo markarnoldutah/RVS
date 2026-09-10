@@ -11,8 +11,10 @@ namespace RVS.Domain.Packets;
 ///
 /// It is a pure transform: string in, string out. It reads the composed
 /// <see cref="ServicePacket"/> in <c>Spec B-2</c> order and never inspects a
-/// <c>ServiceRequest</c>. It performs no I/O and embeds no assets — photos are referenced
-/// by the time-limited URLs already resolved on the packet, never base64.
+/// <c>ServiceRequest</c>. It performs no I/O: photos are referenced by the time-limited
+/// URLs already resolved on the packet, never base64. The only embedded asset is the
+/// optional masthead logo, supplied pre-encoded as a <c>data:</c> URI on
+/// <see cref="PacketBranding"/>.
 ///
 /// Layout follows the Integrated Dealer Systems (IDS) work-order idiom so a service
 /// manager reads it on daily muscle memory: a right-aligned tracking number in the
@@ -45,9 +47,7 @@ public static class PacketHtmlRenderer
         var submittedUtc = packet.Origin.SubmittedAtUtc
             .ToUniversalTime()
             .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
-        var submittedDate = packet.Origin.SubmittedAtUtc
-            .ToUniversalTime()
-            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var brandName = packet.Branding.BrandName;
 
         var sb = new StringBuilder(4096);
 
@@ -56,12 +56,12 @@ public static class PacketHtmlRenderer
         sb.Append("<meta charset=\"utf-8\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         sb.Append("<title>Service Packet ").Append(Text(packet.Origin.ReferenceCode)).Append("</title>\n");
-        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(packet.Origin.ReferenceCode, submittedUtc)))
+        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(packet.Origin.ReferenceCode, submittedUtc, brandName)))
             .Append("\n</style>\n");
         sb.Append("</head>\n<body>\n");
         sb.Append("<main class=\"packet\">\n");
 
-        AppendMasthead(sb, packet, submittedUtc, submittedDate);
+        AppendMasthead(sb, packet, submittedUtc);
         AppendCategory(sb, packet.IssueCategory);
         // The AI assessment sits above the verbatim complaint: a service manager should see
         // the concise recreation of the problem first, then the customer's own words, then
@@ -72,7 +72,7 @@ public static class PacketHtmlRenderer
         AppendPhotos(sb, packet.Photos);
         AppendPasteBlock(sb, packet.PasteBlock);
         AppendStatusLink(sb, packet.StatusLink);
-        AppendFooter(sb, packet.Origin.ReferenceCode, submittedUtc);
+        AppendFooter(sb, packet.Origin.ReferenceCode, submittedUtc, brandName);
 
         sb.Append("</main>\n</body>\n</html>\n");
 
@@ -82,28 +82,47 @@ public static class PacketHtmlRenderer
     // ── Masthead: sections 1 (unit), 2 (customer), 3 (origin) ──────────────
     //
     // IDS puts the tracking number top-right and identifies the job in a three-column
-    // Customer / Dates / Unit band. We mirror that: RVS # + received date in the refbox,
-    // then a Customer | Location & received | Unit grid. The Spec B-2 section markers stay
-    // in order (unit, customer, origin) so the ordering contract is unchanged.
+    // Customer / Dates / Unit band. We mirror that: RVS # + full received timestamp in the
+    // refbox, the customer name (Last, First) above the year/make/model headline, then a
+    // Customer | Location | Unit grid. The Spec B-2 section markers stay in order (unit,
+    // customer, origin) so the ordering contract is unchanged.
 
     private static void AppendMasthead(
-        StringBuilder sb, ServicePacket packet, string submittedUtc, string submittedDate)
+        StringBuilder sb, ServicePacket packet, string submittedUtc)
     {
         var unit = packet.Unit;
         var customer = packet.Customer;
         var origin = packet.Origin;
+        var branding = packet.Branding;
 
         sb.Append("<!-- section:unit -->\n");
         sb.Append("<header class=\"masthead\">\n");
 
-        // Masthead top: letterhead left, tracking number right.
+        // Masthead top: optional logo + brand letterhead left, tracking number right.
         sb.Append("<div class=\"masthead-top\">\n");
-        sb.Append("<div class=\"letterhead\">RV ServiceFlow")
+        sb.Append("<div class=\"brand\">\n");
+        if (branding.HasLogo)
+        {
+            sb.Append("<img class=\"masthead-logo\" src=\"").Append(Attr(branding.LogoDataUri!)).Append("\" alt=\"\">\n");
+        }
+
+        sb.Append("<div class=\"letterhead\">").Append(Text(branding.BrandName))
             .Append("<span class=\"doctype\">Service intake packet</span></div>\n");
+        sb.Append("</div>\n");
         sb.Append("<div class=\"refbox\">\n");
         sb.Append("<p class=\"rvsno\">RVS #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
-        sb.Append("<p class=\"received\">Received: ").Append(Text(submittedDate)).Append("</p>\n");
+        // Received line carries the full timestamp (date + time, UTC) — it is the one
+        // Received line on the packet (the Location column no longer repeats it).
+        sb.Append("<p class=\"received\">Received: ").Append(Text(submittedUtc)).Append("</p>\n");
         sb.Append("</div>\n</div>\n");
+
+        // Customer name, family-name-first, above the unit descriptor headline
+        // (mirrors the ServiceRequestDetail title).
+        var sortableName = customer.SortableName;
+        if (!string.IsNullOrWhiteSpace(sortableName))
+        {
+            sb.Append("<p class=\"customer-headline\">").Append(Text(sortableName)).Append("</p>\n");
+        }
 
         // Unit descriptor headline — useful in a cold inbox; IDS omits it only because the
         // DMS screen already shows the unit.
@@ -127,10 +146,9 @@ public static class PacketHtmlRenderer
         sb.Append("</section>\n");
 
         sb.Append("<!-- section:origin -->\n");
-        sb.Append("<section class=\"col origin\">\n<h2>Location &amp; received</h2>\n");
+        sb.Append("<section class=\"col origin\">\n<h2>Location</h2>\n");
         AppendRow(sb, "Location", origin.LocationName);
         AppendRow(sb, "Location phone", origin.LocationPhone);
-        AppendRow(sb, "Received", submittedUtc);
         sb.Append("</section>\n");
 
         sb.Append("<section class=\"col unit\">\n<h2>Unit</h2>\n");
@@ -307,14 +325,14 @@ public static class PacketHtmlRenderer
 
     // ── Running footer (mirrors IDS "Printed On … © … Page N of N") ───────
 
-    private static void AppendFooter(StringBuilder sb, string referenceCode, string submittedUtc)
+    private static void AppendFooter(StringBuilder sb, string referenceCode, string submittedUtc, string brandName)
     {
         // A static end-of-flow footer for engines that ignore @page margin boxes
         // (Safari); the @page rule in the stylesheet repeats the same line on every
         // printed page where supported.
         sb.Append("<footer class=\"packet-foot\">\n");
         sb.Append("<span>RVS #").Append(Text(referenceCode)).Append(" · ").Append(Text(submittedUtc)).Append("</span>\n");
-        sb.Append("<span>RV ServiceFlow — service intake packet</span>\n");
+        sb.Append("<span>").Append(Text(brandName)).Append(" — service intake packet</span>\n");
         sb.Append("</footer>\n");
     }
 
@@ -338,9 +356,9 @@ public static class PacketHtmlRenderer
     /// <c>content:</c> is a quoted string, so it must be ASCII and carry no <c>"</c> or
     /// <c>\</c>; the reference code and timestamp are already in that alphabet.
     /// </summary>
-    private static string RunningFooterText(string referenceCode, string submittedUtc)
+    private static string RunningFooterText(string referenceCode, string submittedUtc, string brandName)
     {
-        var raw = $"RVS #{referenceCode} / {submittedUtc} / RV ServiceFlow";
+        var raw = $"RVS #{referenceCode} / {submittedUtc} / {brandName}";
         var sb = new StringBuilder(raw.Length);
         foreach (var ch in raw)
         {
@@ -396,7 +414,8 @@ public static class PacketHtmlRenderer
           padding: 8mm;
         }
 
-        h1 { font-size: 15pt; margin: 3mm 0 0; }
+        h1 { font-size: 15pt; margin: 1mm 0 0; }
+        .customer-headline { font-size: 11.5pt; font-weight: 700; margin: 3mm 0 0; }
         h2 {
           font-size: 11pt;
           text-transform: uppercase;
@@ -412,6 +431,8 @@ public static class PacketHtmlRenderer
         /* Masthead — IDS-style letterhead + top-right tracking number + 3-column band. */
         .masthead { border-bottom: 2px solid #000; padding-bottom: 3mm; }
         .masthead-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
+        .brand { display: flex; align-items: center; gap: 4mm; }
+        .masthead-logo { height: 12mm; width: auto; }
         .letterhead { font-size: 13pt; font-weight: 700; }
         .letterhead .doctype {
           display: block;

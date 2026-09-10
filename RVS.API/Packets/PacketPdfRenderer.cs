@@ -1,4 +1,3 @@
-using System.Globalization;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -18,8 +17,9 @@ namespace RVS.API.Packets;
 ///
 /// Photos are supplied as bytes by the caller (keyed by <see cref="PacketPhoto.Url"/>);
 /// resolving the time-limited SAS URLs to bytes is the orchestrator's job (issue
-/// <c>#433</c>). A photo with no bytes renders as a labelled placeholder cell so the
-/// packet still lays out correctly.
+/// <c>#433</c>). A photo with no bytes — or bytes in a format QuestPDF's decoder cannot
+/// read, such as iPhone HEIC/HEIF (issue <c>#492</c> item 8) — renders as a labelled
+/// placeholder cell so the packet still lays out correctly.
 /// </summary>
 public static class PacketPdfRenderer
 {
@@ -83,7 +83,7 @@ public static class PacketPdfRenderer
                         column.Spacing(18f);
 
                         column.Item().Element(e => RenderMasthead(
-                            e, packet, unit: masthead[0], customer: masthead[1], origin: masthead[2]));
+                            e, packet, layout, unit: masthead[0], customer: masthead[1], origin: masthead[2]));
 
                         foreach (var section in bodySections)
                         {
@@ -95,7 +95,7 @@ public static class PacketPdfRenderer
             .WithMetadata(new DocumentMetadata
             {
                 Title = $"Service Packet {packet.Origin.ReferenceCode}",
-                Author = "RV ServiceFlow",
+                Author = packet.Branding.BrandName,
                 Subject = "RV service intake packet",
                 // Pinned to the packet so the same packet renders byte-for-byte identically.
                 CreationDate = submitted,
@@ -109,25 +109,36 @@ public static class PacketPdfRenderer
     private static void RenderMasthead(
         IContainer container,
         ServicePacket packet,
+        PacketPdfLayout layout,
         PacketPdfLayoutSection unit,
         PacketPdfLayoutSection customer,
         PacketPdfLayoutSection origin)
     {
-        var receivedDate = packet.Origin.SubmittedAtUtc
-            .ToUniversalTime()
-            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var branding = packet.Branding;
+        var logoBytes = branding.HasLogo && TryDecodeDataUri(branding.LogoDataUri!, out var bytes)
+            ? bytes
+            : null;
 
         container.Column(col =>
         {
             col.Spacing(3f);
 
-            // Letterhead (left) + tracking number (right), mirroring IDS.
+            // Optional logo + brand letterhead (left) + tracking number (right), mirroring IDS.
             col.Item().Row(row =>
             {
-                row.RelativeItem().Column(left =>
+                row.RelativeItem().Row(brand =>
                 {
-                    left.Item().Text("RV ServiceFlow").Bold().FontSize(13f);
-                    left.Item().Text("SERVICE INTAKE PACKET").FontSize(8f);
+                    brand.Spacing(8f);
+                    if (logoBytes is not null)
+                    {
+                        brand.ConstantItem(34f).AlignMiddle().Image(logoBytes).FitWidth();
+                    }
+
+                    brand.RelativeItem().Column(left =>
+                    {
+                        left.Item().Text(branding.BrandName).Bold().FontSize(13f);
+                        left.Item().Text("SERVICE INTAKE PACKET").FontSize(8f);
+                    });
                 });
 
                 row.ConstantItem(170f).Column(right =>
@@ -137,24 +148,63 @@ public static class PacketPdfRenderer
                         t.Span("RVS #: ").FontSize(11f);
                         t.Span(packet.Origin.ReferenceCode).Bold().FontSize(12f);
                     });
-                    right.Item().AlignRight().Text($"Received: {receivedDate}").FontSize(9f);
+                    // Full timestamp (date + time, UTC) — the one Received line on the packet.
+                    right.Item().AlignRight().Text($"Received: {layout.ReceivedDisplay}").FontSize(9f);
                 });
             });
+
+            // Customer name, family-name-first, above the unit descriptor headline.
+            if (layout.CustomerHeadline is not null)
+            {
+                col.Item().PaddingTop(2f).Text(layout.CustomerHeadline).SemiBold().FontSize(11f);
+            }
 
             // Unit descriptor headline.
             col.Item().PaddingTop(2f).Text(unit.Heading).SemiBold().FontSize(15f);
 
-            // Three-column identity band: Customer | Location & received | Unit.
+            // Three-column identity band: Customer | Location | Unit.
             col.Item().PaddingTop(2f).Row(row =>
             {
                 row.Spacing(14f);
                 row.RelativeItem().Element(e => RenderMastheadColumn(e, "Customer", customer));
-                row.RelativeItem().Element(e => RenderMastheadColumn(e, "Location & received", origin));
+                row.RelativeItem().Element(e => RenderMastheadColumn(e, "Location", origin));
                 row.RelativeItem().Element(e => RenderMastheadColumn(e, "Unit", unit));
             });
 
             col.Item().PaddingTop(4f).LineHorizontal(2f);
         });
+    }
+
+    /// <summary>
+    /// Decodes a <c>data:</c> URI's base64 payload to bytes (the masthead logo — see
+    /// <see cref="PacketBranding.LogoDataUri"/>). Returns <c>false</c> for anything that is
+    /// not a base64 <c>data:</c> URI so the masthead simply renders without a logo rather
+    /// than throwing.
+    /// </summary>
+    private static bool TryDecodeDataUri(string dataUri, out byte[] bytes)
+    {
+        bytes = [];
+
+        if (!dataUri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var comma = dataUri.IndexOf(',');
+        if (comma < 0 || !dataUri[..comma].Contains("base64", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        try
+        {
+            bytes = Convert.FromBase64String(dataUri[(comma + 1)..]);
+            return bytes.Length > 0;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     private static void RenderMastheadColumn(
@@ -332,12 +382,16 @@ public static class PacketPdfRenderer
                         {
                             cell.Spacing(2f);
 
-                            if (images.TryGetValue(photo.Url, out var bytes) && bytes.Length > 0)
+                            if (images.TryGetValue(photo.Url, out var bytes) && IsDecodableRaster(bytes))
                             {
                                 cell.Item().Image(bytes).FitWidth();
                             }
                             else
                             {
+                                // No bytes, or a format QuestPDF's decoder cannot read
+                                // (iPhone HEIC/HEIF is the common case — issue #492 item 8).
+                                // A labelled placeholder keeps the packet laying out
+                                // instead of a blank cell or a failed render.
                                 cell.Item().Border(1f).Padding(12f).AlignCenter()
                                     .Text(photo.FileName).FontSize(9f);
                             }
@@ -357,5 +411,37 @@ public static class PacketPdfRenderer
                 });
             }
         });
+    }
+
+    /// <summary>
+    /// <c>true</c> when <paramref name="bytes"/> begins with the signature of a raster
+    /// format QuestPDF's image decoder (SkiaSharp) can read: JPEG, PNG, GIF, BMP, or WebP.
+    /// Everything else — most importantly Apple HEIC/HEIF from an iPhone, but also empty or
+    /// corrupt payloads — returns <c>false</c> so the caller renders a placeholder rather
+    /// than a blank cell or an exception during <c>GeneratePdf()</c> (issue #492 item 8).
+    /// Proper HEIC support means transcoding to JPEG upstream; tracked as a follow-up.
+    /// </summary>
+    private static bool IsDecodableRaster(byte[]? bytes)
+    {
+        if (bytes is not { Length: >= 4 })
+        {
+            return false;
+        }
+
+        var b = bytes.AsSpan();
+
+        return
+            // JPEG: FF D8 FF
+            (b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF)
+            // PNG: 89 50 4E 47
+            || (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47)
+            // GIF: "GIF8"
+            || (b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x38)
+            // BMP: "BM"
+            || (b[0] == 0x42 && b[1] == 0x4D)
+            // WebP: "RIFF" .... "WEBP"
+            || (b.Length >= 12
+                && b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46
+                && b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50);
     }
 }

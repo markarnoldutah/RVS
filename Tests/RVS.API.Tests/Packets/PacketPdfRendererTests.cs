@@ -38,6 +38,8 @@ public class PacketPdfRendererTests
         Customer = new PacketCustomer
         {
             FullName = "Dale Gribble",
+            FirstName = "Dale",
+            LastName = "Gribble",
             Phone = "555-0101",
             Email = "dale@example.com",
             PreferredContact = "Phone",
@@ -168,6 +170,75 @@ public class PacketPdfRendererTests
         act.Should().NotThrow();
     }
 
+    // Minimal ISO-BMFF header whose `ftyp` major brand is "heic" — the shape of an iPhone
+    // photo. QuestPDF's decoder cannot read it (issue #492 item 8).
+    private static byte[] HeicHeader() =>
+    [
+        0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, // ....ftyp
+        0x68, 0x65, 0x69, 0x63, 0x00, 0x00, 0x00, 0x00, // heic....
+        0x68, 0x65, 0x69, 0x63, 0x6D, 0x69, 0x66, 0x31, // heicmif1
+    ];
+
+    [Fact]
+    public void Render_WhenAPhotosBytesAreHeic_ShouldRenderAPlaceholder_NotThrowOrDropTheGrid()
+    {
+        var packet = FullPacket();
+        var images = packet.Photos.ToDictionary(p => p.Url, _ => HeicHeader());
+
+        var act = () => PacketPdfRenderer.Render(packet, images);
+
+        act.Should().NotThrow("an undecodable image must fall back to a placeholder, never fail the whole PDF");
+        PacketPdfRenderer.Render(packet, images).Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public void Render_WhenAPhotosBytesAreEmpty_ShouldRenderAPlaceholder_NotThrow()
+    {
+        var packet = FullPacket();
+        var images = packet.Photos.ToDictionary(p => p.Url, _ => Array.Empty<byte>());
+
+        var act = () => PacketPdfRenderer.Render(packet, images);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Render_WithABrandNameOverride_ShouldNotThrow()
+    {
+        var packet = FullPacket() with { Branding = new PacketBranding { BrandName = "Acme RV Group" } };
+
+        var act = () => PacketPdfRenderer.Render(packet);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Render_WithALogoDataUri_ShouldDecodeAndEmbedItWithoutThrowing()
+    {
+        var pngDataUri = "data:image/png;base64," + Convert.ToBase64String(OnePixelPng());
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding { BrandName = "RV Intake", LogoDataUri = pngDataUri },
+        };
+
+        var act = () => PacketPdfRenderer.Render(packet);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Render_WithAnUndecodableLogoDataUri_ShouldFallBackToNoLogo_NotThrow()
+    {
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding { BrandName = "RV Intake", LogoDataUri = "data:image/png;base64,not-base64!!" },
+        };
+
+        var act = () => PacketPdfRenderer.Render(packet);
+
+        act.Should().NotThrow();
+    }
+
     [Fact]
     public void Render_WithSixPhotos_ShouldCompleteWellWithinTheLatencyBudget()
     {
@@ -284,13 +355,20 @@ public class PacketPdfRendererTests
     // ── 3. Origin ────────────────────────────────────────────────────────
 
     [Fact]
-    public void Build_ShouldCarryReferenceCodeLocationAndAnInvariantTimestamp()
+    public void Build_TheOriginSection_ShouldBeHeadedLocation_CarryLocationAndRvsNumber_AndNoReceivedRow()
     {
         var section = Section(FullPacket(), "origin");
 
+        section.Heading.Should().Be("Location", "the Received line moved to the top of the masthead (issue #492 item 5)");
         section.Rows.Should().Contain(r => r.Label == "Location" && r.Value == "Salt Lake Service Center");
-        section.Rows.Should().Contain(r => r.Label == "Received" && r.Value == "2026-09-05 14:30 UTC");
         section.Rows.Should().Contain(r => r.Label == "RVS #" && r.Value == "A1B2C3D4");
+        section.Rows.Should().NotContain(r => r.Label == "Received");
+    }
+
+    [Fact]
+    public void Build_ShouldExposeAnInvariantReceivedDisplayForTheTopOfTheMasthead()
+    {
+        Layout(FullPacket()).ReceivedDisplay.Should().Be("2026-09-05 14:30 UTC");
     }
 
     [Fact]
@@ -304,8 +382,22 @@ public class PacketPdfRendererTests
             },
         };
 
-        Section(packet, "origin").Rows.Single(r => r.Label == "Received").Value
-            .Should().Be("2026-09-05 14:30 UTC");
+        Layout(packet).ReceivedDisplay.Should().Be("2026-09-05 14:30 UTC");
+    }
+
+    [Fact]
+    public void Build_ShouldExposeTheCustomerHeadlineFamilyNameFirst()
+    {
+        Layout(FullPacket()).CustomerHeadline.Should().Be("Gribble, Dale");
+    }
+
+    [Fact]
+    public void ToPlainText_ShouldLeadWithTheReceivedLineAndCustomerHeadline_BeforeTheFirstSection()
+    {
+        var text = Layout(FullPacket()).ToPlainText();
+
+        Order(text, "Received: 2026-09-05 14:30 UTC").Should().BeLessThan(Order(text, "Gribble, Dale"));
+        Order(text, "Gribble, Dale").Should().BeLessThan(Order(text, "[section:unit]"));
     }
 
     // ── 4. Category ──────────────────────────────────────────────────────
@@ -497,12 +589,13 @@ public class PacketPdfRendererTests
 
         string[] values =
         [
+            "2026-09-05 14:30 UTC",
+            "Gribble, Dale",
             "2021 Winnebago View",
             "1FDXE45S12HB00001",
             "Dale Gribble",
             "555-0101",
             "Salt Lake Service Center",
-            "2026-09-05 14:30 UTC",
             "A1B2C3D4",
             "Electrical",
             "Likely overheating on the generator windings.",

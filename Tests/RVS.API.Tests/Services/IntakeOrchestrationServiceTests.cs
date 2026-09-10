@@ -560,6 +560,20 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_TechnicianSummary_ShouldNotRepeatTheDiagnosticResponses()
+    {
+        // Issue #492 item 6: the packet renders the diagnostic Q&A in full in its own
+        // section, so the preliminary-assessment seed text must not duplicate it.
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(includeDiagnostics: true));
+
+        result.ServiceRequest.TechnicianSummary.Should().Be("Issue: Slide won't retract");
+        result.ServiceRequest.TechnicianSummary.Should().NotContain("Diagnostic Responses");
+        result.ServiceRequest.TechnicianSummary.Should().NotContain("→ A:");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ShouldIncludeDiagnosticResponsesInServiceRequest()
     {
         SetupFullHappyPath();

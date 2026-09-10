@@ -32,6 +32,8 @@ internal static class SamplePackets
             Customer = new PacketCustomer
             {
                 FullName = "Dale Gribble",
+                FirstName = "Dale",
+                LastName = "Gribble",
                 Phone = "(801) 555-0101",
                 Email = "dale@example.com",
                 PreferredContact = "Text",

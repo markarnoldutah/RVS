@@ -30,6 +30,8 @@ public class PacketHtmlRendererTests
         Customer = new PacketCustomer
         {
             FullName = "Dale Gribble",
+            FirstName = "Dale",
+            LastName = "Gribble",
             Phone = "555-0101",
             Email = "dale@example.com",
             PreferredContact = "Phone",
@@ -250,7 +252,100 @@ public class PacketHtmlRendererTests
         // Mirrors IDS "W/O #" top-right: the tracking number comes before any section body.
         html.IndexOf("A1B2C3D4", StringComparison.Ordinal)
             .Should().BeLessThan(Order(html, "section:customer"));
-        html.Should().Contain("Received: 2026-09-05");
+        // The top-of-packet Received line carries the full timestamp, date + time, UTC
+        // (issue #492 item 4).
+        html.Should().Contain("Received: 2026-09-05 14:30 UTC");
+    }
+
+    // ── Masthead: brand, logo, customer headline, received line (issue #492) ──
+
+    [Fact]
+    public void Render_ByDefault_ShouldTitleTheMastheadWithTheProductBrand()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var masthead = html[..Order(html, "section:customer")];
+        masthead.Should().Contain("RV Intake");
+        html.Should().NotContain("RV ServiceFlow");
+    }
+
+    [Fact]
+    public void Render_WhenBrandNameOverridden_ShouldUseItInTheMastheadAndBothFooters()
+    {
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding { BrandName = "Acme RV Group" },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html[..Order(html, "section:customer")].Should().Contain("Acme RV Group");   // masthead
+        html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*Acme RV Group");            // running footer
+        html[Order(html, "class=\"packet-foot\"")..].Should().Contain("Acme RV Group"); // static footer
+        html.Should().NotContain("RV Intake");
+    }
+
+    [Fact]
+    public void Render_WhenBrandingHasNoLogo_ShouldNotEmitAMastheadImage()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html[..Order(html, "section:customer")].Should().NotContain("<img");
+    }
+
+    [Fact]
+    public void Render_WhenBrandingHasLogoDataUri_ShouldEmitItAsAMastheadImage()
+    {
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding
+            {
+                BrandName = "RV Intake",
+                LogoDataUri = "data:image/png;base64,iVBORw0KGgo=",
+            },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var masthead = html[..Order(html, "section:customer")];
+        masthead.Should().Contain("class=\"masthead-logo\"");
+        masthead.Should().Contain("src=\"data:image/png;base64,iVBORw0KGgo=\"");
+    }
+
+    [Fact]
+    public void Render_ShouldPrecedeTheUnitHeadlineWithTheCustomerNameLastNameFirst()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("class=\"customer-headline\"");
+        html.Should().Contain(">Gribble, Dale<");
+        // Above the year/make/model <h1>, below the top refbox.
+        html.IndexOf("Gribble, Dale", StringComparison.Ordinal)
+            .Should().BeLessThan(html.IndexOf("<h1>", StringComparison.Ordinal));
+        html.IndexOf("Gribble, Dale", StringComparison.Ordinal)
+            .Should().BeGreaterThan(html.IndexOf("RVS #:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Render_WhenOnlyAFullNameIsAvailable_ShouldStillRenderACustomerHeadline()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());   // FullName only, no discrete parts
+
+        html.Should().Contain("class=\"customer-headline\"");
+        html.Should().Contain(">Jane Doe<");
+    }
+
+    // ── 3. Origin column renamed to "Location", Received row dropped (item 5) ──
+
+    [Fact]
+    public void Render_TheOriginColumn_ShouldBeHeadedLocation_WithNoReceivedRow()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var originColumn = html[Order(html, "section:origin")..Order(html, "class=\"col unit\"")];
+        originColumn.Should().Contain("<h2>Location</h2>");
+        originColumn.Should().NotContain("Location &amp; received");
+        originColumn.Should().NotContain("Received:", "the Received line now lives only in the top refbox");
     }
 
     [Fact]
