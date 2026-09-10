@@ -1509,7 +1509,12 @@ static List<AssetLedgerEntry> BuildAssetLedgerEntries() =>
     new AssetLedgerEntry { Id = "ale_014", AssetId = AssetId8, TenantId = TenantBlueCompass, ServiceRequestId = Sr14, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Newmar", Model = "Bay Star 3014", Year = 2023, IssueCategory = "Plumbing", IssueDescription = "Hot water tank pressure relief valve dripping.", Status = "Completed", SubmittedAtUtc = SeedDate(85), Section10A = new Section10AEmbedded { ComponentType = "Pressure Relief Valve", FailureMode = "Wear/Age", RepairAction = "Valve Replacement", PartsUsed = ["Suburban P/N 161135"], LaborHours = 1.0m, ServiceDateUtc = SeedDate(80) } },
 ];
 
-// ── Lookup Sets (4) ─────────────────────────────────────────────────────
+// ── Lookup Sets (1) ─────────────────────────────────────────────────────
+// Only issue-category is seeded and maintained (Spec A-5, issue #454). The
+// four technician-side vocabularies — component type, failure mode, repair
+// action, part number — were never populated at intake and are archived; see
+// "Controlled vocabulary" in Docs/ASOT/RVS_DataModel.md. The taxonomy design
+// is preserved in ARCHIVE/Marketing/RVS_data_moat.md.
 
 static List<LookupSet> BuildLookupSets() =>
 [
@@ -1530,75 +1535,6 @@ static List<LookupSet> BuildLookupSets() =>
             Description = e.Description,
             SortOrder = e.SortOrder,
         })],
-    },
-    new LookupSet
-    {
-        Id = "component-types",
-        TenantId = "GLOBAL",
-        Category = "ComponentType",
-        Name = "Component Types",
-        Description = "Section 10A component type codes for service events",
-        OverrideMode = LookupOverrideMode.GlobalOnly,
-        CreatedByUserId = "seed",
-        Items =
-        [
-            new LookupItem { Code = "AC Compressor", Name = "AC Compressor", SortOrder = 10 },
-            new LookupItem { Code = "Furnace", Name = "Furnace", SortOrder = 20 },
-            new LookupItem { Code = "Water Heater", Name = "Water Heater", SortOrder = 30 },
-            new LookupItem { Code = "Slide-Out Mechanism", Name = "Slide-Out Mechanism", SortOrder = 40 },
-            new LookupItem { Code = "Roof Assembly", Name = "Roof Assembly", SortOrder = 50 },
-            new LookupItem { Code = "Awning Assembly", Name = "Awning Assembly", SortOrder = 60 },
-            new LookupItem { Code = "Door Latch Assembly", Name = "Door Latch Assembly", SortOrder = 70 },
-            new LookupItem { Code = "Tank Sensor", Name = "Tank Sensor", SortOrder = 80 },
-            new LookupItem { Code = "Generator", Name = "Generator", SortOrder = 90 },
-            new LookupItem { Code = "Inverter/Converter", Name = "Inverter/Converter", SortOrder = 100 },
-        ],
-    },
-    new LookupSet
-    {
-        Id = "failure-modes",
-        TenantId = "GLOBAL",
-        Category = "FailureMode",
-        Name = "Failure Modes",
-        Description = "Section 10A failure mode codes for service events",
-        OverrideMode = LookupOverrideMode.GlobalOnly,
-        CreatedByUserId = "seed",
-        Items =
-        [
-            new LookupItem { Code = "Mechanical Obstruction", Name = "Mechanical Obstruction", SortOrder = 10 },
-            new LookupItem { Code = "Mechanical Breakage", Name = "Mechanical Breakage", SortOrder = 20 },
-            new LookupItem { Code = "Mechanical Noise", Name = "Mechanical Noise", SortOrder = 30 },
-            new LookupItem { Code = "Ignition Failure", Name = "Ignition Failure", SortOrder = 40 },
-            new LookupItem { Code = "Sensor Malfunction", Name = "Sensor Malfunction", SortOrder = 50 },
-            new LookupItem { Code = "Electrical Short", Name = "Electrical Short", SortOrder = 60 },
-            new LookupItem { Code = "Wear/Age", Name = "Wear/Age", Description = "Normal wear and aging of components", SortOrder = 70 },
-            new LookupItem { Code = "Water Damage", Name = "Water Damage", SortOrder = 80 },
-            new LookupItem { Code = "Corrosion", Name = "Corrosion", SortOrder = 90 },
-            new LookupItem { Code = "Unknown", Name = "Unknown", Description = "Root cause not yet determined", SortOrder = 100 },
-        ],
-    },
-    new LookupSet
-    {
-        Id = "repair-actions",
-        TenantId = "GLOBAL",
-        Category = "RepairAction",
-        Name = "Repair Actions",
-        Description = "Section 10A repair action codes for service events",
-        OverrideMode = LookupOverrideMode.GlobalOnly,
-        CreatedByUserId = "seed",
-        Items =
-        [
-            new LookupItem { Code = "Sealant Reapplication", Name = "Sealant Reapplication", SortOrder = 10 },
-            new LookupItem { Code = "Sensor Replacement", Name = "Sensor Replacement", SortOrder = 20 },
-            new LookupItem { Code = "Component Replacement", Name = "Component Replacement", SortOrder = 30 },
-            new LookupItem { Code = "Electrical Repair", Name = "Electrical Repair", SortOrder = 40 },
-            new LookupItem { Code = "Mechanical Adjustment", Name = "Mechanical Adjustment", SortOrder = 50 },
-            new LookupItem { Code = "Cleaning/Flush", Name = "Cleaning/Flush", SortOrder = 60 },
-            new LookupItem { Code = "Lubrication", Name = "Lubrication", SortOrder = 70 },
-            new LookupItem { Code = "Software Update", Name = "Software Update", SortOrder = 80 },
-            new LookupItem { Code = "Inspection Only", Name = "Inspection Only", Description = "No repair needed, inspection complete", SortOrder = 90 },
-            new LookupItem { Code = "Warranty Claim", Name = "Warranty Claim", Description = "Repair covered under manufacturer warranty", SortOrder = 100 },
-        ],
     },
 ];
 

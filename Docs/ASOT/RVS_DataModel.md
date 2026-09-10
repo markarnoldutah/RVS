@@ -92,9 +92,9 @@ This is Spec X-2. Nothing else reads it, and that is correct. It exists so the r
 
 ## Controlled vocabulary
 
-At launch the Spec keeps **one** vocabulary: `issue-category`, 13 codes finalised in issue #452 (Slides, Electrical, Plumbing, HVAC, Generator, LPGas, Appliances, Roof, Awning, Chassis, Exterior, Interior, Other). The four technician-side vocabularies — component type, failure mode, repair action, part number — are archived. They were never populated at intake; they filled in after a technician closed a job, and that workflow no longer exists.
+At launch the Spec keeps **one** vocabulary: `issue-category`, 13 codes finalised in issue #452 (Slides, Electrical, Plumbing, HVAC, Generator, LPGas, Appliances, Roof, Awning, Chassis, Exterior, Interior, Other). The four technician-side vocabularies — component type, failure mode, repair action, part number — are archived (issue #454). They were never populated at intake; they filled in after a technician closed a job, and that workflow no longer exists.
 
-`lookup-sets` is structured to hold all five. Only `issue-category` needs seeding and maintenance. The `IssueCategory` set is generated from `RVS.Domain.Validation.IssueCategoryVocabulary`, which is also the list the rule-based categorization fallbacks and `IssueCategoryCapabilityMap` key against; a value outside it is coerced to `Other` before storage.
+`lookup-sets` is structured to hold all five, but the seeder (`RVS.Data.Cosmos.Seed`) emits only `issue-category` as of issue #454 — it is the one set that needs seeding and maintenance. The `IssueCategory` set is generated from `RVS.Domain.Validation.IssueCategoryVocabulary`, which is also the list the rule-based categorization fallbacks and `IssueCategoryCapabilityMap` key against; a value outside it is coerced to `Other` before storage.
 
 ---
 
