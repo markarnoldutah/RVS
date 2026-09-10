@@ -204,11 +204,11 @@ public class PacketPdfRendererTests
         var transcoder = new MagickImageTranscoder(
             MsOptions.Create(new ImageTranscodeOptions()),
             Mock.Of<ILogger<MagickImageTranscoder>>());
-        var jpeg = transcoder.TranscodeToJpeg(SampleImages.Heic96x64());
+        var jpeg = transcoder.Normalize(SampleImages.Heic96x64(), "image/heic");
         jpeg.Should().NotBeNull("the HEIC fixture must transcode for this regression to be meaningful");
 
         var packet = FullPacket();
-        var withJpeg = packet.Photos.ToDictionary(p => p.Url, _ => jpeg!.JpegBytes);
+        var withJpeg = packet.Photos.ToDictionary(p => p.Url, _ => jpeg!.Bytes);
         var withHeic = packet.Photos.ToDictionary(p => p.Url, _ => SampleImages.Heic96x64());
 
         var jpegPdf = PacketPdfRenderer.Render(packet, withJpeg);

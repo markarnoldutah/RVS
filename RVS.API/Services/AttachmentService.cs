@@ -161,14 +161,17 @@ public sealed class AttachmentService : IAttachmentService
         var contentType = request.ContentType;
         var sizeBytes = request.SizeBytes;
 
-        // HEIC/HEIF renders on Apple clients only: the HTML packet shows a blank <img>, the
-        // PDF decoder cannot read it, and emailed .heic files will not preview in most desktop
-        // mail clients. Transcode once here so the stored blob — and every downstream consumer —
-        // is a universally-renderable JPEG (issue #508, finishes #492 item 8). A transcode
-        // failure keeps the original upload; the packet then shows its labelled placeholder.
-        if (_imageTranscoder.CanTranscode(contentType))
+        // Normalise every image upload once here so the stored blob — and every downstream
+        // consumer (the PDF embed, the HTML packet's <img>, the emailed attachment) — is a
+        // small, universally-renderable raster. HEIC/HEIF renders on Apple clients only and is
+        // always converted to JPEG (issue #508); a full-resolution JPEG or PNG is downscaled
+        // past MaxEdgePixels and re-encoded so it no longer rides into the packet email at full
+        // size, forcing #521's size fitter to drop photos (issue #562). Any failure — undecodable payload, oversized
+        // source, download error, or a re-encode that would not shrink an already-web-safe
+        // image — keeps the original upload and logs.
+        if (_imageTranscoder.CanNormalize(contentType))
         {
-            (blobName, fileName, contentType, sizeBytes) = await TranscodeToJpegAsync(
+            (blobName, fileName, contentType, sizeBytes) = await NormalizeImageAsync(
                 serviceRequestId, blobName, fileName, contentType, sizeBytes, cancellationToken);
         }
 
@@ -215,13 +218,19 @@ public sealed class AttachmentService : IAttachmentService
     }
 
     /// <summary>
-    /// Downloads the just-uploaded HEIC/HEIF blob, transcodes it to JPEG, stores the JPEG under
-    /// a sibling <c>.jpg</c> blob name, and best-effort deletes the original. Returns the blob
-    /// name, file name, content type, and size to record on the attachment. Any failure —
-    /// download error, or an undecodable payload — logs a warning and returns the original
-    /// values unchanged, so a bad transcode never blocks the upload from being confirmed.
+    /// Downloads the just-uploaded image blob, normalises it (EXIF orientation baked in,
+    /// downscaled past <c>MaxEdgePixels</c>, metadata stripped, re-encoded — a PNG stays PNG,
+    /// every other raster becomes JPEG), stores the result under a blob name matching its
+    /// output format, and best-effort deletes the original when the blob name changed. Returns
+    /// the blob name, file name, content type, and size to record on the attachment. Any
+    /// failure — download error, an undecodable or oversized payload, or a re-encode that would
+    /// not shrink an already-web-safe image — logs and returns the original values unchanged,
+    /// so normalisation never blocks an upload from being confirmed. The original evidence copy
+    /// is not retained: no repository tracks it, every packet consumer reads the normalised
+    /// blob, and <c>Spec A-6</c> / <c>X-6</c> do not require retention (consistent with the
+    /// HEIC path from <c>#508</c>).
     /// </summary>
-    private async Task<(string BlobName, string FileName, string ContentType, long SizeBytes)> TranscodeToJpegAsync(
+    private async Task<(string BlobName, string FileName, string ContentType, long SizeBytes)> NormalizeImageAsync(
         string serviceRequestId,
         string blobName,
         string fileName,
@@ -238,49 +247,50 @@ public sealed class AttachmentService : IAttachmentService
         {
             _logger.LogWarning(
                 ex,
-                "HEIC transcode: could not download blob {BlobName} for SR {ServiceRequestId}; keeping the original upload",
+                "Image normalise: could not download blob {BlobName} for SR {ServiceRequestId}; keeping the original upload",
                 blobName, serviceRequestId);
             return (blobName, fileName, contentType, sizeBytes);
         }
 
-        var result = _imageTranscoder.TranscodeToJpeg(original, cancellationToken);
+        var result = _imageTranscoder.Normalize(original, contentType, cancellationToken);
         if (result is null)
         {
-            _logger.LogWarning(
-                "HEIC transcode failed for blob {BlobName} on SR {ServiceRequestId}; keeping the original upload (packet will show a placeholder)",
+            _logger.LogInformation(
+                "Image normalise: no change for blob {BlobName} on SR {ServiceRequestId}; keeping the original upload",
                 blobName, serviceRequestId);
             return (blobName, fileName, contentType, sizeBytes);
         }
 
-        var jpegBlobName = Path.ChangeExtension(blobName, ".jpg");
-        if (string.Equals(jpegBlobName, blobName, StringComparison.Ordinal))
+        var extension = string.Equals(result.ContentType, "image/png", StringComparison.OrdinalIgnoreCase) ? ".png" : ".jpg";
+        var normalizedBlobName = Path.ChangeExtension(blobName, extension);
+        var replacesOriginal = !string.Equals(normalizedBlobName, blobName, StringComparison.Ordinal);
+
+        using (var stream = new MemoryStream(result.Bytes, writable: false))
         {
-            jpegBlobName = $"{blobName}.jpg";
+            await _blobStorage.UploadAsync(ContainerName, normalizedBlobName, stream, result.ContentType, cancellationToken);
         }
 
-        using (var jpegStream = new MemoryStream(result.JpegBytes, writable: false))
+        if (replacesOriginal)
         {
-            await _blobStorage.UploadAsync(ContainerName, jpegBlobName, jpegStream, "image/jpeg", cancellationToken);
+            try
+            {
+                await _blobStorage.DeleteAsync(ContainerName, blobName, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Image normalise: output stored as {NormalizedBlobName} but the original {BlobName} could not be deleted",
+                    normalizedBlobName, blobName);
+            }
         }
 
-        try
-        {
-            await _blobStorage.DeleteAsync(ContainerName, blobName, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(
-                ex,
-                "HEIC transcode: JPEG stored as {JpegBlobName} but the original {BlobName} could not be deleted",
-                jpegBlobName, blobName);
-        }
-
-        var jpegFileName = Path.ChangeExtension(fileName, ".jpg");
+        var normalizedFileName = Path.ChangeExtension(fileName, extension);
 
         _logger.LogInformation(
-            "HEIC transcode: SR {ServiceRequestId} upload {OriginalName} -> {JpegName} ({Width}x{Height}, {Bytes} bytes)",
-            serviceRequestId, fileName, jpegFileName, result.Width, result.Height, result.JpegBytes.Length);
+            "Image normalise: SR {ServiceRequestId} upload {OriginalName} -> {NormalizedName} ({ContentType}, {Width}x{Height}, {Bytes} bytes, was {OldBytes})",
+            serviceRequestId, fileName, normalizedFileName, result.ContentType, result.Width, result.Height, result.Bytes.Length, sizeBytes);
 
-        return (jpegBlobName, jpegFileName, "image/jpeg", result.JpegBytes.Length);
+        return (normalizedBlobName, normalizedFileName, result.ContentType, result.Bytes.Length);
     }
 }

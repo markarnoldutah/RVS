@@ -85,7 +85,7 @@ One flag, `Integrations:UseMocks`, read once at startup. **It is `false` in ever
 | Email | Azure Communication Services | NoOp |
 | Packet email size fitting (`#521`) | `PacketEmailSizeFitter` (pure, Domain) — trims attachments to ACS's 10 MB request ceiling, base64 accounted for | none needed; a pure transform with no I/O |
 | SMS | Azure Communication Services | NoOp — **archived scope** |
-| HEIC/HEIF → JPEG transcode (`#508`) | `MagickImageTranscoder` (Magick.NET + libheif, in-process) | `NoOpImageTranscoder` — keeps the original; packet shows the placeholder |
+| Image normalisation on upload — downscale + re-encode every raster (`#508` HEIC/HEIF → JPEG; `#562` widened to JPEG/PNG/WebP, `MaxEdgePixels` 4096 → 1600, PNG kept as PNG, never grows an already-web-safe file) | `MagickImageTranscoder` (Magick.NET + libheif, in-process) | `NoOpImageTranscoder` — keeps the original; HEIC then shows the packet placeholder |
 
 All external clients use `AddStandardResilienceHandler` with per-client timeouts.
 
