@@ -169,17 +169,11 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         profile = await _customerProfileRepository.UpdateAsync(profile, cancellationToken);
 
         // ── Step 4: Create ServiceRequest ────────────────────────────────────
-        string? aiCategory = null;
-        try
-        {
-            aiCategory = await _categorizationService.CategorizeAsync(request.IssueDescription, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "AI categorization failed; falling back to request-provided category");
-        }
-
-        var issueCategory = aiCategory ?? request.IssueCategory.Trim();
+        // A-5: the category the customer submitted is authoritative. The AI suggestion is
+        // advisory and was already offered (and accepted or overridden) in the intake wizard;
+        // the server does not re-run categorization and override the choice here. Coerce to
+        // the controlled vocabulary so an unrecognised value can never reach the packet.
+        var issueCategory = IssueCategoryVocabulary.Normalize(request.IssueCategory);
 
         var technicianSummary = BuildTechnicianSummary(request);
 

@@ -308,9 +308,11 @@ public class AzureOpenAiIssueTextRefinementServiceTests
     [InlineData("Electrical")]
     [InlineData("Plumbing")]
     [InlineData("HVAC")]
-    [InlineData("Appliance")]
-    [InlineData("Structural")]
-    [InlineData("Slide-Out")]
+    [InlineData("Appliances")]
+    [InlineData("Roof")]
+    [InlineData("Slides")]
+    [InlineData("Generator")]
+    [InlineData("LPGas")]
     [InlineData("Awning")]
     public async Task SuggestCategoryAsync_WhenApiReturnsKnownCategory_ShouldReturnThatCategory(string category)
     {
