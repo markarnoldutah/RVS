@@ -354,10 +354,60 @@ public class PacketHtmlRendererTests
         var html = PacketHtmlRenderer.Render(FullPacket());
 
         html.Should().Contain("class=\"idcols\"");
-        html.Should().MatchRegex(@"\.idcols\b[^}]*display\s*:\s*grid");
         html.Should().Contain("class=\"col customer\"")
             .And.Contain("class=\"col origin\"")
             .And.Contain("class=\"col unit\"");
+    }
+
+    // ── Email-client-safe layout ─────────────────────────────────────────────
+    //
+    // The rendered HTML is used verbatim as the packet delivery email body
+    // (PacketEmailComposer). Gmail and Outlook silently drop `display:flex` and
+    // `display:grid`, so any multi-column band built with them collapses to a single
+    // stacked column in the inbox — which is exactly what a service manager saw. Every
+    // horizontal band must therefore be a presentational <table> with the column geometry
+    // carried inline so it survives a stripped <style> block.
+
+    [Fact]
+    public void Render_ShouldNotUseFlexOrGridForLayout()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotMatchRegex(@"display\s*:\s*flex", "email clients drop flexbox layout");
+        html.Should().NotMatchRegex(@"display\s*:\s*grid", "email clients drop CSS grid layout");
+    }
+
+    [Fact]
+    public void Render_TheThreeColumnBand_ShouldBeAPresentationalTable_WithInlineColumnGeometry()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().MatchRegex(@"<table[^>]*role=""presentation""[^>]*class=""idcols""");
+        // Each column is a <td> that carries width + top alignment inline, so the band
+        // still reads as three columns when the <style> block is discarded.
+        html.Should().MatchRegex(@"<td class=""col customer""[^>]*style=""[^""]*vertical-align:\s*top");
+        html.Should().MatchRegex(@"<td class=""col customer""[^>]*style=""[^""]*width:");
+        html.Should().MatchRegex(@"<td class=""col origin""[^>]*style=""[^""]*vertical-align:\s*top");
+        html.Should().MatchRegex(@"<td class=""col unit""[^>]*style=""[^""]*vertical-align:\s*top");
+    }
+
+    [Fact]
+    public void Render_TheMastheadTop_ShouldBeAPresentationalTable_BrandLeftTrackingNumberRight()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+        var masthead = html[..Order(html, "section:customer")];
+
+        masthead.Should().MatchRegex(@"<table[^>]*role=""presentation""[^>]*class=""masthead-top""");
+        // The tracking-number cell is right-aligned inline.
+        masthead.Should().MatchRegex(@"class=""refbox""[^>]*style=""[^""]*text-align:\s*right");
+    }
+
+    [Fact]
+    public void Render_TheStaticFooter_ShouldBeAPresentationalTable()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().MatchRegex(@"<table[^>]*role=""presentation""[^>]*class=""packet-foot""");
     }
 
     [Fact]
