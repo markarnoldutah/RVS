@@ -1,4 +1,5 @@
 using RVS.Domain.Integrations;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Integrations;
 
@@ -13,15 +14,22 @@ public sealed class RuleBasedIssueTextRefinementService : IIssueTextRefinementSe
 
     private readonly ILogger<RuleBasedIssueTextRefinementService> _logger;
 
+    // Keys are codes from IssueCategoryVocabulary. Highest keyword-hit count wins; ties keep
+    // the earlier entry, so the more specific categories are listed first.
     private static readonly Dictionary<string, string[]> CategoryKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Electrical"] = ["battery", "wiring", "fuse", "outlet", "light", "switch", "inverter", "converter", "generator", "electrical", "power", "volt", "circuit"],
-        ["Plumbing"] = ["water", "leak", "pipe", "faucet", "toilet", "drain", "pump", "tank", "plumbing", "sewer", "heater"],
-        ["HVAC"] = ["air conditioning", "ac", "heat", "furnace", "thermostat", "hvac", "climate", "cooling", "heating", "vent", "duct"],
-        ["Appliance"] = ["refrigerator", "fridge", "microwave", "oven", "stove", "washer", "dryer", "dishwasher", "appliance"],
-        ["Structural"] = ["roof", "wall", "floor", "door", "window", "frame", "body", "seal", "crack", "structural", "delamination"],
-        ["Slide-Out"] = ["slide", "slide-out", "slideout", "slide out", "extend", "retract"],
-        ["Awning"] = ["awning", "canopy", "shade"]
+        ["Slides"] = ["slide", "slide-out", "slideout", "slide out", "slide room", "extend", "retract", "slide topper"],
+        ["Generator"] = ["generator", "genset", "onan", "gen set"],
+        ["LPGas"] = ["propane", "lp gas", "lpg", "gas leak", "gas smell", "regulator", "propane detector"],
+        ["Awning"] = ["awning", "canopy", "shade"],
+        ["Appliances"] = ["refrigerator", "fridge", "microwave", "oven", "stove", "cooktop", "range", "washer", "dryer", "dishwasher", "appliance", "ice maker"],
+        ["HVAC"] = ["air conditioning", "ac", "furnace", "thermostat", "hvac", "climate", "cooling", "heating", "vent", "duct", "heat pump"],
+        ["Roof"] = ["roof", "sealant", "reseal", "membrane", "delamination", "water intrusion", "soft spot", "ceiling leak", "seam"],
+        ["Chassis"] = ["brake", "tire", "wheel", "bearing", "suspension", "axle", "leveling", "stabilizer", "landing gear"],
+        ["Exterior"] = ["door", "window", "latch", "compartment", "hitch", "fiberglass", "decal", "paint", "body panel", "slide seal"],
+        ["Interior"] = ["cabinet", "drawer", "dinette", "sofa", "furniture", "flooring", "blinds", "countertop", "upholstery"],
+        ["Electrical"] = ["battery", "wiring", "fuse", "outlet", "breaker", "inverter", "converter", "electrical", "power", "volt", "circuit", "solar", "shore power"],
+        ["Plumbing"] = ["water", "leak", "pipe", "faucet", "toilet", "drain", "pump", "black tank", "grey tank", "gray tank", "fresh tank", "plumbing", "sewer", "water heater"],
     };
 
     public RuleBasedIssueTextRefinementService(ILogger<RuleBasedIssueTextRefinementService> logger)

@@ -1,23 +1,33 @@
 using RVS.Domain.Integrations;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Integrations;
 
 /// <summary>
 /// Keyword-matching fallback implementation of <see cref="ICategorizationService"/>.
-/// Used as the deterministic fallback when Azure OpenAI is unavailable.
+/// Used as the deterministic fallback when Azure OpenAI is unavailable. Every category it
+/// returns is a code from <see cref="IssueCategoryVocabulary"/>; an unmatched description
+/// resolves to <see cref="IssueCategoryVocabulary.FallbackCode"/>.
 /// </summary>
 public sealed class RuleBasedCategorizationService : ICategorizationService
 {
     private const string ProviderName = nameof(RuleBasedCategorizationService);
 
+    // Ordered most-specific first: the first category with any keyword hit wins.
     private static readonly Dictionary<string, string[]> CategoryKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Electrical"] = ["battery", "wiring", "fuse", "outlet", "light", "switch", "inverter", "solar", "generator"],
-        ["Plumbing"] = ["water", "leak", "pipe", "faucet", "toilet", "pump", "tank", "drain", "sewer"],
-        ["HVAC"] = ["air conditioning", "a/c", "furnace", "thermostat", "hvac", "cooling", "heating"],
-        ["Structural"] = ["roof", "wall", "floor", "slide", "seal", "crack", "delamination", "frame"],
-        ["Appliance"] = ["refrigerator", "fridge", "oven", "stove", "microwave", "washer", "dryer", "dishwasher"],
-        ["Exterior"] = ["awning", "door", "window", "paint", "decal", "hitch", "tire", "wheel", "jack"],
+        ["Slides"] = ["slide-out", "slideout", "slide out", "slide room", "slide won't", "slide will not", "retract", "slide topper"],
+        ["Generator"] = ["generator", "genset", "onan", "gen set"],
+        ["LPGas"] = ["propane", "lp gas", "lpg", "gas leak", "gas smell", "regulator", "propane detector", "lp detector"],
+        ["Awning"] = ["awning", "canopy", "patio shade"],
+        ["Appliances"] = ["refrigerator", "fridge", "oven", "stove", "cooktop", "range", "microwave", "washer", "dryer", "dishwasher", "ice maker"],
+        ["HVAC"] = ["air conditioning", "a/c", "ac unit", "furnace", "thermostat", "hvac", "cooling", "heating", "heat pump"],
+        ["Roof"] = ["roof", "sealant", "resealant", "reseal", "membrane", "delamination", "water intrusion", "soft spot", "ceiling leak", "seam"],
+        ["Chassis"] = ["brake", "tire", "wheel", "bearing", "suspension", "axle", "leveling", "stabilizer", "landing gear", "lug"],
+        ["Exterior"] = ["door", "window", "latch", "compartment", "hitch", "fiberglass", "decal", "paint", "exterior panel", "slide seal"],
+        ["Interior"] = ["cabinet", "drawer", "dinette", "sofa", "furniture", "flooring", "blinds", "countertop", "upholstery"],
+        ["Electrical"] = ["battery", "wiring", "fuse", "outlet", "breaker", "inverter", "converter", "solar", "12v", "shore power", "won't charge", "will not charge", "no power"],
+        ["Plumbing"] = ["water", "leak", "pipe", "faucet", "toilet", "pump", "black tank", "grey tank", "gray tank", "fresh tank", "drain", "sewer", "water heater"],
     };
 
     private static readonly Dictionary<string, IReadOnlyList<DiagnosticQuestionItem>> DiagnosticQuestions = new(StringComparer.OrdinalIgnoreCase)
@@ -76,7 +86,7 @@ public sealed class RuleBasedCategorizationService : ICategorizationService
                 true,
                 "Dirty filters are the most common cause of HVAC issues in RVs.")
         ],
-        ["Structural"] =
+        ["Roof"] =
         [
             new DiagnosticQuestionItem(
                 "Is there visible water damage or staining near the affected area?",
@@ -94,7 +104,7 @@ public sealed class RuleBasedCategorizationService : ICategorizationService
                 true,
                 null)
         ],
-        ["Appliance"] =
+        ["Appliances"] =
         [
             new DiagnosticQuestionItem(
                 "Which appliance is affected?",
@@ -166,7 +176,7 @@ public sealed class RuleBasedCategorizationService : ICategorizationService
             }
         }
 
-        return Task.FromResult("General");
+        return Task.FromResult(IssueCategoryVocabulary.FallbackCode);
     }
 
     /// <inheritdoc />

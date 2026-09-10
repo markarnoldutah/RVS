@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Integrations;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Tests.Integrations;
 
@@ -21,11 +22,12 @@ public class MockCategorizationServiceTests
     }
 
     [Fact]
-    public async Task CategorizeAsync_ShouldReturnGeneral()
+    public async Task CategorizeAsync_ShouldReturnFallbackVocabularyCode()
     {
         var result = await _sut.CategorizeAsync("Some issue description");
 
-        result.Should().Be("General");
+        result.Should().Be(IssueCategoryVocabulary.FallbackCode);
+        IssueCategoryVocabulary.IsValid(result).Should().BeTrue();
     }
 
     [Theory]

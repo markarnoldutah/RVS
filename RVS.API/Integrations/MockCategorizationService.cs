@@ -1,4 +1,5 @@
 using RVS.Domain.Integrations;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Integrations;
 
@@ -21,8 +22,8 @@ public sealed class MockCategorizationService : ICategorizationService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(issueDescription);
 
-        _logger.LogDebug("MockCategorizationService returning 'General' category");
-        return Task.FromResult("General");
+        _logger.LogDebug("MockCategorizationService returning '{Category}' category", IssueCategoryVocabulary.FallbackCode);
+        return Task.FromResult(IssueCategoryVocabulary.FallbackCode);
     }
 
     /// <inheritdoc />

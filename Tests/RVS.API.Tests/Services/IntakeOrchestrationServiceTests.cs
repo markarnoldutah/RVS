@@ -7,6 +7,7 @@ using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Packets;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Tests.Services;
 
@@ -499,27 +500,42 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ShouldUseAiCategorizationWhenAvailable()
+    public async Task ExecuteAsync_ShouldPersistTheCustomerSubmittedCategory_AndNotReRunAiCategorization()
     {
+        // A-5: the AI suggestion is advisory and was already offered in the wizard. The
+        // server stores what the customer submitted and never re-runs categorization here.
         SetupFullHappyPath();
         _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("AI Category");
+            .ReturnsAsync("HVAC");
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.ServiceRequest.IssueCategory.Should().Be("AI Category");
+        result.ServiceRequest.IssueCategory.Should().Be("Slides");
+        _categorizationMock.Verify(
+            c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenAiCategorizationFails_ShouldFallBackToRequestCategory()
+    public async Task ExecuteAsync_WhenSubmittedCategoryIsNotInTheVocabulary_ShouldStoreOther()
     {
         SetupFullHappyPath();
-        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TimeoutException("AI timed out"));
+        var request = BuildValidRequest();
+        request = request with { IssueCategory = "Transmission Fluid" };
 
-        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+        var result = await _sut.ExecuteAsync("test-slug", request);
 
-        result.ServiceRequest.IssueCategory.Should().Be("Slide System");
+        result.ServiceRequest.IssueCategory.Should().Be(IssueCategoryVocabulary.FallbackCode);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldNormalizeSubmittedCategoryCasing()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with { IssueCategory = "  slides  " };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.IssueCategory.Should().Be("Slides");
     }
 
     [Fact]
@@ -840,8 +856,6 @@ public class IntakeOrchestrationServiceTests
     public async Task ExecuteAsync_FullOrchestration_ShouldCreateServiceRequestWithAllFields()
     {
         SetupFullHappyPath();
-        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("AI: Slide System");
 
         var request = BuildValidRequest(includeDiagnostics: true);
         var result = await _sut.ExecuteAsync("test-slug", request);
@@ -851,7 +865,7 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.TenantId.Should().Be("ten_test");
         result.ServiceRequest.LocationId.Should().Be("loc_test");
         result.ServiceRequest.Status.Should().Be("New");
-        result.ServiceRequest.IssueCategory.Should().Be("AI: Slide System");
+        result.ServiceRequest.IssueCategory.Should().Be("Slides");
         result.ServiceRequest.IssueDescription.Should().Be("Slide won't retract");
         result.ServiceRequest.CustomerSnapshot.FirstName.Should().Be("Jane");
         result.ServiceRequest.CustomerSnapshot.LastName.Should().Be("Doe");
@@ -916,7 +930,7 @@ public class IntakeOrchestrationServiceTests
                 Model = "Momentum 395G",
                 Year = 2023,
             },
-            IssueCategory = "Slide System",
+            IssueCategory = "Slides",
             IssueDescription = "Slide won't retract",
             Urgency = "This week",
             RvUsage = "Full-time",
@@ -1039,7 +1053,7 @@ public class IntakeOrchestrationServiceTests
             .ReturnsAsync((GlobalCustomerAcct a, CancellationToken _) => a);
 
         _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Slide System");
+            .ReturnsAsync("Slides");
     }
 
     // ── GetIntakeConfigAsync ─────────────────────────────────────────────────
@@ -1365,12 +1379,12 @@ public class IntakeOrchestrationServiceTests
     {
         SetupConfigHappyPath();
         _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("General");
+            .ReturnsAsync(IssueCategoryVocabulary.FallbackCode);
 
         var result = await _sut.AssessCapabilitiesAsync("test-slug", "general issue");
 
         result.Matched.Should().BeTrue();
-        result.IssueCategory.Should().Be("General");
+        result.IssueCategory.Should().Be(IssueCategoryVocabulary.FallbackCode);
         result.RequiredCapabilities.Should().BeEmpty();
         result.MissingCapabilities.Should().BeEmpty();
     }
@@ -1414,7 +1428,7 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task AssessCapabilitiesAsync_WhenStructuralCategoryAndPartialMatch_ShouldReportOnlyMissing()
+    public async Task AssessCapabilitiesAsync_WhenSlidesCategoryAndCapabilityMissing_ShouldReportMissing()
     {
         SetupConfigHappyPath();
         _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
@@ -1427,14 +1441,26 @@ public class IntakeOrchestrationServiceTests
                 EnabledCapabilities = ["body-repair", "roof-repair"],
                 CreatedByUserId = "admin",
             });
-        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Structural");
 
-        var result = await _sut.AssessCapabilitiesAsync("test-slug", "slide-out is stuck");
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "slide-out is stuck", "Slides");
 
         result.Matched.Should().BeFalse();
         result.MissingCapabilities.Should().BeEquivalentTo(["slide-out-repair"]);
-        result.RequiredCapabilities.Should().BeEquivalentTo(["body-repair", "roof-repair", "slide-out-repair"]);
+        result.RequiredCapabilities.Should().BeEquivalentTo(["slide-out-repair"]);
+    }
+
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenAiReturnsOutOfVocabularyCategory_ShouldTreatAsUnknownAndMatch()
+    {
+        SetupConfigHappyPath();
+        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Structural"); // retired alias — no longer in the vocabulary
+
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "slide-out is stuck");
+
+        result.Matched.Should().BeTrue();
+        result.RequiredCapabilities.Should().BeEmpty();
+        result.MissingCapabilities.Should().BeEmpty();
     }
 
     private static GlobalCustomerAcct BuildGlobalAcctWithMagicLink(bool expired, List<string> assetIds)

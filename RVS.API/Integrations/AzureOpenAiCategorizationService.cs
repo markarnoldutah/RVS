@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using RVS.Domain.Integrations;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Integrations;
 
@@ -79,10 +80,20 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
                 cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            var result = await response.Content.ReadAsStringAsync(cancellationToken);
+            var result = (await response.Content.ReadAsStringAsync(cancellationToken))?.Trim();
+
+            // A-5: only a value inside the controlled vocabulary is trusted. Anything else
+            // (free text, an invented label, empty) drops through to the keyword fallback.
+            if (IssueCategoryVocabulary.IsValid(result))
+            {
+                return IssueCategoryVocabulary.Normalize(result);
+            }
+
             if (!string.IsNullOrWhiteSpace(result))
             {
-                return result.Trim();
+                _logger.LogWarning(
+                    "Azure OpenAI categorization returned out-of-vocabulary value '{Value}'; falling back to rule-based engine",
+                    result);
             }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or TimeoutException)

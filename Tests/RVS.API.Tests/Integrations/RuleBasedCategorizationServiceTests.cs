@@ -1,5 +1,6 @@
 using FluentAssertions;
 using RVS.API.Integrations;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Tests.Integrations;
 
@@ -22,22 +23,27 @@ public class RuleBasedCategorizationServiceTests
     [InlineData("The battery is dead and won't charge", "Electrical")]
     [InlineData("There is a water leak under the sink", "Plumbing")]
     [InlineData("The furnace stopped working and won't heat", "HVAC")]
-    [InlineData("Crack in the roof near the slide-out", "Structural")]
-    [InlineData("The refrigerator stopped working", "Appliance")]
-    [InlineData("The awning mechanism is broken", "Exterior")]
+    [InlineData("The sealant on the roof is peeling and there is a soft spot", "Roof")]
+    [InlineData("Slide-out won't retract all the way", "Slides")]
+    [InlineData("The onboard generator will not start", "Generator")]
+    [InlineData("I can smell propane near the regulator", "LPGas")]
+    [InlineData("The refrigerator stopped working", "Appliances")]
+    [InlineData("The awning fabric is torn", "Awning")]
+    [InlineData("Grinding noise from a wheel bearing and the brakes feel soft", "Chassis")]
     public async Task CategorizeAsync_WhenDescriptionContainsKeyword_ShouldReturnMatchingCategory(string description, string expectedCategory)
     {
         var result = await _sut.CategorizeAsync(description);
 
         result.Should().Be(expectedCategory);
+        IssueCategoryVocabulary.IsValid(result).Should().BeTrue();
     }
 
     [Fact]
-    public async Task CategorizeAsync_WhenNoKeywordsMatch_ShouldReturnGeneral()
+    public async Task CategorizeAsync_WhenNoKeywordsMatch_ShouldReturnFallbackVocabularyCode()
     {
         var result = await _sut.CategorizeAsync("Something is wrong but I'm not sure what");
 
-        result.Should().Be("General");
+        result.Should().Be(IssueCategoryVocabulary.FallbackCode);
     }
 
     [Theory]
@@ -55,8 +61,8 @@ public class RuleBasedCategorizationServiceTests
     [InlineData("Electrical")]
     [InlineData("Plumbing")]
     [InlineData("HVAC")]
-    [InlineData("Structural")]
-    [InlineData("Appliance")]
+    [InlineData("Roof")]
+    [InlineData("Appliances")]
     [InlineData("Exterior")]
     public async Task SuggestDiagnosticQuestionsAsync_WhenKnownCategory_ShouldReturnThreeQuestions(string category)
     {

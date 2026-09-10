@@ -42,6 +42,21 @@ public class AzureOpenAiCategorizationServiceTests
     }
 
     [Fact]
+    public async Task CategorizeAsync_WhenApiReturnsOutOfVocabularyText_ShouldFallBackToRuleBased()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("Transmission", Encoding.UTF8, new MediaTypeHeaderValue("text/plain"))
+        };
+
+        var sut = CreateService(response);
+        var result = await sut.CategorizeAsync("The battery is dead");
+
+        // "Transmission" is not in the controlled vocabulary → keyword fallback wins.
+        result.Should().Be("Electrical");
+    }
+
+    [Fact]
     public async Task CategorizeAsync_WhenApiFails_ShouldFallBackToRuleBased()
     {
         var handlerMock = new Mock<HttpMessageHandler>();
