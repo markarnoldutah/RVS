@@ -57,41 +57,73 @@ public class RuleBasedCategorizationServiceTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    public static IEnumerable<object[]> VocabularyCategories =>
+        IssueCategoryVocabulary.Codes.Select(code => new object[] { code });
+
+    [Fact]
+    public void CategoriesWithDedicatedQuestions_ShouldCoverEveryVocabularyCode()
+    {
+        // AC #1 of #453: every category — including "Other" — has a hand-written set,
+        // never the generic default fallback.
+        RuleBasedCategorizationService.CategoriesWithDedicatedQuestions
+            .Should().BeEquivalentTo(IssueCategoryVocabulary.Codes);
+    }
+
     [Theory]
-    [InlineData("Electrical")]
-    [InlineData("Plumbing")]
-    [InlineData("HVAC")]
-    [InlineData("Roof")]
-    [InlineData("Appliances")]
-    [InlineData("Exterior")]
-    public async Task SuggestDiagnosticQuestionsAsync_WhenKnownCategory_ShouldReturnThreeQuestions(string category)
+    [MemberData(nameof(VocabularyCategories))]
+    public async Task SuggestDiagnosticQuestionsAsync_ForEveryVocabularyCategory_ShouldReturnTwoToFourQuestions(string category)
     {
         var result = await _sut.SuggestDiagnosticQuestionsAsync(category);
 
-        result.Questions.Should().HaveCount(3);
-        result.Questions.Should().AllSatisfy(q => q.QuestionText.Should().NotBeNullOrWhiteSpace());
+        result.Questions.Should().HaveCountGreaterThanOrEqualTo(2).And.HaveCountLessThanOrEqualTo(4);
         result.Provider.Should().Be(nameof(RuleBasedCategorizationService));
+        result.SmartSuggestion.Should().BeNull();
     }
 
-    [Fact]
-    public async Task SuggestDiagnosticQuestionsAsync_WhenUnknownCategory_ShouldReturnDefaultQuestions()
+    [Theory]
+    [MemberData(nameof(VocabularyCategories))]
+    public async Task SuggestDiagnosticQuestionsAsync_ForEveryVocabularyCategory_ShouldReturnWellFormedQuestions(string category)
     {
-        var result = await _sut.SuggestDiagnosticQuestionsAsync("Unknown");
-
-        result.Questions.Should().HaveCount(3);
-        result.Questions[0].QuestionText.Should().Contain("describe the issue");
-    }
-
-    [Fact]
-    public async Task SuggestDiagnosticQuestionsAsync_WhenKnownCategory_ShouldReturnQuestionsWithOptions()
-    {
-        var result = await _sut.SuggestDiagnosticQuestionsAsync("Electrical");
+        var result = await _sut.SuggestDiagnosticQuestionsAsync(category);
 
         result.Questions.Should().AllSatisfy(q =>
         {
-            q.Options.Should().NotBeEmpty();
-            q.AllowFreeText.Should().BeTrue();
+            q.QuestionText.Should().NotBeNullOrWhiteSpace();
+            q.QuestionText.Trim().Should().EndWith("?");
+            q.AllowFreeText.Should().BeTrue("free text is always the fallback answer");
+
+            // A question either offers a short pick-list (2–6 mutually exclusive
+            // observations) or is pure free text.
+            if (q.Options.Count > 0)
+            {
+                q.Options.Should().HaveCountGreaterThanOrEqualTo(2).And.HaveCountLessThanOrEqualTo(6);
+                q.Options.Should().OnlyContain(o => !string.IsNullOrWhiteSpace(o));
+                q.Options.Select(o => o.ToLowerInvariant()).Should().OnlyHaveUniqueItems();
+            }
+
+            if (q.HelpText is not null)
+            {
+                q.HelpText.Should().NotBeNullOrWhiteSpace();
+            }
         });
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_ForSlides_ShouldAskWhetherTheSlideMovesAtAll()
+    {
+        // Spec A-4 names this exact litmus: "Does the slide move at all?" beats "Describe the problem."
+        var result = await _sut.SuggestDiagnosticQuestionsAsync("Slides");
+
+        result.Questions.Should().Contain(q => q.QuestionText.Contains("move", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SuggestDiagnosticQuestionsAsync_WhenCategoryIsNotInVocabulary_ShouldReturnDefaultQuestions()
+    {
+        var result = await _sut.SuggestDiagnosticQuestionsAsync("SomethingWeNeverSeeded");
+
+        result.Questions.Should().HaveCountGreaterThanOrEqualTo(2).And.HaveCountLessThanOrEqualTo(4);
+        result.Questions[0].QuestionText.Should().Contain("describe the issue");
     }
 
     [Fact]
@@ -104,7 +136,7 @@ public class RuleBasedCategorizationServiceTests
             model: "Ace",
             year: 2023);
 
-        result.Questions.Should().HaveCount(3);
+        result.Questions.Should().NotBeEmpty();
         result.SmartSuggestion.Should().BeNull();
     }
 }
