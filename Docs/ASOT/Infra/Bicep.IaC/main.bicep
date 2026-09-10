@@ -395,7 +395,6 @@ module openAi 'modules/openai.bicep' = {
   scope: rgPrimary
   params: {
     location: location
-    environmentName: environmentName
     tags: openAiNaming.outputs.tags
     deploymentCapacity: openAiCapacity
     resourceName: openAiNaming.outputs.resourceName
@@ -421,7 +420,6 @@ module whisper 'modules/openai-whisper.bicep' = {
   scope: rgWhisper
   params: {
     location: whisperLocation
-    environmentName: environmentName
     tags: whisperNaming.outputs.tags
     whisperCapacity: whisperCapacity
     resourceName: whisperNaming.outputs.resourceName
