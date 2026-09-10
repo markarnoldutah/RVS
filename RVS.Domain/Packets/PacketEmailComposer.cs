@@ -114,8 +114,22 @@ public static class PacketEmailComposer
         return parts.Count == 0 ? UnknownVehicleLabel : string.Join(' ', parts);
     }
 
-    private static string BuildPlainTextBody(ServicePacket packet) =>
-        string.IsNullOrWhiteSpace(packet.PasteBlock)
+    /// <summary>
+    /// The plain-text body this composer would send for <paramref name="packet"/> — the packet's
+    /// own paste block, or one generated from the same fields when it has none.
+    ///
+    /// Public so a caller can measure the body before composing: the email size budget
+    /// (<see cref="PacketEmailSizeFitter"/>, issue #521) has to charge the real bodies against
+    /// the ACS request ceiling, and re-deriving them here keeps that measurement and the
+    /// composed message from drifting apart.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="packet"/> is null.</exception>
+    public static string BuildPlainTextBody(ServicePacket packet)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        return string.IsNullOrWhiteSpace(packet.PasteBlock)
             ? PasteBlockGenerator.Generate(packet.IssueCategory, packet.IssueDescription, packet.StatusLink?.Url)
             : packet.PasteBlock;
+    }
 }

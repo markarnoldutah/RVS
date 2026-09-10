@@ -32,6 +32,12 @@ public sealed class PacketGenerationService : IPacketGenerationService
     /// <summary>Event id for the exhausted packet-email-delivery alert (<c>Spec B-4</c>, issue #438).</summary>
     private static readonly EventId PacketEmailDeliveryExhausted = new(438_001, nameof(PacketEmailDeliveryExhausted));
 
+    /// <summary>
+    /// Event id for a packet email that could not carry its PDF within the ACS size budget
+    /// (<c>Spec B-4</c>, issue #521). The email still goes out; the PDF does not.
+    /// </summary>
+    private static readonly EventId PacketEmailOversized = new(521_001, nameof(PacketEmailOversized));
+
     private const string SystemUserId = "system";
     private const int MaxErrorLength = 500;
 
@@ -325,8 +331,36 @@ public sealed class PacketGenerationService : IPacketGenerationService
             attachments.AddRange(BuildPhotoAttachments(request, photoImages, photoUrls));
         }
 
+        // Trim the attachment set to what ACS will accept (Spec B-4, #521). Spec A-6 allows ten
+        // 25 MB uploads and the PDF embeds the photo bytes as well, so a photo-heavy submission
+        // can exceed the 10 MB request ceiling; before this it failed every attempt and left the
+        // shop a request with no packet. The PDF outranks the photos, and the photos stay
+        // visible inline in the HTML body by SAS URL either way.
+        var plainTextBody = PacketEmailComposer.BuildPlainTextBody(packet);
+        var fit = PacketEmailSizeFitter.Fit(attachments, html, plainTextBody, _packetEmailOptions.MaxRequestBytes);
+
+        if (fit.AnythingDropped)
+        {
+            _logger.LogWarning(
+                "Packet email for SR {ServiceRequestId} v{PacketVersion} exceeded the {BudgetBytes}-byte ACS budget: attaching {KeptCount} of {CandidateCount} file(s) at ~{EstimatedBytes} bytes, dropping {DroppedFiles}. Dropped photos remain visible inline via their SAS URLs",
+                request.Id, packetVersion, _packetEmailOptions.MaxRequestBytes,
+                fit.Attachments.Count, attachments.Count, fit.EstimatedRequestBytes,
+                string.Join(", ", fit.Dropped.Select(d => d.FileName)));
+        }
+
+        if (fit.PdfDropped)
+        {
+            // The printable artifact could not be emailed at all. The packet is still stored and
+            // downloadable from the manager app, but an operator should know the email went
+            // without it — it usually means the photos need a tighter transcode.
+            _logger.LogCritical(
+                PacketEmailOversized,
+                "Packet email for SR {ServiceRequestId} v{PacketVersion} in tenant {TenantId} went out with no PDF: it did not fit the {BudgetBytes}-byte ACS budget on its own",
+                request.Id, packetVersion, request.TenantId, _packetEmailOptions.MaxRequestBytes);
+        }
+
         var message = PacketEmailComposer.Compose(
-            packet, html, request.CustomerSnapshot.LastName, recipients, attachments);
+            packet, html, request.CustomerSnapshot.LastName, recipients, fit.Attachments);
 
         // One correlation id spans every retry of this delivery. Packet generation runs off the
         // HTTP request thread, so fall back to the service request id when there is no ambient trace.
@@ -349,7 +383,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
                 request.PacketEmailDelivery.MarkDelivered(packetVersion, DateTime.UtcNow);
                 _logger.LogInformation(
                     "Packet email delivered for SR {ServiceRequestId} v{PacketVersion} on attempt {Attempt}/{MaxAttempts} to {RecipientCount} recipient(s) with {AttachmentCount} attachment(s)",
-                    request.Id, packetVersion, attempt, PacketEmailDeliveryEmbedded.MaxAttempts, recipients.Count, attachments.Count);
+                    request.Id, packetVersion, attempt, PacketEmailDeliveryEmbedded.MaxAttempts, recipients.Count, message.Attachments.Count);
                 break;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
