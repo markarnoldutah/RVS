@@ -352,10 +352,24 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public async Task ValidateCurrentStep_Step4_VehicleDetails_ShouldAlwaysReturnNoErrors()
+    public async Task ValidateCurrentStep_Step4_VehicleDetails_EmptyFields_ShouldReturnErrors()
     {
         var state = CreateState();
         await state.GoToStepAsync(4);
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().Contain(e => e.Contains("warranty", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(e => e.Contains("purchase date", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step4_VehicleDetails_BothFieldsSet_ShouldReturnNoErrors()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(4);
+        state.HasExtendedWarranty = "No";
+        state.ApproxPurchaseDate = "03/2023";
 
         var errors = state.ValidateCurrentStep();
 
@@ -372,8 +386,6 @@ public class IntakeWizardStateTests
 
         errors.Should().Contain(e => e.Contains("category"));
         errors.Should().Contain(e => e.Contains("description"));
-        errors.Should().Contain(e => e.Contains("warranty", StringComparison.OrdinalIgnoreCase));
-        errors.Should().Contain(e => e.Contains("purchase date", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

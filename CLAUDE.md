@@ -69,13 +69,17 @@ dotnet restore RVS.slnx
 dotnet build RVS.slnx --configuration Release
 
 # Run all tests with coverage (matches CI)
-dotnet test Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj     --configuration Release --collect:"XPlat Code Coverage"
-dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj           --configuration Release --collect:"XPlat Code Coverage"
-dotnet test Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj --configuration Release --collect:"XPlat Code Coverage"
+# The Tests/ projects run on Microsoft.Testing.Platform (xunit.v3 + Tests/Directory.Build.props).
+# trx/coverage flags are MTP syntax and go after `--`; the old VSTest --collect/--logger
+# forms discover nothing and exit 0 (issue #560).
+dotnet build RVS.slnx --configuration Release
+dotnet test Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj     --configuration Release --no-build -- --coverage --coverage-output-format cobertura
+dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj           --configuration Release --no-build -- --coverage --coverage-output-format cobertura
+dotnet test Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura
 
-# Run a single test class or test
-dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj --filter "FullyQualifiedName~ServiceRequestServiceTests"
-dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj --filter "FullyQualifiedName=RVS.API.Tests.Services.ServiceRequestServiceTests.GetAsync_WhenNotFound_ShouldThrow"
+# Run a single test class or test (MTP simple filters; wildcard '*' only at start/end)
+dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj --configuration Release --no-build -- --filter-class "*.ServiceRequestServiceTests"
+dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj --configuration Release --no-build -- --filter-method "*.ServiceRequestServiceTests.GetAsync_WhenNotFound_ShouldThrow"
 
 # Run individual apps (each has launchSettings.json with HTTPS profile)
 dotnet run --project RVS.API                -lp https   # https://localhost:7116
@@ -273,7 +277,7 @@ When adding a new resource:
 
 ## Testing — TDD Is Mandatory
 
-Full rules in [.github/instructions/testing.instructions.md](.github/instructions/testing.instructions.md). Stack: xUnit v2 (net10.0, Microsoft.Testing.Platform) + Moq + FluentAssertions + coverlet.
+Full rules in [.github/instructions/testing.instructions.md](.github/instructions/testing.instructions.md). Stack: xUnit v3 3.2.x (net10.0, Microsoft.Testing.Platform — self-executing test assemblies) + Moq + FluentAssertions. Coverage via `Microsoft.Testing.Extensions.CodeCoverage` (`-- --coverage`).
 
 **Red → Green → Refactor. Non-negotiable order for every issue:**
 
@@ -327,7 +331,9 @@ Single `MudTheme` defined in `MainLayout.razor` with `PaletteLight` (Primary `#1
 Three workflows in [.github/workflows](.github/workflows/) — detailed runbook in [.github/workflows/README.md](.github/workflows/README.md):
 
 - `build-test.yml` — PR gate, runs on every push/PR. Never deploys.
-- `deploy-staging.yml` — runs on push to `main`. **Only place that builds deployable artifacts.**
+- `deploy-staging.yml` — runs on push to `main`. **Only place that builds deployable artifacts.** Its `build-and-test` job runs all three suites; every `deploy-*` job `needs:` it, so a red suite blocks the deploy.
 - `deploy-production.yml` — promotes the exact artifacts staging validated. **Never rebuilds from source.**
+
+Both workflows invoke the suites through Microsoft.Testing.Platform (`dotnet test <csproj> --no-build -- <mtp flags>`). The `TestingPlatformDotnetTestSupport` switch lives in [Tests/Directory.Build.props](Tests/Directory.Build.props); without it `dotnet test` took the VSTest path, discovered nothing, and reported success (issue #560).
 
 Auth: API uses Azure OIDC (federated credentials, no long-lived secrets). Static Web Apps use long-lived deployment tokens stored as environment secrets.
