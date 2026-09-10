@@ -3,7 +3,7 @@
 **Version:** 1.0 · September 4, 2026
 **Scope:** Cosmos DB and Blob Storage as actually declared. Verified against `modules/cosmos-db.bicep` and `RVS.Data.Cosmos.Seed/Program.cs`.
 
-Database `rvs-db`, SQL API, Session consistency, serverless in every environment today. Provisioned mode puts autoscale at the database level, not per container. `ConnectionMode.Gateway`.
+Database `rvs-db`, SQL API, serverless in every environment today. Provisioned mode puts autoscale at the database level, not per container. Session consistency is set account-level in `modules/cosmos-db.bicep` (`defaultConsistencyLevel: 'Session'`), not in client code. `CosmosClient` is constructed with `ConnectionMode.Gateway` explicitly in [RVS.API/Program.cs](../../RVS.API/Program.cs) and [RVS.Data.Cosmos.Seed/Program.cs](../../RVS.Data.Cosmos.Seed/Program.cs) — the .NET SDK default is Direct. No integrated cache is configured (it would require a provisioned dedicated gateway, absent from the Bicep).
 
 ---
 

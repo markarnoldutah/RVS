@@ -203,7 +203,15 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
     var key = builder.Configuration["CosmosDb:Key"]
         ?? throw new InvalidOperationException("CosmosDb:Key configuration is missing.");
 
-    return new CosmosClient(endpoint, key);
+    // Gateway mode is set explicitly (the .NET SDK default is Direct). The API runs on
+    // Azure App Service with public network access to Cosmos and no VNet integration;
+    // Gateway keeps all traffic on 443, minimises the outbound TCP/SNAT footprint on the
+    // small App Service SKU, and is the mode required if a dedicated gateway / integrated
+    // cache is ever provisioned. Account-level consistency (Session) is configured in
+    // modules/cosmos-db.bicep, not here.
+    var options = new CosmosClientOptions { ConnectionMode = ConnectionMode.Gateway };
+
+    return new CosmosClient(endpoint, key, options);
 });
 
 // Blob Storage client — BlobStorage:Endpoint + DefaultAzureCredential (Managed Identity / user delegation SAS)
