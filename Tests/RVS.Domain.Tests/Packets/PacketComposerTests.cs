@@ -122,6 +122,9 @@ public class PacketComposerTests
 
         // 2. Customer + preferred contact
         packet.Customer.FullName.Should().Be("Dale Gribble");
+        packet.Customer.FirstName.Should().Be("Dale");
+        packet.Customer.LastName.Should().Be("Gribble");
+        packet.Customer.SortableName.Should().Be("Gribble, Dale");
         packet.Customer.Phone.Should().Be("555-0101");
         packet.Customer.Email.Should().Be("dale@example.com");
         packet.Customer.PreferredContact.Should().Be("Text");
@@ -159,6 +162,10 @@ public class PacketComposerTests
         // 10. Status link
         packet.StatusLink.Should().NotBeNull();
         packet.StatusLink!.Url.Should().Be("https://rvintake.com/status/abc123");
+
+        // Branding — defaults to the product brand when the context supplies no override.
+        packet.Branding.BrandName.Should().Be("RV Intake");
+        packet.Branding.HasLogo.Should().BeFalse();
     }
 
     [Fact]
@@ -230,6 +237,91 @@ public class PacketComposerTests
         packet.Unit.Make.Should().BeNull();
         packet.Unit.Model.Should().BeNull();
         packet.Unit.Vin.Should().Be("1FDXE45S12HB00001");
+    }
+
+    // ── Customer name parts (issue #492 item 3) ───────────────────────────
+
+    [Fact]
+    public void Compose_ShouldCarryDiscreteCustomerNameParts()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.FirstName = "  Dale  ";
+        request.CustomerSnapshot.LastName = "  Gribble  ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.FirstName.Should().Be("  Dale  ", "the composer keeps the snapshot value; the renderer trims");
+        packet.Customer.LastName.Should().Be("  Gribble  ");
+        packet.Customer.SortableName.Should().Be("Gribble, Dale");
+    }
+
+    [Fact]
+    public void Compose_WhenLastNameBlank_SortableNameShouldFallBackToFirstName()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.FirstName = "Dale";
+        request.CustomerSnapshot.LastName = "   ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.LastName.Should().BeNull();
+        packet.Customer.SortableName.Should().Be("Dale");
+    }
+
+    [Fact]
+    public void Compose_WhenBothNamePartsBlank_SortableNameShouldFallBackToFullName()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.FirstName = " ";
+        request.CustomerSnapshot.LastName = " ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.SortableName.Should().Be(packet.Customer.FullName);
+    }
+
+    // ── Branding (issue #492 items 1–2) ──────────────────────────────────
+
+    [Fact]
+    public void Compose_ByDefault_ShouldUseTheProductBrand()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.Branding.Should().BeSameAs(PacketBranding.Default);
+        packet.Branding.BrandName.Should().Be("RV Intake");
+        packet.Branding.LogoDataUri.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenContextSuppliesBrandName_ShouldUseIt()
+    {
+        var context = FullContext() with { BrandName = "  Acme RV Group  " };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.BrandName.Should().Be("Acme RV Group");
+    }
+
+    [Fact]
+    public void Compose_WhenContextSuppliesLogoDataUri_ShouldCarryItAndKeepTheDefaultName()
+    {
+        var context = FullContext() with { LogoDataUri = "data:image/png;base64,AAAA" };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.BrandName.Should().Be("RV Intake");
+        packet.Branding.LogoDataUri.Should().Be("data:image/png;base64,AAAA");
+        packet.Branding.HasLogo.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Compose_WhenContextBrandNameBlank_ShouldFallBackToDefault()
+    {
+        var context = FullContext() with { BrandName = "   " };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.BrandName.Should().Be("RV Intake");
     }
 
     // ── Degradation: category ───────────────────────────────────────────────
