@@ -304,9 +304,20 @@ public sealed class IntakeWizardState
             HasExtendedWarranty = string.IsNullOrWhiteSpace(HasExtendedWarranty) ? null : HasExtendedWarranty.Trim(),
             ApproxPurchaseDate = string.IsNullOrWhiteSpace(ApproxPurchaseDate) ? null : ApproxPurchaseDate.Trim(),
             DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null,
-            CapabilityMismatchNote = BuildCapabilityMismatchNote()
+            CapabilityMismatchNote = BuildCapabilityMismatchNote(),
+            ExpectedAttachmentCount = PendingUploadCount
         };
     }
+
+    /// <summary>
+    /// How many attachments still have to be uploaded to blob storage after submission — the
+    /// files buffered in the browser that have not been sent yet. Told to the API so packet
+    /// generation waits for them instead of rendering a photo-less packet (issue #516).
+    /// Files whose bytes were lost are excluded: they are already counted as upload failures
+    /// and will never arrive.
+    /// </summary>
+    public int PendingUploadCount =>
+        Attachments.Count(a => a.FileData is not null && !a.IsUploaded);
 
     private string? BuildCapabilityMismatchNote()
     {

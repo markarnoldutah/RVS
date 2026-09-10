@@ -76,6 +76,37 @@ public class PacketGenerationWorkerTests
         _serviceMock.Verify(s => s.GenerateAsync("ten_1", "sr_2", It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // ── Re-queue decision (issue #516) ─────────────────────────────────────
+
+    [Theory]
+    [InlineData(PacketGenerationOutcome.Retry)]
+    [InlineData(PacketGenerationOutcome.WaitingForAttachments)]
+    public void ShouldRequeue_ForOutcomesThatExpectAnotherPass_ShouldBeTrue(PacketGenerationOutcome outcome)
+    {
+        PacketGenerationWorker.ShouldRequeue(outcome).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(PacketGenerationOutcome.Succeeded)]
+    [InlineData(PacketGenerationOutcome.Exhausted)]
+    [InlineData(null)]
+    public void ShouldRequeue_ForTerminalOutcomes_ShouldBeFalse(PacketGenerationOutcome? outcome)
+    {
+        PacketGenerationWorker.ShouldRequeue(outcome).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ProcessOnceAsync_WhenAttachmentsAreStillUploading_ShouldSurfaceWaitingForAttachments()
+    {
+        _serviceMock.Setup(s => s.GenerateAsync("ten_1", "sr_9", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PacketGenerationOutcome.WaitingForAttachments);
+        var worker = BuildWorker(Mock.Of<IPacketGenerationQueue>());
+
+        var outcome = await worker.ProcessOnceAsync(new PacketGenerationJob("ten_1", "sr_9", "intake"), CancellationToken.None);
+
+        outcome.Should().Be(PacketGenerationOutcome.WaitingForAttachments);
+    }
+
     /// <summary>An <see cref="IPacketGenerationQueue"/> whose stream ends when <see cref="Complete"/> is called.</summary>
     private sealed class CompletableQueue : IPacketGenerationQueue
     {

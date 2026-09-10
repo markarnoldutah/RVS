@@ -35,6 +35,16 @@ public sealed class PacketGenerationService : IPacketGenerationService
     private const string SystemUserId = "system";
     private const int MaxErrorLength = 500;
 
+    /// <summary>
+    /// How long after a request is created generation will wait for intake's promised
+    /// attachments to finish uploading (issue #516). The intake client uploads photos after the
+    /// submission that creates the request, so a packet rendered the instant the job is
+    /// enqueued carries none of them. Once this window closes the packet is rendered with
+    /// whatever arrived — a browser upload that failed must never cost the service department
+    /// its packet.
+    /// </summary>
+    internal static readonly TimeSpan AttachmentUploadWindow = TimeSpan.FromMinutes(2);
+
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly ILocationRepository _locationRepository;
     private readonly IPacketPhotoUrlResolver _photoUrlResolver;
@@ -76,6 +86,19 @@ public sealed class PacketGenerationService : IPacketGenerationService
 
         var request = await _serviceRequestRepository.GetByIdAsync(tenantId, serviceRequestId, cancellationToken)
             ?? throw new KeyNotFoundException($"Service request '{serviceRequestId}' not found.");
+
+        // Intake's photos land after the 201 that created this request (issue #516). Hold off
+        // while fewer than promised have arrived — before MarkGenerating, so polling never eats
+        // one of the three attempts — and render regardless once the window closes.
+        if (IsWaitingForAttachments(request))
+        {
+            _logger.LogInformation(
+                "Packet generation deferred for SR {ServiceRequestId}: {ArrivedCount} of {ExpectedCount} attachment(s) uploaded, still inside the {WindowSeconds}s upload window",
+                request.Id, request.Attachments.Count, request.PacketGeneration.ExpectedAttachmentCount,
+                AttachmentUploadWindow.TotalSeconds);
+
+            return PacketGenerationOutcome.WaitingForAttachments;
+        }
 
         // Record the attempt before doing the work so a mid-render crash still shows it was tried.
         request.PacketGeneration.MarkGenerating();
@@ -185,6 +208,19 @@ public sealed class PacketGenerationService : IPacketGenerationService
                 request.Id);
         }
     }
+
+    /// <summary>
+    /// <c>true</c> while intake has promised more attachments than have been confirmed onto
+    /// <paramref name="request"/> and <see cref="AttachmentUploadWindow"/> has not yet elapsed
+    /// since the request was created (issue #516).
+    ///
+    /// Anchoring the deadline on <see cref="EntityBase.CreatedAtUtc"/> means an on-demand
+    /// regeneration — always long after creation — never waits: it renders immediately with
+    /// whatever attachments the request actually has.
+    /// </summary>
+    private static bool IsWaitingForAttachments(ServiceRequest request) =>
+        request.Attachments.Count < request.PacketGeneration.ExpectedAttachmentCount
+        && DateTime.UtcNow - request.CreatedAtUtc < AttachmentUploadWindow;
 
     /// <summary>
     /// Downloads the image bytes for each resolved photo so <see cref="PacketPdfRenderer"/> can

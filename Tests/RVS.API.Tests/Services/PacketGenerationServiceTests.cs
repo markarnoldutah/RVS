@@ -88,7 +88,15 @@ public class PacketGenerationServiceTests
     private static readonly byte[] OnePixelPng = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
 
-    private static ServiceRequest BuildRequest(params ServiceRequestAttachmentEmbedded[] attachments) => new()
+    private static ServiceRequest BuildRequest(params ServiceRequestAttachmentEmbedded[] attachments) =>
+        BuildRequestCreatedAt(DateTime.UtcNow, attachments);
+
+    /// <summary>
+    /// A request stamped with an explicit creation time — the anchor for the issue #516
+    /// upload-wait deadline.
+    /// </summary>
+    private static ServiceRequest BuildRequestCreatedAt(
+        DateTime createdAtUtc, params ServiceRequestAttachmentEmbedded[] attachments) => new()
     {
         Id = SrId,
         TenantId = TenantId,
@@ -99,6 +107,7 @@ public class PacketGenerationServiceTests
         CustomerSnapshot = new CustomerSnapshotEmbedded { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
         AssetInfo = new AssetInfoEmbedded { AssetId = "1HGBH41JXMN109186", Manufacturer = "Jayco", Model = "Eagle", Year = 2021 },
         Attachments = [.. attachments],
+        CreatedAtUtc = createdAtUtc,
     };
 
     private static ServiceRequestAttachmentEmbedded Image(string id, string blobUri) => new()
@@ -235,6 +244,116 @@ public class PacketGenerationServiceTests
 
         outcome.Should().Be(PacketGenerationOutcome.Succeeded);
         sr.PacketGeneration.Status.Should().Be("Succeeded");
+    }
+
+    // ── Waiting for in-flight intake uploads (issue #516) ──────────────────
+    //
+    // The intake client uploads photos after the 201 that creates the request, so a packet
+    // generated the instant the job is enqueued would carry no photos. Intake records how many
+    // attachments it promised; generation holds off until they land or the window expires.
+
+    [Fact]
+    public async Task GenerateAsync_WhenPromisedAttachmentsHaveNotArrived_ShouldReturnWaitingForAttachments()
+    {
+        var sr = BuildRequest();
+        sr.PacketGeneration.ExpectedAttachmentCount = 2;
+        SetupRequest(sr);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.WaitingForAttachments);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenWaitingForAttachments_ShouldNotRenderStoreOrEmailAnything()
+    {
+        var sr = BuildRequest();
+        sr.PacketGeneration.ExpectedAttachmentCount = 2;
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        _blobMock.Verify(b => b.UploadAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _notificationMock.Verify(n => n.SendPacketEmailAsync(
+            It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()), Times.Never);
+        sr.PacketGeneration.Status.Should().Be("Pending");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenWaitingForAttachments_ShouldNotConsumeAnAttempt()
+    {
+        var sr = BuildRequest();
+        sr.PacketGeneration.ExpectedAttachmentCount = 2;
+        SetupRequest(sr);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+        await _sut.GenerateAsync(TenantId, SrId);
+        await _sut.GenerateAsync(TenantId, SrId);
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sr.PacketGeneration.AttemptCount.Should().Be(
+            0, "polling for late uploads must not burn the three generation attempts");
+        sr.PacketGeneration.AlertRaised.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenEveryPromisedAttachmentHasArrived_ShouldGenerate()
+    {
+        var sr = BuildRequest(
+            Image("att_1", "ten_acme/sr/one.jpg"),
+            Image("att_2", "ten_acme/sr/two.jpg"));
+        sr.PacketGeneration.ExpectedAttachmentCount = 2;
+        SetupRequest(sr);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenMoreAttachmentsArrivedThanPromised_ShouldGenerate()
+    {
+        var sr = BuildRequest(
+            Image("att_1", "ten_acme/sr/one.jpg"),
+            Image("att_2", "ten_acme/sr/two.jpg"));
+        sr.PacketGeneration.ExpectedAttachmentCount = 1;
+        SetupRequest(sr);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheUploadWindowHasExpired_ShouldGenerateWithWhateverArrived()
+    {
+        // One upload failed in the browser and will never arrive. The deadline guarantees the
+        // service department still gets a packet rather than none at all.
+        var sr = BuildRequestCreatedAt(
+            DateTime.UtcNow - PacketGenerationService.AttachmentUploadWindow - TimeSpan.FromSeconds(1),
+            Image("att_1", "ten_acme/sr/one.jpg"));
+        sr.PacketGeneration.ExpectedAttachmentCount = 3;
+        SetupRequest(sr);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        sr.PacketGeneration.AttemptCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenNoAttachmentsWerePromised_ShouldGenerateWithoutWaiting()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
     }
 
     // ── Paste block (Spec B-5, issue #436) ─────────────────────────────────

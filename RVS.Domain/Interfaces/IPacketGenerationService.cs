@@ -14,6 +14,13 @@ public enum PacketGenerationOutcome
 
     /// <summary>This attempt failed and <see cref="Entities.PacketGenerationEmbedded.MaxAttempts"/> is reached — an alert was raised; do not re-enqueue.</summary>
     Exhausted,
+
+    /// <summary>
+    /// Nothing was attempted: intake promised more attachments than have arrived and the upload
+    /// window is still open (issue #516). The job should be re-enqueued; this does not consume
+    /// one of the <see cref="Entities.PacketGenerationEmbedded.MaxAttempts"/> attempts.
+    /// </summary>
+    WaitingForAttachments,
 }
 
 /// <summary>

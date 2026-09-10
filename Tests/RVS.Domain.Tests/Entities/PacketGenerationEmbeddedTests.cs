@@ -129,4 +129,27 @@ public class PacketGenerationEmbeddedTests
         pg.PacketVersion.Should().Be(1, "prior successful versions are retained");
         pg.PdfBlobPath.Should().Be("packets/a/v1.pdf");
     }
+
+    // ── ExpectedAttachmentCount (issue #516) ───────────────────────────────
+
+    [Fact]
+    public void New_ShouldExpectNoAttachments()
+    {
+        var pg = new PacketGenerationEmbedded();
+
+        pg.ExpectedAttachmentCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void ResetForRegeneration_ShouldKeepExpectedAttachmentCount()
+    {
+        var pg = new PacketGenerationEmbedded { ExpectedAttachmentCount = 3 };
+        pg.MarkGenerating();
+        pg.MarkFailed("boom");
+
+        pg.ResetForRegeneration();
+
+        pg.ExpectedAttachmentCount.Should().Be(
+            3, "the count records what intake promised and is not re-derived on regeneration");
+    }
 }

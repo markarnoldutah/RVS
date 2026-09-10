@@ -42,7 +42,7 @@ The packet is the product. Everything else exists to produce it.
 
 ### B-1 — Generation
 
-Enqueued on intake submission; must not block the `201`. Regenerated on demand. Three failed attempts raises an alert and is surfaced in the manager app. Failure never rolls back the service request.
+Enqueued on intake submission; must not block the `201`. The customer's attachments upload after that `201`, so the submission declares how many are coming and generation waits for them to land before rendering — bounded by a short window, after which it renders whatever arrived. A failed upload costs the packet a photo, never the packet. Regenerated on demand. Three failed attempts raises an alert and is surfaced in the manager app. Failure never rolls back the service request.
 
 ### B-2 — Contents
 

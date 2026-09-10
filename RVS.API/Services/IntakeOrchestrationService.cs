@@ -217,6 +217,13 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                     FreeTextResponse = d.FreeTextResponse?.Trim(),
                 })
                 .ToList() ?? [],
+            // The client uploads and confirms its attachments after this call returns, so record
+            // how many to expect: packet generation waits for them rather than rendering a
+            // photo-less packet (issue #516). Clamped so a bad value cannot stall generation.
+            PacketGeneration = new PacketGenerationEmbedded
+            {
+                ExpectedAttachmentCount = Math.Max(0, request.ExpectedAttachmentCount),
+            },
             CreatedByUserId = "intake",
         };
 
