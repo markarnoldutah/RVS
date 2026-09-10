@@ -100,7 +100,7 @@ Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint,
 
 Two public DNS zones — `rvserviceflow.com` (Manager) and `rvintake.com` (Intake) — both living in `rg-rvs-prod-westus3`. Subdomains bind to the Static Web Apps by CNAME delegation; the production apex uses the two-phase A + TXT token flow. `dns-zone-contributor.bicep` grants the staging deployer zone-scoped rights so it can write records into prod-owned zones.
 
-**There are no VNets, no private endpoints, and no private DNS zones anywhere.** Cosmos, Key Vault, Storage, Log Analytics and App Insights are all reachable publicly, with Storage and Key Vault network ACLs defaulting to `Allow`. Blob CORS permits GET/HEAD/PUT from the Static Web App custom domains only.
+**There are no VNets, no private endpoints, and no private DNS zones anywhere.** Cosmos, Key Vault, Storage, Log Analytics, App Insights and both Azure OpenAI accounts (GPT-4o + Whisper) are all reachable publicly, with Storage, Key Vault and the OpenAI accounts' network ACLs defaulting to `Allow` (`bypass: AzureServices`). Blob CORS permits GET/HEAD/PUT from the Static Web App custom domains only.
 
 ---
 
@@ -125,7 +125,6 @@ Auth: the API uses Azure OIDC federated credentials, no long-lived secrets. Stat
 
 | Defect | Detail |
 |---|---|
-| Prod OpenAI unreachable | Both OpenAI modules set `publicNetworkAccess: Disabled` and `networkAcls.defaultAction: Deny` when `environmentName == 'prod'`, and no private endpoint is declared anywhere. As written, production cannot reach either account |
 | `build-mobile.yml` | Builds `RVS.MAUI.Tech` on `mobile-v*` tags. That project is not in the repo and the offline mobile app is archived. Delete the workflow |
 | `deployment-cmds.azcli` | References a `parameters/dev.bicepparam` that does not exist. It also carries a manual `Stripe--WebhookSecret` vault write — harmless, but premature: billing is build item 7 and nothing reads that secret yet |
 | `prod_phase2` placeholders | See Environments above |
