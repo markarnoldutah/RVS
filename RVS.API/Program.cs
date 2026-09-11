@@ -510,6 +510,36 @@ else
     }
 }
 
+// Preliminary assessment — packet pipeline, off the intake request thread (issue #507)
+builder.Services.AddSingleton<RuleBasedPreliminaryAssessmentService>();
+var assessmentEndpoint = builder.Configuration["AzureOpenAi:Endpoint"];
+if (!useMockIntegrations && !string.IsNullOrWhiteSpace(assessmentEndpoint))
+{
+    var assessmentDeploymentName = builder.Configuration["AzureOpenAi:TextDeploymentName"]
+        ?? builder.Configuration["AzureOpenAi:DeploymentName"]
+        ?? "gpt-4o";
+    var assessmentApiKey = builder.Configuration["AzureOpenAi:ApiKey"];
+
+    builder.Services.AddHttpClient<IPreliminaryAssessmentService, AzureOpenAiPreliminaryAssessmentService>(client =>
+    {
+        client.BaseAddress = new Uri(assessmentEndpoint.TrimEnd('/') + $"/openai/deployments/{assessmentDeploymentName}/");
+        if (!string.IsNullOrWhiteSpace(assessmentApiKey))
+        {
+            client.DefaultRequestHeaders.Add("api-key", assessmentApiKey);
+        }
+    })
+    .AddStandardResilienceHandler(options =>
+    {
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(15);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(35);
+        options.Retry.MaxRetryAttempts = 2;
+    });
+}
+else
+{
+    builder.Services.AddSingleton<IPreliminaryAssessmentService>(sp => sp.GetRequiredService<RuleBasedPreliminaryAssessmentService>());
+}
+
 // Notifications (Email via ACS, SMS via ACS, Orchestrator)
 if (useMockIntegrations)
 {

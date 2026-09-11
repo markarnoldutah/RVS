@@ -1,4 +1,5 @@
 using RVS.Domain.Entities;
+using RVS.Domain.Validation;
 
 namespace RVS.Domain.Packets;
 
@@ -36,7 +37,7 @@ public static class PacketComposer
                 ReferenceCode = DeriveReferenceCode(request.Id),
             },
             IssueCategory = NullIfBlank(request.IssueCategory),
-            AiSummary = ComposeAiSummary(request.TechnicianSummary),
+            AiSummary = ComposeAiSummary(request.TechnicianSummary, request.PreliminaryAssessment),
             IssueDescription = request.IssueDescription ?? string.Empty,
             Diagnostics = ComposeDiagnostics(request.DiagnosticResponses),
             Photos = ComposePhotos(request.Attachments, context.PhotoUrls),
@@ -111,10 +112,33 @@ public static class PacketComposer
         return entries;
     }
 
-    private static PacketAiSummary? ComposeAiSummary(string? technicianSummary) =>
-        NullIfBlank(technicianSummary) is { } text
-            ? new PacketAiSummary { Text = text.Trim() }
-            : null;
+    private static PacketAiSummary? ComposeAiSummary(
+        string? technicianSummary, PreliminaryAssessmentEmbedded? assessment)
+    {
+        var text = NullIfBlank(technicianSummary)?.Trim();
+        var confidence = AssessmentConfidence.DisplayName(assessment?.Confidence);
+
+        var summary = new PacketAiSummary { Text = text };
+        if (assessment is not null && confidence is not null)
+        {
+            summary = summary with
+            {
+                ProbableCause = NullIfBlank(assessment.ProbableCause)?.Trim(),
+                PossibleFixes = TrimNonBlank(assessment.PossibleFixes),
+                LikelyParts = TrimNonBlank(assessment.LikelyParts),
+            };
+
+            if (summary.HasStructuredAssessment)
+            {
+                summary = summary with { Confidence = confidence };
+            }
+        }
+
+        return text is null && !summary.HasStructuredAssessment ? null : summary;
+    }
+
+    private static IReadOnlyList<string> TrimNonBlank(IEnumerable<string>? values) =>
+        [.. (values ?? []).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim())];
 
     private static IReadOnlyList<PacketPhoto> ComposePhotos(
         IEnumerable<ServiceRequestAttachmentEmbedded> attachments,

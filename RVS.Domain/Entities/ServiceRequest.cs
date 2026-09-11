@@ -65,6 +65,14 @@ public class ServiceRequest : EntityBase
     public string? TechnicianSummary { get; set; }
 
     /// <summary>
+    /// Structured preliminary assessment — probable cause, possible fixes, likely parts — shown
+    /// in the packet's Preliminary assessment section (issue #507). Generated once by the packet
+    /// pipeline and reused on regeneration. Null until the first packet generation.
+    /// </summary>
+    [JsonProperty("preliminaryAssessment")]
+    public PreliminaryAssessmentEmbedded? PreliminaryAssessment { get; set; }
+
+    /// <summary>
     /// File attachments uploaded during intake (photos, videos, voice notes).
     /// </summary>
     [JsonProperty("attachments")]
@@ -684,6 +692,43 @@ public class AiEnrichmentMetadataEmbedded
     /// </summary>
     [JsonProperty("enrichedAtUtc")]
     public DateTime? EnrichedAtUtc { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: PreliminaryAssessmentEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// An advisory, pre-inspection assessment of the reported issue (issue #507). It is made before
+/// a technician has seen the unit, so fixes are <em>possible</em>, never recommended, and there
+/// may be several. When <see cref="Confidence"/> is <c>abstain</c> the other fields are empty and
+/// the packet shows nothing structured.
+/// </summary>
+public class PreliminaryAssessmentEmbedded
+{
+    /// <summary>The most probable cause, or <c>null</c> when none is offered.</summary>
+    [JsonProperty("probableCause")]
+    public string? ProbableCause { get; set; }
+
+    /// <summary>Plausible fixes to verify on inspection, most plausible first. May be empty.</summary>
+    [JsonProperty("possibleFixes")]
+    public List<string> PossibleFixes { get; set; } = [];
+
+    /// <summary>Generic part names likely to be involved — never part numbers or prices.</summary>
+    [JsonProperty("likelyParts")]
+    public List<string> LikelyParts { get; set; } = [];
+
+    /// <summary>One of <see cref="Validation.AssessmentConfidence.AllowedValues"/>.</summary>
+    [JsonProperty("confidence")]
+    public string Confidence { get; set; } = Validation.AssessmentConfidence.Abstain;
+
+    /// <summary>The implementation that produced the assessment (AI or rule-based fallback).</summary>
+    [JsonProperty("provider")]
+    public string Provider { get; set; } = string.Empty;
+
+    /// <summary>UTC time the assessment was generated.</summary>
+    [JsonProperty("generatedAtUtc")]
+    public DateTime GeneratedAtUtc { get; set; }
 }
 
 // ---------------------------------------------------------------------------

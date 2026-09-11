@@ -299,6 +299,26 @@ public static class PacketPdfRenderer
             });
         }
 
+        foreach (var list in section.Lists)
+        {
+            column.Item().PaddingTop(2f).Text(list.Label).SemiBold();
+            for (var i = 0; i < list.Items.Count; i++)
+            {
+                var marker = list.Numbered ? $"{i + 1}." : "•";
+                var item = list.Items[i];
+                column.Item().PaddingLeft(10f).Row(row =>
+                {
+                    row.ConstantItem(14f).Text(marker);
+                    row.RelativeItem().Text(item);
+                });
+            }
+        }
+
+        if (section.Note is not null)
+        {
+            column.Item().PaddingTop(2f).Text(section.Note).Italic().FontSize(8.5f);
+        }
+
         if (section.Verbatim is not null)
         {
             column.Item().Border(1f).Padding(8f).Text(section.Verbatim);

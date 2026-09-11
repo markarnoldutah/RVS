@@ -502,6 +502,116 @@ public class PacketPdfRendererTests
         Layout(MinimalPacket()).Sections.Should().NotContain(s => s.Id == "ai-summary");
     }
 
+    // ── 7a. Structured preliminary assessment (issue #507) ─────────────
+
+    private static ServicePacket AssessedPacket() => FullPacket() with
+    {
+        AiSummary = new PacketAiSummary
+        {
+            Text = "Likely overheating on the generator windings.",
+            ProbableCause = "Overheating from a clogged generator air intake.",
+            PossibleFixes = ["Clear the air intake and cooling fins", "Replace the high-temp shutdown switch"],
+            LikelyParts = ["Air filter", "High-temp shutdown switch"],
+            Confidence = "Medium",
+        },
+    };
+
+    [Fact]
+    public void Build_WhenAssessmentPresent_ShouldCarryCauseAndConfidenceRows_FixesAndPartsLists_AndTheAdvisoryNote()
+    {
+        var section = Section(AssessedPacket(), "ai-summary");
+
+        section.Heading.Should().Be("Preliminary assessment");
+        section.Body.Should().Be("Likely overheating on the generator windings.");
+        section.Rows.Should().Equal(
+            new PacketPdfLayoutRow("Probable cause", "Overheating from a clogged generator air intake."),
+            new PacketPdfLayoutRow("Confidence", "Medium"));
+        section.Lists.Should().HaveCount(2);
+        section.Lists[0].Label.Should().Be("Possible fixes");
+        section.Lists[0].Numbered.Should().BeTrue();
+        section.Lists[0].Items.Should().Equal("Clear the air intake and cooling fins", "Replace the high-temp shutdown switch");
+        section.Lists[1].Label.Should().Be("Likely parts");
+        section.Lists[1].Numbered.Should().BeFalse();
+        section.Lists[1].Items.Should().Equal("Air filter", "High-temp shutdown switch");
+        section.Note.Should().Be(PacketAiSummary.AdvisoryNote);
+    }
+
+    [Fact]
+    public void Build_WhenAssessmentHasNoFixesOrParts_ShouldCarryNoEmptyLists()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = AssessedPacket().AiSummary! with { PossibleFixes = [], LikelyParts = [] },
+        };
+
+        Section(packet, "ai-summary").Lists.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Build_WhenNoStructuredAssessment_ShouldCarryOnlyTheSummaryText()
+    {
+        var section = Section(FullPacket(), "ai-summary");
+
+        section.Rows.Should().BeEmpty();
+        section.Lists.Should().BeEmpty();
+        section.Note.Should().BeNull();
+    }
+
+    [Fact]
+    public void Build_WhenAssessmentPresentWithoutSummaryText_ShouldHaveNoBody()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = AssessedPacket().AiSummary! with { Text = null },
+        };
+
+        var section = Section(packet, "ai-summary");
+
+        section.Body.Should().BeNull();
+        section.Rows.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Build_ForAnAssessedPacket_ShouldCarryTheSameAssessmentAsTheHtmlRendering_InTheSameOrder()
+    {
+        var packet = AssessedPacket();
+        var html = PacketHtmlRenderer.Render(packet);
+        var pdf = Layout(packet).ToPlainText();
+
+        string[] values =
+        [
+            "Electrical",
+            "Likely overheating on the generator windings.",
+            "Overheating from a clogged generator air intake.",
+            "Medium",
+            "Clear the air intake and cooling fins",
+            "Replace the high-temp shutdown switch",
+            "Air filter",
+            "High-temp shutdown switch",
+            PacketAiSummary.AdvisoryNote,
+            "Generator quits after ten minutes. Smells hot.",
+        ];
+
+        foreach (var value in values)
+        {
+            html.Should().Contain(WebUtility.HtmlEncode(value));
+            pdf.Should().Contain(value);
+        }
+
+        values.Select(v => pdf.IndexOf(v, StringComparison.Ordinal))
+            .Should().BeInAscendingOrder();
+        values.Select(v => html.IndexOf(WebUtility.HtmlEncode(v), html.IndexOf("section:category", StringComparison.Ordinal), StringComparison.Ordinal))
+            .Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void Render_WithAStructuredAssessment_ShouldNotThrow()
+    {
+        var bytes = PacketPdfRenderer.Render(AssessedPacket());
+
+        bytes.Should().NotBeEmpty();
+    }
+
     // ── 8. Photos ───────────────────────────────────────────────────────
 
     [Fact]

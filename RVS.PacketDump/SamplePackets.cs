@@ -78,6 +78,16 @@ internal static class SamplePackets
                     + "cool-down before it restarts, then repeats. Shore power and inverter "
                     + "unaffected. Pattern is consistent with an airflow/cooling restriction or a "
                     + "failing temperature sensor causing a thermal shutdown.",
+                ProbableCause =
+                    "Thermal shutdown from restricted cooling airflow; a failing temperature sensor would show the same pattern.",
+                PossibleFixes =
+                [
+                    "Clear debris from the generator air intake, cooling fins, and compartment vents",
+                    "Test the temperature sensor and high-temp shutdown switch, and replace if out of range",
+                    "Check the cooling fan and its belt or coupling",
+                ],
+                LikelyParts = ["Air filter", "Temperature sensor", "High-temp shutdown switch"],
+                Confidence = "Medium",
             },
             Photos =
             [

@@ -202,12 +202,41 @@ internal sealed record PacketPdfLayout
             return null;
         }
 
+        if (!summary.HasStructuredAssessment)
+        {
+            return new PacketPdfLayoutSection
+            {
+                Id = "ai-summary",
+                Heading = "Preliminary assessment",
+                AiGeneratedTag = true,
+                Body = summary.Text,
+            };
+        }
+
+        var rows = new List<PacketPdfLayoutRow>();
+        AddRow(rows, "Probable cause", summary.ProbableCause);
+        AddRow(rows, "Confidence", summary.Confidence);
+
+        var lists = new List<PacketPdfLayoutList>();
+        if (summary.PossibleFixes.Count > 0)
+        {
+            lists.Add(new PacketPdfLayoutList("Possible fixes", summary.PossibleFixes, Numbered: true));
+        }
+
+        if (summary.LikelyParts.Count > 0)
+        {
+            lists.Add(new PacketPdfLayoutList("Likely parts", summary.LikelyParts, Numbered: false));
+        }
+
         return new PacketPdfLayoutSection
         {
             Id = "ai-summary",
             Heading = "Preliminary assessment",
             AiGeneratedTag = true,
             Body = summary.Text,
+            Rows = rows,
+            Lists = lists,
+            Note = PacketAiSummary.AdvisoryNote,
         };
     }
 
@@ -317,6 +346,17 @@ internal sealed record PacketPdfLayout
             lines.Add($"{row.Label}: {row.Value}");
         }
 
+        foreach (var list in section.Lists)
+        {
+            lines.Add($"{list.Label}:");
+            lines.AddRange(list.Items.Select((item, i) => list.Numbered ? $"  {i + 1}. {item}" : $"  - {item}"));
+        }
+
+        if (section.Note is not null)
+        {
+            lines.Add(section.Note);
+        }
+
         if (section.Verbatim is not null)
         {
             lines.Add(section.Verbatim);
@@ -377,6 +417,12 @@ internal sealed record PacketPdfLayoutSection
     /// <summary>Label/value rows.</summary>
     public IReadOnlyList<PacketPdfLayoutRow> Rows { get; init; } = [];
 
+    /// <summary>Labelled lists, after the rows (the assessment's possible fixes and likely parts).</summary>
+    public IReadOnlyList<PacketPdfLayoutList> Lists { get; init; } = [];
+
+    /// <summary>A small italic note closing the section's rows and lists (the assessment's advisory note).</summary>
+    public string? Note { get; init; }
+
     /// <summary>A single free-text paragraph (customer name, category, AI summary).</summary>
     public string? Body { get; init; }
 
@@ -404,6 +450,9 @@ internal sealed record PacketPdfLayoutSection
 
 /// <summary>A label/value line.</summary>
 internal sealed record PacketPdfLayoutRow(string Label, string Value);
+
+/// <summary>A labelled list of items, numbered when order carries meaning.</summary>
+internal sealed record PacketPdfLayoutList(string Label, IReadOnlyList<string> Items, bool Numbered);
 
 /// <summary>One diagnostic question and its answer(s).</summary>
 internal sealed record PacketPdfLayoutDiagnostic(string Question, IReadOnlyList<string> Answers);

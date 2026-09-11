@@ -140,6 +140,7 @@ All integrations have a `Mock*`/`NoOp*` fallback behind the same interface, nomi
 - VIN Extraction (vision) → Azure OpenAI (`AzureOpenAiVinExtractionService`)
 - Speech-to-Text → Azure OpenAI Whisper (**northcentralus** — Whisper 001 Standard not in westus3)
 - Issue text refinement + categorization → Azure OpenAI (fallback: `RuleBasedIssueTextRefinementService` / `RuleBasedCategorizationService`)
+- Packet preliminary assessment (probable cause / possible fixes / likely parts) → Azure OpenAI, called from `PacketGenerationService` once per request (fallback: `RuleBasedPreliminaryAssessmentService`)
 - Email → Azure Communication Services (fallback: NoOp). Today it only sends a customer confirmation; **nothing emails a service manager yet** — that is Spec section B, the current work
 - SMS → Azure Communication Services (fallback: NoOp). **Archived scope**, outbound-only, descope target
 

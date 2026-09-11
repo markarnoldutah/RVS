@@ -263,8 +263,41 @@ public static class PacketHtmlRenderer
         sb.Append("<!-- section:ai-summary -->\n");
         sb.Append("<section class=\"ai-summary\">\n");
         sb.Append("<h2>Preliminary assessment <span class=\"tag\">AI-generated</span></h2>\n");
-        sb.Append("<p>").Append(Text(summary.Text)).Append("</p>\n");
+        if (summary.Text is not null)
+        {
+            sb.Append("<p>").Append(Text(summary.Text)).Append("</p>\n");
+        }
+
+        if (summary.HasStructuredAssessment)
+        {
+            AppendRow(sb, "Probable cause", summary.ProbableCause);
+            AppendRow(sb, "Confidence", summary.Confidence);
+            AppendAssessmentList(sb, "ol", "possible-fixes", "Possible fixes", summary.PossibleFixes);
+            AppendAssessmentList(sb, "ul", "likely-parts", "Likely parts", summary.LikelyParts);
+            sb.Append("<p class=\"advisory\" style=\"margin:2mm 0 0;font-size:8.5pt;font-style:italic;\">")
+                .Append(Text(PacketAiSummary.AdvisoryNote)).Append("</p>\n");
+        }
+
         sb.Append("</section>\n");
+    }
+
+    private static void AppendAssessmentList(
+        StringBuilder sb, string tag, string cssClass, string label, IReadOnlyList<string> items)
+    {
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        sb.Append("<p class=\"list-label\" style=\"margin:2mm 0 1mm;font-weight:700;\">").Append(label).Append("</p>\n");
+        sb.Append('<').Append(tag).Append(" class=\"").Append(cssClass)
+            .Append("\" style=\"margin:0 0 1mm;padding-left:6mm;\">\n");
+        foreach (var item in items)
+        {
+            sb.Append("<li>").Append(Text(item)).Append("</li>\n");
+        }
+
+        sb.Append("</").Append(tag).Append(">\n");
     }
 
     // ── 8. Photos ─────────────────────────────────────────────────────────

@@ -476,6 +476,143 @@ public class PacketComposerTests
         packet.AiSummary.Should().BeNull();
     }
 
+    // ── Structured preliminary assessment (issue #507) ──────────────────────
+
+    private static PreliminaryAssessmentEmbedded Assessment(
+        string confidence = "medium",
+        string? probableCause = "  Overheating from a clogged generator air intake.  ",
+        List<string>? possibleFixes = null,
+        List<string>? likelyParts = null) => new()
+    {
+        ProbableCause = probableCause,
+        PossibleFixes = possibleFixes ?? ["  Clear the air intake and cooling fins  ", "Replace the high-temp shutdown switch"],
+        LikelyParts = likelyParts ?? ["Air filter", "  High-temp shutdown switch "],
+        Confidence = confidence,
+        Provider = "AzureOpenAiPreliminaryAssessmentService",
+        GeneratedAtUtc = new DateTime(2026, 9, 5, 14, 31, 0, DateTimeKind.Utc),
+    };
+
+    [Fact]
+    public void Compose_WhenNoAssessmentStored_ShouldCarryNoStructuredFields()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.AiSummary!.HasStructuredAssessment.Should().BeFalse();
+        packet.AiSummary.ProbableCause.Should().BeNull();
+        packet.AiSummary.PossibleFixes.Should().BeEmpty();
+        packet.AiSummary.LikelyParts.Should().BeEmpty();
+        packet.AiSummary.Confidence.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentStored_ShouldMapItIntoThePreliminaryAssessment_Trimmed()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment();
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary.Should().NotBeNull();
+        packet.AiSummary!.Text.Should().Be("Likely overheating on the generator windings.");
+        packet.AiSummary.HasStructuredAssessment.Should().BeTrue();
+        packet.AiSummary.ProbableCause.Should().Be("Overheating from a clogged generator air intake.");
+        packet.AiSummary.PossibleFixes.Should().Equal(
+            "Clear the air intake and cooling fins",
+            "Replace the high-temp shutdown switch");
+        packet.AiSummary.LikelyParts.Should().Equal("Air filter", "High-temp shutdown switch");
+        packet.AiSummary.Confidence.Should().Be("Medium");
+    }
+
+    [Fact]
+    public void Compose_ShouldKeepPossibleFixesInTheirStoredOrder_MostPlausibleFirst()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(possibleFixes: ["Third", "First", "Second"]);
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.PossibleFixes.Should().Equal("Third", "First", "Second");
+    }
+
+    [Fact]
+    public void Compose_ShouldDropBlankPossibleFixesAndLikelyParts()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(
+            possibleFixes: ["", "  ", "Reset the breaker"],
+            likelyParts: ["   ", "Breaker"]);
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.PossibleFixes.Should().Equal("Reset the breaker");
+        packet.AiSummary.LikelyParts.Should().Equal("Breaker");
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentAbstained_ShouldCarryNoStructuredFields_ButKeepTheSummaryText()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(confidence: "abstain");
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.Text.Should().Be("Likely overheating on the generator windings.");
+        packet.AiSummary.HasStructuredAssessment.Should().BeFalse();
+        packet.AiSummary.ProbableCause.Should().BeNull();
+        packet.AiSummary.PossibleFixes.Should().BeEmpty();
+        packet.AiSummary.LikelyParts.Should().BeEmpty();
+        packet.AiSummary.Confidence.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentConfidenceIsOutsideTheVocabulary_ShouldTreatItAsAbstained()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(confidence: "certain");
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.HasStructuredAssessment.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentHasNoContent_ShouldCarryNoStructuredFields()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(probableCause: "  ", possibleFixes: [], likelyParts: []);
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.HasStructuredAssessment.Should().BeFalse();
+        packet.AiSummary.Confidence.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentStoredButTechnicianSummaryBlank_ShouldStillRenderTheAssessment()
+    {
+        var request = FullyPopulatedRequest();
+        request.TechnicianSummary = null;
+        request.PreliminaryAssessment = Assessment();
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary.Should().NotBeNull();
+        packet.AiSummary!.Text.Should().BeNull();
+        packet.AiSummary.ProbableCause.Should().Be("Overheating from a clogged generator air intake.");
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentAbstainedAndTechnicianSummaryBlank_ShouldSetAiSummaryNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.TechnicianSummary = "  ";
+        request.PreliminaryAssessment = Assessment(confidence: "abstain");
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary.Should().BeNull();
+    }
+
     // ── Verbatim description ────────────────────────────────────────────────
 
     [Fact]
