@@ -155,6 +155,29 @@ public class AzureOpenAiPreliminaryAssessmentServiceTests
     }
 
     [Fact]
+    public async Task AssessAsync_ShouldIncludeCategorySpecificFailurePatterns_InTheSystemPrompt()
+    {
+        var sut = CreateService(ChatResponse(new { probable_cause = "x", possible_fixes = new[] { "y" }, likely_parts = Array.Empty<string>(), confidence = "low" }));
+
+        await sut.AssessAsync(Request());
+
+        var systemPrompt = JsonNode.Parse(_capturedRequestBody!)!["messages"]!.AsArray()
+            .Single(m => m!["role"]!.GetValue<string>() == "system")!["content"]!.GetValue<string>();
+        systemPrompt.Should().Contain("Slides:");
+        systemPrompt.Should().Contain("Electrical:");
+        systemPrompt.Should().Contain("Plumbing & Water:");
+        systemPrompt.Should().Contain("HVAC:");
+        systemPrompt.Should().Contain("Generator:");
+        systemPrompt.Should().Contain("LP / Propane:");
+        systemPrompt.Should().Contain("Appliances & Refrigerator:");
+        systemPrompt.Should().Contain("Roof & Seals:");
+        systemPrompt.Should().Contain("Awning:");
+        systemPrompt.Should().Contain("Chassis & Running Gear:");
+        systemPrompt.Should().Contain("Body & Exterior:");
+        systemPrompt.Should().Contain("Interior & Cabinetry:");
+    }
+
+    [Fact]
     public async Task AssessAsync_ShouldTrimValues_DropBlanks_AndCapTheLists()
     {
         var sut = CreateService(ChatResponse(new
