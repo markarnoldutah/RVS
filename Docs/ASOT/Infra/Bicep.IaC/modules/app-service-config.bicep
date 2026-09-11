@@ -25,7 +25,7 @@ param environmentName string
 @description('Key Vault URI for configuration provider. Leave empty to skip.')
 param keyVaultUri string = ''
 
-@description('Packet-email sender address, sourced from the deployed ACS Azure-managed domain (e.g. DoNotReply@<guid>.azurecomm.net). Leave empty to skip — the API then falls back to its built-in default.')
+@description('Packet-email sender address, sourced from the deployed ACS domain — the custom verified subdomain when one is configured (DoNotReply@mail.rvintake.com, #532), otherwise the Azure-managed domain (DoNotReply@<guid>.azurecomm.net). Leave empty to skip — the API then falls back to its built-in default.')
 param acsEmailFromAddress string = ''
 
 @description('When true, also applies settings to the staging deployment slot with ASPNETCORE_ENVIRONMENT=Staging.')

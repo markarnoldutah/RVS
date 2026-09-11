@@ -244,9 +244,33 @@ apps; that workflow needs the two deployment tokens from this deployment's
 outputs stored as GitHub secrets — see *SWA deployment tokens* in
 `deployment-cmds.azcli` §6.
 
+**Step 4 — verify and warm the custom sending domain (`#532`).** Bicep has
+already provisioned the `CustomerManaged` ACS domain `mail.rvintake.com` and
+written its SPF / DKIM / DMARC records into the `rvintake.com` zone. What is
+left is the data-plane verification, the quota bump, and the warming window —
+none expressible in Bicep. The `acsCustomDomainAction` deployment output
+repeats this. Commands are in `deployment-cmds.azcli` §4e (2)(c).
+
+1. **Confirm the zone records match ACS.** `az communication email domain show --domain-name mail.rvintake.com --email-service-name <acs>-email -g rg-rvs-prod-westus3 --query properties.verificationRecords` and spot-check each against the `rvintake.com` zone. They should already agree — Bicep wrote them from the same source.
+2. **Initiate verification** for each record type (`Domain`, `SPF`, `DKIM`, `DKIM2`):
+   ```bash
+   for t in Domain SPF DKIM DKIM2; do
+     az communication email domain initiate-verification \
+       --domain-name mail.rvintake.com \
+       --email-service-name <acs>-email -g rg-rvs-prod-westus3 \
+       --verification-type $t
+   done
+   ```
+   Then poll until every entry in `properties.verificationStates` is `Verified` (minutes, since the zone is on Azure DNS). Sends From `mail.rvintake.com` fail until then; the Azure-managed domain stays linked as a fallback.
+3. **Check DMARC resolves:** `dig +short TXT _dmarc.mail.rvintake.com` → `v=DMARC1; p=none; rua=mailto:dmarc-reports@rvserviceflow.com`. Make sure that mailbox (or a DMARC-processor address) is actually monitored — `p=none` is only useful if someone reads the aggregate reports.
+4. **Request the ACS send-quota increase.** Portal → ACS → **Email** → **Domains** → `mail.rvintake.com` → the quota request form (or Help + Support → *Service and Subscription Limits (Quotas)*). Approval takes **up to 72 hours** — longer if filed on a Friday — and requires a sustained bounce rate **under 1 %**. Do not schedule a pilot launch inside that window.
+5. **Warm the domain.** Let Jay Lyons's real intake traffic (P1, `#525`) send through `mail.rvintake.com` for **2–3 weeks** before any *other* shop's mailbox receives a packet. Ramp volume gradually; watch the ACS delivery / bounce metrics and the DMARC `rua` reports. Sustained ACS failures above ~1 % risk throttling.
+6. **In-room deliverability check (second pilot onward — `FS-7` in `RVS_Plan.md`).** When onboarding a shop after Jay: send a test packet while you are with the service manager, confirm it lands in the inbox and not Junk, and have them mark the sender safe on the spot. Not needed for the first pilot.
+
 **Redeploys** are step 1 again, verbatim. ARM incremental mode leaves the
-TXT record and the apex binding alone because the template does not declare
-them; it re-asserts everything it does declare.
+apex TXT record and binding alone (the template does not declare them), and
+re-asserts the ACS domain and its SPF/DKIM/DMARC records as no-ops once
+`verificationStates` is `Verified` — redeploys never re-trigger verification.
 
 ### Pre-Provision Resource Groups (all environments)
 
@@ -460,18 +484,46 @@ The `app-insights.bicep` module creates:
 ## Communication Services — Email
 
 `communication-services.bicep` provisions the ACS account, an Email Service, and
-an **Azure-managed email domain** (`<guid>.azurecomm.net`). `AcsEmailNotificationService`
-sends the service-department packet email (`#437`) and authenticates with the API
-**managed identity** (`DefaultAzureCredential`), so two things must line up with
-the deployed resource — both now handled by Bicep:
+an **Azure-managed email domain** (`<guid>.azurecomm.net`). In **prod** it also
+provisions a **CustomerManaged sending subdomain** — `mail.rvintake.com`
+(`acsCustomEmailDomain`, issue `#532`) — and links both to the account.
+`AcsEmailNotificationService` sends the service-department packet email (`#437`)
+and authenticates with the API **managed identity** (`DefaultAzureCredential`),
+so two things must line up with the deployed resource — both now handled by Bicep:
 
 | Concern | How Bicep handles it |
 |---|---|
 | **Send permission** | `communication-services.bicep` grants the API managed identity (and the S1 staging-slot identity) **Contributor scoped to the ACS resource** — ACS has no granular data-plane "email sender" role yet. Wired from `main.bicep` (`apiPrincipalId` / `stagingSlotPrincipalId`) exactly like the Key Vault / Storage grants. |
-| **Sender address** | `app-service-config.bicep` sets the app setting `AzureCommunicationServices__Email__FromAddress` to `DoNotReply@<communicationServices.outputs.azureManagedMailFrom>`. The hardcoded `DoNotReply@<guid>.azurecomm.net` was removed from `RVS.API/appsettings.json` so a stale value cannot shadow it. |
+| **Sender address** | `app-service-config.bicep` sets the app setting `AzureCommunicationServices__Email__FromAddress` to `DoNotReply@<sender domain>` — the custom verified subdomain (`mail.rvintake.com`) when `acsCustomEmailDomain` is set, otherwise the Azure-managed domain. `main.bicep` picks between `communicationServices.outputs.customFromSenderDomain` and `.azureManagedMailFrom`. The hardcoded `DoNotReply@<guid>.azurecomm.net` was removed from `RVS.API/appsettings.json` so a stale value cannot shadow it. |
 
 A plain [idempotent redeploy](#quick-start-deployment) applies both. RBAC
 propagation can take a few minutes.
+
+### Custom sending domain — `mail.rvintake.com` (`#532`)
+
+The Azure-managed `*.azurecomm.net` domain caps at **5 emails/min, 10/hour with
+no support path to raise it** (`#521`) and carries no sender reputation — a spam
+quarantine at a pilot shop is the one failure the "no IT involvement" pitch
+cannot survive. Prod therefore sends from a dedicated verified subdomain.
+
+**What Bicep does** (prod params only; non-prod is unaffected):
+
+- Provisions a `CustomerManaged` `Microsoft.Communication/emailServices/domains`
+  named `mail.rvintake.com` and adds it to the account's `linkedDomains`.
+- Writes the records ACS requires into the `rvintake.com` zone via `dnsIntake`:
+  **domain-ownership** TXT, **SPF** TXT (`v=spf1 include:… -all` — ACS fails
+  verification on `~all`), and **DKIM** + **DKIM2** CNAMEs. Values come straight
+  from `communicationServices.outputs.customDomain{Txt,Cname}Records`, so there
+  is nothing to transcribe.
+- Publishes **DMARC** at `_dmarc.mail` — `v=DMARC1; p=none; rua=mailto:<dmarcReportingAddress>`
+  — authored in `main.bicep` (not taken from ACS) so the policy stays `p=none`
+  and the reporting mailbox is ours. `p=none` makes alignment failures visible
+  in the aggregate reports without dropping mail while the domain is cold.
+
+**What stays manual** (surfaced by the `acsCustomDomainAction` output — see
+"Deploy Production" step 4): `az communication email domain initiate-verification`
+for each record type, the ACS **send-quota increase** request (72 h lead, needs a
+bounce rate < 1 %), and **domain warming**.
 
 ### Manual steps after the deploy (not expressible in Bicep)
 
@@ -480,13 +532,13 @@ Commands for each are in `deployment-cmds.azcli` §4e. Summary:
 1. **Verify the managed domain is provisioned and verified** (`az communication email domain show` → `provisioningState = Succeeded`). `AzureManaged` verification is automatic but can lag; sends fail with `DomainNotLinked` until it completes.
 2. **Read back the real sender domain** (`properties.fromSenderDomain`) and confirm the deployed `AzureCommunicationServices__Email__FromAddress` app setting is `DoNotReply@<that domain>`.
 3. **Confirm the RBAC grant landed** (`az role assignment list --scope <acs-resource-id>`). If not (older Bicep, or propagation), assign **Contributor** on the ACS resource by hand — §4e (1).
-4. **Check the ACS email send quota.** Azure-managed domains start low (~100 recipients/day, low rate). Request an increase via Azure support if a demo needs more.
+4. **Check the ACS email send quota.** Azure-managed domains start low (~100 recipients/day, low rate). Staging can request an increase via Azure support if a demo needs more; prod raises it against the verified custom domain — "Deploy Production" step 4.
 5. **Set a real recipient on a staging Location.** Seed data uses RFC 2606 `.example.com` addresses that hard-bounce. Point at least one location's `packetConfig.recipients` at a mailbox you control — `PUT /api/dealers/{dealerId}/locations/{locationId}` or directly in Cosmos. `packetConfig.enabled` defaults to `true`.
 6. **Run the end-to-end check.** Complete a staging intake; App Insights should show `ACS packet email send initiated …` from `AcsEmailNotificationService`. A failure logs `Packet email dispatch failed …` from `PacketGenerationService` and is otherwise swallowed (packet generation still reports `Succeeded`; retry/idempotency is `#438`). Confirm the mail arrives with the PDF + photo attachments, subject `[RVS] {category} — {year} {make} {model} — {customer last name}`.
 
-> **Prod follow-up (not this change):** production should move off the Azure-managed
-> domain to a custom verified domain (`notifications.rvserviceflow.com`) — the
-> managed domain has low quotas and no sender reputation.
+> **Prod sends from `mail.rvintake.com`, not the managed domain** — provisioned by
+> Bicep (`acsCustomEmailDomain`), verified and warmed by hand. See "Custom sending
+> domain" above and "Deploy Production" step 4.
 
 ---
 

@@ -37,6 +37,11 @@ param deployAvailabilityTest = true
 // Communication Services (Email + SMS)
 param deployAcs = true
 
+// Custom sending subdomain for the packet email (#532) — see prod.bicepparam
+// for the rationale and the manual follow-up. Kept in step with prod.bicepparam.
+param acsCustomEmailDomain = 'mail.rvintake.com'
+param dmarcReportingAddress = 'dmarc-reports@rvserviceflow.com'
+
 // Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
 param deploySwa = true
 param swaLocation = 'westus2'

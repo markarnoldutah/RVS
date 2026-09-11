@@ -31,7 +31,8 @@
 #         4b. Cross-env DNS Zone Contributor (zone-scoped, least privilege)
 #         4c. Developer blob-access group (sg-rvs-dev-blob)
 #         4d. Key Vault manual secrets
-#         4e. ACS Email send grant (now in Bicep) + post-deploy checks — Issue #489
+#         4e. ACS Email send grant (now in Bicep) + post-deploy checks — Issue #489;
+#             custom sending domain verification / quota / warming — Issue #532
 #   5.  Post-deploy verification
 #   6.  SWA deployment tokens → GitHub secrets
 #   7.  Misc one-offs
@@ -450,17 +451,56 @@ az webapp config appsettings list \
   --name app-rvs-api-staging-wus3 --resource-group rg-rvs-staging-westus3 \
   --query "[?name=='AzureCommunicationServices__Email__FromAddress'].value" -o tsv
 
-# (c) ACS email send quota — HARD CEILING, read this before promising pilot volume (#521).
-#     The deployed domain is Azure-managed (domainManagement: 'AzureManaged'), which
-#     Microsoft limits to 5 emails/min and 10 emails/hour — and those limits are NOT
-#     raisable: higher quotas are offered only for verified custom domains.
-#     So the sequence before any real volume is:
-#       1. Add and verify a custom sending subdomain (issue #532: SPF, DKIM, DMARC).
-#       2. THEN request a quota increase (Azure Portal → Help+Support → Service and
-#          Subscription Limits (Quotas)). Approval takes up to 72 HOURS, longer if
-#          filed on a Friday, and requires a failure rate under 1%.
-#     Budget three days of slack. Do not schedule a pilot launch inside that window.
-#     Portal → ACS → Email → Domains → AzureManagedDomain → (current quota shown there).
+# (c) ACS email send quota + custom sending domain — issue #532.
+#     STAGING sends from the Azure-managed domain (domainManagement: 'AzureManaged'),
+#     which Microsoft limits to 5 emails/min and 10 emails/hour — NOT raisable.
+#     PROD is deployed with acsCustomEmailDomain = 'mail.rvintake.com': Bicep
+#     provisions a CustomerManaged domain and writes its SPF (-all) / DKIM / DKIM2 /
+#     domain-ownership records + a DMARC p=none record into the rvintake.com zone.
+#     The steps below (prod names) are the data-plane work Bicep cannot do — the
+#     `acsCustomDomainAction` deployment output repeats the summary.
+#
+#     ACS_EMAIL_SVC=acs-rvs-notify-prod-wus3-s01-001-email   # <acs>-email
+#     ACS_RG=rg-rvs-prod-westus3
+#
+#     1. Confirm the zone records match what ACS expects (they should — Bicep wrote
+#        them from this same source):
+#          az communication email domain show \
+#            --domain-name mail.rvintake.com --email-service-name "$ACS_EMAIL_SVC" \
+#            -g "$ACS_RG" --query 'properties.verificationRecords' -o jsonc
+#          az network dns record-set list -g "$ACS_RG" -z rvintake.com \
+#            --query "[?contains(name,'mail') || contains(name,'_dmarc')].{n:name,t:type}" -o table
+#
+#     2. Initiate verification for each record type, then poll verificationStates:
+#          for t in Domain SPF DKIM DKIM2; do
+#            az communication email domain initiate-verification \
+#              --domain-name mail.rvintake.com --email-service-name "$ACS_EMAIL_SVC" \
+#              -g "$ACS_RG" --verification-type $t
+#          done
+#          az communication email domain show \
+#            --domain-name mail.rvintake.com --email-service-name "$ACS_EMAIL_SVC" \
+#            -g "$ACS_RG" --query 'properties.verificationStates' -o jsonc
+#        Every entry must read "Verified". Sends From mail.rvintake.com fail until
+#        then; the Azure-managed domain stays linked as a fallback.
+#
+#     3. Confirm DMARC resolves and the reporting mailbox is monitored:
+#          dig +short TXT _dmarc.mail.rvintake.com
+#          # → v=DMARC1; p=none; rua=mailto:dmarc-reports@rvserviceflow.com
+#
+#     4. THEN request the ACS send-quota increase — Portal → ACS → Email → Domains →
+#        mail.rvintake.com → quota request (or Help+Support → Service and Subscription
+#        Limits (Quotas)). Approval takes up to 72 HOURS, longer if filed on a Friday,
+#        and requires a sustained bounce rate under 1%. Do NOT schedule a pilot launch
+#        inside that window.
+#
+#     5. Warm the domain: let Jay Lyons's real intake traffic (P1, #525) send through
+#        mail.rvintake.com for 2–3 WEEKS before any other shop's mailbox gets a packet.
+#        Ramp gradually; watch ACS delivery/bounce metrics and the DMARC rua reports.
+#        Sustained ACS failures above ~1% risk throttling.
+#
+#     6. In-room deliverability check (second pilot onward — FS-7 in RVS_Plan.md):
+#        send a test packet with the service manager present, confirm inbox not Junk,
+#        have them mark the sender safe on the spot. Not needed for the first pilot.
 
 # (d) Point at least one staging Location's packetConfig.recipients at a REAL
 #     mailbox you control (seed data uses RFC 2606 .example.com addresses that
