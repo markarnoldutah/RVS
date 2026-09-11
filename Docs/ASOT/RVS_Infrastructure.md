@@ -1,6 +1,6 @@
 # RVS — Infrastructure
 
-**Version:** 1.1 · September 10, 2026
+**Version:** 1.2 · September 10, 2026
 **Scope:** Azure resources and CI/CD as declared. The Bicep in `Infra/Bicep.IaC/` is the source of truth; this document explains it. Where they disagree, the Bicep is right.
 
 `main.bicep` targets subscription scope. Primary region **westus3**, Whisper **northcentralus**, Static Web Apps **westus2**, ACS global.
@@ -26,6 +26,7 @@
 | Web App appsettings | `app-service-config.bicep` | `deployAppService` |
 | Log Analytics workspace | `log-analytics.bicep` | `deployObservability` |
 | App Insights + availability webtest | `app-insights.bicep` | `deployObservability`; webtest also needs `deployAvailabilityTest && deployAppService` |
+| Ops action group + 5 packet-pipeline alert rules | `monitor-alerts.bicep` | `deployObservability` |
 | Key Vault + role assignments | `key-vault.bicep` | `deployKeyVault` |
 | Cosmos account, database, 10 containers | `cosmos-db.bicep` | `deployCosmosDb` |
 | Storage account, CORS, `rvs-attachments`, 4 role assignments | `storage-account.bicep` | `deployStorageAccount` |
@@ -92,6 +93,8 @@ Ten an hour is survivable for a single mobile technician on staging; prod's warm
 **Static Web Apps** — Standard, staging environments enabled, config file updates allowed, enterprise CDN off.
 
 **Observability** — Log Analytics `PerGB2018`, 30-day retention. Workspace-based App Insights. Availability test pings from three US locations every 300 s, expecting HTTP 200 with an SSL check.
+
+**Alerts (`#494`).** `monitor-alerts.bicep` deploys an ops action group `ag-rvs-ops-{env}-wus3` and five `scheduledQueryRules` (`kind: LogAlert`) scoped to the App Insights component, one per packet-pipeline health event. Four are Severity 1, evaluated every 5 minutes over a 5-minute window — `439002` `AllRecipientsBounced` (a location's last packet recipient hard-bounced), `438001` `PacketEmailDeliveryExhausted`, `434001` `PacketGenerationExhausted`, `521001` `PacketEmailOversized` (email sent without its PDF — a render-size regression, page-worthy from day one). The fifth, `439001` `RecipientHardBounced` (one recipient disabled, others still deliver), is Severity 3 on a 6-hour window evaluated hourly — a digest, not a page. Each query is `union traces, exceptions | where tostring(customDimensions.EventId) == "<id>"` (434001 logs with an exception, so it lands in `exceptions`) and projects `TenantId` plus `LocationId` / `ServiceRequestId` as split dimensions, so the alert payload identifies the tenant and the offending location or request. Action-group receivers are **not** in the parameter files — `opsAlertEmailReceivers` is empty and set on the deploy or in the portal, the same handling as the Auth0 values; the `opsAlertReceiverAction` output flags an empty group. On-call runbook and the end-to-end verification query are in `Infra/Bicep.IaC/README.md` "Monitoring & alerts".
 
 ---
 

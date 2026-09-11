@@ -133,6 +133,9 @@ az deployment sub create `
 # committed — nothing in it is a placeholder. The very first run also needs the
 # one-time apex registration afterwards (Section 2b); redeploys never touch it.
 # Auth0 values are passed on the CLI, not stored in the file (Section 4d).
+# The ops alert mailbox (#494) is likewise not in the file — append
+#   --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"ops@yourco.com"}]'
+# (or add receivers to ag-rvs-ops-<env>-wus3 in the portal after the first deploy).
 # bash / zsh
 az deployment sub create \
   --location westus3 \
@@ -551,6 +554,23 @@ az monitor app-insights component show --app appi-rvs-api-staging-wus3 \
 # Log Analytics workspace
 az monitor log-analytics workspace show --workspace-name law-rvs-obs-staging-wus3 \
   --resource-group rg-rvs-staging-westus3 --query '{name:name, customerId:customerId}' -o json
+
+# Packet-pipeline alerts (#494) — ops action group + its receivers, and the 5 rules.
+# opsAlertEmailReceivers is empty in the param files; set it on the deploy:
+#   --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"ops@yourco.com"}]'
+# or add receivers to the action group here. Empty group = alerts fire but page nobody.
+az monitor action-group show --name ag-rvs-ops-staging-wus3 \
+  --resource-group rg-rvs-staging-westus3 \
+  --query '{name:name, shortName:groupShortName, enabled:enabled, email:emailReceivers[].emailAddress}' -o json
+az monitor scheduled-query list --resource-group rg-rvs-staging-westus3 \
+  --query "[?starts_with(name,'sqr-rvs-packet-')].{name:name, sev:severity, enabled:enabled, freq:evaluationFrequency, window:windowSize}" -o table
+# Prove the alert query has data to project (run in the App Insights Logs blade or via CLI):
+#   union traces, exceptions
+#   | where tostring(customDimensions.EventId) in ("439002","438001","434001","521001","439001")
+#   | project timestamp, customDimensions.EventId, SeverityLevel,
+#             LocationId=tostring(customDimensions.LocationId),
+#             ServiceRequestId=tostring(customDimensions.ServiceRequestId),
+#             TenantId=tostring(customDimensions.TenantId)
 
 # Azure OpenAI — endpoint + model deployments
 az cognitiveservices account show --name oai-rvs-ai-staging-wus3-s01-001 \

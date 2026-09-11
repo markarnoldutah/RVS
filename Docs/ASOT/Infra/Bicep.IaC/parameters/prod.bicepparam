@@ -49,6 +49,15 @@ param deployKeyVault = true
 param deployObservability = true
 param deployAvailabilityTest = true
 
+// Ops alert receivers for the packet-pipeline critical alerts (#494). Left empty
+// here — the ops mailbox is not committed to git, same rule as the Auth0 values.
+// Set it on the deploy:
+//   --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"ops@yourco.com"}]'
+// or add receivers to the ag-rvs-ops-prod-wus3 action group in the portal.
+// Until a receiver exists the alert rules fire but notify nobody
+// (the opsAlertReceiverAction deployment output repeats this).
+param opsAlertEmailReceivers = []
+
 // Communication Services (Email + SMS)
 param deployAcs = true
 

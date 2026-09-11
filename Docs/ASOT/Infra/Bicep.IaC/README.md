@@ -21,6 +21,7 @@ Infrastructure as Code for the RVS Azure platform. Supports **independent deploy
 | Key Vault | `key-vault.bicep` | RBAC model | RBAC model |
 | Log Analytics | `log-analytics.bicep` | Per env | Per env |
 | Application Insights | `app-insights.bicep` | /health test | /health test |
+| Monitor alerts + ops action group | `monitor-alerts.bicep` | Packet-pipeline alerts | Packet-pipeline alerts |
 | OpenAI (GPT-4o) | `openai.bicep` | 10 K TPM | 30 K TPM |
 | OpenAI (Whisper) | `openai-whisper.bicep` | 1 K TPM | 1 K TPM |
 | Communication Services | `communication-services.bicep` | Email + SMS | Email + SMS |
@@ -64,6 +65,7 @@ Docs/ASOT/Infra/Bicep.IaC/
 │   ├── app-service.bicep                   # App Service Plan + Web App (Managed Identity)
 │   ├── app-service-config.bicep            # Post-deploy app settings (App Insights, Key Vault)
 │   ├── app-insights.bicep                  # Application Insights + /health availability test
+│   ├── monitor-alerts.bicep                # Ops action group + packet-pipeline critical/warn alert rules (#494)
 │   ├── cosmos-db.bicep                     # Cosmos DB account + 10 containers with index policies
 │   ├── key-vault.bicep                     # Key Vault (RBAC access model)
 │   ├── log-analytics.bicep                 # Log Analytics Workspace
@@ -478,6 +480,92 @@ The `app-insights.bicep` module creates:
 
 - **Workspace-based Application Insights** linked to Log Analytics
 - **Standard availability test** on `/health` (URL ping from 3 US locations, every 5 minutes)
+
+---
+
+## Monitoring & alerts
+
+`monitor-alerts.bicep` (gated by `deployObservability`, deployed in staging and
+prod) turns the packet-pipeline `LogCritical` events — which until now only
+landed in Application Insights — into Azure Monitor alerts (#494).
+
+**Ops action group** — `ag-rvs-ops-<env>-wus3` (short name `rvs-ops-stg` /
+`rvs-ops-prod`). Receivers come from the `opsAlertEmailReceivers` parameter,
+left empty in the param files (the ops mailbox is not committed to git, same as
+the Auth0 values) — set it on the deploy or add receivers in the portal:
+
+```bash
+az deployment sub create ... \
+  --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"ops@yourco.com"}]'
+```
+
+Until a receiver exists the rules evaluate and fire but notify nobody. The
+`opsAlertReceiverAction` deployment output flags this.
+
+**Alert rules** — log-search rules (`Microsoft.Insights/scheduledQueryRules`,
+`kind: LogAlert`) scoped to the App Insights component. Each query is
+`union traces, exceptions | where tostring(customDimensions.EventId) == "<id>"`
+and projects the structured log properties as **split dimensions**, so the
+alert payload carries `TenantId` plus the offending `LocationId` /
+`ServiceRequestId`. `union traces, exceptions` because 434001 logs with an
+exception argument and so lands in `exceptions`, not `traces`.
+
+| Rule | EventId | Tier | Cadence / window | Dimensions |
+|---|---|---|---|---|
+| `sqr-rvs-packet-recipients-bounced-<env>-wus3` | 439002 `AllRecipientsBounced` | Sev 1 — page | 5 min / 5 min | `LocationId`, `TenantId` |
+| `sqr-rvs-packet-email-delivery-exhausted-<env>-wus3` | 438001 `PacketEmailDeliveryExhausted` | Sev 1 — page | 5 min / 5 min | `ServiceRequestId`, `TenantId` |
+| `sqr-rvs-packet-generation-exhausted-<env>-wus3` | 434001 `PacketGenerationExhausted` | Sev 1 — page | 5 min / 5 min | `ServiceRequestId`, `TenantId` |
+| `sqr-rvs-packet-email-oversized-<env>-wus3` | 521001 `PacketEmailOversized` | Sev 1 — page | 5 min / 5 min | `ServiceRequestId`, `TenantId` |
+| `sqr-rvs-packet-recipient-bounced-warn-<env>-wus3` | 439001 `RecipientHardBounced` | Sev 3 — digest | 1 h / 6 h | `LocationId`, `TenantId` |
+
+5 minutes is the practical near-real-time floor for log-search alerts; the four
+Sev 1 rules use it. **439001** (one recipient disabled, others still receive
+packets) is deliberately lower: it is not a delivery failure, so it does not
+page — a Sev 3 rule on a 6-hour window evaluated hourly reads as a digest. Fix
+the address before it becomes the last active one (439002).
+
+**521001** (`PacketEmailOversized`) pages from day one. Since #566 validates the
+email size budget at startup, it can no longer be reached by a misconfigured
+budget — it now fires only when the packet PDF has grown past its ~1.5–3 MB norm
+(a renderer regression, or an oversized embedded asset such as a per-location
+logo). The email still delivered and any photos that fit were still attached, so
+nothing else catches the missing PDF. Treat any occurrence as a bug to chase.
+The sibling `LogWarning` for the ordinary photo-heavy case (some attachments
+trimmed, no `EventId`) is informational and is not alerted.
+
+### Runbook — on-call
+
+- **439002 `AllRecipientsBounced`** — packets for that location are going
+  nowhere. In the manager app (or Cosmos), open the location's packet settings
+  and **fix or replace the bounced address in `recipients`, then save**.
+  `LocationService.UpdateAsync` reconciles the disabled list — re-enabling a
+  bounced address is just "add it back to `recipients` and save". The alert
+  auto-resolves once no 439002 recurs within the window. Payload carries
+  `LocationId` + `TenantId`.
+- **438001 / 434001** — a service request has no packet delivered / generated
+  after 3 attempts. Payload carries `ServiceRequestId` + `TenantId`. Check the
+  correlated traces/exceptions for the failure, then trigger regeneration
+  (`POST /api/.../packet:regenerate`, per `PacketGenerationService`).
+- **521001 `PacketEmailOversized`** — the email went out without its PDF.
+  Not a delivery incident; it is a rendering-size regression. Pull the packet
+  for that `ServiceRequestId` from the manager app, check the PDF size and what
+  inflated it (embedded image resampling, a per-location logo, the HTML body),
+  and file a bug.
+- **439001 `RecipientHardBounced`** (digest) — one address on a location was
+  disabled; delivery still works via the others. Replace it at leisure before
+  the location hits 439002.
+
+Verify the pipeline end to end (payload really carries the dimensions):
+
+```kusto
+union traces, exceptions
+| where tostring(customDimensions.EventId) in ("439002","438001","434001","521001","439001")
+| project timestamp, customDimensions.EventId, SeverityLevel,
+          LocationId = tostring(customDimensions.LocationId),
+          ServiceRequestId = tostring(customDimensions.ServiceRequestId),
+          TenantId = tostring(customDimensions.TenantId)
+| order by timestamp desc
+```
 
 ---
 

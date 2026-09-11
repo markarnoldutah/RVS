@@ -184,6 +184,9 @@ param deployObservability bool = false
 @description('When true and deployObservability + deployAppService are both true, creates a standard availability test on the API /health endpoint.')
 param deployAvailabilityTest bool = false
 
+@description('Email receivers for the ops action group that packet-pipeline critical alerts route to (#494). Each item: { name: string, email: string }. Empty = the action group is created with no receivers — add them in the portal or pass on the CLI, the same way the Auth0 values are handled. Only used when deployObservability = true.')
+param opsAlertEmailReceivers array = []
+
 // ── Variables ─────────────────────────────────────────────────
 
 // Storage account names must be 3-24 lowercase alphanumeric characters with no hyphens.
@@ -300,6 +303,21 @@ module appInsights 'modules/app-insights.bicep' = if (deployObservability) {
     logAnalyticsWorkspaceId: deployObservability ? logAnalytics.outputs.resourceId : ''
     deployAvailabilityTest: deployAvailabilityTest && deployAppService
     healthCheckUrl: (deployAvailabilityTest && deployAppService) ? healthCheckUrl : ''
+  }
+}
+
+// ── Monitor Alerts (packet-pipeline critical events, #494) ────
+
+module monitorAlerts 'modules/monitor-alerts.bicep' = if (deployObservability) {
+  name: 'deploy-alerts-${environmentName}'
+  scope: rgPrimary
+  params: {
+    location: location
+    #disable-next-line BCP318
+    appInsightsResourceId: deployObservability ? appInsights.outputs.resourceId : ''
+    environmentName: environmentName
+    tags: sharedTags
+    opsEmailReceivers: opsAlertEmailReceivers
   }
 }
 
@@ -821,6 +839,16 @@ output appInsightsConnectionString string = deployObservability ? appInsights.ou
 @description('Log Analytics workspace name. Empty when deployObservability = false.')
 #disable-next-line BCP318
 output logAnalyticsWorkspaceName string = deployObservability ? logAnalytics.outputs.name : ''
+
+@description('Ops action group resource ID for packet-pipeline alerts (#494). Empty when deployObservability = false.')
+#disable-next-line BCP318
+output opsActionGroupId string = deployObservability ? monitorAlerts.outputs.actionGroupId : ''
+
+@description('Manual follow-up when opsAlertEmailReceivers is empty: the ops action group deploys with no receivers and no alert reaches a human until one is added.')
+#disable-next-line BCP318
+output opsAlertReceiverAction string = (deployObservability && empty(opsAlertEmailReceivers))
+  ? 'ACTION REQUIRED: add an email (or other) receiver to the ag-rvs-ops-${environmentName}-wus3 ops action group — portal, or redeploy with --parameters opsAlertEmailReceivers=\'[{"name":"oncall","email":"..."}]\'. Until then packet-pipeline critical alerts fire but notify nobody.'
+  : ''
 
 // ── ACS ───────────────────────────────────────────────────────
 

@@ -34,6 +34,10 @@ param deployKeyVault = true
 param deployObservability = true
 param deployAvailabilityTest = true
 
+// Ops alert receivers for the packet-pipeline critical alerts (#494) — see
+// prod.bicepparam. Left empty; set on the deploy or in the portal.
+param opsAlertEmailReceivers = []
+
 // Communication Services (Email + SMS)
 param deployAcs = true
 
