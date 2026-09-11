@@ -128,10 +128,9 @@ public class PacketPhotoUrlResolverTests
 
     [Theory]
     [InlineData("audio/mp4")]
-    [InlineData("video/mp4")]
     [InlineData("application/pdf")]
     [InlineData("")]
-    public async Task ResolveAsync_ShouldSkipNonImageAttachments(string contentType)
+    public async Task ResolveAsync_ShouldSkipNonImageNonVideoAttachments(string contentType)
     {
         var request = RequestWith(
             Image("att_img"),
@@ -147,6 +146,25 @@ public class PacketPhotoUrlResolverTests
 
         map.Should().ContainKey("att_img");
         map.Should().NotContainKey("att_other");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ShouldResolveAReadSasUrlForVideoAttachments()
+    {
+        // Videos need a resolved SAS URL too so the packet can link to them (issue #583) —
+        // only their raster bytes are skipped, not their URL resolution.
+        var request = RequestWith(new ServiceRequestAttachmentEmbedded
+        {
+            AttachmentId = "att_video",
+            FileName = "walkaround.mp4",
+            ContentType = "video/mp4",
+            BlobUri = "ten_1/sr_1/walkaround.mp4",
+        });
+
+        var map = await _sut.ResolveAsync(request);
+
+        map.Should().ContainKey("att_video");
+        map["att_video"].Should().Be("https://blob.example.com/ten_1/sr_1/walkaround.mp4?sv=2024&sp=r&sig=deadbeef");
     }
 
     [Fact]

@@ -452,6 +452,49 @@ public class PacketComposerTests
         packet.Photos[0].FileName.Should().Be("generator.jpg");
     }
 
+    [Fact]
+    public void Compose_WhenAttachmentIsVideo_ShouldIncludeInPhotosWithIsVideoTrue()
+    {
+        // Videos must not be silently dropped from the packet (issue #583) — they render
+        // as a hyperlinked placeholder rather than an embedded raster image.
+        var request = FullyPopulatedRequest();
+        request.Attachments =
+        [
+            new ServiceRequestAttachmentEmbedded
+            {
+                AttachmentId = "att_video_1",
+                FileName = "walkaround.mp4",
+                ContentType = "video/mp4",
+            },
+        ];
+
+        var context = FullContext() with
+        {
+            PhotoUrls = new Dictionary<string, string>
+            {
+                ["att_video_1"] = "https://blob/walkaround.mp4?sas=read",
+            },
+        };
+
+        var packet = PacketComposer.Compose(request, context);
+
+        packet.Photos.Should().ContainSingle();
+        packet.Photos[0].FileName.Should().Be("walkaround.mp4");
+        packet.Photos[0].ContentType.Should().Be("video/mp4");
+        packet.Photos[0].IsVideo.Should().BeTrue();
+        packet.Photos[0].Url.Should().Be("https://blob/walkaround.mp4?sas=read");
+    }
+
+    [Fact]
+    public void Compose_WhenAttachmentIsImage_ShouldSetIsVideoFalse()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.Photos.Should().ContainSingle();
+        packet.Photos[0].ContentType.Should().Be("image/jpeg");
+        packet.Photos[0].IsVideo.Should().BeFalse();
+    }
+
     // ── Degradation: AI summary ─────────────────────────────────────────────
 
     [Fact]
