@@ -52,6 +52,18 @@ param deployAvailabilityTest = true
 // Communication Services (Email + SMS)
 param deployAcs = true
 
+// Custom sending subdomain for the packet email (#532). The Azure-managed
+// *.azurecomm.net domain is capped at 10 emails/hour with no support path to
+// raise it, and carries no sender reputation — a spam quarantine at a pilot
+// shop is unrecoverable. Bicep provisions the CustomerManaged ACS domain and
+// writes its SPF (-all) / DKIM / DMARC (p=none) records into the rvintake.com
+// zone; the operator then runs `az communication email domain
+// initiate-verification` and the ACS quota-increase request (72h lead) —
+// README "Deploy Production" step 4. dmarcReportingAddress must be a monitored
+// mailbox (or a DMARC-processor address).
+param acsCustomEmailDomain = 'mail.rvintake.com'
+param dmarcReportingAddress = 'dmarc-reports@rvserviceflow.com'
+
 // Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
 param deploySwa = true
 param swaLocation = 'westus2'

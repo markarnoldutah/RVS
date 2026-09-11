@@ -30,7 +30,7 @@ param cnameRecords array = []
 @description('A records. Each entry is EITHER { name: string, ipv4Addresses: string[] } for a literal record, OR { name: string, targetResourceId: string } for an ALIAS record that tracks an Azure resource (e.g. a Static Web App id for an apex domain). Use name="@" for the apex.')
 param aRecords array = []
 
-@description('TXT records. Each entry: { name: string, values: string[] } where values is the chunked string list composing one TXT record (per-chunk max 255 chars).')
+@description('TXT record-sets. Each entry: { name: string, values: string[] } where each value in the list is published as a SEPARATE TXT record at that name (e.g. a domain-ownership string and an SPF string sharing one host). A single string over 255 chars must be pre-split by the caller — rare.')
 param txtRecords array = []
 
 @description('DNS record TTL in seconds.')
@@ -71,11 +71,14 @@ resource txtSet 'Microsoft.Network/dnsZones/TXT@2018-05-01' = [for record in txt
   name: record.name
   properties: {
     TTL: ttl
-    TXTRecords: [
-      {
-        value: record.values
-      }
-    ]
+    // One TXT record per value — Azure DNS merges them into a single record-set
+    // at `name`. (A value longer than 255 chars would itself need chunking into
+    // string[]; callers pre-split when that rare case arises.)
+    TXTRecords: [for v in record.values: {
+      value: [
+        v
+      ]
+    }]
   }
 }]
 

@@ -72,6 +72,12 @@ param deployAcs bool = false
 @description('ACS data residency location.')
 param acsDataLocation string = 'United States'
 
+@description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in prod params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the quota-increase request out of band — README "Deploy Production" step 4. (#532)')
+param acsCustomEmailDomain string = ''
+
+@description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. (#532)')
+param dmarcReportingAddress string = ''
+
 // ── Static Web App Parameters ─────────────────────────────────
 
 @description('When true, deploys Azure Static Web App resources for Blazor.Intake and Blazor.Manager.')
@@ -328,8 +334,7 @@ module appServiceConfig 'modules/app-service-config.bicep' = if (deployAppServic
     appInsightsConnectionString: (deployAppService && deployObservability) ? appInsights.outputs.connectionString : ''
     #disable-next-line BCP318
     keyVaultUri: (deployAppService && deployKeyVault) ? keyVault.outputs.vaultUri : ''
-    #disable-next-line BCP318
-    acsEmailFromAddress: (deployAppService && deployAcs) ? 'DoNotReply@${communicationServices.outputs.azureManagedMailFrom}' : ''
+    acsEmailFromAddress: (deployAppService && deployAcs) ? acsEmailFromAddress : ''
     configureStagingSlot: deployStagingSlot
   }
 }
@@ -464,8 +469,42 @@ module communicationServices 'modules/communication-services.bicep' = if (deploy
     apiPrincipalId: (deployAcs && deployAppService) ? appService.outputs.principalId : ''
     #disable-next-line BCP318
     stagingSlotPrincipalId: (deployAcs && deployAppService && deployStagingSlot) ? appService.outputs.stagingSlotPrincipalId : ''
+    customDomainName: acsCustomEmailDomain
   }
 }
+
+// ── ACS custom sending domain — derived values (#532) ─────────
+// True only in prod, where acsCustomEmailDomain is set to mail.rvintake.com.
+var acsCustomDomainOn = deployAcs && !empty(acsCustomEmailDomain)
+
+// Packet-email From address: the custom verified subdomain when configured,
+// otherwise the Azure-managed *.azurecomm.net domain. Consumed by
+// app-service-config.bicep above. `acsMailFromSenderDomain` picks the right
+// one; the DoNotReply@ mailbox is fixed on both.
+#disable-next-line BCP318
+var acsMailFromSenderDomain = deployAcs ? (acsCustomDomainOn ? communicationServices.outputs.customFromSenderDomain : communicationServices.outputs.azureManagedMailFrom) : ''
+var acsEmailFromAddress = empty(acsMailFromSenderDomain) ? '' : 'DoNotReply@${acsMailFromSenderDomain}'
+
+// SPF / DKIM / domain-ownership records ACS requires to verify the custom
+// domain — deterministic once the domain resource exists, written into the
+// Intake zone by the dnsIntake module below. `initiate-verification` and the
+// quota-increase request stay manual (README "Deploy Production" step 4).
+// ACS returns each record `name` relative to the zone apex
+// (e.g. 'mail', 'selector1-..._domainkey.mail').
+#disable-next-line BCP318
+var acsCustomDomainCnameRecords = acsCustomDomainOn ? communicationServices.outputs.customDomainCnameRecords : []
+
+// DMARC is authored here (not taken from ACS) so we control the policy and the
+// reporting address: p=none surfaces failures without dropping mail while the
+// domain warms. Host is the sending subdomain's label(s) under the zone —
+// 'mail' for mail.rvintake.com in zone rvintake.com — prefixed with _dmarc.
+var acsCustomDomainDmarcRecord = {
+  name: '_dmarc.${replace(acsCustomEmailDomain, '.${intakeZoneName}', '')}'
+  values: [ 'v=DMARC1; p=none; rua=mailto:${dmarcReportingAddress}; adkim=r; aspf=r' ]
+}
+#disable-next-line BCP318
+var acsCustomDomainOwnershipTxtRecords = acsCustomDomainOn ? communicationServices.outputs.customDomainTxtRecords : []
+var acsCustomDomainTxtRecords = acsCustomDomainOn ? concat(acsCustomDomainOwnershipTxtRecords, [ acsCustomDomainDmarcRecord ]) : []
 
 module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs && deployKeyVault) {
   name: 'deploy-acs-kv-secrets-${environmentName}'
@@ -599,18 +638,22 @@ module dnsManager 'modules/dns.bicep' = if (deploySwa && deployDns) {
 //           on Azure DNS" flow (or the CLI equivalent) — README.md "Deploy
 //           Production". Incremental deploys leave them alone thereafter.
 
+// The Intake zone also carries the ACS custom-sending-domain records
+// (SPF/DKIM/DMARC for mail.rvintake.com) when acsCustomEmailDomain is set — see
+// "ACS custom sending domain — derived values (#532)" above. Non-prod leaves
+// acsCustomDomain* empty, so this is a no-op there.
 module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
   name: 'deploy-dns-intake-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
   params: {
     zoneName: intakeZoneName
-    cnameRecords: environmentName == 'prod' ? [] : [
+    cnameRecords: concat(environmentName == 'prod' ? [] : [
       {
         name: intakeDnsPrefix
         #disable-next-line BCP318
         target: swaIntake.outputs.defaultHostname
       }
-    ]
+    ], acsCustomDomainCnameRecords)
     aRecords: environmentName == 'prod' ? [
       {
         name: '@'
@@ -618,6 +661,7 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         targetResourceId: swaIntake.outputs.id
       }
     ] : []
+    txtRecords: acsCustomDomainTxtRecords
   }
 }
 
@@ -795,6 +839,17 @@ output acsEmailServiceName string = deployAcs ? communicationServices.outputs.em
 @description('Azure-managed MailFrom sender domain. Empty when deployAcs = false.')
 #disable-next-line BCP318
 output acsMailFromDomain string = deployAcs ? communicationServices.outputs.azureManagedMailFrom : ''
+
+@description('Custom sending subdomain in use for the packet email. Empty unless acsCustomEmailDomain is set (#532).')
+output acsCustomEmailDomain string = acsCustomDomainOn ? acsCustomEmailDomain : ''
+
+@description('Packet-email From address applied to the API app settings — custom verified domain when configured, else the Azure-managed domain.')
+output acsEmailFromAddress string = deployAcs ? acsEmailFromAddress : ''
+
+@description('Manual follow-up when a custom sending domain is configured. Bicep provisions the CustomerManaged ACS domain and writes its SPF/DKIM/DMARC records, but cannot initiate verification or raise the send quota. Empty when acsCustomEmailDomain is unset.')
+output acsCustomDomainAction string = acsCustomDomainOn
+  ? 'ACTION REQUIRED: run `az communication email domain initiate-verification` for Domain/SPF/DKIM/DKIM2, confirm every record shows Verified, then request the ACS send-quota increase (72h lead) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.'
+  : ''
 
 // ── SWA ───────────────────────────────────────────────────────
 

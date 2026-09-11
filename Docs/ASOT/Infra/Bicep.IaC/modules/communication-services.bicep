@@ -6,6 +6,17 @@
 // the ACS resource; phone numbers are provisioned via the
 // Azure portal (not Bicep) for the MVP.
 //
+// When `customDomainName` is set (prod — e.g. mail.rvintake.com,
+// issue #532) a second, CustomerManaged domain is provisioned
+// alongside the Azure-managed one and linked to the account. The
+// Azure-managed *.azurecomm.net domain caps at 10 emails/hour with
+// no support path to raise it; a verified custom sending subdomain
+// is the only route to pilot volume and to a warmed sender
+// reputation. Bicep provisions the domain and emits the SPF / DKIM
+// / domain-ownership records it needs (`customDomainVerificationRecords`);
+// `initiate-verification` and the quota-increase request stay manual
+// (README "Deploy Production" step 4).
+//
 // ACS is a **global** resource — `location` is always 'global'.
 // Data residency is controlled via the `dataLocation` property.
 // ──────────────────────────────────────────────────────────────
@@ -27,6 +38,9 @@ param apiPrincipalId string = ''
 
 @description('Principal ID of the API staging deployment-slot managed identity (S1 only). Leave empty to skip the role assignment.')
 param stagingSlotPrincipalId string = ''
+
+@description('Custom sending subdomain to provision as a CustomerManaged domain (e.g. mail.rvintake.com). Empty = Azure-managed domain only. (#532)')
+param customDomainName string = ''
 
 // ── Variables ─────────────────────────────────────────────────
 
@@ -51,9 +65,12 @@ resource acsAccount 'Microsoft.Communication/communicationServices@2023-04-01' =
   tags: tags
   properties: {
     dataLocation: dataLocation
-    linkedDomains: [
-      azureManagedDomain.id
-    ]
+    // Both domains are linked when a custom one is configured — the account can
+    // send From either, and the managed domain stays available as a fallback.
+    linkedDomains: empty(customDomainName)
+      ? [ azureManagedDomain.id ]
+      #disable-next-line BCP318
+      : [ azureManagedDomain.id, customDomain.id ]
   }
 }
 
@@ -70,9 +87,10 @@ resource emailService 'Microsoft.Communication/emailServices@2023-04-01' = {
 }
 
 // ── Azure-Managed Email Domain ────────────────────────────────
-// Uses the built-in Azure-managed domain (AzureManagedDomain)
-// for staging. Production should use a custom verified domain
-// (e.g. notifications.rvserviceflow.com) configured separately.
+// The built-in Azure-managed domain (<guid>.azurecomm.net). Always
+// created — it is the only domain in staging, and a From-address
+// fallback in prod. Microsoft caps it at 5 emails/min, 10/hour with
+// no support path to raise it (#521).
 
 #disable-next-line use-recent-api-versions
 resource azureManagedDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' = {
@@ -82,6 +100,27 @@ resource azureManagedDomain 'Microsoft.Communication/emailServices/domains@2023-
   tags: tags
   properties: {
     domainManagement: 'AzureManaged'
+    userEngagementTracking: 'Disabled'
+  }
+}
+
+// ── Custom (CustomerManaged) Sending Domain — #532 ────────────
+// Provisioned in prod as mail.rvintake.com. On creation ACS returns
+// `verificationRecords` (Domain + SPF as TXT, DKIM + DKIM2 as CNAME) —
+// deterministic from the domain name and region, available before
+// verification is initiated. main.bicep writes them into the Intake
+// DNS zone. `verificationStates` stays NotStarted until an operator
+// runs `az communication email domain initiate-verification`; sends
+// From this domain fail until every record shows Verified.
+
+#disable-next-line use-recent-api-versions
+resource customDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' = if (!empty(customDomainName)) {
+  parent: emailService
+  name: customDomainName
+  location: 'global'
+  tags: tags
+  properties: {
+    domainManagement: 'CustomerManaged'
     userEngagementTracking: 'Disabled'
   }
 }
@@ -131,6 +170,39 @@ output emailServiceName string = emailService.name
 
 @description('The Azure-managed MailFrom address (e.g. DoNotReply@<guid>.azurecomm.net).')
 output azureManagedMailFrom string = azureManagedDomain.properties.mailFromSenderDomain
+
+@description('True when a CustomerManaged sending domain was provisioned (#532).')
+output hasCustomDomain bool = !empty(customDomainName)
+
+@description('The custom MailFrom sender domain (e.g. mail.rvintake.com). Empty when no custom domain — use for the packet-email From address in prod.')
+#disable-next-line BCP318
+output customFromSenderDomain string = empty(customDomainName) ? '' : customDomain.properties.fromSenderDomain
+
+@description('CNAME records the custom domain needs (DKIM, DKIM2), shaped for dns.bicep as [{ name, target }]. Empty when no custom domain.')
+output customDomainCnameRecords array = empty(customDomainName) ? [] : [
+  #disable-next-line BCP318
+  { name: customDomain.properties.verificationRecords.DKIM.name, target: customDomain.properties.verificationRecords.DKIM.value }
+  #disable-next-line BCP318
+  { name: customDomain.properties.verificationRecords.DKIM2.name, target: customDomain.properties.verificationRecords.DKIM2.value }
+]
+
+@description('TXT record-set the custom domain needs, shaped for dns.bicep as [{ name, values }] where each value is a separate TXT record: the domain-ownership string and the SPF string (ending in -all). ACS puts both at the subdomain host, so they share one record-set name. DMARC is authored by the caller. Empty when no custom domain.')
+output customDomainTxtRecords array = empty(customDomainName) ? [] : [
+  {
+    #disable-next-line BCP318
+    name: customDomain.properties.verificationRecords.Domain.name
+    values: [
+      #disable-next-line BCP318
+      customDomain.properties.verificationRecords.Domain.value
+      #disable-next-line BCP318
+      customDomain.properties.verificationRecords.SPF.value
+    ]
+  }
+]
+
+@description('Raw ACS verification records for the custom domain — for diffing against the zone with `az communication email domain show`. Empty object when no custom domain.')
+#disable-next-line BCP318
+output customDomainVerificationRecords object = empty(customDomainName) ? {} : customDomain.properties.verificationRecords
 
 @description('The data residency location.')
 output dataLocation string = dataLocation
