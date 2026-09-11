@@ -30,6 +30,7 @@ else
                            Color="Color.Default"
                            StartIcon="@Icons.Material.Filled.ArrowBack"
                            OnClick="HandlePreviousStep"
+                           Disabled="_state.IsSubmitting"
                            Style="text-transform: none;"
                            aria-label="Go back">
                     Back
@@ -143,6 +144,7 @@ else
 
     private async Task HandlePreviousStep()
     {
+        if (_state.IsSubmitting) return;
         _validationErrors = [];
         _state.FieldErrors = [];
         await _state.GoToPreviousStepAsync();

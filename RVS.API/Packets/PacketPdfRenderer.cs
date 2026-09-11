@@ -404,6 +404,15 @@ public static class PacketPdfRenderer
                             {
                                 cell.Item().Image(bytes).FitWidth();
                             }
+                            else if (photo.IsVideo)
+                            {
+                                // Videos never render as a raster thumbnail — link to the
+                                // resolved read URL instead so the file is still reachable
+                                // from the PDF (issue #583).
+                                cell.Item().Border(1f).Padding(12f).AlignCenter()
+                                    .Hyperlink(photo.Url)
+                                    .Text(text => text.Span(photo.FileName).FontSize(9f).Underline());
+                            }
                             else
                             {
                                 // No bytes, or a format QuestPDF's decoder cannot read

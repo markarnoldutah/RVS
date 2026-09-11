@@ -489,7 +489,9 @@
                                 Attachments (@_sr.Attachments.Count)
                             </MudText>
                             <MudGrid Spacing="2">
-                                @foreach (var att in _sr.Attachments)
+                                @* The PDF (when present) sorts first so it is always visible
+                                   without scrolling past photo/video attachments (issue #583). *@
+                                @foreach (var att in OrderedAttachments())
                                 {
                                     <MudItem xs="6" sm="4" md="3">
                                         <div class="text-center">
@@ -501,10 +503,20 @@
                                             <MudText Typo="Typo.caption" Color="Color.Info">
                                                 @FormatFileSize(att.SizeBytes)
                                             </MudText>
-                                            <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
-                                                       OnClick="@(() => ViewAttachmentAsync(att))">
-                                                View
-                                            </MudButton>
+                                            @if (IsVideo(att.ContentType))
+                                            {
+                                                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
+                                                           OnClick="@(() => PlayVideoAsync(att))">
+                                                    Play
+                                                </MudButton>
+                                            }
+                                            else
+                                            {
+                                                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
+                                                           OnClick="@(() => ViewAttachmentAsync(att))">
+                                                    View
+                                                </MudButton>
+                                            }
                                         </div>
                                     </MudItem>
                                 }
@@ -874,7 +886,32 @@
     </div>
 </MudDrawer>
 
+@* Video playback dialog — videos are played inline instead of a raw SAS-URL navigation,
+   which prompts a download instead of playing for most browsers/containers (issue #583). *@
+<MudDialog @bind-Visible="_videoDialogOpen" Options="VideoDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Class="text-truncate">@_videoDialogFileName</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_videoDialogUrl is not null)
+        {
+            <video src="@_videoDialogUrl" controls autoplay style="width: 100%; max-height: 70vh;">
+                Your browser does not support inline video playback.
+            </video>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _videoDialogOpen = false)">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
+    private static readonly DialogOptions VideoDialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    private bool _videoDialogOpen;
+    private string? _videoDialogUrl;
+    private string? _videoDialogFileName;
+
     /// <summary>
     /// Controls visibility of the dialog. Bind two-way from parent.
     /// </summary>
@@ -1611,6 +1648,44 @@
             StateHasChanged();
         }
     }
+
+    /// <summary>
+    /// Opens a video attachment in an inline player instead of navigating to the raw SAS
+    /// URL, which most browsers treat as a download rather than something to play (issue
+    /// <c>#583</c>).
+    /// </summary>
+    private async Task PlayVideoAsync(AttachmentDto attachment)
+    {
+        if (_dealershipId is null || _sr is null) return;
+
+        try
+        {
+            var sas = await AttachmentClient.GetReadSasAsync(_dealershipId, _sr.Id, attachment.AttachmentId);
+            _videoDialogUrl = sas.SasUrl;
+            _videoDialogFileName = attachment.FileName;
+            _videoDialogOpen = true;
+        }
+        catch (Exception ex)
+        {
+            _statusError = $"Failed to open attachment: {ex.Message}";
+        }
+
+        StateHasChanged();
+    }
+
+    private static bool IsVideo(string contentType) =>
+        contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The PDF (when present) sorts first so it is always visible without scrolling past
+    /// photo/video attachments — the same ordering the packet email attaches (issue #583).
+    /// Uses a stable sort, so attachments of the same kind keep their original order.
+    /// </summary>
+    private IEnumerable<AttachmentDto> OrderedAttachments() =>
+        _sr is null
+            ? []
+            : _sr.Attachments.OrderBy(a =>
+                a.ContentType.Contains("pdf", StringComparison.OrdinalIgnoreCase) ? 0 : 1);
 
     private async Task CloseDialog()
     {
