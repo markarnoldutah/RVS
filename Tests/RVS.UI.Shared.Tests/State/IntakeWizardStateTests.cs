@@ -729,6 +729,7 @@ public class IntakeWizardStateTests
         state.IsSubmitted = true;
         state.SubmissionMagicLinkToken = "abc123:xyz789";
         state.FailedUploadCount = 3;
+        state.IsSubmitting = true;
         state.SmsOptOut = true;
         state.EmailOptOut = true;
         state.PreferredContact = "Phone";
@@ -747,9 +748,18 @@ public class IntakeWizardStateTests
         state.IsSubmitted.Should().BeFalse();
         state.SubmissionMagicLinkToken.Should().BeNull();
         state.FailedUploadCount.Should().Be(0);
+        state.IsSubmitting.Should().BeFalse();
         state.SmsOptOut.Should().BeFalse();
         state.EmailOptOut.Should().BeFalse();
         state.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void IsSubmitting_ShouldDefaultToFalse()
+    {
+        var state = CreateState();
+
+        state.IsSubmitting.Should().BeFalse();
     }
 
     [Fact]

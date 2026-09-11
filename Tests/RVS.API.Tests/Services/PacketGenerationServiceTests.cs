@@ -135,6 +135,14 @@ public class PacketGenerationServiceTests
         BlobUri = blobUri,
     };
 
+    private static ServiceRequestAttachmentEmbedded Video(string id, string blobUri) => new()
+    {
+        AttachmentId = id,
+        FileName = "walkaround.mp4",
+        ContentType = "video/mp4",
+        BlobUri = blobUri,
+    };
+
     private void SetupRequest(ServiceRequest sr) =>
         _srRepoMock.Setup(r => r.GetByIdAsync(TenantId, SrId, It.IsAny<CancellationToken>())).ReturnsAsync(sr);
 
@@ -248,6 +256,23 @@ public class PacketGenerationServiceTests
     }
 
     [Fact]
+    public async Task GenerateAsync_ShouldNotDownloadBytesForVideoAttachments()
+    {
+        // Videos are never embedded as raster images in the PDF, so downloading their bytes
+        // would be wasted work — the renderer only needs their resolved URL (issue #583).
+        var sr = BuildRequest(Video("att_video", "ten_acme/sr/walkaround.mp4"));
+        SetupRequest(sr);
+        _photoResolverMock.Setup(r => r.ResolveAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string> { ["att_video"] = "https://blob/walkaround.mp4?sig=a" });
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        _blobMock.Verify(
+            b => b.DownloadAsync(AttachmentsContainer, "ten_acme/sr/walkaround.mp4", It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task GenerateAsync_WhenOnePhotoDownloadFails_ShouldStillSucceed()
     {
         var sr = BuildRequest(Image("att_1", "ten_acme/sr/one.jpg"));
@@ -258,7 +283,6 @@ public class PacketGenerationServiceTests
             .ThrowsAsync(new IOException("blob read timeout"));
 
         var outcome = await _sut.GenerateAsync(TenantId, SrId);
-
         outcome.Should().Be(PacketGenerationOutcome.Succeeded);
         sr.PacketGeneration.Status.Should().Be("Succeeded");
     }
@@ -681,6 +705,67 @@ public class PacketGenerationServiceTests
         sent.Should().NotBeNull();
         sent!.Attachments.Should().HaveCount(2);
         sent.Attachments.Should().OnlyContain(a => a.ContentType == "image/jpeg");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_ShouldNotAttachVideosToTheEmail_EvenWhenPhotosAreIncluded()
+    {
+        // Videos are linked, not attached — attaching raw video bytes to the email would
+        // blow the size budget and isn't what the manager-app playback link needs (#583).
+        var sr = BuildRequest(
+            Image("att_1", "ten_acme/sr/one.jpg"),
+            Video("att_video", "ten_acme/sr/walkaround.mp4"));
+        SetupRequest(sr);
+        _photoResolverMock.Setup(r => r.ResolveAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>
+            {
+                ["att_1"] = "https://blob/one.jpg?sig=a",
+                ["att_video"] = "https://blob/walkaround.mp4?sig=b",
+            });
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients(attachPdf: false, includePhotos: true));
+
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().ContainSingle();
+        sent.Attachments.Should().OnlyContain(a => a.ContentType == "image/jpeg");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnSuccess_ShouldAttachThePdfBeforeThePhotos()
+    {
+        // The PDF must sort first in the attachment list so it isn't pushed "below the
+        // fold" by photo attachments in an email client (issue #583).
+        var sr = BuildRequest(
+            Image("att_1", "ten_acme/sr/one.jpg"),
+            Image("att_2", "ten_acme/sr/two.jpg"));
+        SetupRequest(sr);
+        _photoResolverMock.Setup(r => r.ResolveAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>
+            {
+                ["att_1"] = "https://blob/one.jpg?sig=a",
+                ["att_2"] = "https://blob/two.jpg?sig=b",
+            });
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients(attachPdf: true, includePhotos: true));
+
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sent.Should().NotBeNull();
+        sent!.Attachments.Should().HaveCount(3);
+        sent.Attachments[0].ContentType.Should().Be("application/pdf");
+        sent.Attachments.Skip(1).Should().OnlyContain(a => a.ContentType == "image/jpeg");
     }
 
     [Fact]

@@ -248,6 +248,10 @@
     private async Task HandleSubmit()
     {
         _isSubmitting = true;
+        // Also gates the wizard header's Back button (issue #583): leaving Step 8 while this
+        // upload loop is still running would tear down this component's StateHasChanged
+        // target mid-submission.
+        State.IsSubmitting = true;
         _submitError = null;
         _uploadStatus = null;
         _uploadProgress = null;
@@ -354,6 +358,7 @@
         finally
         {
             _isSubmitting = false;
+            State.IsSubmitting = false;
             StateHasChanged();
         }
     }

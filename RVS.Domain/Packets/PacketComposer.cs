@@ -149,7 +149,8 @@ public static class PacketComposer
         foreach (var attachment in attachments)
         {
             var isImage = attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
-            if (!isImage)
+            var isVideo = attachment.ContentType?.StartsWith("video/", StringComparison.OrdinalIgnoreCase) == true;
+            if (!isImage && !isVideo)
             {
                 continue;
             }
@@ -163,6 +164,7 @@ public static class PacketComposer
             {
                 Url = url,
                 FileName = attachment.FileName,
+                ContentType = attachment.ContentType,
             });
         }
 

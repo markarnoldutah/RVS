@@ -315,9 +315,19 @@ public static class PacketHtmlRenderer
         sb.Append("<h2>Photos</h2>\n");
         // Text only: the photos are sent as email attachments, which the mail client
         // already shows as clickable thumbnails, so no <img> is embedded here (issue #580).
+        // Videos are never attached to the email (too large) and never render as a thumbnail
+        // either, so they get a plain hyperlink to the resolved read URL instead (issue #583).
         foreach (var photo in renderable)
         {
-            sb.Append("<p class=\"photo-line\">image ").Append(Text(photo.FileName)).Append(" attached</p>\n");
+            if (photo.IsVideo)
+            {
+                sb.Append("<p class=\"photo-line\">video ").Append(Text(photo.FileName))
+                    .Append(" — <a href=\"").Append(Attr(photo.Url)).Append("\">view video</a></p>\n");
+            }
+            else
+            {
+                sb.Append("<p class=\"photo-line\">image ").Append(Text(photo.FileName)).Append(" attached</p>\n");
+            }
         }
 
         // One or more photo attachments did not fit the ACS size budget (PacketEmailSizeFitter,

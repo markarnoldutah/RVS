@@ -232,6 +232,30 @@ public class PacketPdfRendererTests
     }
 
     [Fact]
+    public void Render_WhenPhotoIsVideo_ShouldRenderAHyperlinkedPlaceholder_NotThrow()
+    {
+        // Videos are never embedded as raster images — they render as a placeholder that
+        // hyperlinks to the video's SAS URL, with no bytes required (issue #583).
+        var packet = FullPacket() with
+        {
+            Photos =
+            [
+                new PacketPhoto
+                {
+                    Url = "https://blob/walkaround.mp4?sas=read",
+                    FileName = "walkaround.mp4",
+                    ContentType = "video/mp4",
+                },
+            ],
+        };
+
+        var act = () => PacketPdfRenderer.Render(packet);
+
+        act.Should().NotThrow();
+        PacketPdfRenderer.Render(packet).Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
     public void Render_WithABrandNameOverride_ShouldNotThrow()
     {
         var packet = FullPacket() with { Branding = new PacketBranding { BrandName = "Acme RV Group" } };

@@ -6,9 +6,10 @@ using RVS.Domain.Packets;
 namespace RVS.API.Packets;
 
 /// <summary>
-/// Mints per-request read SAS URLs for a service request's photo attachments so the packet
-/// renderers can reference them as <c>&lt;img src&gt;</c> — never base64 (<c>Spec B-3</c>,
-/// <c>X-6</c>, issue <c>#433</c>).
+/// Mints per-request read SAS URLs for a service request's photo and video attachments so the
+/// packet renderers can reference them as <c>&lt;img src&gt;</c> or a video hyperlink — never
+/// base64 (<c>Spec B-3</c>, <c>X-6</c>, issue <c>#433</c>). Videos never render as thumbnails
+/// (issue <c>#583</c>) but still need a resolved URL for the text link the renderers show.
 ///
 /// The URLs are generated on every call and returned to the caller only; nothing is written
 /// back to the <see cref="ServiceRequest"/> or to storage, so a SAS token is never persisted.
@@ -51,7 +52,9 @@ public sealed class PacketPhotoUrlResolver : IPacketPhotoUrlResolver
 
         foreach (var attachment in request.Attachments)
         {
-            if (attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) != true)
+            var isImage = attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+            var isVideo = attachment.ContentType?.StartsWith("video/", StringComparison.OrdinalIgnoreCase) == true;
+            if (!isImage && !isVideo)
             {
                 continue;
             }
@@ -59,7 +62,7 @@ public sealed class PacketPhotoUrlResolver : IPacketPhotoUrlResolver
             if (string.IsNullOrWhiteSpace(attachment.BlobUri))
             {
                 _logger.LogWarning(
-                    "Skipping image attachment {AttachmentId} on service request {ServiceRequestId}: no blob path.",
+                    "Skipping attachment {AttachmentId} on service request {ServiceRequestId}: no blob path.",
                     attachment.AttachmentId, request.Id);
                 continue;
             }

@@ -38,7 +38,10 @@ public sealed record ServicePacket
     /// <summary>7. Diagnostic Q&amp;A. Empty when no diagnostic responses were captured.</summary>
     public required IReadOnlyList<PacketDiagnosticEntry> Diagnostics { get; init; }
 
-    /// <summary>8. Photo thumbnails. Empty when there are no image attachments with a resolved URL.</summary>
+    /// <summary>
+    /// 8. Photo thumbnails and video links. Empty when there are no image or video attachments
+    /// with a resolved URL.
+    /// </summary>
     public required IReadOnlyList<PacketPhoto> Photos { get; init; }
 
     /// <summary>9. DMS paste block (<c>Spec B-5</c>). <c>null</c> until it is generated upstream.</summary>
@@ -169,12 +172,25 @@ public sealed record PacketAiSummary
     public bool IsAiGenerated => true;
 }
 
-/// <summary>One photo thumbnail, referenced by a time-limited read URL (never base64).</summary>
+/// <summary>
+/// One photo or video attachment, referenced by a time-limited read URL (never base64).
+/// Videos cannot be embedded as thumbnails, so renderers fall back to a text/hyperlink
+/// entry for them (issue <c>#583</c>) — see <see cref="IsVideo"/>.
+/// </summary>
 public sealed record PacketPhoto
 {
     public required string Url { get; init; }
     public required string FileName { get; init; }
     public string? Caption { get; init; }
+
+    /// <summary>
+    /// The attachment's original content type, e.g. <c>image/jpeg</c> or <c>video/mp4</c>.
+    /// <c>null</c> for callers that never populate it (treated as an image).
+    /// </summary>
+    public string? ContentType { get; init; }
+
+    /// <summary><c>true</c> when <see cref="ContentType"/> is a video MIME type.</summary>
+    public bool IsVideo => ContentType?.StartsWith("video/", StringComparison.OrdinalIgnoreCase) == true;
 }
 
 /// <summary>The anonymous customer status link.</summary>

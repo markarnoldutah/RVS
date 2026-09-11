@@ -265,7 +265,10 @@ public sealed class PacketGenerationService : IPacketGenerationService
     /// <summary>
     /// Downloads the image bytes for each resolved photo so <see cref="PacketPdfRenderer"/> can
     /// embed them (<c>Spec B-3</c>). A single photo that cannot be fetched is logged and skipped —
-    /// it renders as a labelled placeholder rather than failing the whole packet.
+    /// it renders as a labelled placeholder rather than failing the whole packet. Videos are
+    /// skipped here: <see cref="PacketPdfRenderer"/> renders them as a text/hyperlink placeholder,
+    /// not a raster embed, so downloading their (potentially 25 MB) bytes would be wasted work
+    /// (issue <c>#583</c>).
     /// </summary>
     private async Task<Dictionary<string, byte[]>> DownloadPhotoBytesAsync(
         ServiceRequest request, IReadOnlyDictionary<string, string> photoUrls, CancellationToken cancellationToken)
@@ -274,6 +277,12 @@ public sealed class PacketGenerationService : IPacketGenerationService
 
         foreach (var attachment in request.Attachments)
         {
+            var isImage = attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+            if (!isImage)
+            {
+                continue;
+            }
+
             if (!photoUrls.TryGetValue(attachment.AttachmentId, out var url) || string.IsNullOrWhiteSpace(attachment.BlobUri))
             {
                 continue;

@@ -149,6 +149,16 @@ public sealed class IntakeWizardState
     public int FailedUploadCount { get; set; }
 
     /// <summary>
+    /// <c>true</c> while the Review &amp; Submit step is submitting the request and uploading
+    /// attachments (runtime-only, not persisted). The wizard header uses this to block
+    /// backward navigation mid-submission — leaving Step 8 while its upload loop is still
+    /// running tears down the component the loop's <c>StateHasChanged</c> calls depend on,
+    /// which previously could abandon an in-flight submission along with its attachments
+    /// (issue #583).
+    /// </summary>
+    public bool IsSubmitting { get; set; }
+
+    /// <summary>
     /// When set, the next call to <see cref="GoToNextStepAsync"/> or <see cref="GoToPreviousStepAsync"/>
     /// will navigate to this step instead of the natural next/previous step.
     /// Used when editing a specific section from the Review &amp; Submit page.
@@ -460,6 +470,7 @@ public sealed class IntakeWizardState
         CreatedServiceRequestId = null;
         SubmissionMagicLinkToken = null;
         FailedUploadCount = 0;
+        IsSubmitting = false;
         FieldErrors = [];
 
         await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", StorageKey);

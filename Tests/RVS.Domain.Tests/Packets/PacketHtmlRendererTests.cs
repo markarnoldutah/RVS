@@ -748,6 +748,30 @@ public class PacketHtmlRendererTests
         html.Should().NotContain("section:photos");
     }
 
+    [Fact]
+    public void Render_WhenPhotoIsVideo_ShouldRenderAViewVideoHyperlink_NeverAVideoTag()
+    {
+        var packet = FullPacket() with
+        {
+            Photos =
+            [
+                new PacketPhoto
+                {
+                    Url = "https://blob/walkaround.mp4?sas=read",
+                    FileName = "walkaround.mp4",
+                    ContentType = "video/mp4",
+                },
+            ],
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().Contain("video walkaround.mp4");
+        html.Should().Contain("<a href=\"https://blob/walkaround.mp4?sas=read\">view video</a>");
+        html.Should().NotContain("<video");
+        html.Should().NotContain("image walkaround.mp4 attached");
+    }
+
     // ── Manager-app note for a photo dropped by the ACS size budget (issue #580) ──
 
     [Fact]
