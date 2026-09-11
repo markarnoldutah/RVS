@@ -14,7 +14,7 @@
 | **2** | **Email delivery: ACS, recipients config, photo attachments, paste block, retry/bounce** | 1 sprint |
 | **3** | Customer status page + status token | ~1 sprint |
 | **4** | Manager app: list, detail, status, disposition, resend, settings | 1–2 sprints |
-| **5** | One-click status links in the packet email (C-7) | Days, if the token machinery from 3 is reused |
+| **5** | Persistent manager-app session + deep links from the packet email (C-7, issue #498) | Folds into item 4 as a sub-issue of #420 — a session/PWA build, not the original days-long token-reuse estimate |
 | **6** | Issue-category vocabulary + per-category fallback diagnostic questions | Domain time, parallel, not engineering-blocked |
 | **7** | Stripe billing + trial | 2 sprints — **do not start until three shops are running.** The first five customers get a hand-sent invoice and a Stripe payment link. Two sprints off the critical path, and you learn what to build |
 | **8** | Descope: delete archived-scope code — analytics, Kanban board, batch-outcome, SMS, technician/scheduling fields, `build-mobile.yml` | ~1 sprint, can run in parallel |
@@ -49,9 +49,8 @@ Non-code blocker, unchanged: the one-page, phone-signable design-partner agreeme
 
 | Work | Issues | Trigger to start |
 |---|---|---|
-| Manager app to thin scope (build item 4) | epic #420 → #443–#448, plus #498, #468, #470 | The dealer-group pitch. The mobile tech does not use it. |
+| Manager app to thin scope (build item 4) | epic #420 → #443–#448, plus #498, #468, #470 | The dealer-group pitch. The mobile tech does not use it. Build item 5 (C-7) no longer stands apart from this row — #498 folded it in; see Spec C-7 and the Sep 11 2026 decision log entry. |
 | Per-location packet branding UI (brand name + logo) | #505 | Needs the manager location-config screen (#470 territory). #492 already ships the default "RV Intake" masthead. |
-| One-click status links in the packet email (build item 5, C-7) | reuses #440 token machinery | After the manager app. |
 | Stripe billing + trial (build item 7) | epic #425, #478 | Three shops running. First five customers get a hand-sent invoice + Stripe link. |
 | Packet "Received" line in dealership-local time | #506 | Cosmetic; falls back to a `… UTC` string until a Location timezone field exists. |
 | Structured preliminary assessment (probable cause / fix / parts) | #507 | Spike, then its own issue(s). Architecture where the #452/#453 craft work is cheaper first (scope filter #3). |
@@ -67,7 +66,7 @@ Steps 3–5 (the issue-category and question-bank work, build item 6) run alongs
 - The PDF prints legibly on a shop printer in greyscale.
 - The paste block goes into a real DMS complaint field without reformatting. **Verify against an actual DMS, not a mock.** — *not a gate for the first mobile technician (he has no DMS); it becomes a gate before the dealer-group pilot.*
 - The customer can check status from the link without logging in.
-- A service manager can run a full week on email alone, never opening the manager app.
+- A service manager can run a full week acting on packet-email deep links alone — no interactive login, no proactive visit to the app as a workspace.
 
 That last one is the real test.
 
@@ -92,7 +91,7 @@ The archived strategy carried a Yes/No filter that kept scope honest for a year.
 | Proposal | Verdict | Why |
 |---|---|---|
 | Per-category fallback diagnostic questions (item 6) | **Pass** | Strong 1 and 3. The cheapest quality lever in the product |
-| One-click status links in the packet email (C-7) | **Pass** | Strong 1 and 2 — it is the feature that makes "no dashboard" literally true |
+| Persistent-session deep links from the packet email (C-7) | **Pass** | Strong 1 and 2 — it is the feature that keeps "no dashboard" true without a daily interactive login |
 | Per-location paste-block cap (B-6) | **Pass** | 1. Real DMS complaint fields truncate at different lengths |
 | Resend the packet (C-5) | **Pass** | 1, and already specced |
 | A dashboard, of any kind | **Fail** | 2, outright. This is the objection the whole design answers |
@@ -111,7 +110,7 @@ The archived strategy carried a Yes/No filter that kept scope honest for a year.
 | # | Question | Owner | Needed by |
 |---|---|---|---|
 | ~~**Q1**~~ | ~~PDF rendering library and license.~~ **Resolved (issue #426): QuestPDF.** Native .NET renderer, no headless browser. Community License v3.0 is free under USD 1M revenue (RVS qualifies); paid tier is perpetual USD 1,999 / 4,999 if the threshold is crossed. See decision log and Spec B-7. | Engineering | ~~Before build item 1~~ Done |
-| **Q2** | Build one-click status links (C-7) now or after the manager app? Recommendation: now — it's cheap once the token machinery exists and it's the thing that makes the "no dashboard" claim actually true. | Product | Before build item 4 |
+| ~~**Q2**~~ | ~~Build one-click status links (C-7) now or after the manager app?~~ **Resolved (issue #498): built alongside the manager app, as part of it — not the standalone anonymous-token design this question assumed.** That design (cheap, reuses the status-token machinery) turned out to collide with corporate mail-security link-prescanning and left an anonymous write surface; #498 replaces it with a persistent manager-app session + deep links, load-bearing for #420's AC rather than a cheap add-on after it. See decision log and Spec C-7. | Product | ~~Before build item 4~~ Done |
 | ~~**Q3**~~ | ~~Does the mobile tech's "buy in" mean a subscription at ~$39/mo, or equity/partnership?~~ **Resolved, then closed for good (Sep 9 2026): subscription, never equity — and no founding-partner term.** He gets the same 30-day free trial as everyone else, then $39/mo locked for life. Upside, if he wants it, is still a named referral fee — not shares. See decision log and `Marketing/RVS_GoToMarket.md`. | GTM | ~~Next conversation with him~~ Done |
 | **Q4** | At the dealer group: who owns the location service pages — marketing, IT, or an agency? **Downgraded from a gate to a second-conversation item.** The pilot is built to require nothing the service manager cannot authorize alone — counter QR code, advisor email signatures, the existing callback autoresponder — so the web-page change is the expansion ask, not the entry ask. Still worth knowing; no longer blocks a pitch. | GTM | ~~Before pitching~~ Before the expansion ask |
 | ~~**Q5**~~ | ~~Status vocabulary — is the C-3 set right for a mobile tech *and* a dealership, or does it need to be per-location configurable?~~ **Resolved (issue #428): one fixed set, adopted from the code** — `New / InProgress / WaitingOnParts / WaitingOnCustomer / Completed / Cancelled`. Per-location configurable vocabularies rejected. See decision log and Spec C-8. | Product | ~~Before build item 4~~ Done |
@@ -198,6 +197,7 @@ Honest note on both: one interested mobile technician is a design partner and a 
 | Sep 6 2026 | **Recorded, not solved: the scope filter has no category for "protects revenue"** | A product designed so nobody logs in has no usage signal and nothing to renew against; in month four an invoice reaches someone with no recent memory of the value. The obvious fix — a monthly recap email — fails filter #1 outright, since it makes no individual packet better. Not building it. The invoice line item does the same job for zero product work. Logged so that the filter gets an honest amendment when something harder needs this category, rather than making a commercial decision by accident. | |
 | Sep 10 2026 | **Added a future-state register to this document** | Deferred sub-items were surviving only inside other issues' bodies (the `rv-warranty-rules` hint sub-task in #507, a hardened C-7 in #498, competitor-referral in #478) or inside a closing issue's checklist (the Cosmos integrated cache in #477), with no condition recorded for revisiting them. Leaving GitHub issues open for parked work makes them accrete and invites scope creep; this document already tracked one deferral class ("Deferred until the first mobile tech is live"). The register generalises it: one table, every row carrying a typed trigger and a "lands as", graduating the same way the resolved `Q-n` entries do, entry gated by scope-filter question 4. Seeded from an open-issue sweep done the same day. A matching issue-body template is in `.github/skills/github-issues/references/templates.md`. |
 | Sep 11 2026 | **Commercial launch targets mobile techs and small shops only; Blue Compass Hurricane deferred** (approved by Mark, closes #530) | The local cluster around Washington/Hurricane/St. George/Cedar City — seven independent shops, approached in person, capped at five live pilots (#527) — *is* the commercial launch, not "party three." Blue Compass Hurricane is explicitly excluded from the pilot sequence: no X-3 signing authority at a 100-location PE-backed company, no price band that fits the $79/location independent pricing, and a corporate no is expensive and durable. It is downgraded from a pilot candidate to a relationship to nurture — a 30-minute observation visit, not a trial — running in parallel any time after Phase P1 (the Jay Lyons pilot, #525) closes, and gating nothing else in the sequence. See #526 and the future-state register (FS-8). |
+| Sep 11 2026 | **Spec C-7 and this document's build-item-5 references reconciled to the #498 design** | #421 (the original C-7: anonymous, tokenized one-click email action links) closed `not_planned` on Sep 9, superseded by #498 (persistent ~30-day manager-app session + `/sr/{id}?action=…` deep links, no anonymous status-write endpoint) — but Spec C-7, the X-5 token row, and this document's build-order/deferred/worked-example/Q2 rows for "build item 5" still described the withdrawn design, caught while updating #420's AC to match. Spec C-7 rewritten around #498; X-5 narrowed to the one anonymous token scope that still exists (X-1's read-only status token) since C-7 no longer has an anonymous write surface for it to cover. This file: build-order row 5, the deferred-work table, the scope-filter worked example, and Q2 updated to match; build item 5 folds into item 4 (#420) rather than standing apart from it. `RVS_Architecture.md`, `RVS_Identity.md`, and `RVS_DataModel.md` still quote the pre-#498 X-5 wording (the "C-7 action links are per-request and per-action" clause) and need their own pass. |
 
 ---
 

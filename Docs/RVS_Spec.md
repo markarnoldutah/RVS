@@ -123,13 +123,13 @@ The manager app exists so a status update can happen. It is not a workspace and 
 | **C-5** | Resend the packet to the configured recipients or an ad-hoc address. |
 | **C-6** | Location settings: the B-6 configuration. |
 
-### C-7 — Status updates without logging in *(recommended)*
+### C-7 — Status updates without a daily login
 
-The packet email carries one-click action links — *In Progress*, *Waiting on Parts*, *Completed* — each a tokenized single-purpose URL, and each one of the C-3 statuses. Clicking one sets the status and shows a small confirmation page. No login, no app.
+**Decided (issue #498, supersedes the anonymous-token design this section originally described — see #421, closed `not_planned`).** The packet email carries deep links into the manager app — *In Progress*, *Waiting on Parts*, *Completed*, plus a plain link to the request — as `…/sr/{id}?action=…` and `…/sr/{id}`. The manager app keeps a persistent, rotating session (target ~30 days, silent renewal) so tapping an email link lands the manager already signed in; one more tap confirms the status change. There is no anonymous status-write endpoint — every change is attributed to the signed-in user.
 
-This matters more than it looks. If setting status requires opening a web app every day, RVS is still a thing people have to visit — the objection the whole design is meant to answer. One-click email actions mean the manager app becomes optional for daily operation and is only opened for configuration and history.
+This matters more than it looks. If setting status requires an interactive login every day, RVS is still a thing people have to visit — the objection the whole design is meant to answer. The original version of C-7 (anonymous, single-purpose tokenized links, no app at all) ran into two problems: corporate mail-security link-prescanning (Defender Safe Links, Proofpoint, Mimecast auto-fetch every link in inbound mail, silently burning single-use tokens and firing transitions from a bot, not the manager) and an anonymous write surface on the token model. The persistent-session deep-link design avoids both and keeps the same outcome for the manager: no interactive login, no proactive visit to the app as a workspace — just a tap in the email.
 
-Cost is small: the tokens, endpoints, and audit logging are the same machinery as the customer status link. Decision is Q2 in `RVS_Plan.md`.
+Cost is not small: a persistent-session / refresh-token mechanism, an installable PWA so the tap is one hop, and deep-link routes with an `action` query parameter. This does not reuse the anonymous customer-status-token machinery (X-5) — it is authenticated, session-based work.
 
 ### C-8 — Status vocabulary decision
 
@@ -159,7 +159,7 @@ The entry surface is the manager app detail view (C-2). It also fits a C-7 deep 
 | **X-2** | **Ledger write.** Append-only entry on intake submission: asset ID, tenant, location, category, timestamp, taxonomy version. Write-once; corrections are new entries referencing the original. Invisible to users. Persistent write failure raises an alert. *This exists solely so the record is there later. Nothing reads it today.* |
 | **X-3** | **Anonymization license.** Terms of service and any design-partner agreement must grant a perpetual, irrevocable license to use service data in anonymized, aggregated form. **Get this into the first customer's paperwork.** It cannot be added retroactively without renegotiating with every existing customer. |
 | **X-4** | **Tenancy.** Every query is tenant-scoped through the existing claims and gate middleware. Cross-tenant data never appears in any response. |
-| **X-5** | **Tokens.** All anonymous-access tokens (status page, packet link, email actions): ≥128 bits entropy, stored **hashed** (SHA-256; the raw token is never persisted), TTL-bounded, rate-limited per IP, access audit-logged, read-only except the single status write in C-7. Two scopes, one shared helper: the **status token is per customer** (resolves to the identity, TTL ≤ 30 days, sliding renewal on use); **C-7 action links are per request and per action** (single-purpose, TTL ≤ 14 days or single-use). Decision Q7 / issue #427. |
+| **X-5** | **Tokens.** The anonymous status-page token (X-1): ≥128 bits entropy, stored **hashed** (SHA-256; the raw token is never persisted), TTL ≤ 30 days with sliding renewal on use, rate-limited per IP, access audit-logged, **read-only** — resolves to the customer identity on `GlobalCustomerAcct`. One generation/hash/TTL/audit helper. Decision Q7 / issue #427. **C-7 status changes are not on this token model** — they run through an authenticated manager-app session (issue #498); there is no anonymous status-write surface. |
 | **X-6** | **Attachment access.** Time-limited read SAS, generated per request, never persisted. |
 
 ### Non-functional
