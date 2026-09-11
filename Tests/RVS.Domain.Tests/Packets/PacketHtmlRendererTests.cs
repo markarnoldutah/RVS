@@ -313,26 +313,24 @@ public class PacketHtmlRendererTests
     }
 
     [Fact]
-    public void Render_ShouldPrecedeTheUnitHeadlineWithTheCustomerNameLastNameFirst()
+    public void Render_ShouldRenderASingleLineTitle_CustomerNameLastNameFirstThenUnitDescriptor()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        html.Should().Contain("class=\"customer-headline\"");
-        html.Should().Contain(">Gribble, Dale<");
-        // Above the year/make/model <h1>, below the top refbox.
-        html.IndexOf("Gribble, Dale", StringComparison.Ordinal)
-            .Should().BeLessThan(html.IndexOf("<h1>", StringComparison.Ordinal));
+        html.Should().Contain("class=\"packet-title\"");
+        html.Should().Contain(">Gribble, Dale : 2021 Winnebago View<");
+        // Below the top refbox.
         html.IndexOf("Gribble, Dale", StringComparison.Ordinal)
             .Should().BeGreaterThan(html.IndexOf("RVS #:", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Render_WhenOnlyAFullNameIsAvailable_ShouldStillRenderACustomerHeadline()
+    public void Render_WhenOnlyAFullNameIsAvailable_ShouldStillRenderItInTheTitle()
     {
         var html = PacketHtmlRenderer.Render(MinimalPacket());   // FullName only, no discrete parts
 
-        html.Should().Contain("class=\"customer-headline\"");
-        html.Should().Contain(">Jane Doe<");
+        html.Should().Contain("class=\"packet-title\"");
+        html.Should().Contain(">Jane Doe : Unit details not provided<");
     }
 
     // ── 3. Origin column renamed to "Location", Received row dropped (item 5) ──
@@ -521,9 +519,37 @@ public class PacketHtmlRendererTests
         var html = PacketHtmlRenderer.Render(FullPacket());
 
         html.Should().Contain("class=\"diagnostics\"");
-        // emphasis is carried by a heavier border / weight in the embedded stylesheet,
-        // legible in greyscale
-        html.Should().MatchRegex(@"\.diagnostics\b[^}]*border[^}]*}");
+        // No frame around the section (issue #580); emphasis is carried by bold questions
+        // and a left-rule accent per answer, legible in greyscale.
+        html.Should().MatchRegex(@"\.diagnostics\s+dt\s*\{[^}]*font-weight:\s*700");
+        html.Should().MatchRegex(@"\.diagnostics\s+dd\s*\{[^}]*border-left[^}]*}");
+    }
+
+    [Fact]
+    public void Render_TheDiagnosticsSection_ShouldNotBeFramed()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotMatchRegex(@"\.diagnostics\s*\{[^}]*border\s*:");
+    }
+
+    [Fact]
+    public void Render_TheDescriptionVerbatimBlock_ShouldNotBeFramed()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var openBrace = html.IndexOf(".description .verbatim", StringComparison.Ordinal);
+        openBrace.Should().BeGreaterThanOrEqualTo(0);
+        var sharedRuleBody = html[html.IndexOf('{', openBrace)..html.IndexOf('}', openBrace)];
+        sharedRuleBody.Should().NotContain("border");
+    }
+
+    [Fact]
+    public void Render_ThePasteBlock_ShouldStayFramed()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().MatchRegex(@"pre\.dms-text\s*\{[^}]*border\s*:\s*1px");
     }
 
     [Fact]
@@ -689,29 +715,29 @@ public class PacketHtmlRendererTests
     // ── 8. Photos ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void Render_WhenPhotosPresent_ShouldEmbedThemAsImgTagsWithUrls_NeverBase64()
+    public void Render_WhenPhotosPresent_ShouldRenderATextOnlyAttachedLine_NeverAnImgTag()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        html.Should().Contain("<img");
-        html.Should().Contain("src=\"https://blob/generator.jpg?sas=read\"");
-        html.Should().Contain("generator.jpg");
+        var block = html[Order(html, "section:photos")..Order(html, "section:paste-block")];
+        block.Should().Contain("image generator.jpg attached");
+        block.Should().NotContain("<img");
         html.ToLowerInvariant().Should().NotContain("data:image");
         html.ToLowerInvariant().Should().NotContain("base64");
     }
 
     [Fact]
-    public void Render_ShouldHtmlEncodePhotoUrlsInTheSrcAttribute()
+    public void Render_ShouldHtmlEncodeThePhotoFileNameInTheAttachedLine()
     {
         var packet = FullPacket() with
         {
-            Photos = [new PacketPhoto { Url = "https://blob/x.jpg?a=1&b=2&sig=abc", FileName = "x.jpg" }],
+            Photos = [new PacketPhoto { Url = "https://blob/x.jpg", FileName = "<b>x</b>.jpg" }],
         };
 
         var html = PacketHtmlRenderer.Render(packet);
 
-        html.Should().Contain("a=1&amp;b=2&amp;sig=abc");
-        html.Should().NotContain("a=1&b=2");
+        html.Should().Contain("image &lt;b&gt;x&lt;/b&gt;.jpg attached");
+        html.Should().NotContain("<b>x</b>.jpg");
     }
 
     [Fact]
@@ -722,8 +748,27 @@ public class PacketHtmlRendererTests
         html.Should().NotContain("section:photos");
     }
 
+    // ── Manager-app note for a photo dropped by the ACS size budget (issue #580) ──
+
     [Fact]
-    public void Render_ShouldPageBreakPhotosBeyondTheSixthOntoAnAppendix()
+    public void Render_WhenAManagerAppUrlIsGiven_ShouldAddANoteWithADeepLink()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket(), "https://manager.example/service-requests/sr_1/edit");
+
+        html.Should().Contain("Some images can only be shown in the manager app");
+        html.Should().Contain("href=\"https://manager.example/service-requests/sr_1/edit\"");
+    }
+
+    [Fact]
+    public void Render_WhenNoManagerAppUrlIsGiven_ShouldOmitTheNote()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("Some images can only be shown in the manager app");
+    }
+
+    [Fact]
+    public void Render_WhenManyPhotosPresent_ShouldListEveryOneAsATextLine()
     {
         var photos = Enumerable.Range(1, 8)
             .Select(i => new PacketPhoto { Url = $"https://blob/p{i}.jpg", FileName = $"p{i}.jpg" })
@@ -732,8 +777,10 @@ public class PacketHtmlRendererTests
 
         var html = PacketHtmlRenderer.Render(packet);
 
-        // Spec B-2 item 8: up to 6 on page one, the rest on an appendix page.
-        html.Should().MatchRegex(@"nth-child\(n\s*\+\s*7\)[^}]*break-before\s*:\s*page");
+        foreach (var photo in photos)
+        {
+            html.Should().Contain($"image {photo.FileName} attached");
+        }
     }
 
     // ── 9. Paste block ───────────────────────────────────────────────────

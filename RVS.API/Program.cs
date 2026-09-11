@@ -335,6 +335,9 @@ builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
 // Intake app URL — used to build QR-code / magic-link URLs pointing at the public Intake SPA
 builder.Services.Configure<RVS.API.Options.IntakeUrlOptions>(builder.Configuration.GetSection("Intake"));
 
+// Manager app URL — used to build deep links pointing at the authenticated Manager SPA
+builder.Services.Configure<RVS.API.Options.ManagerAppUrlOptions>(builder.Configuration.GetSection("ManagerApp"));
+
 // VIN Decoder
 if (useMockIntegrations)
 {

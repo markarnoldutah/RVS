@@ -60,6 +60,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
     private readonly INotificationService _notificationService;
     private readonly IPreliminaryAssessmentService _assessmentService;
     private readonly PacketEmailOptions _packetEmailOptions;
+    private readonly ManagerAppUrlOptions _managerAppUrlOptions;
     private readonly ILogger<PacketGenerationService> _logger;
 
     /// <summary>Creates the packet generation orchestrator with its repositories, blob storage, queue, notification transport, and assessment generator.</summary>
@@ -73,6 +74,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         INotificationService notificationService,
         IPreliminaryAssessmentService assessmentService,
         IOptions<PacketEmailOptions> packetEmailOptions,
+        IOptions<ManagerAppUrlOptions> managerAppUrlOptions,
         ILogger<PacketGenerationService> logger)
     {
         _serviceRequestRepository = serviceRequestRepository;
@@ -84,6 +86,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         _notificationService = notificationService;
         _assessmentService = assessmentService;
         _packetEmailOptions = packetEmailOptions.Value;
+        _managerAppUrlOptions = managerAppUrlOptions.Value;
         _logger = logger;
     }
 
@@ -366,18 +369,29 @@ public sealed class PacketGenerationService : IPacketGenerationService
         // 25 MB uploads, so a photo-heavy submission's original photos can exceed the 10 MB
         // request ceiling on their own; before this it failed every attempt and left the shop a
         // request with no packet. The PDF is not the problem (QuestPDF resamples embedded images,
-        // keeping it at roughly 1.5–3 MB) and outranks the photos, which stay visible inline in
-        // the HTML body by SAS URL either way.
+        // keeping it at roughly 1.5–3 MB) and outranks the photos.
         var plainTextBody = PacketEmailComposer.BuildPlainTextBody(packet);
         var fit = PacketEmailSizeFitter.Fit(attachments, html, plainTextBody, _packetEmailOptions.MaxRequestBytes);
 
         if (fit.AnythingDropped)
         {
             _logger.LogWarning(
-                "Packet email for SR {ServiceRequestId} v{PacketVersion} exceeded the {BudgetBytes}-byte ACS budget: attaching {KeptCount} of {CandidateCount} file(s) at ~{EstimatedBytes} bytes, dropping {DroppedFiles}. Dropped photos remain visible inline via their SAS URLs",
+                "Packet email for SR {ServiceRequestId} v{PacketVersion} exceeded the {BudgetBytes}-byte ACS budget: attaching {KeptCount} of {CandidateCount} file(s) at ~{EstimatedBytes} bytes, dropping {DroppedFiles}",
                 request.Id, packetVersion, _packetEmailOptions.MaxRequestBytes,
                 fit.Attachments.Count, attachments.Count, fit.EstimatedRequestBytes,
                 string.Join(", ", fit.Dropped.Select(d => d.FileName)));
+        }
+
+        // A dropped photo attachment is no longer visible inline (issue #580: the HTML body
+        // lists photos by name only, it no longer embeds them by SAS URL) — point the reader
+        // at the Manager app instead of silently losing the photo. Re-rendering after Fit()
+        // costs a few dozen bytes against the budget's 500 KB margin, which is negligible.
+        var droppedAPhoto = fit.Dropped.Any(
+            d => d.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase));
+        if (droppedAPhoto)
+        {
+            var managerAppUrl = $"{_managerAppUrlOptions.BaseUrl.TrimEnd('/')}/service-requests/{request.Id}/edit";
+            html = PacketHtmlRenderer.Render(packet, managerAppUrl);
         }
 
         if (fit.PdfDropped)

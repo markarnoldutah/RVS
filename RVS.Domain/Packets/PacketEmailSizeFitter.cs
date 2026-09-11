@@ -29,11 +29,11 @@ namespace RVS.Domain.Packets;
 /// regression, and the photos that fit are still worth more to the reader than a bare
 /// email.</para>
 ///
-/// <para><b>Nothing is lost.</b> The email body is the packet HTML, which references every
-/// photo by time-limited read SAS URL (<c>#433</c>, <c>Spec X-6</c>), so a recipient still sees
-/// every photo inline even when none is attached — the same blob-plus-SAS pattern Microsoft
-/// recommends for oversized mail. A dropped attachment costs the reader the local copy, not the
-/// picture, and the PDF remains downloadable from the manager app.</para>
+/// <para><b>A dropped photo is still reachable.</b> The packet HTML body lists every photo by
+/// file name (issue <c>#580</c>) but no longer embeds any of them, so a dropped attachment is
+/// no longer visible inline the way it was before that change. When a photo is dropped, the
+/// caller re-renders the body with a note pointing the reader at the Manager app, where the
+/// packet's stored photos remain reachable; the PDF remains downloadable there too.</para>
 ///
 /// <para>A pure transform: it reads only its arguments, mutates nothing, and returns the same
 /// result for the same input. An oversized input is the case it exists to handle, so it is not
