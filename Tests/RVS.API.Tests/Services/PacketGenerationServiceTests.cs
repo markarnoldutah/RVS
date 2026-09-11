@@ -34,7 +34,18 @@ public class PacketGenerationServiceTests
     private readonly Mock<IPacketGenerationQueue> _queueMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
     private readonly Mock<INotificationService> _notificationMock = new();
+    private readonly Mock<IPreliminaryAssessmentService> _assessmentMock = new();
     private readonly PacketGenerationService _sut;
+
+    private static PreliminaryAssessmentEmbedded GeneratedAssessment() => new()
+    {
+        ProbableCause = "Slide motor stalled under load.",
+        PossibleFixes = ["Check the slide fuse and battery voltage", "Replace the slide motor"],
+        LikelyParts = ["Slide-out motor"],
+        Confidence = "medium",
+        Provider = "AzureOpenAiPreliminaryAssessmentService",
+        GeneratedAtUtc = DateTime.UtcNow,
+    };
 
     public PacketGenerationServiceTests()
     {
@@ -55,6 +66,9 @@ public class PacketGenerationServiceTests
 
         _userContextMock.SetupGet(u => u.UserId).Returns("user_manager_7");
 
+        _assessmentMock.Setup(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GeneratedAssessment);
+
         _sut = new PacketGenerationService(
             _srRepoMock.Object,
             _locationRepoMock.Object,
@@ -63,6 +77,7 @@ public class PacketGenerationServiceTests
             _queueMock.Object,
             _userContextMock.Object,
             _notificationMock.Object,
+            _assessmentMock.Object,
             // Zero backoff so retry tests do not actually wait.
             Microsoft.Extensions.Options.Options.Create(new PacketEmailOptions { RetryBaseDelay = TimeSpan.Zero }),
             Mock.Of<ILogger<PacketGenerationService>>());
@@ -244,6 +259,85 @@ public class PacketGenerationServiceTests
 
         outcome.Should().Be(PacketGenerationOutcome.Succeeded);
         sr.PacketGeneration.Status.Should().Be("Succeeded");
+    }
+
+    // ── Structured preliminary assessment (issue #507) ─────────────────────
+
+    [Fact]
+    public async Task GenerateAsync_WhenNoAssessmentStored_ShouldGenerateOneAndPersistItOnTheRequest()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        PreliminaryAssessmentEmbedded? persisted = null;
+        _srRepoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest s, CancellationToken _) =>
+            {
+                persisted = s.PreliminaryAssessment;
+                return s;
+            });
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        _assessmentMock.Verify(a => a.AssessAsync(sr, It.IsAny<CancellationToken>()), Times.Once);
+        persisted.Should().NotBeNull();
+        persisted!.ProbableCause.Should().Be("Slide motor stalled under load.");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenAssessmentAlreadyStored_ShouldReuseIt_AndNotCallTheGeneratorAgain()
+    {
+        var stored = GeneratedAssessment();
+        stored.ProbableCause = "Stored cause from the first generation.";
+        var sr = BuildRequest();
+        sr.PreliminaryAssessment = stored;
+        SetupRequest(sr);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        _assessmentMock.Verify(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        sr.PreliminaryAssessment.Should().BeSameAs(stored);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheAssessmentGeneratorThrows_ShouldStillGenerateThePacket()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _assessmentMock.Setup(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("assessment blew up"));
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        sr.PacketGeneration.Status.Should().Be("Succeeded");
+        sr.PreliminaryAssessment.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldRenderTheAssessmentIntoThePreliminaryAssessmentOfTheEmailedPacket()
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sent.Should().NotBeNull();
+        var html = sent!.HtmlBody;
+        var start = html.IndexOf("section:ai-summary", StringComparison.Ordinal);
+        var end = html.IndexOf("section:description", StringComparison.Ordinal);
+        start.Should().BeGreaterThanOrEqualTo(0);
+        var block = html[start..end];
+        block.Should().Contain("Probable cause: <span>Slide motor stalled under load.</span>");
+        block.Should().Contain("<li>Check the slide fuse and battery voltage</li>");
+        block.Should().Contain("<li>Replace the slide motor</li>");
+        block.Should().Contain("<li>Slide-out motor</li>");
     }
 
     // ── Waiting for in-flight intake uploads (issue #516) ──────────────────
@@ -829,6 +923,7 @@ public class PacketGenerationServiceTests
             _queueMock.Object,
             _userContextMock.Object,
             _notificationMock.Object,
+            _assessmentMock.Object,
             Microsoft.Extensions.Options.Options.Create(new PacketEmailOptions
             {
                 RetryBaseDelay = TimeSpan.Zero,

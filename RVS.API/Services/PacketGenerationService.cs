@@ -58,10 +58,11 @@ public sealed class PacketGenerationService : IPacketGenerationService
     private readonly IPacketGenerationQueue _queue;
     private readonly IUserContextAccessor _userContext;
     private readonly INotificationService _notificationService;
+    private readonly IPreliminaryAssessmentService _assessmentService;
     private readonly PacketEmailOptions _packetEmailOptions;
     private readonly ILogger<PacketGenerationService> _logger;
 
-    /// <summary>Creates the packet generation orchestrator with its repositories, blob storage, queue, and notification transport.</summary>
+    /// <summary>Creates the packet generation orchestrator with its repositories, blob storage, queue, notification transport, and assessment generator.</summary>
     public PacketGenerationService(
         IServiceRequestRepository serviceRequestRepository,
         ILocationRepository locationRepository,
@@ -70,6 +71,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         IPacketGenerationQueue queue,
         IUserContextAccessor userContext,
         INotificationService notificationService,
+        IPreliminaryAssessmentService assessmentService,
         IOptions<PacketEmailOptions> packetEmailOptions,
         ILogger<PacketGenerationService> logger)
     {
@@ -80,6 +82,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         _queue = queue;
         _userContext = userContext;
         _notificationService = notificationService;
+        _assessmentService = assessmentService;
         _packetEmailOptions = packetEmailOptions.Value;
         _logger = logger;
     }
@@ -116,6 +119,8 @@ public sealed class PacketGenerationService : IPacketGenerationService
             var location = await _locationRepository.GetByIdAsync(tenantId, request.LocationId, cancellationToken);
 
             var photoUrls = await _photoUrlResolver.ResolveAsync(request, cancellationToken);
+
+            await EnsurePreliminaryAssessmentAsync(request, cancellationToken);
 
             var pasteBlockCap = location?.PacketConfig.PasteBlockCharacterCap
                 ?? PacketConfigEmbedded.DefaultPasteBlockCharacterCap;
@@ -211,6 +216,32 @@ public sealed class PacketGenerationService : IPacketGenerationService
         {
             _logger.LogWarning(
                 "Packet regeneration for SR {ServiceRequestId} could not be enqueued; it stays Pending and will need another regenerate request",
+                request.Id);
+        }
+    }
+
+    /// <summary>
+    /// Generates the structured preliminary assessment the first time a packet is built and
+    /// stores it on <paramref name="request"/>, persisted by the attempt's next save (issue #507).
+    /// A regeneration reuses the stored result, so the packet's content stays stable and the
+    /// model is called once per request. The assessment is advisory: an unexpected failure is
+    /// logged and the packet renders without it rather than costing a generation attempt.
+    /// </summary>
+    private async Task EnsurePreliminaryAssessmentAsync(ServiceRequest request, CancellationToken cancellationToken)
+    {
+        if (request.PreliminaryAssessment is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            request.PreliminaryAssessment = await _assessmentService.AssessAsync(request, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Preliminary assessment failed for SR {ServiceRequestId}; the packet renders without it",
                 request.Id);
         }
     }

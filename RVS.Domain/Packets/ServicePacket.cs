@@ -138,10 +138,32 @@ public sealed record PacketDiagnosticEntry
     public required IReadOnlyList<string> Answers { get; init; }
 }
 
-/// <summary>The AI-generated summary. The label is not optional (<c>Spec B-2</c> item 7).</summary>
+/// <summary>
+/// The Preliminary assessment block, labelled AI-generated (<c>Spec B-2</c> item 5): the summary
+/// text plus, when one was offered, the structured assessment (issue #507).
+/// </summary>
 public sealed record PacketAiSummary
 {
-    public required string Text { get; init; }
+    /// <summary>Shown under a structured assessment so it reads as advisory, not a diagnosis.</summary>
+    public const string AdvisoryNote =
+        "Advisory only. Possible causes and fixes to confirm on inspection, not a diagnosis.";
+
+    /// <summary>The summary paragraph. <c>null</c> when only a structured assessment exists.</summary>
+    public string? Text { get; init; }
+
+    public string? ProbableCause { get; init; }
+
+    /// <summary>Plausible fixes, most plausible first. Never presented as recommended.</summary>
+    public IReadOnlyList<string> PossibleFixes { get; init; } = [];
+
+    public IReadOnlyList<string> LikelyParts { get; init; } = [];
+
+    /// <summary>Display label (<c>High</c> / <c>Medium</c> / <c>Low</c>); <c>null</c> without a structured assessment.</summary>
+    public string? Confidence { get; init; }
+
+    /// <summary><c>true</c> when any structured field is present.</summary>
+    public bool HasStructuredAssessment =>
+        ProbableCause is not null || PossibleFixes.Count > 0 || LikelyParts.Count > 0;
 
     /// <summary>Always <c>true</c> — this block is presented as AI-generated.</summary>
     public bool IsAiGenerated => true;

@@ -556,6 +556,136 @@ public class PacketHtmlRendererTests
         html.Should().NotContain("section:ai-summary");
     }
 
+    // ── 5a. Structured preliminary assessment (issue #507) ────────────────
+
+    private static ServicePacket AssessedPacket() => FullPacket() with
+    {
+        AiSummary = new PacketAiSummary
+        {
+            Text = "Likely overheating on the generator windings.",
+            ProbableCause = "Overheating from a clogged generator air intake.",
+            PossibleFixes = ["Clear the air intake and cooling fins", "Replace the high-temp shutdown switch"],
+            LikelyParts = ["Air filter", "High-temp shutdown switch"],
+            Confidence = "Medium",
+        },
+    };
+
+    private static string AssessmentBlock(string html) =>
+        html[Order(html, "section:ai-summary")..Order(html, "section:description")];
+
+    [Fact]
+    public void Render_WhenAssessmentPresent_ShouldRenderProbableCauseAndConfidenceInThePreliminaryAssessment()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()));
+
+        block.Should().Contain("Preliminary assessment");
+        block.Should().Contain("Probable cause: <span>Overheating from a clogged generator air intake.</span>");
+        block.Should().Contain("Confidence: <span>Medium</span>");
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentPresent_ShouldRenderPossibleFixesAsAnOrderedList_InOrder()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()));
+
+        block.Should().Contain("Possible fixes");
+        block.Should().Contain("<ol class=\"possible-fixes\"");
+        Order(block, "<li>Clear the air intake and cooling fins</li>")
+            .Should().BeLessThan(Order(block, "<li>Replace the high-temp shutdown switch</li>"));
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentPresent_ShouldRenderLikelyPartsAsAList()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()));
+
+        block.Should().Contain("Likely parts");
+        block.Should().Contain("<ul class=\"likely-parts\"");
+        block.Should().Contain("<li>Air filter</li>");
+        block.Should().Contain("<li>High-temp shutdown switch</li>");
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentPresent_ShouldCarryTheAdvisoryNote()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()));
+
+        block.Should().Contain(System.Net.WebUtility.HtmlEncode(PacketAiSummary.AdvisoryNote));
+    }
+
+    [Fact]
+    public void Render_ShouldNeverPresentAFixAsRecommended()
+    {
+        var html = PacketHtmlRenderer.Render(AssessedPacket());
+
+        html.ToLowerInvariant().Should().NotContain("recommended");
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentHasNoPartsOrFixes_ShouldOmitThoseListsEntirely()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = AssessedPacket().AiSummary! with { PossibleFixes = [], LikelyParts = [] },
+        };
+
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(packet));
+
+        block.Should().Contain("Probable cause:");
+        block.Should().NotContain("Possible fixes");
+        block.Should().NotContain("Likely parts");
+    }
+
+    [Fact]
+    public void Render_WhenNoStructuredAssessment_ShouldRenderOnlyTheSummaryText_WithNoAdvisoryNote()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(FullPacket()));
+
+        block.Should().Contain("Likely overheating on the generator windings.");
+        block.Should().NotContain("Probable cause");
+        block.Should().NotContain("Possible fixes");
+        block.Should().NotContain("Likely parts");
+        block.Should().NotContain("Confidence");
+        block.Should().NotContain(System.Net.WebUtility.HtmlEncode(PacketAiSummary.AdvisoryNote));
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentPresentWithoutSummaryText_ShouldRenderTheAssessmentWithoutAnEmptyParagraph()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = AssessedPacket().AiSummary! with { Text = null },
+        };
+
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(packet));
+
+        block.Should().Contain("Probable cause:");
+        block.Should().NotContain("<p></p>");
+        block.Should().NotContain("Likely overheating on the generator windings.");
+    }
+
+    [Fact]
+    public void Render_ShouldHtmlEncodeEveryAssessmentValue()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = new PacketAiSummary
+            {
+                ProbableCause = "<script>cause</script>",
+                PossibleFixes = ["<b>fix</b>"],
+                LikelyParts = ["\"part\" & <i>more</i>"],
+                Confidence = "Low",
+            },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("<script>cause</script>");
+        html.Should().NotContain("<b>fix</b>");
+        html.Should().NotContain("<i>more</i>");
+        html.Should().Contain("&lt;script&gt;cause&lt;/script&gt;");
+    }
+
     // ── 8. Photos ─────────────────────────────────────────────────────────
 
     [Fact]

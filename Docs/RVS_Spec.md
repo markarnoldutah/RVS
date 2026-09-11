@@ -52,7 +52,7 @@ One page, in this order:
 2. Customer — name, phone, email, preferred contact. Preferred contact is one of `Phone` / `Text` / `Email`, required at intake; it is omitted from the packet only for requests created before it was captured
 3. Location, submission timestamp, short reference code. The reference code is the first hyphen-delimited segment of the service request id, upper-cased (e.g. `A1B2C3D4`) — deterministic, stable across regenerations, no stored field or counter
 4. Issue category
-5. AI summary, labeled as AI-generated — placed here so the service manager reads the concise recreation of the problem first
+5. AI summary, labeled as AI-generated — placed here so the service manager reads the concise recreation of the problem first. Headed **Preliminary assessment**, it also carries, when the model will offer one, a probable cause, a confidence (high / medium / low), **possible fixes** — plural and ordered most plausible first, never a single "recommended" fix, because the unit has not been inspected — and likely parts as generic names (never part numbers or prices). Advisory only, and says so. When the information is too thin the model abstains and only the summary renders. Generated once in the packet pipeline, not on the intake path, and reused on regeneration; a rule-based per-category fallback (low confidence) covers an unavailable model
 6. **The customer's description, verbatim**
 7. **Diagnostic Q&A**
 8. Photo thumbnails, up to 6 on page one, rest on an appendix page
