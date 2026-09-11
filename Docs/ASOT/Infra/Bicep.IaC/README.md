@@ -132,10 +132,37 @@ thing it does not do is *register* the apex with the SWA: Azure mints the
 ownership token at registration time, so that is a one-time step you do by
 hand after the first deploy (step 2). Redeploys never touch it.
 
-Prerequisites, all already true for this subscription as of 2026-09-10:
-the six resource groups exist (`rg-scaffold.bicep`), both DNS zones exist in
-`rg-rvs-prod-westus3`, and both apex domains are delegated to Azure DNS at
-the registrar (`dig NS rvintake.com` → `ns1-08.azure-dns.com` …).
+Prerequisites: the six resource groups exist (`rg-scaffold.bicep`). The two
+DNS zones and the registrar delegation onto them are **not** prerequisites —
+`deployDns = true` in `prod.bicepparam` creates both zones (idempotent, safe
+to redeploy), but Azure DNS only becomes authoritative once the registrar's
+NS records point at the four nameservers Azure assigned the zone. Until that
+delegation happens, the zone exists in Azure but the domain resolves nowhere
+(`dig +short rvintake.com` returns nothing) — this was the actual state of
+`rvintake.com` as of the G7 pilot-readiness check (`#535`): the domain was
+held but had zero DNS recorded, registrar delegation included. Verify before
+assuming either zone is live:
+
+```bash
+dig NS rvintake.com +short          # expect ns1-XX.azure-dns.com. (x4)
+dig NS rvserviceflow.com +short     # same check for the Manager zone
+```
+
+If that returns nothing (or your registrar's default parking nameservers),
+delegate before continuing:
+
+1. Deploy (or re-run) the template once so the zones exist — the outputs
+   `dnsIntakeNameServers` / `dnsManagerNameServers` list the four Azure-
+   assigned nameservers for each zone (also visible via
+   `az network dns zone show -g rg-rvs-prod-westus3 -n rvintake.com --query nameServers`).
+2. At the domain registrar for each domain, replace the NS records with
+   those four values.
+3. Wait for propagation (minutes to a few hours depending on the registrar
+   and the previous NS TTL), then re-run the `dig NS` check above until it
+   shows the `azure-dns.com` nameservers.
+
+Only once both zones show Azure's nameservers will the ALIAS/CNAME records
+Bicep writes actually resolve for anyone outside Azure.
 
 **Step 0 — pre-flight (read-only).** See the change set before you commit
 to it. On a first bring-up expect a wall of `Create`; on a redeploy expect
