@@ -58,6 +58,18 @@ param opsAlertEmailReceivers = []
 // Communication Services (Email + SMS)
 param deployAcs = true
 
+// Custom sending subdomain for staging (#532) — on staging's own ACS resource,
+// never prod's. ACS tracks failures, the suppression list and send quota per
+// resource and domain, and staging fails many sends (seeded recipients are
+// .example.com), so sharing prod's would spend prod's bounce budget while it
+// warms. A sibling of mail.rvintake.com, not a child of it. Replaces the
+// Azure-managed *.azurecomm.net domain (10/hour, not raisable, lands in Junk).
+// Manual follow-up is verification only — no quota request, no warming:
+// README "Communication Services — Email". Keep staging recipients to
+// mailboxes we control; that is what keeps rvintake.com's reputation clean.
+param acsCustomEmailDomain = 'mail.staging.rvintake.com'
+param dmarcReportingAddress = 'dmarc-reports@rvserviceflow.com'
+
 // Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
 param deploySwa = true
 param swaLocation = 'westus2'

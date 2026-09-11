@@ -444,9 +444,10 @@ az communication email domain show \
   --query '{state:properties.provisioningState, verification:properties.verificationStates}' -o json
 
 # (b) Read back the real sender domain and confirm the deployed app setting
-#     matches DoNotReply@<domain>:
+#     matches DoNotReply@<domain>. Staging and prod send From their custom domain
+#     (#532); use --domain-name AzureManagedDomain for an env without one:
 az communication email domain show \
-  --domain-name AzureManagedDomain \
+  --domain-name mail.staging.rvintake.com \
   --email-service-name acs-rvs-notify-staging-wus3-s01-001-email \
   --resource-group rg-rvs-staging-westus3 \
   --query 'properties.fromSenderDomain' -o tsv
@@ -454,14 +455,23 @@ az webapp config appsettings list \
   --name app-rvs-api-staging-wus3 --resource-group rg-rvs-staging-westus3 \
   --query "[?name=='AzureCommunicationServices__Email__FromAddress'].value" -o tsv
 
-# (c) ACS email send quota + custom sending domain — issue #532.
-#     STAGING sends from the Azure-managed domain (domainManagement: 'AzureManaged'),
-#     which Microsoft limits to 5 emails/min and 10 emails/hour — NOT raisable.
-#     PROD is deployed with acsCustomEmailDomain = 'mail.rvintake.com': Bicep
-#     provisions a CustomerManaged domain and writes its SPF (-all) / DKIM / DKIM2 /
-#     domain-ownership records + a DMARC p=none record into the rvintake.com zone.
-#     The steps below (prod names) are the data-plane work Bicep cannot do — the
-#     `acsCustomDomainAction` deployment output repeats the summary.
+# (c) ACS email send quota + custom sending domains — issue #532.
+#     Both environments set acsCustomEmailDomain, each on its OWN ACS resource:
+#       STAGING → mail.staging.rvintake.com     PROD → mail.rvintake.com
+#     Bicep provisions a CustomerManaged domain and writes its SPF (-all) / DKIM /
+#     DKIM2 / domain-ownership records + a DMARC p=none record into the rvintake.com
+#     zone. The Azure-managed domain stays linked as a fallback only (5 emails/min,
+#     10/hour — NOT raisable). The steps below (prod names) are the data-plane work
+#     Bicep cannot do — the `acsCustomDomainAction` deployment output repeats the
+#     summary.
+#
+#     STAGING runs steps 1–3 only — no quota request (the default 100/hour covers
+#     testing) and no warming — with the domain mail.staging.rvintake.com, DMARC host
+#     _dmarc.mail.staging.rvintake.com, and:
+#       ACS_EMAIL_SVC=acs-rvs-notify-staging-wus3-s01-001-email
+#       ACS_RG=rg-rvs-staging-westus3
+#     The rvintake.com zone lives in rg-rvs-prod-westus3 in both cases — use that RG
+#     for the `az network dns record-set list` in step 1.
 #
 #     ACS_EMAIL_SVC=acs-rvs-notify-prod-wus3-s01-001-email   # <acs>-email
 #     ACS_RG=rg-rvs-prod-westus3

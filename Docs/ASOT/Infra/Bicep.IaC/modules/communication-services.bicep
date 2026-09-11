@@ -6,8 +6,8 @@
 // the ACS resource; phone numbers are provisioned via the
 // Azure portal (not Bicep) for the MVP.
 //
-// When `customDomainName` is set (prod — e.g. mail.rvintake.com,
-// issue #532) a second, CustomerManaged domain is provisioned
+// When `customDomainName` is set (staging — mail.staging.rvintake.com;
+// prod — mail.rvintake.com; issue #532) a second, CustomerManaged domain is provisioned
 // alongside the Azure-managed one and linked to the account. The
 // Azure-managed *.azurecomm.net domain caps at 10 emails/hour with
 // no support path to raise it; a verified custom sending subdomain
@@ -88,8 +88,8 @@ resource emailService 'Microsoft.Communication/emailServices@2023-04-01' = {
 
 // ── Azure-Managed Email Domain ────────────────────────────────
 // The built-in Azure-managed domain (<guid>.azurecomm.net). Always
-// created — it is the only domain in staging, and a From-address
-// fallback in prod. Microsoft caps it at 5 emails/min, 10/hour with
+// created — a From-address fallback wherever a custom domain is linked
+// (staging, prod), and the only domain in an env without one. Microsoft caps it at 5 emails/min, 10/hour with
 // no support path to raise it (#521).
 
 #disable-next-line use-recent-api-versions
@@ -105,7 +105,8 @@ resource azureManagedDomain 'Microsoft.Communication/emailServices/domains@2023-
 }
 
 // ── Custom (CustomerManaged) Sending Domain — #532 ────────────
-// Provisioned in prod as mail.rvintake.com. On creation ACS returns
+// Provisioned as mail.rvintake.com in prod and mail.staging.rvintake.com
+// in staging, each on its own ACS resource. On creation ACS returns
 // `verificationRecords` (Domain + SPF as TXT, DKIM + DKIM2 as CNAME) —
 // deterministic from the domain name and region, available before
 // verification is initiated. main.bicep writes them into the Intake

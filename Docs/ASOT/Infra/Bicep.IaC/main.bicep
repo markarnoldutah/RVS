@@ -72,7 +72,7 @@ param deployAcs bool = false
 @description('ACS data residency location.')
 param acsDataLocation string = 'United States'
 
-@description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in prod params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the quota-increase request out of band — README "Deploy Production" step 4. (#532)')
+@description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in staging (mail.staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the quota-increase request out of band — README "Deploy Production" step 4. (#532)')
 param acsCustomEmailDomain string = ''
 
 @description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. (#532)')
@@ -492,7 +492,7 @@ module communicationServices 'modules/communication-services.bicep' = if (deploy
 }
 
 // ── ACS custom sending domain — derived values (#532) ─────────
-// True only in prod, where acsCustomEmailDomain is set to mail.rvintake.com.
+// True in staging (mail.staging.rvintake.com) and prod (mail.rvintake.com).
 var acsCustomDomainOn = deployAcs && !empty(acsCustomEmailDomain)
 
 // Packet-email From address: the custom verified subdomain when configured,
@@ -515,7 +515,8 @@ var acsCustomDomainCnameRecords = acsCustomDomainOn ? communicationServices.outp
 // DMARC is authored here (not taken from ACS) so we control the policy and the
 // reporting address: p=none surfaces failures without dropping mail while the
 // domain warms. Host is the sending subdomain's label(s) under the zone —
-// 'mail' for mail.rvintake.com in zone rvintake.com — prefixed with _dmarc.
+// 'mail' for mail.rvintake.com, 'mail.staging' for mail.staging.rvintake.com,
+// in zone rvintake.com — prefixed with _dmarc.
 var acsCustomDomainDmarcRecord = {
   name: '_dmarc.${replace(acsCustomEmailDomain, '.${intakeZoneName}', '')}'
   values: [ 'v=DMARC1; p=none; rua=mailto:${dmarcReportingAddress}; adkim=r; aspf=r' ]
@@ -657,9 +658,11 @@ module dnsManager 'modules/dns.bicep' = if (deploySwa && deployDns) {
 //           Production". Incremental deploys leave them alone thereafter.
 
 // The Intake zone also carries the ACS custom-sending-domain records
-// (SPF/DKIM/DMARC for mail.rvintake.com) when acsCustomEmailDomain is set — see
-// "ACS custom sending domain — derived values (#532)" above. Non-prod leaves
-// acsCustomDomain* empty, so this is a no-op there.
+// (SPF/DKIM/DMARC for mail.rvintake.com in prod, mail.staging.rvintake.com in
+// staging) when acsCustomEmailDomain is set — see "ACS custom sending domain —
+// derived values (#532)" above. The two use distinct record names, so neither
+// environment's deploy touches the other's. An env without acsCustomEmailDomain
+// leaves acsCustomDomain* empty, so this is a no-op there.
 module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
   name: 'deploy-dns-intake-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
