@@ -26,6 +26,7 @@ public class PacketGenerationServiceTests
     private const string TenantId = "ten_acme";
     private const string SrId = "a1b2c3d4-1111-2222-3333-444455556666";
     private const string AttachmentsContainer = "rvs-attachments";
+    private const string ManagerAppBaseUrl = "https://manager.test";
 
     private readonly Mock<IServiceRequestRepository> _srRepoMock = new();
     private readonly Mock<ILocationRepository> _locationRepoMock = new();
@@ -80,6 +81,7 @@ public class PacketGenerationServiceTests
             _assessmentMock.Object,
             // Zero backoff so retry tests do not actually wait.
             Microsoft.Extensions.Options.Options.Create(new PacketEmailOptions { RetryBaseDelay = TimeSpan.Zero }),
+            Microsoft.Extensions.Options.Options.Create(new ManagerAppUrlOptions { BaseUrl = ManagerAppBaseUrl }),
             Mock.Of<ILogger<PacketGenerationService>>());
     }
 
@@ -929,6 +931,7 @@ public class PacketGenerationServiceTests
                 RetryBaseDelay = TimeSpan.Zero,
                 MaxRequestBytes = maxRequestBytes,
             }),
+            Microsoft.Extensions.Options.Options.Create(new ManagerAppUrlOptions { BaseUrl = ManagerAppBaseUrl }),
             Mock.Of<ILogger<PacketGenerationService>>());
 
     /// <summary>
@@ -1020,8 +1023,8 @@ public class PacketGenerationServiceTests
     [Fact]
     public async Task GenerateAsync_WhenEvenThePdfCannotFitTheEmailBudget_ShouldSendABodyOnlyEmail()
     {
-        // A budget below the HTML body itself: nothing can be attached, but the packet HTML is
-        // the email body and still carries every photo by SAS URL, so the send is worth making.
+        // A budget below the HTML body itself: nothing can be attached, but the packet HTML
+        // body is still worth sending on its own.
         var sut = BuildSutWithEmailBudget(1_000);
 
         var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 50_000, out var sr);
@@ -1030,6 +1033,33 @@ public class PacketGenerationServiceTests
         sent.Should().NotBeNull();
         sent!.Attachments.Should().BeEmpty();
         sr.PacketEmailDelivery.Status.Should().Be("Delivered");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenAPhotoIsDroppedByTheEmailBudget_ShouldAddAManagerAppLinkNoteToTheBody()
+    {
+        // Issue #580: photos are no longer embedded by SAS URL in the HTML body, so a dropped
+        // photo attachment needs a pointer to where it can still be seen.
+        var sut = BuildSutWithEmailBudget(200_000);
+
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 500_000, out var sr);
+
+        await Task.CompletedTask;
+        sent.Should().NotBeNull();
+        sent!.HtmlBody.Should().Contain("Some images can only be shown in the manager app");
+        sent.HtmlBody.Should().Contain($"{ManagerAppBaseUrl}/service-requests/{sr.Id}/edit");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenEverythingFitsTheEmailBudget_ShouldNotAddAManagerAppLinkNote()
+    {
+        var sut = BuildSutWithEmailBudget(PacketEmailSizeFitter.DefaultMaxRequestBytes);
+
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 50_000, out _);
+
+        await Task.CompletedTask;
+        sent.Should().NotBeNull();
+        sent!.HtmlBody.Should().NotContain("Some images can only be shown in the manager app");
     }
 
     [Fact]

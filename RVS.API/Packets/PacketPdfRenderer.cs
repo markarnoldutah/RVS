@@ -153,14 +153,12 @@ public static class PacketPdfRenderer
                 });
             });
 
-            // Customer name, family-name-first, above the unit descriptor headline.
-            if (layout.CustomerHeadline is not null)
-            {
-                col.Item().PaddingTop(2f).Text(layout.CustomerHeadline).SemiBold().FontSize(11f);
-            }
-
-            // Unit descriptor headline.
-            col.Item().PaddingTop(2f).Text(unit.Heading).SemiBold().FontSize(15f);
+            // Title line: customer name (family-name-first) and unit descriptor on one line,
+            // same size, bold (issue #580) — e.g. "Gribble, Dale : 2021 Winnebago View".
+            var titleLine = layout.CustomerHeadline is null
+                ? unit.Heading
+                : $"{layout.CustomerHeadline} : {unit.Heading}";
+            col.Item().PaddingTop(2f).Text(titleLine).Bold().FontSize(13f);
 
             // Three-column identity band: Customer | Location | Unit.
             col.Item().PaddingTop(2f).Row(row =>
@@ -245,15 +243,7 @@ public static class PacketPdfRenderer
         PacketPdfLayoutSection section,
         IReadOnlyDictionary<string, byte[]> images)
     {
-        if (section.Emphasised)
-        {
-            // The diagnostic block: the heaviest frame on the page, legible in greyscale.
-            column.Item().Border(2f).Padding(10f).Column(inner => RenderSectionBody(inner, section, images));
-        }
-        else
-        {
-            column.Item().Column(inner => RenderSectionBody(inner, section, images));
-        }
+        column.Item().Column(inner => RenderSectionBody(inner, section, images));
     }
 
     private static void RenderSectionBody(
@@ -266,7 +256,7 @@ public static class PacketPdfRenderer
         column.Item().Row(row =>
         {
             row.Spacing(6f);
-            row.RelativeItem().Text(section.Heading).SemiBold().FontSize(11f);
+            row.RelativeItem().Text(section.Heading).Bold().FontSize(11f);
 
             if (section.AiGeneratedTag)
             {
@@ -321,7 +311,14 @@ public static class PacketPdfRenderer
 
         if (section.Verbatim is not null)
         {
-            column.Item().Border(1f).Padding(8f).Text(section.Verbatim);
+            if (section.Framed)
+            {
+                column.Item().Border(1f).Padding(8f).Text(section.Verbatim);
+            }
+            else
+            {
+                column.Item().Text(section.Verbatim);
+            }
         }
 
         if (section.DiagnosticsEmpty)
@@ -376,7 +373,8 @@ public static class PacketPdfRenderer
         {
             // Spec B-2 item 8: up to six thumbnails on page one, the rest on an appendix page.
             column.Item().PageBreak();
-            column.Item().PaddingBottom(4f).Text("Photos (continued)").SemiBold().FontSize(11f);
+            column.Item().Text("Photos (continued)").Bold().FontSize(11f);
+            column.Item().PaddingBottom(2f).LineHorizontal(1f);
             column.Item().Element(container => RenderPhotoGrid(container, appendix, images));
         }
     }

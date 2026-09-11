@@ -11,10 +11,10 @@ namespace RVS.Domain.Packets;
 ///
 /// It is a pure transform: string in, string out. It reads the composed
 /// <see cref="ServicePacket"/> in <c>Spec B-2</c> order and never inspects a
-/// <c>ServiceRequest</c>. It performs no I/O: photos are referenced by the time-limited
-/// URLs already resolved on the packet, never base64. The only embedded asset is the
-/// optional masthead logo, supplied pre-encoded as a <c>data:</c> URI on
-/// <see cref="PacketBranding"/>.
+/// <c>ServiceRequest</c>. It performs no I/O. Photos are listed by file name only, never
+/// embedded — they travel as the email's own attachments, which mail clients already show as
+/// clickable thumbnails (issue <c>#580</c>). The only embedded asset is the optional masthead
+/// logo, supplied pre-encoded as a <c>data:</c> URI on <see cref="PacketBranding"/>.
 ///
 /// Layout follows the Integrated Dealer Systems (IDS) work-order idiom so a service
 /// manager reads it on daily muscle memory: a right-aligned tracking number in the
@@ -46,7 +46,15 @@ public static class PacketHtmlRenderer
     /// <summary>
     /// Renders <paramref name="packet"/> to a complete HTML5 document string.
     /// </summary>
-    public static string Render(ServicePacket packet)
+    /// <param name="packet">The composed packet.</param>
+    /// <param name="managerAppServiceRequestUrl">
+    /// When non-blank, a deep link into the Manager app for this service request, shown as a
+    /// note under the photo list: some photos could not be attached to the email (the ACS size
+    /// budget, <c>PacketEmailSizeFitter</c>, issue <c>#521</c>) and are visible only there.
+    /// <c>null</c> — the default — omits the note; pass it only when the caller has already
+    /// determined that at least one photo attachment was dropped (issue <c>#580</c>).
+    /// </param>
+    public static string Render(ServicePacket packet, string? managerAppServiceRequestUrl = null)
     {
         ArgumentNullException.ThrowIfNull(packet);
 
@@ -75,7 +83,7 @@ public static class PacketHtmlRenderer
         AppendAiSummary(sb, packet.AiSummary);
         AppendDescription(sb, packet.IssueDescription);
         AppendDiagnostics(sb, packet.Diagnostics);
-        AppendPhotos(sb, packet.Photos);
+        AppendPhotos(sb, packet.Photos, managerAppServiceRequestUrl);
         AppendPasteBlock(sb, packet.PasteBlock);
         AppendStatusLink(sb, packet.StatusLink);
         AppendFooter(sb, packet.Origin.ReferenceCode, submittedUtc, brandName);
@@ -129,24 +137,16 @@ public static class PacketHtmlRenderer
         sb.Append("<p class=\"received\" style=\"margin:0.5mm 0 0;font-size:9pt;\">Received: ").Append(Text(submittedUtc)).Append("</p>\n");
         sb.Append("</td>\n</tr>\n</table>\n");
 
-        // Customer name, family-name-first, above the unit descriptor headline
-        // (mirrors the ServiceRequestDetail title).
+        // Title line: customer name (family-name-first) and unit descriptor on one line,
+        // same size, bold (issue #580) — e.g. "Gribble, Dale : 2021 Winnebago View".
         var sortableName = customer.SortableName;
-        if (!string.IsNullOrWhiteSpace(sortableName))
-        {
-            sb.Append("<p class=\"customer-headline\" style=\"font-size:11.5pt;font-weight:700;margin:3mm 0 0;\">")
-                .Append(Text(sortableName)).Append("</p>\n");
-        }
-
-        // Unit descriptor headline — useful in a cold inbox; IDS omits it only because the
-        // DMS screen already shows the unit.
         var descriptor = string.Join(
             ' ',
             new[] { unit.Year?.ToString(CultureInfo.InvariantCulture), unit.Make, unit.Model }
                 .Where(part => !string.IsNullOrWhiteSpace(part)));
-        sb.Append("<h1>")
-            .Append(string.IsNullOrWhiteSpace(descriptor) ? "Unit details not provided" : Text(descriptor))
-            .Append("</h1>\n");
+        var descriptorText = string.IsNullOrWhiteSpace(descriptor) ? "Unit details not provided" : descriptor;
+        var titleLine = string.IsNullOrWhiteSpace(sortableName) ? descriptorText : $"{sortableName} : {descriptorText}";
+        sb.Append("<p class=\"packet-title\">").Append(Text(titleLine)).Append("</p>\n");
 
         // Three-column identity band — a presentational <table>, never CSS grid (same
         // email-client reason as the masthead top). Each column carries its width and top
@@ -302,7 +302,7 @@ public static class PacketHtmlRenderer
 
     // ── 8. Photos ─────────────────────────────────────────────────────────
 
-    private static void AppendPhotos(StringBuilder sb, IReadOnlyList<PacketPhoto> photos)
+    private static void AppendPhotos(StringBuilder sb, IReadOnlyList<PacketPhoto> photos, string? managerAppServiceRequestUrl)
     {
         var renderable = photos.Where(p => IsHttpUrl(p.Url)).ToList();
         if (renderable.Count == 0)
@@ -313,22 +313,23 @@ public static class PacketHtmlRenderer
         sb.Append("<!-- section:photos -->\n");
         sb.Append("<section class=\"photos\">\n");
         sb.Append("<h2>Photos</h2>\n");
-        sb.Append("<div class=\"photo-grid\">\n");
+        // Text only: the photos are sent as email attachments, which the mail client
+        // already shows as clickable thumbnails, so no <img> is embedded here (issue #580).
         foreach (var photo in renderable)
         {
-            sb.Append("<figure>\n");
-            sb.Append("<img src=\"").Append(Attr(photo.Url)).Append("\" alt=\"")
-                .Append(Attr(photo.FileName)).Append("\">\n");
-            sb.Append("<figcaption>").Append(Text(photo.FileName));
-            if (!string.IsNullOrWhiteSpace(photo.Caption))
-            {
-                sb.Append(" — ").Append(Text(photo.Caption));
-            }
-
-            sb.Append("</figcaption>\n</figure>\n");
+            sb.Append("<p class=\"photo-line\">image ").Append(Text(photo.FileName)).Append(" attached</p>\n");
         }
 
-        sb.Append("</div>\n</section>\n");
+        // One or more photo attachments did not fit the ACS size budget (PacketEmailSizeFitter,
+        // issue #521) and were left off this email — point the reader at the Manager app instead
+        // of silently dropping them (issue #580).
+        if (!string.IsNullOrWhiteSpace(managerAppServiceRequestUrl))
+        {
+            sb.Append("<p class=\"photo-note\">Some images can only be shown in the manager app. <a href=\"")
+                .Append(Attr(managerAppServiceRequestUrl)).Append("\">Click here to view</a>.</p>\n");
+        }
+
+        sb.Append("</section>\n");
     }
 
     // ── 9. Paste block ───────────────────────────────────────────────────
@@ -465,10 +466,10 @@ public static class PacketHtmlRenderer
           padding: 8mm;
         }
 
-        h1 { font-size: 15pt; margin: 1mm 0 0; }
-        .customer-headline { font-size: 11.5pt; font-weight: 700; margin: 3mm 0 0; }
+        .packet-title { font-size: 13pt; font-weight: 700; margin: 3mm 0 0; }
         h2 {
           font-size: 11pt;
+          font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.04em;
           margin: 0 0 2mm;
@@ -514,19 +515,20 @@ public static class PacketHtmlRenderer
           white-space: pre-wrap;
           word-wrap: break-word;
           font: 10pt/1.45 "Courier New", "Liberation Mono", monospace;
-          border: 1px solid #000;
-          padding: 3mm;
+          padding: 0;
           margin: 0;
         }
 
-        /* The diagnostic Q&A is the block that must read as expert: the heaviest frame
-           on the page, extra padding, bold questions. Emphasis survives greyscale. */
-        .diagnostics {
-          border: 3px solid #000;
-          padding: 4mm 5mm;
-          margin-bottom: 8mm;
+        /* Copy & paste block keeps a frame — it is meant to be lifted into a DMS field,
+           and the border marks its boundaries. The Complaint block (issue #580) does not. */
+        pre.dms-text {
+          border: 1px solid #000;
+          padding: 3mm;
         }
-        .diagnostics h2 { border-bottom-width: 2px; }
+
+        /* The diagnostic Q&A is the block that must read as expert: bold questions and a
+           left-rule accent per answer. Emphasis survives greyscale without a frame. */
+        .diagnostics { margin-bottom: 8mm; }
         .diagnostics dl { margin: 0; }
         .diagnostics dt {
           font-weight: 700;
@@ -550,18 +552,9 @@ public static class PacketHtmlRenderer
           vertical-align: middle;
         }
 
-        .photo-grid { display: block; }
-        .photo-grid figure {
-          display: inline-block;
-          width: 48%;
-          margin: 0 1% 4mm;
-          vertical-align: top;
-          break-inside: avoid;
-        }
-        .photo-grid img { border: 1px solid #000; width: 100%; height: auto; }
-        .photo-grid figcaption { font-size: 9pt; margin-top: 1mm; }
-        /* Spec B-2 item 8: up to 6 photos on page one, the rest on an appendix page. */
-        .photo-grid figure:nth-child(n + 7) { break-before: page; }
+        .photo-line { margin: 0 0 1mm; }
+        .photo-note { margin: 2mm 0 0; font-style: italic; }
+        .photo-note a { color: #000; }
 
         .status-link a { color: #000; }
 

@@ -459,14 +459,26 @@ public class PacketPdfRendererTests
             .Should().Be("it won't \"start\" <b>at all</b> & smells hot\nsecond line");
     }
 
+    [Fact]
+    public void Build_TheDescriptionSection_ShouldNotBeFramed()
+    {
+        // Issue #580: the Complaint block reads as plain text, no bordered frame.
+        Section(FullPacket(), "description").Framed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Build_ThePasteBlockSection_ShouldStayFramed()
+    {
+        Section(FullPacket(), "paste-block").Framed.Should().BeTrue();
+    }
+
     // ── 6. Diagnostic Q&A — the expert block ────────────────────────────
 
     [Fact]
-    public void Build_WhenDiagnosticsPresent_ShouldCarryEveryQuestionAndAnswer_AndBeEmphasised()
+    public void Build_WhenDiagnosticsPresent_ShouldCarryEveryQuestionAndAnswer()
     {
         var section = Section(FullPacket(), "diagnostics");
 
-        section.Emphasised.Should().BeTrue("the diagnostic block is the visually dominant one");
         section.Diagnostics.Should().HaveCount(2);
         section.Diagnostics[0].Question.Should().Be("Does the generator start at all?");
         section.Diagnostics[0].Answers.Should().Equal("Yes, then dies", "Dies after about 10 minutes");

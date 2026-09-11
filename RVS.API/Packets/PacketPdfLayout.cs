@@ -173,6 +173,8 @@ internal sealed record PacketPdfLayout
         Id = "description",
         Heading = "Complaint",
         Verbatim = description,
+        // Issue #580: the Complaint block reads as plain text, no bordered frame.
+        Framed = false,
     };
 
     // ── 7. Diagnostic Q&A — the expert block ────────────────────────────
@@ -187,7 +189,6 @@ internal sealed record PacketPdfLayout
         {
             Id = "diagnostics",
             Heading = "Reported symptoms & diagnostic Q&A",
-            Emphasised = true,
             Diagnostics = entries,
             DiagnosticsEmpty = entries.Count == 0,
         };
@@ -411,9 +412,6 @@ internal sealed record PacketPdfLayoutSection
     /// <summary>When <c>true</c>, the heading carries an "AI-generated" tag (<c>Spec B-2</c> item 7).</summary>
     public bool AiGeneratedTag { get; init; }
 
-    /// <summary>When <c>true</c>, the section is framed as the visually dominant block (diagnostics).</summary>
-    public bool Emphasised { get; init; }
-
     /// <summary>Label/value rows.</summary>
     public IReadOnlyList<PacketPdfLayoutRow> Rows { get; init; } = [];
 
@@ -426,8 +424,12 @@ internal sealed record PacketPdfLayoutSection
     /// <summary>A single free-text paragraph (customer name, category, AI summary).</summary>
     public string? Body { get; init; }
 
-    /// <summary>Verbatim text rendered in a bordered block, whitespace preserved (description, paste block).</summary>
+    /// <summary>Verbatim text, whitespace preserved (description, paste block).</summary>
     public string? Verbatim { get; init; }
+
+    /// <summary>When <c>true</c> (the default), <see cref="Verbatim"/> renders in a bordered
+    /// block. The Complaint section (issue <c>#580</c>) opts out so it reads as plain text.</summary>
+    public bool Framed { get; init; } = true;
 
     /// <summary>Diagnostic question/answer entries.</summary>
     public IReadOnlyList<PacketPdfLayoutDiagnostic> Diagnostics { get; init; } = [];
