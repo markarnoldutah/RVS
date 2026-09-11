@@ -551,7 +551,12 @@ else
     var acsEndpoint = builder.Configuration["AzureCommunicationServices:Endpoint"];
     if (!string.IsNullOrWhiteSpace(acsEndpoint))
     {
-        var credential = new DefaultAzureCredential();
+        // Development sends through staging's ACS resource as the az-login identity. Use
+        // AzureCliCredential directly, as Blob does, to skip DefaultAzureCredential's
+        // ManagedIdentityCredential probe timeout.
+        TokenCredential credential = builder.Environment.IsDevelopment()
+            ? new AzureCliCredential()
+            : new DefaultAzureCredential();
         var acsUri = new Uri(acsEndpoint);
 
         builder.Services.AddSingleton(new Azure.Communication.Email.EmailClient(acsUri, credential));

@@ -30,7 +30,7 @@
 | Key Vault + role assignments | `key-vault.bicep` | `deployKeyVault` |
 | Cosmos account, database, 10 containers | `cosmos-db.bicep` | `deployCosmosDb` |
 | Storage account, CORS, `rvs-attachments`, 4 role assignments | `storage-account.bicep` | `deployStorageAccount` |
-| ACS + Email Service + managed domain + 2 role assignments (+ a `CustomerManaged` sending domain when `acsCustomEmailDomain` is set) | `communication-services.bicep` | `deployAcs`; role assignments only when an App Service principal is supplied; custom domain in prod only (`#532`) |
+| ACS + Email Service + managed domain + 2 role assignments (+ a `CustomerManaged` sending domain when `acsCustomEmailDomain` is set) | `communication-services.bicep` | `deployAcs`; role assignments only when an App Service principal is supplied; custom domain in staging and prod (`#532`) |
 | Two Static Web Apps + custom domains | `static-web-app.bicep` | `deploySwa` |
 | DNS zones + record sets | `dns.bicep` | `deploySwa && deployDns` |
 | DNS Zone Contributor grants | `dns-zone-contributor.bicep` | `deploySwa && deployDns && env=='prod' && principals supplied` |
@@ -50,9 +50,9 @@ All three parameter files set every deploy flag to `true`, `cosmosCapacityMode='
 | Whisper capacity | 1 | 2 | 2 |
 | Storage CORS origins | set | set | default |
 | DNS RBAC principals | — | set | — |
-| ACS custom sending domain | — | `mail.rvintake.com` | `mail.rvintake.com` |
+| ACS custom sending domain | `mail.staging.rvintake.com` | `mail.rvintake.com` | `mail.rvintake.com` |
 
-Every file is deployable as committed. Prod is a single file with no phases; the two things it leaves to a human are the one-time registration of the `rvintake.com` apex with the Intake SWA (a token Azure mints at registration time) and the data-plane verification + quota bump + warming of the `mail.rvintake.com` sending domain (`#532`) — both sequences are in `Infra/Bicep.IaC/README.md` "Deploy Production" (steps 2 and 4). Redeploys never touch either.
+Every file is deployable as committed. Prod is a single file with no phases; the two things it leaves to a human are the one-time registration of the `rvintake.com` apex with the Intake SWA (a token Azure mints at registration time) and the data-plane verification + quota bump + warming of the `mail.rvintake.com` sending domain (`#532`) — both sequences are in `Infra/Bicep.IaC/README.md` "Deploy Production" (steps 2 and 4). Redeploys never touch either. Staging's `mail.staging.rvintake.com` needs the same verification, but no quota request and no warming.
 
 Two things to know before using these:
 
@@ -71,11 +71,11 @@ Two things to know before using these:
 
 **Azure OpenAI** — both accounts `kind: OpenAI`, SKU `S0`, custom subdomain, system-assigned identity. `gpt-4o` version `2024-11-20`; Whisper model `whisper` version `001`. Whisper is in northcentralus because Whisper 001 Standard is not offered in westus3.
 
-**ACS** — location `global`, data location United States, engagement tracking disabled. Email Service with an Azure-managed domain in every environment; prod also links a `CustomerManaged` sending subdomain, `mail.rvintake.com` (`acsCustomEmailDomain`, `#532`), and sends the packet email From that.
+**ACS** — location `global`, data location United States, engagement tracking disabled. Email Service with an Azure-managed domain in every environment; staging and prod each also link a `CustomerManaged` sending subdomain — `mail.staging.rvintake.com` and `mail.rvintake.com` (`acsCustomEmailDomain`, `#532`) — and send the packet email From it.
 
 **ACS Email quotas and the managed-domain ceiling (`#521`, `#532`).** An Azure-managed domain is a trial tier, not a small custom one — Microsoft's published limits:
 
-| | Azure-managed domain (staging) | Verified custom domain (prod — `mail.rvintake.com`) |
+| | Azure-managed domain (fallback only) | Verified custom domain (staging, prod) |
 |---|---|---|
 | Send rate | **5 emails/min, 10 emails/hour** | 30/min, 100/hour out of the box |
 | Raisable via support? | **No** | Yes, up to 1–2 M/hour |
@@ -83,10 +83,18 @@ Two things to know before using these:
 
 Two consequences worth stating plainly:
 
-- **On the managed domain, ten packets an hour is the hard ceiling and no support ticket lifts it.** Higher quotas are available only for verified custom domains. Staging stays on the managed domain and lives with the ceiling.
+- **On the managed domain, ten packets an hour is the hard ceiling and no support ticket lifts it.** Higher quotas are available only for verified custom domains. Neither deployed environment sends from the managed domain; it stays linked only as a fallback.
 - **Prod deploys the custom sending subdomain via Bicep (`#532`).** `communication-services.bicep` provisions the `CustomerManaged` domain and emits the records it needs; `main.bicep` writes **SPF** (`… -all`), **DKIM** + **DKIM2** (CNAME), a domain-ownership TXT, and a **DMARC** `p=none` record with `rua` reporting into the `rvintake.com` zone. Verification (`initiate-verification`), the quota-increase request (72 h lead, bounce rate < 1 %), and 2–3 weeks of domain warming on Jay Lyons's real traffic (`#525`) before any other shop's mailbox sees a packet are the manual follow-up — README "Deploy Production" step 4, surfaced by the `acsCustomDomainAction` output. The in-room deliverability check for later pilots is `FS-7` in `RVS_Plan.md`.
 
-Ten an hour is survivable for a single mobile technician on staging; prod's warmed custom domain is what carries the local cluster (`#527`).
+Prod's warmed custom domain is what carries the local cluster (`#527`).
+
+**Each environment keeps its own ACS resource and sending subdomain (`#532`).** Staging sends From `mail.staging.rvintake.com` on `acs-rvs-notify-staging-wus3-s01-001`, and local development borrows that resource too. One prod resource shared by every environment was considered and rejected, for three reasons:
+
+- **Bounce budget.** ACS tracks failures, the suppression list and send quota per resource and domain. Staging fails many sends, because every seeded packet recipient is an undeliverable `.example.com` address. On a shared resource those failures would count against `mail.rvintake.com` while it warms and while the quota request, which needs bounces under 1 %, is pending.
+- **Access to prod.** ACS has no narrower send role, so a shared resource would give staging's app identity, and every developer, Contributor on prod's ACS.
+- **No saving.** A second ACS resource has no standing charge.
+
+`mail.staging` is a sibling of `mail`, not a child of it. Mailbox providers still weigh a subdomain's behaviour partly against its parent `rvintake.com`, so staging stays harmless by behaviour: staging mail that reaches a real inbox goes only to mailboxes the team controls.
 
 **Key Vault** — standard SKU, RBAC authorization, 90-day soft delete, purge protection on, public access enabled.
 
@@ -113,13 +121,13 @@ There is no RBAC grant to Cosmos or OpenAI. Both are consumed by key, read from 
 
 Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint, key, vision/text/whisper deployment names, Whisper endpoint and key), `CosmosDb--Endpoint/Key/DatabaseId`, `BlobStorage--Endpoint`, `AzureCommunicationServices--Endpoint/ConnectionString`, `ApplicationInsights--ConnectionString`, `Auth0--*`.
 
-`app-service-config.bicep` sets four app settings — `ASPNETCORE_ENVIRONMENT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `KeyVault__VaultUri`, and (when `deployAcs`) `AzureCommunicationServices__Email__FromAddress` = `DoNotReply@<ACS sender domain>`, so the packet-email sender tracks the deployed ACS resource instead of a hardcoded value. The sender domain is `mail.rvintake.com` when `acsCustomEmailDomain` is set (prod, `#532`) and the Azure-managed domain otherwise; `main.bicep` chooses between `communicationServices.outputs.customFromSenderDomain` and `.azureManagedMailFrom`. Everything else is pulled by the Key Vault configuration provider at startup using the managed identity. Locally, development uses `appsettings.Development.json` plus `dotnet user-secrets`, and Blob uses `AzureCliCredential` directly to avoid the managed-identity probe timeout.
+`app-service-config.bicep` sets four app settings — `ASPNETCORE_ENVIRONMENT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `KeyVault__VaultUri`, and (when `deployAcs`) `AzureCommunicationServices__Email__FromAddress` = `DoNotReply@<ACS sender domain>`, so the packet-email sender tracks the deployed ACS resource instead of a hardcoded value. The sender domain is `mail.rvintake.com` when `acsCustomEmailDomain` is set (prod, `#532`) and the Azure-managed domain otherwise; `main.bicep` chooses between `communicationServices.outputs.customFromSenderDomain` and `.azureManagedMailFrom`. Everything else is pulled by the Key Vault configuration provider at startup using the managed identity. Locally, development uses `appsettings.Development.json` plus `dotnet user-secrets`, and Blob and ACS use `AzureCliCredential` directly to avoid the managed-identity probe timeout. The local API borrows staging's storage account and staging's ACS resource, sending From `DoNotReply@mail.staging.rvintake.com`, and never touches prod's.
 
 ---
 
 ## Networking and DNS
 
-Two public DNS zones — `rvserviceflow.com` (Manager) and `rvintake.com` (Intake) — both living in `rg-rvs-prod-westus3`. Subdomains bind to the Static Web Apps by CNAME delegation, with the binding (`swa-custom-domain.bicep`) ordered after the record it validates against. The production apex is an ALIAS A record that tracks the Intake SWA resource — no IP is pinned — plus a one-time out-of-band TXT-token registration that Bicep does not declare. In prod the `rvintake.com` zone also carries the ACS custom-sending-domain records for `mail.rvintake.com` (`#532`) — SPF, DKIM + DKIM2, a domain-ownership TXT, and a DMARC `p=none` record — written by the `dnsIntake` module from `communicationServices` outputs. `dns-zone-contributor.bicep` grants the staging deployer zone-scoped rights so it can write records into prod-owned zones.
+Two public DNS zones — `rvserviceflow.com` (Manager) and `rvintake.com` (Intake) — both living in `rg-rvs-prod-westus3`. Subdomains bind to the Static Web Apps by CNAME delegation, with the binding (`swa-custom-domain.bicep`) ordered after the record it validates against. The production apex is an ALIAS A record that tracks the Intake SWA resource — no IP is pinned — plus a one-time out-of-band TXT-token registration that Bicep does not declare. The `rvintake.com` zone also carries the ACS custom-sending-domain records for `mail.rvintake.com` (prod) and `mail.staging.rvintake.com` (staging) (`#532`) — SPF, DKIM + DKIM2, a domain-ownership TXT, and a DMARC `p=none` record — written by the `dnsIntake` module from `communicationServices` outputs. `dns-zone-contributor.bicep` grants the staging deployer zone-scoped rights so it can write records into prod-owned zones.
 
 **There are no VNets, no private endpoints, and no private DNS zones anywhere.** Cosmos, Key Vault, Storage, Log Analytics, App Insights and both Azure OpenAI accounts (GPT-4o + Whisper) are all reachable publicly, with Storage, Key Vault and the OpenAI accounts' network ACLs defaulting to `Allow` (`bypass: AzureServices`). Blob CORS permits GET/HEAD/PUT from the Static Web App custom domains only.
 
@@ -148,7 +156,7 @@ Auth: the API uses Azure OIDC federated credentials, no long-lived secrets. Stat
 |---|---|
 | `build-mobile.yml` | Builds `RVS.MAUI.Tech` on `mobile-v*` tags. That project is not in the repo and the offline mobile app is archived. Delete the workflow |
 | `deployment-cmds.azcli` | References a `parameters/dev.bicepparam` that does not exist. It also carries a manual `Stripe--WebhookSecret` vault write — harmless, but premature: billing is build item 7 and nothing reads that secret yet |
-| ACS send quota on the managed domain caps delivery at 10 packets/hour (`#521`) | An Azure-managed Email domain is limited to 5 emails/min and 10/hour **with no support path to raise it**. Staging stays on it. Prod deploys the verified custom domain `mail.rvintake.com` (`#532`, now in Bicep), against which the quota increase *can* be requested — a 72 h lead, and 2–3 weeks of warming on top. Not a code defect; `#521`'s size handling is built. Still gates the local-cluster launch (`#527`) until the prod domain is verified and warmed |
+| ACS send quota on the managed domain caps delivery at 10 packets/hour (`#521`) | An Azure-managed Email domain is limited to 5 emails/min and 10/hour **with no support path to raise it**. Neither environment sends from it any more: staging deploys its own verified `mail.staging.rvintake.com` (verification only, no quota request). Prod deploys the verified custom domain `mail.rvintake.com` (`#532`, now in Bicep), against which the quota increase *can* be requested — a 72 h lead, and 2–3 weeks of warming on top. Not a code defect; `#521`'s size handling is built. Still gates the local-cluster launch (`#527`) until the prod domain is verified and warmed |
 
 ---
 
