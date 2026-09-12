@@ -23,15 +23,11 @@
                                    Style="text-transform: none;">
                             @(_isRecording ? "Stop Recording" : "Tap to Speak")
                         </MudButton>
-                        @if (_isRecording)
-                        {
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <span class="rvs-recording-dot" aria-hidden="true"></span>
-                                <MudText Typo="Typo.body2" Style="@GetRecordingStatusStyle()">
-                                    @GetRecordingStatusText()
-                                </MudText>
-                            </MudStack>
-                        }
+                        <VoiceRecordingIndicator IsRecording="_isRecording"
+                                                  ElapsedSeconds="_recordingElapsedSeconds"
+                                                  MaxSeconds="MaxRecordingSeconds"
+                                                  WarningSeconds="RecordingCapWarningSeconds"
+                                                  Announcement="_recordingAnnouncement" />
                         @if (_isTranscribing)
                         {
                             <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
@@ -43,9 +39,6 @@
                             <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Cleaning up transcript...</MudText>
                         }
                     </MudStack>
-
-                    @* Screen-reader-only announcement of recording start/stop; visual state is conveyed above *@
-                    <div aria-live="polite" class="rvs-visually-hidden">@_recordingAnnouncement</div>
 
                     @if (!string.IsNullOrWhiteSpace(_transcriptionError))
                     {
@@ -194,11 +187,9 @@
     private string? _transcriptionError;
     private CancellationTokenSource? _suggestCategoryCts;
     private CancellationTokenSource? _suggestInsightsCts;
-    private CancellationTokenSource? _recordingTimerCts;
+    private RecordingTimer? _recordingTimer;
     private int _recordingElapsedSeconds;
     private string _recordingAnnouncement = string.Empty;
-
-    private bool IsNearRecordingCap => _recordingElapsedSeconds >= MaxRecordingSeconds - RecordingCapWarningSeconds;
 
     protected override void OnInitialized()
     {
@@ -322,64 +313,27 @@
 
     private void StartRecordingTimer()
     {
-        _recordingTimerCts?.Cancel();
-        _recordingTimerCts?.Dispose();
-        _recordingTimerCts = new CancellationTokenSource();
-        _ = RunRecordingTimerAsync(_recordingTimerCts.Token);
+        _recordingTimer?.Dispose();
+        _recordingTimer = new RecordingTimer(
+            MaxRecordingSeconds,
+            onTick: () =>
+            {
+                _recordingElapsedSeconds = _recordingTimer!.ElapsedSeconds;
+                StateHasChanged();
+            },
+            onAutoStop: StopRecordingAsync);
+        _recordingTimer.Start();
     }
 
     private void StopRecordingTimer()
     {
-        _recordingTimerCts?.Cancel();
-        _recordingTimerCts?.Dispose();
-        _recordingTimerCts = null;
-    }
-
-    private async Task RunRecordingTimerAsync(CancellationToken ct)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-        try
-        {
-            while (await timer.WaitForNextTickAsync(ct))
-            {
-                _recordingElapsedSeconds++;
-                StateHasChanged();
-
-                if (_recordingElapsedSeconds >= MaxRecordingSeconds)
-                {
-                    await StopRecordingAsync();
-                    break;
-                }
-            }
-        }
-        catch (OperationCanceledException) { }
-    }
-
-    private static string FormatElapsed(int totalSeconds)
-    {
-        var elapsed = TimeSpan.FromSeconds(totalSeconds);
-        return $"{(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}";
-    }
-
-    private string GetRecordingStatusText()
-    {
-        var elapsed = FormatElapsed(_recordingElapsedSeconds);
-        if (!IsNearRecordingCap) return elapsed;
-
-        var remaining = Math.Max(0, MaxRecordingSeconds - _recordingElapsedSeconds);
-        return $"{elapsed} (auto-stop in {remaining}s)";
-    }
-
-    private string GetRecordingStatusStyle()
-    {
-        var color = IsNearRecordingCap ? "var(--mud-palette-warning)" : "var(--mud-palette-text-secondary)";
-        return $"font-variant-numeric: tabular-nums; color: {color};";
+        _recordingTimer?.Dispose();
+        _recordingTimer = null;
     }
 
     public void Dispose()
     {
-        _recordingTimerCts?.Cancel();
-        _recordingTimerCts?.Dispose();
+        _recordingTimer?.Dispose();
     }
 
     private async Task RequestCategorySuggestion()

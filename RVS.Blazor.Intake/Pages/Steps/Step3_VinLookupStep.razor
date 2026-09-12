@@ -55,13 +55,11 @@
                                Style="height: 63px; width: 60px; padding: 8px; margin-top: 4px;"
                                aria-label="Capture VIN with camera" />
                 </MudStack>
-                @if (_isRecording)
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudProgressCircular Size="Size.Small" Color="Color.Error" Indeterminate="true" />
-                        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Listening… tap mic to stop</MudText>
-                    </MudStack>
-                }
+                <VoiceRecordingIndicator IsRecording="_isRecording"
+                                          ElapsedSeconds="_recordingElapsedSeconds"
+                                          MaxSeconds="MaxRecordingSeconds"
+                                          WarningSeconds="RecordingCapWarningSeconds"
+                                          Announcement="_recordingAnnouncement" />
                 @if (_isTranscribing)
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
@@ -176,10 +174,16 @@
     </MudForm>
 </MudPaper>
 
+@implements IDisposable
 @code {
     private const long MaxCameraCaptureSizeBytes = 10 * 1024 * 1024;
     private const double VinAutoFillThreshold = 0.7;
     private const double VinAutoLookupThreshold = 0.9;
+
+    // Spec A-9: voice is optional and advisory — this cap exists only so a forgotten
+    // recording doesn't produce a huge upload, not to gate the wizard.
+    private const int MaxRecordingSeconds = 120;
+    private const int RecordingCapWarningSeconds = 15;
 
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
@@ -198,6 +202,9 @@
     private string? _extractionMessage;
     private string? _transcriptionError;
     private Severity _extractionSeverity = Severity.Info;
+    private RecordingTimer? _recordingTimer;
+    private int _recordingElapsedSeconds;
+    private string _recordingAnnouncement = string.Empty;
 
     private string? ValidateVin(string? value)
     {
@@ -260,7 +267,9 @@
     {
         if (_isRecording)
         {
+            StopRecordingTimer();
             _isRecording = false;
+            _recordingAnnouncement = "Recording stopped";
             _isTranscribing = true;
             _transcriptionError = null;
             StateHasChanged();
@@ -315,12 +324,40 @@
             {
                 await JsRuntime.InvokeVoidAsync("rvs_startRecording");
                 _isRecording = true;
+                _recordingElapsedSeconds = 0;
+                _recordingAnnouncement = "Recording started";
+                StartRecordingTimer();
             }
             catch (Exception)
             {
                 _transcriptionError = "Microphone access was denied or is unavailable.";
             }
         }
+    }
+
+    private void StartRecordingTimer()
+    {
+        _recordingTimer?.Dispose();
+        _recordingTimer = new RecordingTimer(
+            MaxRecordingSeconds,
+            onTick: () =>
+            {
+                _recordingElapsedSeconds = _recordingTimer!.ElapsedSeconds;
+                StateHasChanged();
+            },
+            onAutoStop: ToggleVinRecording);
+        _recordingTimer.Start();
+    }
+
+    private void StopRecordingTimer()
+    {
+        _recordingTimer?.Dispose();
+        _recordingTimer = null;
+    }
+
+    public void Dispose()
+    {
+        _recordingTimer?.Dispose();
     }
 
     private async Task HandleCameraCapture(InputFileChangeEventArgs e)

@@ -1,0 +1,50 @@
+@* Live "mic is recording" affordance, shared by every wizard step with voice input. *@
+@if (IsRecording)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <span class="rvs-recording-dot" aria-hidden="true"></span>
+        <MudText Typo="Typo.body2" Style="@StatusStyle">
+            @StatusText
+        </MudText>
+    </MudStack>
+}
+
+@* Screen-reader-only announcement of recording start/stop; visual state is conveyed above *@
+<div aria-live="polite" class="rvs-visually-hidden">@Announcement</div>
+
+@code {
+    [Parameter] public bool IsRecording { get; set; }
+    [Parameter] public int ElapsedSeconds { get; set; }
+    [Parameter] public int MaxSeconds { get; set; } = 120;
+    [Parameter] public int WarningSeconds { get; set; } = 15;
+    [Parameter] public string Announcement { get; set; } = string.Empty;
+
+    private bool IsNearCap => ElapsedSeconds >= MaxSeconds - WarningSeconds;
+
+    private string StatusText
+    {
+        get
+        {
+            var elapsed = FormatElapsed(ElapsedSeconds);
+            if (!IsNearCap) return elapsed;
+
+            var remaining = Math.Max(0, MaxSeconds - ElapsedSeconds);
+            return $"{elapsed} (auto-stop in {remaining}s)";
+        }
+    }
+
+    private string StatusStyle
+    {
+        get
+        {
+            var color = IsNearCap ? "var(--mud-palette-warning)" : "var(--mud-palette-text-secondary)";
+            return $"font-variant-numeric: tabular-nums; color: {color};";
+        }
+    }
+
+    private static string FormatElapsed(int totalSeconds)
+    {
+        var elapsed = TimeSpan.FromSeconds(totalSeconds);
+        return $"{(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}";
+    }
+}
