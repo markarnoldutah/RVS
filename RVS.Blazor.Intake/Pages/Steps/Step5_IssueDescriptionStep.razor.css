@@ -1,1 +1,34 @@
 /* Border styles centralized in app.css */
+
+.rvs-recording-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--mud-palette-error);
+    animation: rvs-recording-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes rvs-recording-pulse {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(1.3); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rvs-recording-dot {
+        animation: none;
+    }
+}
+
+.rvs-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

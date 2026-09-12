@@ -23,6 +23,15 @@
                                    Style="text-transform: none;">
                             @(_isRecording ? "Stop Recording" : "Tap to Speak")
                         </MudButton>
+                        @if (_isRecording)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <span class="rvs-recording-dot" aria-hidden="true"></span>
+                                <MudText Typo="Typo.body2" Style="@GetRecordingStatusStyle()">
+                                    @GetRecordingStatusText()
+                                </MudText>
+                            </MudStack>
+                        }
                         @if (_isTranscribing)
                         {
                             <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
@@ -34,6 +43,9 @@
                             <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Cleaning up transcript...</MudText>
                         }
                     </MudStack>
+
+                    @* Screen-reader-only announcement of recording start/stop; visual state is conveyed above *@
+                    <div aria-live="polite" class="rvs-visually-hidden">@_recordingAnnouncement</div>
 
                     @if (!string.IsNullOrWhiteSpace(_transcriptionError))
                     {
@@ -159,11 +171,17 @@
     </MudForm>
 </MudPaper>
 
+@implements IDisposable
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    // Spec A-9: voice is optional and advisory — this cap exists only so a forgotten
+    // recording doesn't produce a huge upload, not to gate the wizard.
+    private const int MaxRecordingSeconds = 120;
+    private const int RecordingCapWarningSeconds = 15;
 
     private MudForm _form = default!;
     private bool _submitted;
@@ -176,6 +194,11 @@
     private string? _transcriptionError;
     private CancellationTokenSource? _suggestCategoryCts;
     private CancellationTokenSource? _suggestInsightsCts;
+    private CancellationTokenSource? _recordingTimerCts;
+    private int _recordingElapsedSeconds;
+    private string _recordingAnnouncement = string.Empty;
+
+    private bool IsNearRecordingCap => _recordingElapsedSeconds >= MaxRecordingSeconds - RecordingCapWarningSeconds;
 
     protected override void OnInitialized()
     {
@@ -189,97 +212,174 @@
     {
         if (_isRecording)
         {
-            _isRecording = false;
-            _isTranscribing = true;
-            _transcriptionError = null;
-            StateHasChanged();
-
-            try
-            {
-                var recording = await JS.InvokeAsync<AudioRecordingResult?>("rvs_stopRecording");
-                if (recording is null || string.IsNullOrWhiteSpace(recording.Audio))
-                {
-                    _transcriptionError = "No audio was captured.";
-                    return;
-                }
-
-                var request = new IssueTranscriptionRequestDto
-                {
-                    AudioBase64 = recording.Audio,
-                    ContentType = recording.MimeType
-                };
-
-                var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
-                if (result?.Result is not null)
-                {
-                    // Start with the Whisper result as a baseline
-                    var rawTranscript = result.Result.RawTranscript ?? string.Empty;
-                    State.IssueDescription = result.Result.CleanedDescription
-                        ?? rawTranscript;
-
-                    // Fire insights extraction from the raw transcript immediately —
-                    // the refine prompt strips lifestyle/urgency context we need.
-                    _isTranscribing = false;
-                    _isRefining = true;
-                    StateHasChanged();
-
-                    var insightsTask = RequestInsightsSuggestion(rawTranscript);
-
-                    try
-                    {
-                        var refinementRequest = new IssueTextRefinementRequestDto
-                        {
-                            RawTranscript = rawTranscript,
-                            IssueCategory = State.IssueCategory
-                        };
-
-                        var refined = await IntakeApi.RefineIssueTextAsync(State.Slug, refinementRequest);
-                        if (!string.IsNullOrWhiteSpace(refined?.Result?.CleanedDescription))
-                        {
-                            State.IssueDescription = refined.Result.CleanedDescription;
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // Refinement is best-effort; the Whisper result is already set
-                    }
-                    finally
-                    {
-                        _isRefining = false;
-                    }
-
-                    StateHasChanged();
-                    // Category uses the cleaned description; insights already in-flight from raw transcript
-                    await Task.WhenAll(insightsTask, RequestCategorySuggestion());
-                }
-                else
-                {
-                    _transcriptionError = "Could not transcribe the audio.";
-                }
-            }
-            catch (Exception)
-            {
-                _transcriptionError = "Transcription failed.";
-            }
-            finally
-            {
-                _isTranscribing = false;
-                StateHasChanged();
-            }
+            await StopRecordingAsync();
         }
         else
         {
-            _transcriptionError = null;
-            try
+            await StartRecordingAsync();
+        }
+    }
+
+    private async Task StartRecordingAsync()
+    {
+        _transcriptionError = null;
+        try
+        {
+            await JS.InvokeVoidAsync("rvs_startRecording");
+            _isRecording = true;
+            _recordingElapsedSeconds = 0;
+            _recordingAnnouncement = "Recording started";
+            StartRecordingTimer();
+        }
+        catch (Exception)
+        {
+            _transcriptionError = "Microphone access was denied or is unavailable.";
+        }
+    }
+
+    private async Task StopRecordingAsync()
+    {
+        StopRecordingTimer();
+        _isRecording = false;
+        _recordingAnnouncement = "Recording stopped";
+        _isTranscribing = true;
+        _transcriptionError = null;
+        StateHasChanged();
+
+        try
+        {
+            var recording = await JS.InvokeAsync<AudioRecordingResult?>("rvs_stopRecording");
+            if (recording is null || string.IsNullOrWhiteSpace(recording.Audio))
             {
-                await JS.InvokeVoidAsync("rvs_startRecording");
-                _isRecording = true;
+                _transcriptionError = "No audio was captured.";
+                return;
             }
-            catch (Exception)
+
+            var request = new IssueTranscriptionRequestDto
             {
-                _transcriptionError = "Microphone access was denied or is unavailable.";
+                AudioBase64 = recording.Audio,
+                ContentType = recording.MimeType
+            };
+
+            var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
+            if (result?.Result is not null)
+            {
+                // Start with the Whisper result as a baseline
+                var rawTranscript = result.Result.RawTranscript ?? string.Empty;
+                State.IssueDescription = result.Result.CleanedDescription
+                    ?? rawTranscript;
+
+                // Fire insights extraction from the raw transcript immediately —
+                // the refine prompt strips lifestyle/urgency context we need.
+                _isTranscribing = false;
+                _isRefining = true;
+                StateHasChanged();
+
+                var insightsTask = RequestInsightsSuggestion(rawTranscript);
+
+                try
+                {
+                    var refinementRequest = new IssueTextRefinementRequestDto
+                    {
+                        RawTranscript = rawTranscript,
+                        IssueCategory = State.IssueCategory
+                    };
+
+                    var refined = await IntakeApi.RefineIssueTextAsync(State.Slug, refinementRequest);
+                    if (!string.IsNullOrWhiteSpace(refined?.Result?.CleanedDescription))
+                    {
+                        State.IssueDescription = refined.Result.CleanedDescription;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Refinement is best-effort; the Whisper result is already set
+                }
+                finally
+                {
+                    _isRefining = false;
+                }
+
+                StateHasChanged();
+                // Category uses the cleaned description; insights already in-flight from raw transcript
+                await Task.WhenAll(insightsTask, RequestCategorySuggestion());
+            }
+            else
+            {
+                _transcriptionError = "Could not transcribe the audio.";
             }
         }
+        catch (Exception)
+        {
+            _transcriptionError = "Transcription failed.";
+        }
+        finally
+        {
+            _isTranscribing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void StartRecordingTimer()
+    {
+        _recordingTimerCts?.Cancel();
+        _recordingTimerCts?.Dispose();
+        _recordingTimerCts = new CancellationTokenSource();
+        _ = RunRecordingTimerAsync(_recordingTimerCts.Token);
+    }
+
+    private void StopRecordingTimer()
+    {
+        _recordingTimerCts?.Cancel();
+        _recordingTimerCts?.Dispose();
+        _recordingTimerCts = null;
+    }
+
+    private async Task RunRecordingTimerAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                _recordingElapsedSeconds++;
+                StateHasChanged();
+
+                if (_recordingElapsedSeconds >= MaxRecordingSeconds)
+                {
+                    await StopRecordingAsync();
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private static string FormatElapsed(int totalSeconds)
+    {
+        var elapsed = TimeSpan.FromSeconds(totalSeconds);
+        return $"{(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}";
+    }
+
+    private string GetRecordingStatusText()
+    {
+        var elapsed = FormatElapsed(_recordingElapsedSeconds);
+        if (!IsNearRecordingCap) return elapsed;
+
+        var remaining = Math.Max(0, MaxRecordingSeconds - _recordingElapsedSeconds);
+        return $"{elapsed} (auto-stop in {remaining}s)";
+    }
+
+    private string GetRecordingStatusStyle()
+    {
+        var color = IsNearRecordingCap ? "var(--mud-palette-warning)" : "var(--mud-palette-text-secondary)";
+        return $"font-variant-numeric: tabular-nums; color: {color};";
+    }
+
+    public void Dispose()
+    {
+        _recordingTimerCts?.Cancel();
+        _recordingTimerCts?.Dispose();
     }
 
     private async Task RequestCategorySuggestion()
