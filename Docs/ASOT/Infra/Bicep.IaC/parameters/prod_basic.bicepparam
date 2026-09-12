@@ -13,6 +13,11 @@ param whisperResourceGroupName = 'rg-rvs-prod-ncus'
 param openAiCapacity = 30
 param whisperCapacity = 2
 
+// Preliminary-assessment-only model — see prod.bicepparam for the rationale.
+// Kept in step with prod.bicepparam.
+param assessmentModelName = 'gpt-5'
+param assessmentDeploymentCapacity = 2
+
 // App Service (API) — Basic B1 (~$12/mo): cost-conscious production, no Always On / slots
 param deployAppService = true
 param appServiceSkuName = 'B1'

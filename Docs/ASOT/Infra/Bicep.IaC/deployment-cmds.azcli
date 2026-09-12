@@ -528,6 +528,73 @@ az webapp config appsettings list \
 #     Confirm the mail arrives with the PDF + photo attachments, subject
 #     "[RVS] {category} — {year} {make} {model} — {customer last name}".
 
+# ── 4f. Preliminary-assessment GPT-5 deployment — Issue #584 ────────────────
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │ Fully Bicep-driven — a plain Section 1 redeploy applies all of it:         │
+# │   - modules/openai.bicep gains a second, independent model deployment     │
+# │     (name = assessmentModelName, default "gpt-5") on the SAME OpenAI      │
+# │     account as gpt-4o, via additionalDeployments. gpt-4o is untouched.    │
+# │   - modules/openai-keyvault-secrets.bicep writes                          │
+# │     AzureOpenAi--AssessmentDeploymentName with that name (empty when      │
+# │     assessmentModelName is blank).                                        │
+# │   - Program.cs reads that secret first for the packet preliminary         │
+# │     assessment only; categorization/issue-text refinement stay on        │
+# │     TextDeploymentName (gpt-4o) unchanged.                                │
+# │ SKU is DataZoneStandard (US) — gpt-5 is not offered under the regional    │
+# │ Standard SKU gpt-4o uses. Capacity: staging.bicepparam = 1 K TPM,          │
+# │ prod(_basic).bicepparam = 2 K TPM — both confirmed against remaining      │
+# │ subscription quota for gpt-5 in westus3 at the time these were set;       │
+# │ re-check before raising (Section 0 below).                                │
+# └────────────────────────────────────────────────────────────────────────────┘
+#
+# ── (0) Redeploy — creates the gpt-5 deployment + the KV secret ─────────────
+# STAGING: Section 1a.  PROD: Section 1b.  Preview first with Section 1c
+# what-if — expect ONE new Microsoft.CognitiveServices/accounts/deployments
+# resource and ONE new/changed Key Vault secret; no change to the gpt-4o
+# deployment or its capacity.
+
+# ── (1) Confirm quota BEFORE deploying (repeat per environment/region) ──────
+# "maxCapacity" is what Azure will actually let you allocate right now, not
+# the model's theoretical ceiling — raise assessmentDeploymentCapacity above
+# it and the deployment fails.
+az cognitiveservices account list-models \
+  --name oai-rvs-ai-staging-wus3-s01-001 --resource-group rg-rvs-staging-westus3 \
+  --query "[?name=='gpt-5'].{version:version, maxCapacity:maxCapacity}" -o table
+
+# ── (2) POST-DEPLOY CHECKS ───────────────────────────────────────────────────
+
+# (a) The gpt-5 deployment exists with the expected capacity:
+az cognitiveservices account deployment show \
+  --name oai-rvs-ai-staging-wus3-s01-001 --resource-group rg-rvs-staging-westus3 \
+  --deployment-name gpt-5 \
+  --query '{model:properties.model, sku:sku}' -o json
+
+# (b) The Key Vault secret resolves to that deployment name (uses the API's
+#     managed identity in staging/prod — az keyvault secret show works too if
+#     your own principal has Key Vault Secrets Officer/User on the vault):
+az keyvault secret show \
+  --vault-name kv-rvs-staging-wus3 \
+  --name AzureOpenAi--AssessmentDeploymentName --query value -o tsv
+
+# (c) Smoke-test: dotnet run --project RVS.PacketDump against a config pointed
+#     at staging, comparing gpt-4o vs gpt-5 output on a few sample packets —
+#     confirm the request contract (temperature, max_tokens, response_format:
+#     json_object) still works for gpt-5 at the pinned ApiVersion in
+#     AzureOpenAiPreliminaryAssessmentService.cs. If it doesn't, the service's
+#     existing fallback silently degrades to the rule-based assessment rather
+#     than erroring — watch App Insights for repeated "falling back to
+#     rule-based" warnings from AzureOpenAiPreliminaryAssessmentService, which
+#     is the symptom of a contract mismatch, not a crash.
+
+# (d) REVERT to gpt-4o for the assessment call (no application-code change):
+#     set `assessmentModelName = ''` in the environment's .bicepparam file and
+#     redeploy (Section 0). The idle gpt-5 deployment can be left in place —
+#     PAYG capacity is a rate-limit ceiling, not a reservation cost — or
+#     removed with:
+#       az cognitiveservices account deployment delete \
+#         --name oai-rvs-ai-staging-wus3-s01-001 \
+#         --resource-group rg-rvs-staging-westus3 --deployment-name gpt-5
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 5.  POST-DEPLOY VERIFICATION

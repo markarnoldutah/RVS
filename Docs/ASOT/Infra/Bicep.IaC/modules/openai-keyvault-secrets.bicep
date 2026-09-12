@@ -29,6 +29,9 @@ param openAiTextDeploymentName string = openAiDeploymentName
 @description('The name of the Whisper model deployment (used for speech-to-text transcription).')
 param openAiWhisperDeploymentName string = 'whisper'
 
+@description('Optional. Name of an additional deployment used only for the packet preliminary assessment, independent of openAiTextDeploymentName (e.g. gpt-5, to try it without moving categorization/refinement off gpt-4o). Empty = not set — the app falls back to openAiTextDeploymentName.')
+param openAiAssessmentDeploymentName string = ''
+
 // ── Existing Resource References ──────────────────────────────
 
 resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
@@ -82,6 +85,15 @@ resource textDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01'
   name: 'AzureOpenAi--TextDeploymentName'
   properties: {
     value: openAiTextDeploymentName
+    contentType: 'text/plain'
+  }
+}
+
+resource assessmentDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
+  parent: keyVault
+  name: 'AzureOpenAi--AssessmentDeploymentName'
+  properties: {
+    value: openAiAssessmentDeploymentName
     contentType: 'text/plain'
   }
 }

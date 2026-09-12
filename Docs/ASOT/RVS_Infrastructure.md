@@ -71,6 +71,8 @@ Two things to know before using these:
 
 **Azure OpenAI** — both accounts `kind: OpenAI`, SKU `S0`, custom subdomain, system-assigned identity. `gpt-4o` version `2024-11-20`; Whisper model `whisper` version `001`. Whisper is in northcentralus because Whisper 001 Standard is not offered in westus3.
 
+**Optional assessment-only deployment (`#584`).** `openai.bicep`'s `additionalDeployments` array can add further model deployments on the primary account beyond `gpt-4o`, keyed by `assessmentModelName` in `main.bicep` — staging and prod both set this to `gpt-5` (`assessmentDeploymentCapacity` 1 / 2 K TPM), used only by the packet preliminary assessment via the `AzureOpenAi--AssessmentDeploymentName` Key Vault secret; categorization and issue-text refinement stay on `gpt-4o` via `TextDeploymentName`. `gpt-5` deploys under SKU `DataZoneStandard` (US), not the `Standard` regional SKU `gpt-4o` uses — that SKU isn't offered for it. Blank `assessmentModelName` and redeploy to revert the assessment call to `gpt-4o` with no application-code change.
+
 **ACS** — location `global`, data location United States, engagement tracking disabled. Email Service with an Azure-managed domain in every environment; staging and prod each also link a `CustomerManaged` sending subdomain — `mail.staging.rvintake.com` and `mail.rvintake.com` (`acsCustomEmailDomain`, `#532`) — and send the packet email From it.
 
 **ACS Email quotas and the managed-domain ceiling (`#521`, `#532`).** An Azure-managed domain is a trial tier, not a small custom one — Microsoft's published limits:

@@ -18,6 +18,9 @@ param tags object
 @minValue(1)
 param deploymentCapacity int
 
+@description('Additional model deployments on this account, independent of the primary gpt-4o deployment — e.g. a single-purpose deployment for one call to evaluate or switch models without touching gpt-4o. Each entry: { name, modelName, modelVersion, skuName, capacity }. Empty = none. Some newer model families (e.g. gpt-5) are not offered under the regional "Standard" SKU used by gpt-4o — use "GlobalStandard" or "DataZoneStandard" for those.')
+param additionalDeployments array = []
+
 // ── Variables ─────────────────────────────────────────────────
 
 var deploymentName = 'gpt-4o'
@@ -68,6 +71,31 @@ resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
   }
 }
 
+// ── Additional Model Deployments (optional) ───────────────────
+// Sequential (@batchSize(1)) to avoid concurrent deployment PUTs against the
+// same Cognitive Services account, which Azure can reject as conflicting.
+
+@batchSize(1)
+resource additionalModelDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [for d in additionalDeployments: {
+  parent: openAiAccount
+  name: d.name
+  sku: {
+    name: d.skuName
+    capacity: d.capacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: d.modelName
+      version: d.modelVersion
+    }
+    versionUpgradeOption: 'OnceCurrentVersionExpired'
+  }
+  dependsOn: [
+    gpt4oDeployment
+  ]
+}]
+
 // ── Outputs ───────────────────────────────────────────────────
 
 @description('The endpoint URL of the Azure OpenAI resource.')
@@ -81,3 +109,6 @@ output deploymentName string = gpt4oDeployment.name
 
 @description('The principal ID of the system-assigned managed identity.')
 output principalId string = openAiAccount.identity.principalId
+
+@description('Names of additional model deployments created on this account, in the same order as additionalDeployments.')
+output additionalDeploymentNames array = [for (d, i) in additionalDeployments: additionalModelDeployments[i].name]
