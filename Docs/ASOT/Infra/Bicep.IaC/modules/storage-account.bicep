@@ -125,7 +125,7 @@ resource attachmentsContainer 'Microsoft.Storage/storageAccounts/blobServices/co
 
 // Storage Blob Data Contributor — read/write blobs, create containers
 resource blobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(blobAccessPrincipalId)) {
-  name: guid(storageAccount.id, blobAccessPrincipalId, storageBlobDataContributorRoleId)
+  name: guid(storageAccount.id, empty(blobAccessPrincipalId) ? 'unset-app' : blobAccessPrincipalId, storageBlobDataContributorRoleId)
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId(
@@ -139,7 +139,7 @@ resource blobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-0
 
 // Storage Blob Delegator — required for GetUserDelegationKeyAsync (user delegation SAS)
 resource blobDelegatorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(blobAccessPrincipalId)) {
-  name: guid(storageAccount.id, blobAccessPrincipalId, storageBlobDelegatorRoleId)
+  name: guid(storageAccount.id, empty(blobAccessPrincipalId) ? 'unset-app' : blobAccessPrincipalId, storageBlobDelegatorRoleId)
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegatorRoleId)
@@ -152,7 +152,7 @@ resource blobDelegatorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 
 // Storage Blob Data Contributor for staging slot managed identity
 resource stagingSlotBlobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(stagingSlotBlobAccessPrincipalId)) {
-  name: guid(storageAccount.id, stagingSlotBlobAccessPrincipalId, storageBlobDataContributorRoleId)
+  name: guid(storageAccount.id, empty(stagingSlotBlobAccessPrincipalId) ? 'unset-staging-slot' : stagingSlotBlobAccessPrincipalId, storageBlobDataContributorRoleId)
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId(
@@ -166,7 +166,7 @@ resource stagingSlotBlobDataContributorRole 'Microsoft.Authorization/roleAssignm
 
 // Storage Blob Delegator for staging slot managed identity
 resource stagingSlotBlobDelegatorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(stagingSlotBlobAccessPrincipalId)) {
-  name: guid(storageAccount.id, stagingSlotBlobAccessPrincipalId, storageBlobDelegatorRoleId)
+  name: guid(storageAccount.id, empty(stagingSlotBlobAccessPrincipalId) ? 'unset-staging-slot' : stagingSlotBlobAccessPrincipalId, storageBlobDelegatorRoleId)
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegatorRoleId)
@@ -184,7 +184,7 @@ resource stagingSlotBlobDelegatorRole 'Microsoft.Authorization/roleAssignments@2
 
 // Storage Blob Data Contributor — read/write blobs, create containers
 resource devBlobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(devBlobAccessPrincipalId)) {
-  name: guid(storageAccount.id, devBlobAccessPrincipalId, storageBlobDataContributorRoleId)
+  name: guid(storageAccount.id, empty(devBlobAccessPrincipalId) ? 'unset-dev' : devBlobAccessPrincipalId, storageBlobDataContributorRoleId)
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId(
@@ -198,7 +198,7 @@ resource devBlobDataContributorRole 'Microsoft.Authorization/roleAssignments@202
 
 // Storage Blob Delegator — required for GetUserDelegationKeyAsync (user delegation SAS)
 resource devBlobDelegatorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(devBlobAccessPrincipalId)) {
-  name: guid(storageAccount.id, devBlobAccessPrincipalId, storageBlobDelegatorRoleId)
+  name: guid(storageAccount.id, empty(devBlobAccessPrincipalId) ? 'unset-dev' : devBlobAccessPrincipalId, storageBlobDelegatorRoleId)
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegatorRoleId)

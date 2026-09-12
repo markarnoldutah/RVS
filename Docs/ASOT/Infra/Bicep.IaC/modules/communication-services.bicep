@@ -7,15 +7,26 @@
 // Azure portal (not Bicep) for the MVP.
 //
 // When `customDomainName` is set (staging — mail.staging.rvintake.com;
-// prod — mail.rvintake.com; issue #532) a second, CustomerManaged domain is provisioned
-// alongside the Azure-managed one and linked to the account. The
-// Azure-managed *.azurecomm.net domain caps at 10 emails/hour with
-// no support path to raise it; a verified custom sending subdomain
-// is the only route to pilot volume and to a warmed sender
-// reputation. Bicep provisions the domain and emits the SPF / DKIM
-// / domain-ownership records it needs (`customDomainVerificationRecords`);
+// prod — mail.rvintake.com; issue #532) a second, CustomerManaged domain is
+// provisioned alongside the Azure-managed one. The Azure-managed
+// *.azurecomm.net domain caps at 10 emails/hour with no support path to raise
+// it; a verified custom sending subdomain is the only route to pilot volume
+// and to a warmed sender reputation. Bicep provisions the domain and emits
+// the raw SPF / DKIM / domain-ownership records it needs
+// (`customDomainVerificationRecords`) for the caller to write into DNS;
 // `initiate-verification` and the quota-increase request stay manual
 // (README "Deploy Production" step 4).
+//
+// The domain is linked to the account (added to `linkedDomains`) ONLY when
+// `linkCustomDomain = true` — ACS rejects linking an unverified domain
+// (`DomainValidationError: ... not in a valid state for linking`), so a
+// brand-new domain can never be linked in the same deployment that creates
+// it. Bootstrap sequence for a new custom domain: (1) deploy with the default
+// `linkCustomDomain = false` to create the domain and let the caller write
+// its DNS records; (2) run `initiate-verification` and poll until every
+// record shows Verified; (3) redeploy with `linkCustomDomain = true` to
+// perform the link. Steps 1 and 3 use the identical template — only the
+// parameter changes.
 //
 // ACS is a **global** resource — `location` is always 'global'.
 // Data residency is controlled via the `dataLocation` property.
@@ -42,6 +53,9 @@ param stagingSlotPrincipalId string = ''
 @description('Custom sending subdomain to provision as a CustomerManaged domain (e.g. mail.rvintake.com). Empty = Azure-managed domain only. (#532)')
 param customDomainName string = ''
 
+@description('When true, adds the custom domain to the ACS account\'s linkedDomains. ACS rejects linking an unverified domain, so this must stay false on the deploy that first creates the domain and only flip to true once every verificationRecords entry shows Verified. Ignored when customDomainName is empty.')
+param linkCustomDomain bool = false
+
 // ── Variables ─────────────────────────────────────────────────
 
 // Email service name follows the ACS resource name with an '-email' suffix.
@@ -65,12 +79,14 @@ resource acsAccount 'Microsoft.Communication/communicationServices@2023-04-01' =
   tags: tags
   properties: {
     dataLocation: dataLocation
-    // Both domains are linked when a custom one is configured — the account can
-    // send From either, and the managed domain stays available as a fallback.
-    linkedDomains: empty(customDomainName)
-      ? [ azureManagedDomain.id ]
+    // Both domains are linked once the custom one is verified — the account
+    // can then send From either, with the managed domain as a fallback. Until
+    // linkCustomDomain flips to true (see param doc above), only the managed
+    // domain is linked — ACS rejects linking an unverified domain outright.
+    linkedDomains: (!empty(customDomainName) && linkCustomDomain)
       #disable-next-line BCP318
-      : [ azureManagedDomain.id, customDomain.id ]
+      ? [ azureManagedDomain.id, customDomain.id ]
+      : [ azureManagedDomain.id ]
   }
 }
 
@@ -179,29 +195,7 @@ output hasCustomDomain bool = !empty(customDomainName)
 #disable-next-line BCP318
 output customFromSenderDomain string = empty(customDomainName) ? '' : customDomain.properties.fromSenderDomain
 
-@description('CNAME records the custom domain needs (DKIM, DKIM2), shaped for dns.bicep as [{ name, target }]. Empty when no custom domain.')
-output customDomainCnameRecords array = empty(customDomainName) ? [] : [
-  #disable-next-line BCP318
-  { name: customDomain.properties.verificationRecords.DKIM.name, target: customDomain.properties.verificationRecords.DKIM.value }
-  #disable-next-line BCP318
-  { name: customDomain.properties.verificationRecords.DKIM2.name, target: customDomain.properties.verificationRecords.DKIM2.value }
-]
-
-@description('TXT record-set the custom domain needs, shaped for dns.bicep as [{ name, values }] where each value is a separate TXT record: the domain-ownership string and the SPF string (ending in -all). ACS puts both at the subdomain host, so they share one record-set name. DMARC is authored by the caller. Empty when no custom domain.')
-output customDomainTxtRecords array = empty(customDomainName) ? [] : [
-  {
-    #disable-next-line BCP318
-    name: customDomain.properties.verificationRecords.Domain.name
-    values: [
-      #disable-next-line BCP318
-      customDomain.properties.verificationRecords.Domain.value
-      #disable-next-line BCP318
-      customDomain.properties.verificationRecords.SPF.value
-    ]
-  }
-]
-
-@description('Raw ACS verification records for the custom domain — for diffing against the zone with `az communication email domain show`. Empty object when no custom domain.')
+@description('Raw ACS verification records for the custom domain (DKIM/DKIM2/Domain/SPF, each { name, value, type, ttl }). NOT zone-relative: ACS returns DKIM/DKIM2 as a bare selector with no domain suffix at all, and Domain/SPF as the full custom-domain FQDN — neither is usable as a dns.bicep record-set name as-is inside a parent zone. The caller (main.bicep) has the zone context this module lacks and derives the correct relative names from these raw values plus the zone/subdomain relationship. Also used for diffing against the zone with `az communication email domain show`. Empty object when no custom domain.')
 #disable-next-line BCP318
 output customDomainVerificationRecords object = empty(customDomainName) ? {} : customDomain.properties.verificationRecords
 

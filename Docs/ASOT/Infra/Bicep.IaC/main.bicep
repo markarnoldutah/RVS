@@ -95,6 +95,9 @@ param acsCustomEmailDomain string = ''
 @description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. (#532)')
 param dmarcReportingAddress string = ''
 
+@description('When true, links the custom domain to the ACS account. ACS rejects linking an unverified domain, so this must stay false (the default) on the deploy that first creates a new acsCustomEmailDomain — that deploy only creates the domain and writes its DNS records. Once every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified, redeploy with this set to true (CLI override — not committed to any .bicepparam file, same pattern as opsAlertEmailReceivers) to perform the link. (#579)')
+param acsCustomDomainVerified bool = false
+
 // ── Static Web App Parameters ─────────────────────────────────
 
 @description('When true, deploys Azure Static Web App resources for Blazor.Intake and Blazor.Manager.')
@@ -525,6 +528,7 @@ module communicationServices 'modules/communication-services.bicep' = if (deploy
     #disable-next-line BCP318
     stagingSlotPrincipalId: (deployAcs && deployAppService && deployStagingSlot) ? appService.outputs.stagingSlotPrincipalId : ''
     customDomainName: acsCustomEmailDomain
+    linkCustomDomain: acsCustomDomainVerified
   }
 }
 
@@ -544,22 +548,57 @@ var acsEmailFromAddress = empty(acsMailFromSenderDomain) ? '' : 'DoNotReply@${ac
 // domain — deterministic once the domain resource exists, written into the
 // Intake zone by the dnsIntake module below. `initiate-verification` and the
 // quota-increase request stay manual (README "Deploy Production" step 4).
-// ACS returns each record `name` relative to the zone apex
-// (e.g. 'mail', 'selector1-..._domainkey.mail').
-#disable-next-line BCP318
-var acsCustomDomainCnameRecords = acsCustomDomainOn ? communicationServices.outputs.customDomainCnameRecords : []
+//
+// ACS's `verificationRecords[*].name` values are NOT zone-relative — confirmed
+// against a live `az communication email domain show` for mail.staging.rvintake.com
+// (2026-09-12): DKIM/DKIM2 come back as a bare selector with no domain suffix
+// at all ('selector1-azurecomm-prod-net._domainkey'), and Domain/SPF come back
+// as the full custom-domain FQDN ('mail.staging.rvintake.com'). Passing either
+// straight through as a dns.bicep record-set name inside the PARENT zone
+// (rvintake.com) is wrong: the FQDN form double-suffixes into
+// 'mail.staging.rvintake.com.rvintake.com', and the bare-selector form is
+// missing the subdomain host it needs to sit under. Both are corrected here
+// by combining them with the subdomain's own label under the zone —
+// 'mail.staging' for mail.staging.rvintake.com, 'mail' for mail.rvintake.com —
+// the same label the DMARC record below already uses.
+var acsCustomDomainSubLabel = acsCustomDomainOn ? replace(acsCustomEmailDomain, '.${intakeZoneName}', '') : ''
+
+var acsCustomDomainCnameRecords = acsCustomDomainOn ? [
+  {
+    #disable-next-line BCP318
+    name: '${communicationServices.outputs.customDomainVerificationRecords.DKIM.name}.${acsCustomDomainSubLabel}'
+    #disable-next-line BCP318
+    target: communicationServices.outputs.customDomainVerificationRecords.DKIM.value
+  }
+  {
+    #disable-next-line BCP318
+    name: '${communicationServices.outputs.customDomainVerificationRecords.DKIM2.name}.${acsCustomDomainSubLabel}'
+    #disable-next-line BCP318
+    target: communicationServices.outputs.customDomainVerificationRecords.DKIM2.value
+  }
+] : []
 
 // DMARC is authored here (not taken from ACS) so we control the policy and the
 // reporting address: p=none surfaces failures without dropping mail while the
-// domain warms. Host is the sending subdomain's label(s) under the zone —
-// 'mail' for mail.rvintake.com, 'mail.staging' for mail.staging.rvintake.com,
-// in zone rvintake.com — prefixed with _dmarc.
+// domain warms.
 var acsCustomDomainDmarcRecord = {
-  name: '_dmarc.${replace(acsCustomEmailDomain, '.${intakeZoneName}', '')}'
+  name: '_dmarc.${acsCustomDomainSubLabel}'
   values: [ 'v=DMARC1; p=none; rua=mailto:${dmarcReportingAddress}; adkim=r; aspf=r' ]
 }
-#disable-next-line BCP318
-var acsCustomDomainOwnershipTxtRecords = acsCustomDomainOn ? communicationServices.outputs.customDomainTxtRecords : []
+
+// Domain (ownership) + SPF share one record-set name — the subdomain's own
+// label under the zone, not the FQDN ACS returns in .name.
+var acsCustomDomainOwnershipTxtRecords = acsCustomDomainOn ? [
+  {
+    name: acsCustomDomainSubLabel
+    values: [
+      #disable-next-line BCP318
+      communicationServices.outputs.customDomainVerificationRecords.Domain.value
+      #disable-next-line BCP318
+      communicationServices.outputs.customDomainVerificationRecords.SPF.value
+    ]
+  }
+] : []
 var acsCustomDomainTxtRecords = acsCustomDomainOn ? concat(acsCustomDomainOwnershipTxtRecords, [ acsCustomDomainDmarcRecord ]) : []
 
 module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs && deployKeyVault) {
@@ -915,9 +954,11 @@ output acsCustomEmailDomain string = acsCustomDomainOn ? acsCustomEmailDomain : 
 @description('Packet-email From address applied to the API app settings — custom verified domain when configured, else the Azure-managed domain.')
 output acsEmailFromAddress string = deployAcs ? acsEmailFromAddress : ''
 
-@description('Manual follow-up when a custom sending domain is configured. Bicep provisions the CustomerManaged ACS domain and writes its SPF/DKIM/DMARC records, but cannot initiate verification or raise the send quota. Empty when acsCustomEmailDomain is unset.')
+@description('Manual follow-up when a custom sending domain is configured. Bicep provisions the CustomerManaged ACS domain and writes its SPF/DKIM/DMARC records, but cannot initiate verification, link the verified domain to the account, or raise the send quota. Empty when acsCustomEmailDomain is unset.')
 output acsCustomDomainAction string = acsCustomDomainOn
-  ? 'ACTION REQUIRED: run `az communication email domain initiate-verification` for Domain/SPF/DKIM/DKIM2, confirm every record shows Verified, then request the ACS send-quota increase (72h lead) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.'
+  ? (acsCustomDomainVerified
+      ? 'Domain linked to the ACS account. If sends still fail with DomainNotLinked, confirm every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified, then request the ACS send-quota increase (72h lead) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.'
+      : 'ACTION REQUIRED: run `az communication email domain initiate-verification` for Domain/SPF/DKIM/DKIM2, confirm every record shows Verified, then redeploy with acsCustomDomainVerified=true to link the domain to the account before requesting the ACS send-quota increase (72h lead) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.')
   : ''
 
 // ── SWA ───────────────────────────────────────────────────────
