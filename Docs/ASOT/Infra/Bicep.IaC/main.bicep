@@ -46,6 +46,23 @@ param whisperCapacity int = 1
 @description('Optional. Name of the model deployment used for text workloads. Defaults to gpt-4o.')
 param textDeploymentName string = 'gpt-4o'
 
+@description('Optional. Model catalog name for an additional single-purpose deployment used only by the packet preliminary assessment (e.g. "gpt-5"), independent of textDeploymentName. Empty = not deployed; the app falls back to textDeploymentName. This is the intended way to try a stronger model for the assessment call alone, and to revert to gpt-4o (blank this and redeploy) without touching application code.')
+param assessmentModelName string = ''
+
+@description('Model version for the assessment deployment (only used when assessmentModelName is set).')
+param assessmentModelVersion string = '2025-08-07'
+
+@description('SKU for the assessment deployment. Some newer model families (e.g. gpt-5) are not offered under the regional "Standard" SKU textDeploymentName uses — GlobalStandard routes to wherever Microsoft has capacity, DataZoneStandard keeps inference within the US, matching the residency textDeploymentName already has today.')
+@allowed([
+  'GlobalStandard'
+  'DataZoneStandard'
+])
+param assessmentDeploymentSkuName string = 'DataZoneStandard'
+
+@description('Assessment deployment capacity in K TPM. Staging = 1, Prod = 2 — confirm against remaining model quota before raising.')
+@minValue(1)
+param assessmentDeploymentCapacity int = 1
+
 // ── Storage Parameters ────────────────────────────────────────
 
 @description('When true, deploys a general-purpose v2 storage account (Standard_LRS) with the rvs-attachments blob container.')
@@ -407,6 +424,21 @@ module openAiNaming 'modules/naming-tags.bicep' = {
   }
 }
 
+// A single-entry array today (the preliminary-assessment model), built here rather
+// than passed as a raw object literal so openai.bicep stays reusable for whatever
+// gets added next (e.g. issue #584's "another module to switch to Sonnet" note —
+// though a Claude/Foundry deployment lives on a different resource kind entirely
+// and would need its own module, not another entry here).
+var additionalOpenAiDeployments = empty(assessmentModelName) ? [] : [
+  {
+    name: assessmentModelName
+    modelName: assessmentModelName
+    modelVersion: assessmentModelVersion
+    skuName: assessmentDeploymentSkuName
+    capacity: assessmentDeploymentCapacity
+  }
+]
+
 module openAi 'modules/openai.bicep' = {
   name: 'deploy-openai-${environmentName}'
   scope: rgPrimary
@@ -415,8 +447,12 @@ module openAi 'modules/openai.bicep' = {
     tags: openAiNaming.outputs.tags
     deploymentCapacity: openAiCapacity
     resourceName: openAiNaming.outputs.resourceName
+    additionalDeployments: additionalOpenAiDeployments
   }
 }
+
+// Name of the assessment-only model deployment, or empty when assessmentModelName is unset.
+var openAiAssessmentDeploymentName = empty(assessmentModelName) ? '' : openAi.outputs.additionalDeploymentNames[0]
 
 // ── Whisper STT (dedicated region: northcentralus) ────────────
 
@@ -454,6 +490,7 @@ module keyVaultSecrets 'modules/openai-keyvault-secrets.bicep' = if (deployKeyVa
     openAiName: openAi.outputs.name
     openAiDeploymentName: openAi.outputs.deploymentName
     openAiTextDeploymentName: textDeploymentName
+    openAiAssessmentDeploymentName: openAiAssessmentDeploymentName
     whisperOpenAiName: whisper.outputs.name
     whisperOpenAiResourceGroup: rgWhisper.name
     openAiWhisperDeploymentName: whisper.outputs.whisperDeploymentName
@@ -774,6 +811,7 @@ output openAiEndpoint string = openAi.outputs.endpoint
 
 @description('The name of the GPT-4o model deployment.')
 output openAiDeploymentName string = openAi.outputs.deploymentName
+output openAiAssessmentDeploymentName string = openAiAssessmentDeploymentName
 
 @description('The Whisper Azure OpenAI resource endpoint URL.')
 output whisperEndpoint string = whisper.outputs.endpoint

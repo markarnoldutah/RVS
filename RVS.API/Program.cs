@@ -518,9 +518,16 @@ builder.Services.AddSingleton<RuleBasedPreliminaryAssessmentService>();
 var assessmentEndpoint = builder.Configuration["AzureOpenAi:Endpoint"];
 if (!useMockIntegrations && !string.IsNullOrWhiteSpace(assessmentEndpoint))
 {
-    var assessmentDeploymentName = builder.Configuration["AzureOpenAi:TextDeploymentName"]
-        ?? builder.Configuration["AzureOpenAi:DeploymentName"]
-        ?? "gpt-4o";
+    // AssessmentDeploymentName lets the packet assessment use a different model than
+    // categorization/refinement (issue #584) without any code change — blank it (Key
+    // Vault secret always exists, empty when unset) to fall back to gpt-4o via
+    // TextDeploymentName.
+    var configuredAssessmentDeployment = builder.Configuration["AzureOpenAi:AssessmentDeploymentName"];
+    var assessmentDeploymentName = !string.IsNullOrWhiteSpace(configuredAssessmentDeployment)
+        ? configuredAssessmentDeployment
+        : builder.Configuration["AzureOpenAi:TextDeploymentName"]
+            ?? builder.Configuration["AzureOpenAi:DeploymentName"]
+            ?? "gpt-4o";
     var assessmentApiKey = builder.Configuration["AzureOpenAi:ApiKey"];
 
     builder.Services.AddHttpClient<IPreliminaryAssessmentService, AzureOpenAiPreliminaryAssessmentService>(client =>

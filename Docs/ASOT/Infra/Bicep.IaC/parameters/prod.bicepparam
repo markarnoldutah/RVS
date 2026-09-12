@@ -22,6 +22,14 @@ param whisperResourceGroupName = 'rg-rvs-prod-ncus'
 param openAiCapacity = 30
 param whisperCapacity = 2
 
+// Preliminary-assessment-only model, independent of textDeploymentName (#584).
+// Blank assessmentModelName and redeploy to revert to gpt-4o with zero
+// application-code changes. DataZoneStandard (US) SKU — gpt-5 isn't offered
+// under the regional Standard SKU textDeploymentName uses. Keep in step with
+// prod_basic.bicepparam.
+param assessmentModelName = 'gpt-5'
+param assessmentDeploymentCapacity = 2
+
 // App Service (API) — Standard S1: Always On, deployment slots (staging), autoscale ready.
 // Cost-conscious alternative: appServiceSkuName = 'B1' (see prod_basic.bicepparam).
 param deployAppService = true

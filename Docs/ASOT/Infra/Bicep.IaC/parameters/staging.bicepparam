@@ -8,6 +8,16 @@ param whisperResourceGroupName = 'rg-rvs-staging-ncus'
 param openAiCapacity = 10
 param whisperCapacity = 1
 
+// Preliminary-assessment-only model, independent of textDeploymentName (#584).
+// Try gpt-5 here first; blank assessmentModelName and redeploy to revert to
+// gpt-4o with zero application-code changes. DataZoneStandard (US) SKU — gpt-5
+// isn't offered under the regional Standard SKU textDeploymentName uses.
+// Capacity 1 (1K TPM) — confirmed against remaining subscription quota for
+// gpt-5 in westus3 at the time this was set; raise via quota request first if
+// this account's other AI usage grows into it.
+param assessmentModelName = 'gpt-5'
+param assessmentDeploymentCapacity = 1
+
 // App Service (API) — Basic B1 ($13.14/mo), upgrade path: B1 → S1
 param deployAppService = true
 param appServiceSkuName = 'B1'
