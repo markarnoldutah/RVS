@@ -31,26 +31,30 @@ public sealed class NotificationOrchestrator : INotificationOrchestrator
         string? toPhoneNumber,
         string serviceRequestId,
         string dealershipName,
+        string statusUrl,
+        string? dealerPhone,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
         ArgumentException.ThrowIfNullOrWhiteSpace(dealershipName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(statusUrl);
 
         var sent = false;
 
         if (!emailOptOut && !string.IsNullOrWhiteSpace(toEmail))
         {
             _logger.LogInformation("Sending SR confirmation via email for SR {ServiceRequestId}", serviceRequestId);
-            await _emailService.SendServiceRequestConfirmationAsync(
-                toEmail, serviceRequestId, cancellationToken);
+            var subject = ServiceRequestConfirmationContent.BuildEmailSubject(dealershipName);
+            var htmlBody = ServiceRequestConfirmationContent.BuildEmailHtmlBody(dealershipName, statusUrl, dealerPhone);
+            await _emailService.SendEmailAsync(toEmail, subject, htmlBody, cancellationToken);
             sent = true;
         }
 
         if (!smsOptOut && !string.IsNullOrWhiteSpace(toPhoneNumber))
         {
             _logger.LogInformation("Sending SR confirmation via SMS for SR {ServiceRequestId}", serviceRequestId);
-            await _smsService.SendServiceRequestConfirmationSmsAsync(
-                toPhoneNumber, serviceRequestId, dealershipName, cancellationToken);
+            var message = ServiceRequestConfirmationContent.BuildSmsBody(dealershipName, statusUrl, dealerPhone);
+            await _smsService.SendSmsAsync(toPhoneNumber, message, cancellationToken);
             sent = true;
         }
 

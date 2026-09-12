@@ -16,21 +16,13 @@ public interface INotificationService
     Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sends a confirmation email for a newly submitted service request.
-    /// </summary>
-    /// <param name="toEmail">Recipient email address.</param>
-    /// <param name="serviceRequestId">Identifier of the confirmed service request.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task SendServiceRequestConfirmationAsync(string toEmail, string serviceRequestId, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Sends the composed service-packet email to the service department (<c>Spec B-4</c>,
     /// issue #437): the packet HTML as the inline body, its paste block as the plain-text
     /// alternative, the PDF and original photos as attachments, to every address in
     /// <see cref="PacketEmailMessage.Recipients"/>.
     /// </summary>
     /// <remarks>
-    /// Unlike the confirmation methods this awaits the transport's submit call and lets a
+    /// Unlike <see cref="SendEmailAsync"/> this awaits the transport's submit call and lets a
     /// failure propagate, so the caller can react. Idempotency and retry with backoff are
     /// layered on by the caller (issue #438), not here.
     /// </remarks>

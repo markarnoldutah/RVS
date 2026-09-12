@@ -72,49 +72,6 @@ public class AcsSmsNotificationServiceTests
         await act.Should().NotThrowAsync();
     }
 
-    // ── SendServiceRequestConfirmationSmsAsync Guard Clauses ─────────────
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendServiceRequestConfirmationSmsAsync_WhenPhoneIsNullOrWhiteSpace_ShouldThrowArgumentException(string? phone)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendServiceRequestConfirmationSmsAsync(phone!, "sr_001", "Blue Compass RV");
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendServiceRequestConfirmationSmsAsync_WhenSrIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? srId)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendServiceRequestConfirmationSmsAsync("+18015551234", srId!, "Blue Compass RV");
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendServiceRequestConfirmationSmsAsync_WhenDealershipNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? dealer)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendServiceRequestConfirmationSmsAsync("+18015551234", "sr_001", dealer!);
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Fact]
-    public async Task SendServiceRequestConfirmationSmsAsync_WithValidInputs_ShouldNotThrow()
-    {
-        var sut = CreateService();
-        var act = () => sut.SendServiceRequestConfirmationSmsAsync("+18015551234", "sr_001", "Blue Compass RV");
-        await act.Should().NotThrowAsync();
-    }
-
     // ── SendStatusChangeSmsAsync Guard Clauses ───────────────────────────
 
     [Theory]

@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
+using RVS.API.Options;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
@@ -29,6 +31,8 @@ public class IntakeOrchestrationServiceTests
     {
         _packetQueueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>())).Returns(true);
 
+        var intakeUrlOptions = Microsoft.Extensions.Options.Options.Create(new IntakeUrlOptions { BaseUrl = "https://rvintake.com" });
+
         _sut = new IntakeOrchestrationService(
             _slugLookupRepoMock.Object,
             _globalAcctRepoMock.Object,
@@ -40,6 +44,7 @@ public class IntakeOrchestrationServiceTests
             _categorizationMock.Object,
             _notificationOrchestratorMock.Object,
             _packetQueueMock.Object,
+            intakeUrlOptions,
             Mock.Of<ILogger<IntakeOrchestrationService>>());
     }
 

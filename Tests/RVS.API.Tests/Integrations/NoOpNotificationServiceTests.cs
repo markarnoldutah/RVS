@@ -19,14 +19,6 @@ public class NoOpNotificationServiceTests
     }
 
     [Fact]
-    public async Task SendServiceRequestConfirmationAsync_ShouldCompleteWithoutThrowing()
-    {
-        var act = () => _sut.SendServiceRequestConfirmationAsync("user@example.com", "sr_001");
-
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
     public async Task SendPacketEmailAsync_ShouldCompleteWithoutThrowing()
     {
         var message = new PacketEmailMessage

@@ -23,17 +23,6 @@ public interface ISmsNotificationService
     Task SendMagicLinkSmsAsync(string toPhoneNumber, string magicLinkUrl, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sends an SMS confirmation for a newly submitted service request.
-    /// </summary>
-    /// <param name="toPhoneNumber">Recipient phone number in E.164 format.</param>
-    /// <param name="serviceRequestId">Identifier of the confirmed service request.</param>
-    /// <param name="dealershipName">Display name of the dealership for message context.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task SendServiceRequestConfirmationSmsAsync(
-        string toPhoneNumber, string serviceRequestId, string dealershipName,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Sends an SMS notification when a service request status changes.
     /// </summary>
     /// <param name="toPhoneNumber">Recipient phone number in E.164 format.</param>

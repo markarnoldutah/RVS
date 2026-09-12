@@ -30,17 +30,6 @@ public sealed class NoOpSmsNotificationService : ISmsNotificationService
     }
 
     /// <inheritdoc />
-    public Task SendServiceRequestConfirmationSmsAsync(
-        string toPhoneNumber, string serviceRequestId, string dealershipName,
-        CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug(
-            "NoOpSmsNotificationService: Would send SR confirmation SMS to {Recipient} for SR {ServiceRequestId} at {Dealership}",
-            toPhoneNumber, serviceRequestId, dealershipName);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
     public Task SendStatusChangeSmsAsync(
         string toPhoneNumber, string serviceRequestId, string newStatus,
         CancellationToken cancellationToken = default)
