@@ -1,6 +1,6 @@
 # RVS — Infrastructure
 
-**Version:** 1.2 · September 10, 2026
+**Version:** 1.3 · September 12, 2026
 **Scope:** Azure resources and CI/CD as declared. The Bicep in `Infra/Bicep.IaC/` is the source of truth; this document explains it. Where they disagree, the Bicep is right.
 
 `main.bicep` targets subscription scope. Primary region **westus3**, Whisper **northcentralus**, Static Web Apps **westus2**, ACS global.
@@ -97,6 +97,8 @@ Prod's warmed custom domain is what carries the local cluster (`#527`).
 - **No saving.** A second ACS resource has no standing charge.
 
 `mail.staging` is a sibling of `mail`, not a child of it. Mailbox providers still weigh a subdomain's behaviour partly against its parent `rvintake.com`, so staging stays harmless by behaviour: staging mail that reaches a real inbox goes only to mailboxes the team controls.
+
+**Outbound SMS sending number — toll-free, not per-location 10DLC (issue #600).** The advisor-initiated intake invite (A-14) sends by SMS. Per-location 10DLC numbers were considered, for the trust benefit of a local area code, and rejected in favor of one shared toll-free number: the customer is already on a live call with the advisor when the text lands, which collapses the cold-outreach trust gap 10DLC solves, and toll-free avoids a per-location provisioning/reconciliation tail — notably, STOP/opt-out handling is *per-number*, so a customer opting out from one location's number stays reachable from another's, a compliance gap 10DLC would force an explicit answer to. ACS 10DLC brand/campaign registration is also still **preview**, with no SLA and an explicit Microsoft "not recommended for production" notice, against toll-free's GA path — a second reason to default there even though 10DLC registers faster (days, versus 5–8 weeks official for toll-free and real-world reports of ~4 months). The outbound sending number still resolves per-location in config/data rather than being hardcoded, so a future *cold* outreach use case (no live call to lean on) can move to local numbers without a schema change; every location resolves to the same toll-free number today. Submitting a toll-free verification application in parallel is cheap (~$2/mo) and worth doing regardless, as a hedge against the 10DLC preview surface changing.
 
 **Key Vault** — standard SKU, RBAC authorization, 90-day soft delete, purge protection on, public access enabled.
 
