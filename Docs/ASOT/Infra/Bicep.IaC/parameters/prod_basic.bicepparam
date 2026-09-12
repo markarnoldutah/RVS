@@ -50,6 +50,7 @@ param deployAcs = true
 // for the rationale and the manual follow-up. Kept in step with prod.bicepparam.
 param acsCustomEmailDomain = 'mail.rvintake.com'
 param dmarcReportingAddress = 'dmarc-reports@rvserviceflow.com'
+param acsCustomDomainVerified = true
 
 // Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
 param deploySwa = true

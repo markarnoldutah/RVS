@@ -95,7 +95,7 @@ param acsCustomEmailDomain string = ''
 @description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. (#532)')
 param dmarcReportingAddress string = ''
 
-@description('When true, links the custom domain to the ACS account. ACS rejects linking an unverified domain, so this must stay false (the default) on the deploy that first creates a new acsCustomEmailDomain — that deploy only creates the domain and writes its DNS records. Once every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified, redeploy with this set to true (CLI override — not committed to any .bicepparam file, same pattern as opsAlertEmailReceivers) to perform the link. (#579)')
+@description('When true, links the custom domain to the ACS account. ACS rejects linking an unverified domain, so this must stay false (the default) on the deploy that first creates a new acsCustomEmailDomain — that deploy only creates the domain and writes its DNS records. Once every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified, set this to true in the .bicepparam file and redeploy to perform the link. Once linked it must stay true — false unlinks the domain on the next deploy. (#579)')
 param acsCustomDomainVerified bool = false
 
 // ── Static Web App Parameters ─────────────────────────────────
