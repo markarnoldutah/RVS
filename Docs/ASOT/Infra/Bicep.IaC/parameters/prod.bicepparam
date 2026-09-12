@@ -80,6 +80,8 @@ param deployAcs = true
 // mailbox (or a DMARC-processor address).
 param acsCustomEmailDomain = 'mail.rvintake.com'
 param dmarcReportingAddress = 'dmarc-reports@rvserviceflow.com'
+// Verified and linked. Must stay true: false unlinks the domain on redeploy.
+param acsCustomDomainVerified = true
 
 // Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
 param deploySwa = true
