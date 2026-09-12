@@ -24,13 +24,6 @@ public class NoOpSmsNotificationServiceTests
     }
 
     [Fact]
-    public async Task SendServiceRequestConfirmationSmsAsync_ShouldCompleteWithoutThrowing()
-    {
-        var act = () => _sut.SendServiceRequestConfirmationSmsAsync("+18015551234", "sr_001", "Blue Compass RV");
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
     public async Task SendStatusChangeSmsAsync_ShouldCompleteWithoutThrowing()
     {
         var act = () => _sut.SendStatusChangeSmsAsync("+18015551234", "sr_001", "InProgress");

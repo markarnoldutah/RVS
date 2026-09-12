@@ -23,13 +23,6 @@ public sealed class NoOpNotificationService : INotificationService
     }
 
     /// <inheritdoc />
-    public Task SendServiceRequestConfirmationAsync(string toEmail, string serviceRequestId, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug("NoOpNotificationService: Would send SR confirmation to {Recipient} for SR {ServiceRequestId}", toEmail, serviceRequestId);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
     public Task SendPacketEmailAsync(PacketEmailMessage message, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);

@@ -55,40 +55,6 @@ public class AcsEmailNotificationServiceTests
         await act.Should().NotThrowAsync();
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendServiceRequestConfirmationAsync_WhenToEmailIsNullOrWhiteSpace_ShouldThrowArgumentException(string? toEmail)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendServiceRequestConfirmationAsync(toEmail!, "sr_001");
-
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendServiceRequestConfirmationAsync_WhenServiceRequestIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? srId)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendServiceRequestConfirmationAsync("user@example.com", srId!);
-
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Fact]
-    public async Task SendServiceRequestConfirmationAsync_WithValidInputs_ShouldCompleteImmediately()
-    {
-        var sut = CreateService();
-
-        var act = () => sut.SendServiceRequestConfirmationAsync("user@example.com", "sr_001");
-
-        await act.Should().NotThrowAsync();
-    }
-
     // ── SendPacketEmailAsync (Spec B-4, issue #437) ───────────────────────
 
     [Fact]

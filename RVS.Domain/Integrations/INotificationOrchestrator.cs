@@ -16,6 +16,8 @@ public interface INotificationOrchestrator
     /// <param name="toPhoneNumber">Recipient phone number in E.164 format.</param>
     /// <param name="serviceRequestId">Identifier of the confirmed service request.</param>
     /// <param name="dealershipName">Display name of the dealership for message context.</param>
+    /// <param name="statusUrl">The full URL of the customer's status page.</param>
+    /// <param name="dealerPhone">The dealer's contact phone number, when known.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task SendServiceRequestConfirmationAsync(
         bool smsOptOut,
@@ -24,6 +26,8 @@ public interface INotificationOrchestrator
         string? toPhoneNumber,
         string serviceRequestId,
         string dealershipName,
+        string statusUrl,
+        string? dealerPhone,
         CancellationToken cancellationToken = default);
 
     /// <summary>

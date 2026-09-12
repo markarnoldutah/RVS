@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using RVS.API.Options;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
@@ -25,6 +27,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     private readonly ICategorizationService _categorizationService;
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly IPacketGenerationQueue _packetGenerationQueue;
+    private readonly IntakeUrlOptions _intakeUrlOptions;
     private readonly ILogger<IntakeOrchestrationService> _logger;
 
     /// <summary>
@@ -41,6 +44,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         ICategorizationService categorizationService,
         INotificationOrchestrator notificationOrchestrator,
         IPacketGenerationQueue packetGenerationQueue,
+        IOptions<IntakeUrlOptions> intakeUrlOptions,
         ILogger<IntakeOrchestrationService> logger)
     {
         _slugLookupRepository = slugLookupRepository;
@@ -53,6 +57,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _categorizationService = categorizationService;
         _notificationOrchestrator = notificationOrchestrator;
         _packetGenerationQueue = packetGenerationQueue;
+        _intakeUrlOptions = intakeUrlOptions.Value;
         _logger = logger;
     }
 
@@ -310,13 +315,20 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             globalAcct.Id);
 
         // ── Step 7: Fire-and-forget notification ─────────────────────────────
+        // Spec section B / issue #496: the confirmation thanks the customer by dealer name,
+        // points them at their status page, and includes the dealer phone when known.
+        var location = await _locationRepository.GetByIdAsync(tenantId, locationId, cancellationToken);
+        var statusUrl = $"{_intakeUrlOptions.BaseUrl.TrimEnd('/')}/status/{globalAcct.MagicLinkToken}";
+
         _ = FireAndForgetNotificationAsync(
             request.SmsOptOut,
             request.EmailOptOut,
             request.Customer.Email.Trim(),
             request.Customer.Phone?.Trim(),
             serviceRequest.Id,
-            slugLookup.DealershipName);
+            slugLookup.DealershipName,
+            statusUrl,
+            location?.Phone);
 
         // ── Step 8: Enqueue packet generation (never blocks the 201) ─────────
         // Spec A-8 / B-1 / X-7: the packet is generated asynchronously; nothing here may delay
@@ -365,7 +377,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     /// </summary>
     private async Task FireAndForgetNotificationAsync(
         bool smsOptOut, bool emailOptOut,
-        string email, string? phone, string serviceRequestId, string dealershipName)
+        string email, string? phone, string serviceRequestId, string dealershipName,
+        string statusUrl, string? dealerPhone)
     {
         try
         {
@@ -376,6 +389,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 phone,
                 serviceRequestId,
                 dealershipName,
+                statusUrl,
+                dealerPhone,
                 CancellationToken.None);
         }
         catch (Exception ex)

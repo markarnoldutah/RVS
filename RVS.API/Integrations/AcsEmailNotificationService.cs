@@ -40,19 +40,6 @@ public sealed class AcsEmailNotificationService : INotificationService
     }
 
     /// <inheritdoc />
-    public Task SendServiceRequestConfirmationAsync(string toEmail, string serviceRequestId, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(toEmail);
-        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
-
-        var subject = $"Service Request {serviceRequestId} Confirmed";
-        var htmlBody = $"<p>Your service request <strong>{serviceRequestId}</strong> has been received and is being processed.</p>";
-
-        _ = FireAndForgetAsync(toEmail, subject, htmlBody);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
     public async Task SendPacketEmailAsync(PacketEmailMessage message, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);

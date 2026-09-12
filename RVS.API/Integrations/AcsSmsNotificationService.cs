@@ -68,19 +68,6 @@ public sealed class AcsSmsNotificationService : ISmsNotificationService
     }
 
     /// <inheritdoc />
-    public async Task SendServiceRequestConfirmationSmsAsync(
-        string toPhoneNumber, string serviceRequestId, string dealershipName,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(toPhoneNumber);
-        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipName);
-
-        var message = $"RV Service Flow: Your service request at {dealershipName} is confirmed (Ref: {serviceRequestId}). Reply STOP to opt out.";
-        await SendSmsAsync(toPhoneNumber, message, cancellationToken);
-    }
-
-    /// <inheritdoc />
     public async Task SendStatusChangeSmsAsync(
         string toPhoneNumber, string serviceRequestId, string newStatus,
         CancellationToken cancellationToken = default)
