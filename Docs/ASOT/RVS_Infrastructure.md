@@ -145,7 +145,7 @@ Four workflows in `.github/workflows/`, detailed runbook in its README.
 |---|---|---|
 | `build-test.yml` | push / PR, any branch | Restore, build `RVS.slnx` Release, run all three test projects with coverage, upload TRX + cobertura. Never deploys |
 | `deploy-staging.yml` | push to `main` | Diffs `HEAD~1..HEAD` to detect which apps changed, builds and tests everything, publishes only what changed. API via Azure OIDC + `webapps-deploy`; each SWA via its `*_SWA_TOKEN_STAGING` |
-| `deploy-production.yml` | `workflow_dispatch` only | Resolves the latest successful staging run on `main` and re-downloads **its** artifacts. Never rebuilds. Rewrites `blazor-environment` Staging→Production in `staticwebapp.config.json`, then deploys |
+| `deploy-production.yml` | `workflow_dispatch` only | For each selected app, resolves the newest successful staging run on `main` that built it and re-downloads that artifact. Never rebuilds. The Blazor apps choose their environment from the hostname in `index.html`, so the artifacts deploy unmodified |
 | `copilot-setup-steps.yml` | — | Agent environment bootstrap |
 
 Auth: the API uses Azure OIDC federated credentials, no long-lived secrets. Static Web Apps use deployment tokens held as environment secrets.
