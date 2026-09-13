@@ -63,13 +63,7 @@ jobs:
             exit 1
           fi
 
-          ENCODED_BRANCH=$(python - <<'PY'
-import os
-import urllib.parse
-
-print(urllib.parse.quote(os.environ["BRANCH_NAME"], safe=""))
-PY
-)
+          ENCODED_BRANCH=$(printf '%s' "$BRANCH_NAME" | jq -sRr '@uri')
 
           if ! gh api "/repos/$REPO/branches/$ENCODED_BRANCH" >/dev/null 2>&1; then
             echo "::error::'$BRANCH_INPUT' is not an existing branch in $REPO."
