@@ -12,7 +12,8 @@
       "mcp__github__issue_read",
       "Bash(git checkout *)",
       "Bash(git pull *)",
-      "Bash(dotnet exec *)"
+      "Bash(dotnet exec *)",
+      "mcp__github__issue_write"
     ]
   }
 }
