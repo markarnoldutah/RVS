@@ -25,35 +25,52 @@ jobs:
   # Resolve the staging run that produced the artifacts to promote
   # ---------------------------------------------------------------------------
   resolve-staging-run:
-    name: Resolve Staging Run
+    name: Resolve Staging Artifacts
     if: inputs.deploy_api || inputs.deploy_intake || inputs.deploy_manager
     runs-on: ubuntu-latest
     permissions:
       actions: read
     outputs:
-      run_id: ${{ steps.find.outputs.run_id }}
-      head_sha: ${{ steps.find.outputs.head_sha }}
+      api_run_id: ${{ steps.find.outputs.api_run_id }}
+      intake_run_id: ${{ steps.find.outputs.intake_run_id }}
+      intake_artifact: ${{ steps.find.outputs.intake_artifact }}
+      manager_run_id: ${{ steps.find.outputs.manager_run_id }}
+      manager_artifact: ${{ steps.find.outputs.manager_artifact }}
     steps:
-      - name: Find latest successful deploy-staging run
+      - name: Find newest successful staging run carrying each selected artifact
         id: find
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEPLOY_API: ${{ inputs.deploy_api }}
+          DEPLOY_INTAKE: ${{ inputs.deploy_intake }}
+          DEPLOY_MANAGER: ${{ inputs.deploy_manager }}
         run: |
-          RUN=$(gh api \
-            "/repos/${{ github.repository }}/actions/workflows/deploy-staging.yml/runs?branch=main&status=success&per_page=1" \
-            --jq '.workflow_runs[0] | {id, head_sha}')
+          # deploy-staging only builds apps whose paths changed, so the latest successful
+          # run can carry no artifacts. Resolve each app to the newest run that built it.
+          RUNS=$(gh api "/repos/$REPO/actions/workflows/deploy-staging.yml/runs?branch=main&status=success&per_page=50" \
+            --jq '.workflow_runs[].id')
 
-          RUN_ID=$(echo "$RUN" | jq -r '.id')
-          HEAD_SHA=$(echo "$RUN" | jq -r '.head_sha')
+          find_artifact() {
+            for RUN_ID in $RUNS; do
+              NAME=$(gh api "/repos/$REPO/actions/runs/$RUN_ID/artifacts" \
+                --jq "[.artifacts[] | select(.expired == false) | select(.name | startswith(\"$1\"))][0].name // empty")
+              if [ -n "$NAME" ]; then echo "$RUN_ID $NAME"; return 0; fi
+            done
+            return 1
+          }
 
-          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
-            echo "::error::No successful deploy-staging run found on the main branch."
-            exit 1
-          fi
-
-          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-          echo "Resolved staging run ID: $RUN_ID (SHA: $HEAD_SHA)"
+          for APP in "api:api-publish:$DEPLOY_API" "intake:intake-wwwroot-:$DEPLOY_INTAKE" "manager:manager-wwwroot-:$DEPLOY_MANAGER"; do
+            IFS=: read -r KEY PREFIX WANT <<< "$APP"
+            [ "$WANT" = "true" ] || continue
+            if ! RESULT=$(find_artifact "$PREFIX"); then
+              echo "::error::No unexpired '$PREFIX' artifact in the last 50 successful deploy-staging runs on main."
+              exit 1
+            fi
+            echo "${KEY}_run_id=${RESULT%% *}" >> "$GITHUB_OUTPUT"
+            echo "${KEY}_artifact=${RESULT#* }" >> "$GITHUB_OUTPUT"
+            echo "$KEY: staging run ${RESULT%% *}, artifact ${RESULT#* }"
+          done
 
   # ---------------------------------------------------------------------------
   # Deploy API to production (artifact promotion — never rebuilds)
@@ -77,7 +94,7 @@ jobs:
         with:
           name: api-publish
           path: ./api
-          run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
+          run-id: ${{ needs.resolve-staging-run.outputs.api_run_id }}
           github-token: ${{ github.token }}
 
       - name: Login to Azure via OIDC
@@ -115,9 +132,9 @@ jobs:
       - name: Download Intake artifact from staging run
         uses: actions/download-artifact@v4
         with:
-          name: intake-wwwroot-${{ needs.resolve-staging-run.outputs.head_sha }}
+          name: ${{ needs.resolve-staging-run.outputs.intake_artifact }}
           path: ./publish/intake/wwwroot
-          run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
+          run-id: ${{ needs.resolve-staging-run.outputs.intake_run_id }}
           github-token: ${{ github.token }}
 
       - name: Set blazor-environment to Production
@@ -156,9 +173,9 @@ jobs:
       - name: Download Manager artifact from staging run
         uses: actions/download-artifact@v4
         with:
-          name: manager-wwwroot-${{ needs.resolve-staging-run.outputs.head_sha }}
+          name: ${{ needs.resolve-staging-run.outputs.manager_artifact }}
           path: ./publish/manager/wwwroot
-          run-id: ${{ needs.resolve-staging-run.outputs.run_id }}
+          run-id: ${{ needs.resolve-staging-run.outputs.manager_run_id }}
           github-token: ${{ github.token }}
 
       - name: Set blazor-environment to Production
