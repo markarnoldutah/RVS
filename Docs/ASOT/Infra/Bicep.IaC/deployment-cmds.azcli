@@ -101,8 +101,8 @@ DEV_BLOB_GROUP_OBJECT_ID="e7c21157-3e7a-4a31-9408-c4ccef22670e"
 #   SWA (Intake)        stapp-rvs-intake-staging            stapp-rvs-intake-prod
 #   SWA (Manager)       stapp-rvs-manager-staging           stapp-rvs-manager-prod
 #
-# prod runs App Service S1 → a deployment slot ("staging") exists and has its own
-# managed identity; staging runs B1 → no slot.
+# Both environments run App Service B1 → no deployment slot. Moving to S1 (Section 3)
+# creates a "staging" slot with its own managed identity.
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -465,8 +465,8 @@ az webapp config appsettings list \
 #     Bicep cannot do — the `acsCustomDomainAction` deployment output repeats the
 #     summary.
 #
-#     STAGING runs steps 1–3 only — no quota request (the default 100/hour covers
-#     testing) and no warming — with the domain mail.staging.rvintake.com, DMARC host
+#     STAGING runs steps 1–3 only — no warming — with the domain
+#     mail.staging.rvintake.com, DMARC host
 #     _dmarc.mail.staging.rvintake.com, and:
 #       ACS_EMAIL_SVC=acs-rvs-notify-staging-wus3-s01-001-email
 #       ACS_RG=rg-rvs-staging-westus3
@@ -495,16 +495,21 @@ az webapp config appsettings list \
 #            -g "$ACS_RG" --query 'properties.verificationStates' -o jsonc
 #        Every entry must read "Verified". Sends From mail.rvintake.com fail until
 #        then; the Azure-managed domain stays linked as a fallback.
+#        A brand-new domain's first deploy runs with acsCustomDomainVerified=false;
+#        once verified, set it to true in the .bicepparam and redeploy to link the
+#        domain. Never set it back to false — that unlinks the domain. Confirm:
+#          az communication show -n acs-rvs-notify-prod-wus3-s01-001 -g "$ACS_RG" \
+#            --query linkedDomains -o json
 #
-#     3. Confirm DMARC resolves and the reporting mailbox is monitored:
+#     3. Confirm DMARC resolves and the reporting mailbox is monitored (#608):
 #          dig +short TXT _dmarc.mail.rvintake.com
 #          # → v=DMARC1; p=none; rua=mailto:dmarc-reports@rvserviceflow.com
 #
-#     4. THEN request the ACS send-quota increase — Portal → ACS → Email → Domains →
-#        mail.rvintake.com → quota request (or Help+Support → Service and Subscription
-#        Limits (Quotas)). Approval takes up to 72 HOURS, longer if filed on a Friday,
-#        and requires a sustained bounce rate under 1%. Do NOT schedule a pilot launch
-#        inside that window.
+#     4. Send quota: NO request at bring-up. A verified domain gets 30/min, 100/hour
+#        automatically, which covers the pilot. File the increase when the #603 volume
+#        alert fires — Portal → ACS → Email → Domains → mail.rvintake.com → quota
+#        request. Approval takes up to 72 HOURS and needs a sustained bounce rate
+#        under 1%, so file on the alert, not at the hard cap.
 #
 #     5. Warm the domain: let Jay Lyons's real intake traffic (P1, #525) send through
 #        mail.rvintake.com for 2–3 WEEKS before any other shop's mailbox gets a packet.

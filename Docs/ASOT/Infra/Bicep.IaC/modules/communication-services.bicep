@@ -14,8 +14,7 @@
 // and to a warmed sender reputation. Bicep provisions the domain and emits
 // the raw SPF / DKIM / domain-ownership records it needs
 // (`customDomainVerificationRecords`) for the caller to write into DNS;
-// `initiate-verification` and the quota-increase request stay manual
-// (README "Deploy Production" step 4).
+// `initiate-verification` stays manual (README "Deploy Production" step 4).
 //
 // The domain is linked to the account (added to `linkedDomains`) ONLY when
 // `linkCustomDomain = true` — ACS rejects linking an unverified domain

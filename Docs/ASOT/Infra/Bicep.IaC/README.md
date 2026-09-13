@@ -132,37 +132,21 @@ thing it does not do is *register* the apex with the SWA: Azure mints the
 ownership token at registration time, so that is a one-time step you do by
 hand after the first deploy (step 2). Redeploys never touch it.
 
-Prerequisites: the six resource groups exist (`rg-scaffold.bicep`). The two
-DNS zones and the registrar delegation onto them are **not** prerequisites —
-`deployDns = true` in `prod.bicepparam` creates both zones (idempotent, safe
-to redeploy), but Azure DNS only becomes authoritative once the registrar's
-NS records point at the four nameservers Azure assigned the zone. Until that
-delegation happens, the zone exists in Azure but the domain resolves nowhere
-(`dig +short rvintake.com` returns nothing) — this was the actual state of
-`rvintake.com` as of the G7 pilot-readiness check (`#535`): the domain was
-held but had zero DNS recorded, registrar delegation included. Verify before
-assuming either zone is live:
+Prerequisites: the six resource groups exist (`rg-scaffold.bicep`).
+`deployDns = true` creates or re-asserts both DNS zones. Both `rvintake.com`
+and `rvserviceflow.com` are already delegated to Azure DNS at the registrar
+and resolving (confirmed 2026-09-11), so no registrar step is needed. If a
+zone is ever recreated, Azure may assign different nameservers — re-check
+before relying on any record Bicep writes:
 
 ```bash
-dig NS rvintake.com +short          # expect ns1-XX.azure-dns.com. (x4)
+dig NS rvintake.com +short          # expect ns*-0*.azure-dns.* (x4)
 dig NS rvserviceflow.com +short     # same check for the Manager zone
 ```
 
-If that returns nothing (or your registrar's default parking nameservers),
-delegate before continuing:
-
-1. Deploy (or re-run) the template once so the zones exist — the outputs
-   `dnsIntakeNameServers` / `dnsManagerNameServers` list the four Azure-
-   assigned nameservers for each zone (also visible via
-   `az network dns zone show -g rg-rvs-prod-westus3 -n rvintake.com --query nameServers`).
-2. At the domain registrar for each domain, replace the NS records with
-   those four values.
-3. Wait for propagation (minutes to a few hours depending on the registrar
-   and the previous NS TTL), then re-run the `dig NS` check above until it
-   shows the `azure-dns.com` nameservers.
-
-Only once both zones show Azure's nameservers will the ALIAS/CNAME records
-Bicep writes actually resolve for anyone outside Azure.
+If a check returns something else, copy the zone's current nameservers
+(`az network dns zone show -g rg-rvs-prod-westus3 -n <zone> --query nameServers`)
+to the registrar's NS records.
 
 **Step 0 — pre-flight (read-only).** See the change set before you commit
 to it. On a first bring-up expect a wall of `Create`; on a redeploy expect
@@ -184,9 +168,12 @@ az deployment sub what-if \
   --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam
 ```
 
-**Step 1 — deploy.** Pass the Auth0 values on the command line (they are
-deliberately not in the parameter file — see *Key Vault Configuration*), or
-omit them and write the secrets to the vault by hand afterwards.
+**Step 1 — deploy.** On the first deploy, pass the Auth0 values on the
+command line (they are deliberately not in the parameter file — see *Key
+Vault Configuration*), or omit them and write the secrets to the vault by
+hand afterwards. On a redeploy they are optional: the Auth0 secrets module
+only runs when `auth0Domain` is set, so omitting them leaves the vault's
+existing `Auth0--*` secrets untouched. Pass them only to change those secrets.
 
 ```bash
 TS=$(date +%Y%m%d%H%M)
@@ -276,8 +263,8 @@ outputs stored as GitHub secrets — see *SWA deployment tokens* in
 **Step 4 — verify and warm the custom sending domain (`#532`).** Bicep has
 already provisioned the `CustomerManaged` ACS domain `mail.rvintake.com` and
 written its SPF / DKIM / DMARC records into the `rvintake.com` zone. What is
-left is the data-plane verification, the quota bump, and the warming window —
-none expressible in Bicep. The `acsCustomDomainAction` deployment output
+left is the data-plane verification, linking the verified domain, and the
+warming window — none expressible in Bicep. The `acsCustomDomainAction` deployment output
 repeats this. Commands are in `deployment-cmds.azcli` §4e (2)(c).
 
 1. **Confirm the zone records match ACS.** `az communication email domain show --domain-name mail.rvintake.com --email-service-name <acs>-email -g rg-rvs-prod-westus3 --query properties.verificationRecords` and spot-check each against the `rvintake.com` zone. They should already agree — Bicep wrote them from the same source.
@@ -291,15 +278,18 @@ repeats this. Commands are in `deployment-cmds.azcli` §4e (2)(c).
    done
    ```
    Then poll until every entry in `properties.verificationStates` is `Verified` (minutes, since the zone is on Azure DNS). Sends From `mail.rvintake.com` fail until then; the Azure-managed domain stays linked as a fallback.
-3. **Check DMARC resolves:** `dig +short TXT _dmarc.mail.rvintake.com` → `v=DMARC1; p=none; rua=mailto:dmarc-reports@rvserviceflow.com`. Make sure that mailbox (or a DMARC-processor address) is actually monitored — `p=none` is only useful if someone reads the aggregate reports.
-4. **Request the ACS send-quota increase.** Portal → ACS → **Email** → **Domains** → `mail.rvintake.com` → the quota request form (or Help + Support → *Service and Subscription Limits (Quotas)*). Approval takes **up to 72 hours** — longer if filed on a Friday — and requires a sustained bounce rate **under 1 %**. Do not schedule a pilot launch inside that window.
+
+   **Link the verified domain.** ACS rejects linking an unverified domain, so a brand-new custom domain's first deploy runs with `acsCustomDomainVerified = false` — that deploy only creates the domain and writes its DNS records. Once Domain, SPF, DKIM and DKIM2 all read `Verified`, set `acsCustomDomainVerified = true` in the parameter file and redeploy (step 1). `prod.bicepparam` and `staging.bicepparam` already carry `true` for their linked domains; **never set it back to `false`** — the next deploy would unlink the domain. Confirm with `az communication show -n <acs> -g rg-rvs-prod-westus3 --query linkedDomains` (the domain's own `linkedAccount` field reads `null` even when linked).
+3. **Check DMARC resolves:** `dig +short TXT _dmarc.mail.rvintake.com` → `v=DMARC1; p=none; rua=mailto:dmarc-reports@rvserviceflow.com`. Make sure that mailbox (or a DMARC-processor address) is actually monitored — `p=none` is only useful if someone reads the aggregate reports. As of 2026-09-12 it is not (`#608`).
+4. **Send quota — no request at bring-up.** Once the domain verifies, ACS applies 30 emails/min, 100/hour automatically, which covers the pilot. Request an increase only when sustained volume approaches that ceiling (`#603` tracks the alert): Portal → ACS → **Email** → **Domains** → `mail.rvintake.com` → quota request. Approval takes **up to 72 hours** and requires a sustained bounce rate **under 1 %**, so file when the alert fires, not at the hard cap.
 5. **Warm the domain.** Let Jay Lyons's real intake traffic (P1, `#525`) send through `mail.rvintake.com` for **2–3 weeks** before any *other* shop's mailbox receives a packet. Ramp volume gradually; watch the ACS delivery / bounce metrics and the DMARC `rua` reports. Sustained ACS failures above ~1 % risk throttling.
 6. **In-room deliverability check (second pilot onward — `FS-7` in `RVS_Plan.md`).** When onboarding a shop after Jay: send a test packet while you are with the service manager, confirm it lands in the inbox and not Junk, and have them mark the sender safe on the spot. Not needed for the first pilot.
 
-**Redeploys** are step 1 again, verbatim. ARM incremental mode leaves the
-apex TXT record and binding alone (the template does not declare them), and
-re-asserts the ACS domain and its SPF/DKIM/DMARC records as no-ops once
-`verificationStates` is `Verified` — redeploys never re-trigger verification.
+**Redeploys** are step 1 again, with the Auth0 values optional. ARM
+incremental mode leaves the apex TXT record and binding alone (the template
+does not declare them), and re-asserts the ACS domain, its link and its
+SPF/DKIM/DMARC records as no-ops while `acsCustomDomainVerified = true` —
+redeploys never re-trigger verification.
 
 ### Pre-Provision Resource Groups (all environments)
 
@@ -641,12 +631,15 @@ mailboxes we control.
 **What Bicep does** (any env whose params set `acsCustomEmailDomain` — staging and prod):
 
 - Provisions a `CustomerManaged` `Microsoft.Communication/emailServices/domains`
-  named after `acsCustomEmailDomain` and adds it to the account's `linkedDomains`.
+  named after `acsCustomEmailDomain`, and adds it to the account's `linkedDomains`
+  only when `acsCustomDomainVerified = true` (ACS rejects linking an unverified domain).
 - Writes the records ACS requires into the `rvintake.com` zone via `dnsIntake`:
   **domain-ownership** TXT, **SPF** TXT (`v=spf1 include:… -all` — ACS fails
-  verification on `~all`), and **DKIM** + **DKIM2** CNAMEs. Values come straight
-  from `communicationServices.outputs.customDomain{Txt,Cname}Records`, so there
-  is nothing to transcribe.
+  verification on `~all`), and **DKIM** + **DKIM2** CNAMEs. Values come from
+  `communicationServices.outputs.customDomainVerificationRecords`; `main.bicep`
+  builds the record-set names from the subdomain label (`mail` / `mail.staging`),
+  because ACS returns DKIM names as a bare selector and Domain/SPF names as the
+  full FQDN — neither is zone-relative. There is nothing to transcribe.
 - Publishes **DMARC** at `_dmarc.mail` (prod) / `_dmarc.mail.staging` (staging) — `v=DMARC1; p=none; rua=mailto:<dmarcReportingAddress>`
   — authored in `main.bicep` (not taken from ACS) so the policy stays `p=none`
   and the reporting mailbox is ours. `p=none` makes alignment failures visible
@@ -654,9 +647,10 @@ mailboxes we control.
 
 **What stays manual** (surfaced by the `acsCustomDomainAction` output — see
 "Deploy Production" step 4): `az communication email domain initiate-verification`
-for each record type, the ACS **send-quota increase** request (72 h lead, needs a
-bounce rate < 1 %), and **domain warming**. Staging needs only the verification:
-its default 30/min, 100/hour quota is enough for testing, and it is never warmed.
+for each record type, the follow-up deploy with `acsCustomDomainVerified = true`
+that links the verified domain, and **domain warming** (prod only). The send-quota
+increase is not part of bring-up — the default 30/min, 100/hour covers the pilot,
+and the request is filed when volume warrants it (`#603`).
 
 ### Manual steps after the deploy (not expressible in Bicep)
 
@@ -665,7 +659,7 @@ Commands for each are in `deployment-cmds.azcli` §4e. Summary:
 1. **Verify the sending domain.** Staging and prod send from a custom domain: run "Deploy Production" step 4 (1)–(3) against that environment's domain, ACS resource and resource group — sends From it fail until every record shows `Verified`. The Azure-managed fallback domain verifies automatically but can lag (`az communication email domain show` → `provisioningState = Succeeded`); sends from it fail with `DomainNotLinked` until it completes.
 2. **Read back the real sender domain** (`properties.fromSenderDomain`) and confirm the deployed `AzureCommunicationServices__Email__FromAddress` app setting is `DoNotReply@<that domain>`.
 3. **Confirm the RBAC grant landed** (`az role assignment list --scope <acs-resource-id>`). If not (older Bicep, or propagation), assign **Contributor** on the ACS resource by hand — §4e (1).
-4. **Check the ACS email send quota.** A verified custom domain starts at 30/min, 100/hour — enough for staging, so there is no request to file there. Prod raises it against `mail.rvintake.com` — "Deploy Production" step 4. An environment left on the Azure-managed domain is capped at 10/hour, and no request lifts that.
+4. **Check the ACS email send quota.** A verified custom domain starts at 30/min, 100/hour — enough for staging and for the prod pilot, so there is no request to file at bring-up. Prod raises it against `mail.rvintake.com` when the `#603` volume alert fires — "Deploy Production" step 4. An environment left on the Azure-managed domain is capped at 10/hour, and no request lifts that.
 5. **Set a real recipient on a staging Location.** Seed data uses RFC 2606 `.example.com` addresses that hard-bounce. Point at least one location's `packetConfig.recipients` at a mailbox you control — `PUT /api/dealers/{dealerId}/locations/{locationId}` or directly in Cosmos. `packetConfig.enabled` defaults to `true`. Only ever use mailboxes you control in staging: it is the rule that keeps `mail.staging.rvintake.com` from affecting `rvintake.com`'s reputation.
 6. **Run the end-to-end check.** Complete a staging intake; App Insights should show `ACS packet email send initiated …` from `AcsEmailNotificationService`. A failure logs `Packet email dispatch failed …` from `PacketGenerationService` and is otherwise swallowed (packet generation still reports `Succeeded`; retry/idempotency is `#438`). Confirm the mail arrives with the PDF + photo attachments, subject `[RVS] {category} — {year} {make} {model} — {customer last name}`.
 
