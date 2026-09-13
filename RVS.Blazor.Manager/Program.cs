@@ -57,9 +57,21 @@ builder.Services.AddScoped<RVS.UI.Shared.Services.LookupApiClient>(sp =>
 builder.Services.AddScoped<RVS.UI.Shared.Services.AttachmentApiClient>(sp =>
     new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
 
+// This device's "Keep me signed in" answer, read from js/session-persist.js once the host is
+// built (below). The OIDC options are resolved lazily on first use, after that read; if they were
+// ever resolved first, the null default fails closed and forces the password prompt.
+string? keepSignedInPreference = null;
+var keepSignedInPreferenceResolved = false;
+
 // Configure OIDC Authentication with Auth0
 builder.Services.AddOidcAuthentication(options =>
 {
+    // Force Auth0's password prompt unless this device opted in to staying signed in, so Auth0's
+    // own session cookie cannot silently sign the next person into a shared computer (issue #498).
+    KeepSignedInPolicy.ApplyTo(
+        options.ProviderOptions.AdditionalProviderParameters,
+        keepSignedInPreferenceResolved ? keepSignedInPreference : null);
+
     builder.Configuration.Bind("Auth0", options.ProviderOptions);
 
     // PKCE: Use authorization code flow
@@ -82,21 +94,8 @@ builder.Services.AddOidcAuthentication(options =>
         options.ProviderOptions.AdditionalProviderParameters.Add("audience", audience);
     }
 
-    // Do NOT put "prompt" here. AdditionalProviderParameters becomes the OIDC client's
-    // extraQueryParams, which is attached to every authorize request the library makes —
-    // including the automatic, invisible signinSilent() check it runs on every auth-state
-    // read via a hidden iframe. `prompt=login` forces Auth0's interactive login *form*, and
-    // Auth0 (like most IdPs) refuses to render that form inside a frame as an anti-clickjacking
-    // measure, so the hidden iframe's navigation gets blocked — the browser stalls for the
-    // iframe's timeout (~3-5s) and then reports the blocked navigation as a failed request.
-    // This was hit and reverted once already (see git history) before issue #498 re-added it
-    // here and reproduced the same stall on every post-logout auth check.
-    //
-    // The "Keep me signed in" gate (issue #498, KeepSignedInPolicy.ShouldForceLogin) is instead
-    // applied per call, only on an explicit interactive sign-in request built with
-    // InteractiveRequestOptions.TryAddAdditionalParameter — see UnauthorizedAccess.razor and
-    // LoginDisplay.razor. That request always goes straight to a full-page signinRedirect and
-    // never through the silent/iframe path, so it cannot repeat this failure.
+    // Force Auth0 to always show the login screen (no silent SSO re-use)
+    // options.ProviderOptions.AdditionalProviderParameters.Add("prompt", "login");
 
     // Auth0 claim mapping
     options.UserOptions.RoleClaim = "roles";
@@ -151,6 +150,18 @@ var app = builder.Build();
 
 // Startup diagnostics — console.warn is always visible in browser DevTools (F12 → Console)
 var js = app.Services.GetRequiredService<IJSRuntime>();
+
+// Read this device's "Keep me signed in" answer before anything resolves the OIDC options
+// (see KeepSignedInPolicy above). A failed read leaves it unresolved, which forces the prompt.
+try
+{
+    keepSignedInPreference = await js.InvokeAsync<string?>("rvsSession_getPersistPreference");
+    keepSignedInPreferenceResolved = true;
+}
+catch (JSException)
+{
+    // session-persist.js missing or storage blocked — fail closed.
+}
 await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] Environment       : {builder.HostEnvironment.Environment}");
 await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] BaseAddress       : {builder.HostEnvironment.BaseAddress}");
 await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] ApiBaseUrl resolved: {apiBaseUrl}");

@@ -6,26 +6,13 @@ namespace RVS.UI.Shared.Services;
 ///
 /// The app's opt-in only controls whether its refresh token survives a restart. Auth0 keeps a
 /// separate session cookie on its own domain, and the Blazor authentication library silently
-/// signs in against that cookie on every auth-state check. Without this policy, a shared
-/// computer whose last user closed the tab without signing out would sign the next person
-/// straight into that account.
+/// signs in against that cookie on page load. Without this policy, a shared computer whose last
+/// user closed the tab without signing out would sign the next person straight into that account.
 ///
-/// <para><b>Apply this per call, never globally.</b> The obvious-looking fix — adding
-/// <c>prompt=login</c> to <c>OidcProviderOptions.AdditionalProviderParameters</c> once at
-/// startup — was tried and reverted: that dictionary becomes the OIDC client's
-/// <c>extraQueryParams</c>, which rides along on <i>every</i> authorize request the library
-/// makes, including the automatic, invisible <c>signinSilent()</c> check it runs via a hidden
-/// iframe on every auth-state read. <c>prompt=login</c> forces Auth0's interactive login
-/// *form*, and Auth0 — like most IdPs — refuses to render that form inside a frame as an
-/// anti-clickjacking measure, so the hidden iframe's navigation gets blocked: the browser
-/// stalls for the iframe's timeout (observed ~3-5s) and then reports it as a failed request,
-/// on every page load and right after every sign-out.</para>
-///
-/// <para>The safe alternative is to add <c>prompt=login</c> only to an explicit, interactive
-/// sign-in request built with <c>InteractiveRequestOptions.TryAddAdditionalParameter</c> (see
-/// <c>UnauthorizedAccess.razor</c> and <c>LoginDisplay.razor</c>). Such a request always goes
-/// straight to a full-page <c>signinRedirect</c> and never through the silent/iframe path, so
-/// it cannot repeat this failure.</para>
+/// Unless the device explicitly opted in, every authorize request carries <c>prompt=login</c>.
+/// Auth0 then always asks for the password on an interactive sign-in, and it rejects the silent
+/// sign-in outright (a request carrying both <c>prompt=none</c> and <c>prompt=login</c> fails
+/// with <c>invalid_request</c>). Token renewal is unaffected: it uses the refresh token.
 /// </summary>
 public static class KeepSignedInPolicy
 {
@@ -44,4 +31,23 @@ public static class KeepSignedInPolicy
     /// </summary>
     public static bool ShouldForceLogin(string? preference) =>
         !string.Equals(preference, PreferenceYes, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Adds <c>prompt=login</c> to the provider's authorize parameters when login must be forced,
+    /// and removes any <c>prompt</c> parameter otherwise. Other parameters are left untouched.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is null.</exception>
+    public static void ApplyTo(IDictionary<string, string> parameters, string? preference)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        if (ShouldForceLogin(preference))
+        {
+            parameters[PromptParameter] = PromptLoginValue;
+        }
+        else
+        {
+            parameters.Remove(PromptParameter);
+        }
+    }
 }

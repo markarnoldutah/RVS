@@ -1,7 +1,5 @@
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
-@using RVS.UI.Shared.Services
 @inject NavigationManager Navigation
-@inject IJSRuntime JS
 
 <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 100vh;" Spacing="4">
     <MudProgressCircular Color="Color.Primary" Indeterminate="true" aria-label="Signing in" />
@@ -13,40 +11,20 @@
     public string? ReturnUrl { get; set; }
 
     /// <summary>
-    /// Automatically initiates the OIDC login redirect so the user never has to click a
-    /// "Sign In" button. <see cref="InteractiveRequestOptions"/> forces this straight to a
-    /// full-page redirect (never the library's silent/iframe check), so it is safe to attach
-    /// <c>prompt=login</c> here per <see cref="KeepSignedInPolicy"/> — see that type's doc
-    /// comment for why this must never be set globally instead.
+    /// Automatically initiates the OIDC login redirect so the user never has to
+    /// click a "Sign In" button. Uses OnInitialized because in Blazor WASM
+    /// NavigateToLogin is a synchronous NavigateTo call (no JS interop required).
     /// </summary>
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         var returnUrl = ReturnUrl ?? Navigation.Uri;
 
         var requestOptions = new InteractiveRequestOptions
         {
             Interaction = InteractionType.SignIn,
-            ReturnUrl = returnUrl,
+            ReturnUrl = returnUrl
         };
 
-        if (KeepSignedInPolicy.ShouldForceLogin(await GetKeepSignedInPreferenceAsync()))
-        {
-            requestOptions.TryAddAdditionalParameter(KeepSignedInPolicy.PromptParameter, KeepSignedInPolicy.PromptLoginValue);
-        }
-
         Navigation.NavigateToLogin("authentication/login", requestOptions);
-    }
-
-    private async Task<string?> GetKeepSignedInPreferenceAsync()
-    {
-        try
-        {
-            return await JS.InvokeAsync<string?>("rvsSession_getPersistPreference");
-        }
-        catch (JSException)
-        {
-            // session-persist.js missing or storage blocked — ShouldForceLogin fails closed on null.
-            return null;
-        }
     }
 }

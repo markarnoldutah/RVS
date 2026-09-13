@@ -1,5 +1,3 @@
-@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
-@using RVS.UI.Shared.Services
 @inject NavigationManager Navigation
 @inject ThemeService ThemeService
 
@@ -57,33 +55,9 @@
 </AuthorizeView>
 
 @code {
-    /// <summary>
-    /// Manual "Log in" button. Builds an explicit <see cref="InteractiveRequestOptions"/> so this
-    /// always goes straight to a full-page redirect — never the library's silent/iframe check —
-    /// which is what makes it safe to attach <c>prompt=login</c> here per
-    /// <see cref="KeepSignedInPolicy"/>. See that type's doc comment for why this must never be
-    /// set on the provider's global options instead.
-    /// </summary>
-    private async Task BeginLogin()
+    private void BeginLogin()
     {
-        var requestOptions = new InteractiveRequestOptions { Interaction = InteractionType.SignIn, ReturnUrl = Navigation.Uri };
-
-        string? preference = null;
-        try
-        {
-            preference = await JS.InvokeAsync<string?>("rvsSession_getPersistPreference");
-        }
-        catch (JSException)
-        {
-            // session-persist.js missing or storage blocked — ShouldForceLogin fails closed on null.
-        }
-
-        if (KeepSignedInPolicy.ShouldForceLogin(preference))
-        {
-            requestOptions.TryAddAdditionalParameter(KeepSignedInPolicy.PromptParameter, KeepSignedInPolicy.PromptLoginValue);
-        }
-
-        Navigation.NavigateToLogin("authentication/login", requestOptions);
+        Navigation.NavigateToLogin("authentication/login");
     }
 
     [Inject]
