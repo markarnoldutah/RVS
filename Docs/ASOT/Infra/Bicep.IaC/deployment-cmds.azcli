@@ -151,10 +151,6 @@ az deployment sub create `
   --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam `
   --name "rvs-prod-$ts"
 
-# prod_basic.bicepparam is the cost-conscious alternate (App Service B1 instead
-# of S1, no deployment slot). Swap it in place of prod.bicepparam only if you
-# have deliberately downgraded prod.
-
 # ── 1c. what-if preview (dry run — inspect the change set before committing) ──
 # Same args as the deploy, `create` → `what-if`. No `--name` needed.
 az deployment sub what-if \

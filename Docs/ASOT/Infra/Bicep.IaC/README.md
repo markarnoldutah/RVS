@@ -81,8 +81,7 @@ Docs/ASOT/Infra/Bicep.IaC/
 │   └── dns.bicep                           # DNS zone + CNAME / A / ALIAS-A / TXT record sets (called once per zone)
 ├── parameters/
 │   ├── staging.bicepparam                  # Staging parameter values (full)
-│   ├── prod.bicepparam                     # Production — the one prod file, deployable as committed
-│   └── prod_basic.bicepparam               # Production with B1 App Service (cost-conscious alt)
+│   └── prod.bicepparam                     # Production — the one prod file, deployable as committed
 └── README.md                               # This file
 ```
 

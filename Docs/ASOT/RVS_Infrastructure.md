@@ -40,24 +40,26 @@
 
 ## Environments
 
-All three parameter files set every deploy flag to `true`, `cosmosCapacityMode='Serverless'`, `storageAllowSharedKeyAccess=false`, `swaSkuName='Standard'`, `swaLocation='westus2'`. The differences are small:
+Both parameter files set every deploy flag to `true`, `cosmosCapacityMode='Serverless'`, `storageAllowSharedKeyAccess=false`, `swaSkuName='Standard'`, `swaLocation='westus2'`, `acsCustomDomainVerified=true`. The differences are small:
 
-| | `staging` | `prod` | `prod_basic` |
-|---|---|---|---|
-| App Service SKU | `B1` | `S1` | `B1` |
-| Staging slot | no | yes | no |
-| OpenAI capacity | 10 | 30 | 30 |
-| Whisper capacity | 1 | 2 | 2 |
-| Storage CORS origins | set | set | default |
-| DNS RBAC principals | — | set | — |
-| ACS custom sending domain | `mail.staging.rvintake.com` | `mail.rvintake.com` | `mail.rvintake.com` |
+| | `staging` | `prod` |
+|---|---|---|
+| App Service SKU | `B1` | `B1` |
+| Staging slot | no | no |
+| OpenAI capacity | 10 | 30 |
+| Whisper capacity | 1 | 2 |
+| Storage CORS origins | set | set |
+| DNS RBAC principals | — | set |
+| ACS custom sending domain | `mail.staging.rvintake.com` | `mail.rvintake.com` |
 
-Every file is deployable as committed. Prod is a single file with no phases; the two things it leaves to a human are the one-time registration of the `rvintake.com` apex with the Intake SWA (a token Azure mints at registration time) and the data-plane verification + quota bump + warming of the `mail.rvintake.com` sending domain (`#532`) — both sequences are in `Infra/Bicep.IaC/README.md` "Deploy Production" (steps 2 and 4). Redeploys never touch either. Staging's `mail.staging.rvintake.com` needs the same verification, but no quota request and no warming.
+Moving prod to `S1` (Always On, staging slot) is a one-value change — README "SKU Upgrade Paths".
+
+Every file is deployable as committed. Prod is a single file with no phases; the things it leaves to a human are the one-time registration of the `rvintake.com` apex with the Intake SWA (a token Azure mints at registration time) and the data-plane verification + warming of the `mail.rvintake.com` sending domain (`#532`) — both sequences are in `Infra/Bicep.IaC/README.md` "Deploy Production" (steps 2 and 4). Redeploys never touch either. The ACS send-quota increase is not part of bring-up: the default 30/min, 100/hour applies once the domain verifies, and the increase is filed when volume warrants it (`#603`). Staging's `mail.staging.rvintake.com` needs the same verification, but no warming.
 
 Two things to know before using these:
 
-- **Prod has not been deployed yet** (as of 2026-09-10 the prod resource groups hold only the two DNS zones, which the staging deploy created). The first prod run is the README sequence, start to finish. The northcentralus Whisper quota is 3 units subscription-wide; `staging = 1` + `prod = 2` fits it exactly with no headroom, so if staging is still deployed at its old `whisperCapacity = 3` it must be redeployed before the prod pre-flight will pass.
-- **No parameter file sets the Auth0 values.** `auth0Domain`, `auth0Audience`, `auth0ClientId`, `auth0ClientSecret` are empty, so `auth0-keyvault-secrets.bicep` never runs from a param file. Those secrets must be passed on the CLI or written to the vault by hand.
+- **Prod is live** (first deployed 2026-09-12). The northcentralus Whisper quota is 3 units subscription-wide, and `gpt-5` in westus3 allows 3 units per model; for both, `staging = 1` + `prod = 2` fits exactly with no headroom, so raising either value needs a quota increase first.
+- **No parameter file sets the Auth0 values.** `auth0Domain`, `auth0Audience`, `auth0ClientId`, `auth0ClientSecret` are empty, so `auth0-keyvault-secrets.bicep` is skipped on a param-file-only deploy and the vault's existing `Auth0--*` secrets are left as they are. Pass the values on the CLI only to create or change those secrets.
 
 ---
 
