@@ -89,7 +89,7 @@ param deployAcs bool = false
 @description('ACS data residency location.')
 param acsDataLocation string = 'United States'
 
-@description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in staging (mail.staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the quota-increase request out of band — README "Deploy Production" step 4. (#532)')
+@description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in staging (mail.staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the follow-up link deploy (acsCustomDomainVerified) out of band — README "Deploy Production" step 4. (#532)')
 param acsCustomEmailDomain string = ''
 
 @description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. (#532)')
@@ -547,7 +547,7 @@ var acsEmailFromAddress = empty(acsMailFromSenderDomain) ? '' : 'DoNotReply@${ac
 // SPF / DKIM / domain-ownership records ACS requires to verify the custom
 // domain — deterministic once the domain resource exists, written into the
 // Intake zone by the dnsIntake module below. `initiate-verification` and the
-// quota-increase request stay manual (README "Deploy Production" step 4).
+// follow-up link deploy stay manual (README "Deploy Production" step 4).
 //
 // ACS's `verificationRecords[*].name` values are NOT zone-relative — confirmed
 // against a live `az communication email domain show` for mail.staging.rvintake.com
@@ -957,8 +957,8 @@ output acsEmailFromAddress string = deployAcs ? acsEmailFromAddress : ''
 @description('Manual follow-up when a custom sending domain is configured. Bicep provisions the CustomerManaged ACS domain and writes its SPF/DKIM/DMARC records, but cannot initiate verification, link the verified domain to the account, or raise the send quota. Empty when acsCustomEmailDomain is unset.')
 output acsCustomDomainAction string = acsCustomDomainOn
   ? (acsCustomDomainVerified
-      ? 'Domain linked to the ACS account. If sends still fail with DomainNotLinked, confirm every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified, then request the ACS send-quota increase (72h lead) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.'
-      : 'ACTION REQUIRED: run `az communication email domain initiate-verification` for Domain/SPF/DKIM/DKIM2, confirm every record shows Verified, then redeploy with acsCustomDomainVerified=true to link the domain to the account before requesting the ACS send-quota increase (72h lead) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.')
+      ? 'Domain linked to the ACS account. If sends fail with DomainNotLinked, confirm every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified. Send quota starts at 30/min, 100/hour; request an increase only when volume warrants it (#603) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.'
+      : 'ACTION REQUIRED: run `az communication email domain initiate-verification` for Domain/SPF/DKIM/DKIM2, confirm every record shows Verified, then set acsCustomDomainVerified=true in the parameter file and redeploy to link the domain to the account — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.')
   : ''
 
 // ── SWA ───────────────────────────────────────────────────────

@@ -75,9 +75,10 @@ param deployAcs = true
 // shop is unrecoverable. Bicep provisions the CustomerManaged ACS domain and
 // writes its SPF (-all) / DKIM / DMARC (p=none) records into the rvintake.com
 // zone; the operator then runs `az communication email domain
-// initiate-verification` and the ACS quota-increase request (72h lead) —
-// README "Deploy Production" step 4. dmarcReportingAddress must be a monitored
-// mailbox (or a DMARC-processor address).
+// initiate-verification` — README "Deploy Production" step 4. The send-quota
+// increase is volume-triggered (#603), not part of bring-up.
+// dmarcReportingAddress must be a monitored mailbox (or a DMARC-processor
+// address) — see #608.
 param acsCustomEmailDomain = 'mail.rvintake.com'
 param dmarcReportingAddress = 'dmarc-reports@rvserviceflow.com'
 // Verified and linked. Must stay true: false unlinks the domain on redeploy.
