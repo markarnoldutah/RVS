@@ -51,6 +51,14 @@ public sealed record ServicePacket
     public PacketStatusLink? StatusLink { get; init; }
 
     /// <summary>
+    /// Deep links into the authenticated manager app — open the request, or one-tap set status
+    /// (<c>Spec C-7</c>, issue #498). Not a <c>Spec B-2</c> section: it is delivery chrome for the
+    /// email, hidden when printed and never drawn on the PDF. <c>null</c> when no manager-app
+    /// base URL is configured.
+    /// </summary>
+    public PacketManagerLinks? ManagerLinks { get; init; }
+
+    /// <summary>
     /// Displayed brand identity for the masthead, footer, and PDF author. Defaults to the
     /// product brand (<see cref="PacketBranding.Default"/>); the future per-location override
     /// (issue <c>#470</c>) supplies it via <see cref="PacketCompositionContext"/>.
@@ -196,5 +204,31 @@ public sealed record PacketPhoto
 /// <summary>The anonymous customer status link.</summary>
 public sealed record PacketStatusLink
 {
+    public required string Url { get; init; }
+}
+
+/// <summary>
+/// Deep links into the authenticated manager app for one request (<c>Spec C-7</c>, issue #498).
+/// Built by <see cref="ManagerDeepLinks.Build"/>.
+/// </summary>
+public sealed record PacketManagerLinks
+{
+    /// <summary>Opens the request in the manager app: <c>{base}/sr/{id}</c>.</summary>
+    public required string RequestUrl { get; init; }
+
+    /// <summary>One-tap status actions, in display order.</summary>
+    public required IReadOnlyList<PacketManagerActionLink> Actions { get; init; }
+}
+
+/// <summary>One status action link: <c>{base}/sr/{id}?action={slug}</c>.</summary>
+public sealed record PacketManagerActionLink
+{
+    /// <summary>Display label, e.g. <c>In Progress</c>.</summary>
+    public required string Label { get; init; }
+
+    /// <summary>The C-3 status the action sets, e.g. <c>InProgress</c>.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>The deep-link URL.</summary>
     public required string Url { get; init; }
 }

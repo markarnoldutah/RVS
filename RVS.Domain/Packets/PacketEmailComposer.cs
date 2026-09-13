@@ -128,8 +128,30 @@ public static class PacketEmailComposer
     {
         ArgumentNullException.ThrowIfNull(packet);
 
-        return string.IsNullOrWhiteSpace(packet.PasteBlock)
+        var pasteBlock = string.IsNullOrWhiteSpace(packet.PasteBlock)
             ? PasteBlockGenerator.Generate(packet.IssueCategory, packet.IssueDescription, packet.StatusLink?.Url)
             : packet.PasteBlock;
+
+        return packet.ManagerLinks is { } links
+            ? pasteBlock + BuildManagerLinksText(links)
+            : pasteBlock;
+    }
+
+    /// <summary>
+    /// The manager-app deep links as ASCII lines after the paste block, so a text-only client
+    /// still gets one-tap status links (<c>Spec B-4</c>, <c>C-7</c>, issue #498). Kept outside the
+    /// paste block itself: that block is lifted into a DMS field and the links do not belong there.
+    /// </summary>
+    private static string BuildManagerLinksText(PacketManagerLinks links)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("\n\nManager app\n");
+        sb.Append("Open in manager app: ").Append(links.RequestUrl).Append('\n');
+        foreach (var action in links.Actions)
+        {
+            sb.Append("Mark ").Append(action.Label).Append(": ").Append(action.Url).Append('\n');
+        }
+
+        return sb.ToString();
     }
 }

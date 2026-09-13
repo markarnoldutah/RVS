@@ -38,19 +38,26 @@
                 <LocationSelector />
             </div>
 
-            @* Keyword filter *@
-            <div class="filter-no-helper mb-2">
-                <MudTextField T="string"
-                              Value="_filterText"
-                              ValueChanged="OnFilterChanged"
-                              Variant="Variant.Outlined"
-                              Placeholder="Filter by keyword or field"
-                              Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Search"
-                              Margin="Margin.Dense"
-                              Immediate="true"
-                              Clearable="true" />
-            </div>
+            @* Keyword filter + actionable-today toggle (issue #498: the board lands pre-filtered) *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Class="mb-2">
+                <div class="filter-no-helper flex-grow-1">
+                    <MudTextField T="string"
+                                  Value="_filterText"
+                                  ValueChanged="OnFilterChanged"
+                                  Variant="Variant.Outlined"
+                                  Placeholder="Filter by keyword or field"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Margin="Margin.Dense"
+                                  Immediate="true"
+                                  Clearable="true" />
+                </div>
+                <MudSwitch T="bool"
+                           Value="_actionableOnly"
+                           ValueChanged="OnActionableOnlyChanged"
+                           Color="Color.Primary"
+                           Label="Actionable today" />
+            </MudStack>
 
             @* Loading skeleton *@
             @if (_loading && _boardItems.Count == 0)
@@ -236,6 +243,19 @@
 
     private string? _dealershipId;
 
+    /// <summary>
+    /// Service request to open in the detail dialog on arrival — set by the packet email's plain
+    /// request link via <c>/sr/{id}</c> (issue #498).
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "sr")]
+    public string? OpenServiceRequestId { get; set; }
+
+    /// <summary>
+    /// The board lands on today's actionable requests (issue #498): open work plus anything closed
+    /// today. See <see cref="ActionableRequestFilter"/>.
+    /// </summary>
+    private bool _actionableOnly = true;
+
     private static readonly BoardColumn[] _columns =
     [
         new("New",         "New",             Icons.Material.Filled.FiberNew,     Color.Info,    "Items that haven't been started"),
@@ -250,6 +270,12 @@
 
         AppState.OnLocationChanged += HandleLocationChangedAsync;
         ThemeService.OnThemeChanged += HandleThemeChanged;
+
+        // Arrived from a packet-email request link (/sr/{id} → /board?sr={id}, issue #498).
+        if (!string.IsNullOrWhiteSpace(OpenServiceRequestId))
+        {
+            OpenDetailDialog(OpenServiceRequestId);
+        }
 
         // If a location was already persisted, load data immediately
         if (AppState.SelectedLocation is not null)
@@ -484,22 +510,28 @@
         _needsContainerRefresh = true;
     }
 
+    private void OnActionableOnlyChanged(bool value)
+    {
+        _actionableOnly = value;
+        ApplyFilter();
+        _needsContainerRefresh = true;
+    }
+
     private void ApplyFilter()
     {
-        if (string.IsNullOrWhiteSpace(_filterText))
-        {
-            _filteredBoardItems = _boardItems;
-            return;
-        }
+        var now = DateTimeOffset.Now;
+        IEnumerable<BoardItem> items = _actionableOnly
+            ? _boardItems.Where(i => string.IsNullOrWhiteSpace(i.Status)
+                || ActionableRequestFilter.IsActionable(i.Status, i.Summary.CreatedAtUtc, i.Summary.UpdatedAtUtc, now))
+            : _boardItems;
 
-        var tokens = _filterText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (tokens.Length == 0)
-        {
-            _filteredBoardItems = _boardItems;
-            return;
-        }
+        var tokens = string.IsNullOrWhiteSpace(_filterText)
+            ? []
+            : _filterText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        _filteredBoardItems = _boardItems.Where(i => tokens.All(t => MatchesToken(i, t))).ToList();
+        _filteredBoardItems = tokens.Length == 0
+            ? items.ToList()
+            : items.Where(i => tokens.All(t => MatchesToken(i, t))).ToList();
     }
 
     private static bool MatchesToken(BoardItem item, string token)

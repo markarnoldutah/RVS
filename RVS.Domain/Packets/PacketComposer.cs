@@ -45,6 +45,7 @@ public static class PacketComposer
             StatusLink = NullIfBlank(context.StatusLinkUrl) is { } url
                 ? new PacketStatusLink { Url = url }
                 : null,
+            ManagerLinks = context.ManagerLinks,
             Branding = ComposeBranding(context),
         };
     }

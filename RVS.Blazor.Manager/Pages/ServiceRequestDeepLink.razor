@@ -1,0 +1,151 @@
+@page "/sr/{Id}"
+@using RVS.Domain.Packets
+@inject RVS.UI.Shared.Services.ServiceRequestApiClient SrClient
+@inject RVS.UI.Shared.Services.LookupApiClient LookupClient
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@*
+    Landing page for the packet email's deep links (Spec C-7, issue #498).
+
+    /sr/{id}                 → straight to the board with the request open.
+    /sr/{id}?action={slug}   → a one-tap confirm for that status.
+
+    Reaching this page requires a signed-in manager (the app-wide fallback policy), and the
+    status write only happens on the confirm tap, through the authenticated update endpoint —
+    so a mail-security scanner that fetches the link changes nothing, and the change is
+    attributed to the signed-in user.
+*@
+
+<PageTitle>RVS Manager — Update status</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
+    <MudPaper Elevation="2" Class="pa-8" Style="max-width: 500px; width: 100%;">
+        @if (_loading)
+        {
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" aria-label="Loading service request" />
+                <MudText Typo="Typo.body1" Color="Color.Secondary">Loading service request&hellip;</MudText>
+            </MudStack>
+        }
+        else if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/board">Go to the board</MudButton>
+        }
+        else if (_sr is not null && _action is not null)
+        {
+            <MudText Typo="Typo.h5" Class="mb-2">Mark as @_action.Label?</MudText>
+            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">@_sr.IssueCategory</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4" Style="white-space: pre-wrap;">@_sr.IssueDescription</MudText>
+
+            @if (string.Equals(_sr.Status, _action.Status, StringComparison.Ordinal))
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-4">This request is already @_action.Label.</MudAlert>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="@BoardUrl">Open on the board</MudButton>
+            }
+            else
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                               OnClick="ConfirmAsync" Disabled="_saving">
+                        Mark @_action.Label
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" Href="@BoardUrl" Disabled="_saving">Not now</MudButton>
+                </MudStack>
+            }
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = ManagerDeepLinks.ActionQueryParameter)]
+    public string? Action { get; set; }
+
+    private ManagerDeepLinkAction? _action;
+    private ServiceRequestDetailResponseDto? _sr;
+    private string? _dealershipId;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+
+    private string BoardUrl => $"/board?sr={Uri.EscapeDataString(Id)}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!ManagerDeepLinks.TryFindAction(Action, out var action))
+        {
+            // Plain request link, or an action the email never offers — just open the request.
+            Navigation.NavigateTo(BoardUrl, replace: true);
+            return;
+        }
+
+        _action = action;
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            var dealerships = await LookupClient.GetDealershipsAsync();
+            _dealershipId = dealerships.FirstOrDefault()?.Id;
+            if (_dealershipId is null)
+            {
+                _error = "No dealership found for your account.";
+                return;
+            }
+
+            _sr = await SrClient.GetByIdAsync(_dealershipId, Id);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception)
+        {
+            _error = "This service request could not be opened. It may have been removed, or it belongs to another dealership.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (_sr is null || _action is null || _dealershipId is null) return;
+
+        _saving = true;
+
+        try
+        {
+            var request = new ServiceRequestUpdateRequestDto
+            {
+                Status = _action.Status,
+                IssueDescription = _sr.IssueDescription,
+                Priority = _sr.Priority ?? "Medium",
+                TechnicianSummary = ActivityLogFormatter.PrependSystemEntry(
+                    _sr.TechnicianSummary,
+                    $"Status changed to {_action.Label}"),
+            };
+
+            await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            Snackbar.Add($"Marked {_action.Label}.", Severity.Success);
+            Navigation.NavigateTo("/board");
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Unable to update status. {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

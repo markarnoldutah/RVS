@@ -44,7 +44,8 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 | `/` | `Home` | Partly — embeds `OutcomeComplianceWidget`, which is archived scope |
 | `/settings` | `Settings` | Partly — tenant-level config and access gate, not the per-location packet settings B-6 needs |
 | `/service-requests/{id}/edit` | `ServiceRequestEdit` | Partly — largely duplicates the detail drawer and carries technician, bay and scheduled-date fields |
-| `/board` | `ServiceBoard` + `BoardLayout` | **No** — Kanban with drag-drop status change |
+| `/board` | `ServiceBoard` + `BoardLayout` | **No** — Kanban with drag-drop status change. Lands on an **Actionable today** view (`ActionableRequestFilter`: open requests plus anything closed today, toggleable) and opens the detail drawer from `?sr={id}` (#498) |
+| `/sr/{id}` | `ServiceRequestDeepLink` | Yes — C-7 (#498). Packet-email landing: without `action` it forwards to `/board?sr={id}`; with `?action=in-progress\|waiting-on-parts\|completed` (`ManagerDeepLinks`) it shows a one-tap confirm and writes through the authenticated update endpoint. Nothing is written on page load |
 | `/analytics` | `Analytics` | **No** — dashboard with summary cards and top-category tables |
 | `/service-requests/batch-outcome` | `BatchOutcome` | **No** — bulk repair-outcome entry |
 | `/claims-debug` | `ClaimsDebug` | **No** — self-labelled "remove before production" |
@@ -53,6 +54,8 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 Missing from Spec C: **no resend action anywhere** (C-5), and **no disposition flow with a reason code** (C-4) — closing is just setting status to Completed or Cancelled. Status vocabulary is `New / InProgress / WaitingOnCustomer / WaitingOnParts / Completed / Cancelled`; the Spec (C-3 / C-8) was aligned to this set in issue #428, closing Q5.
 
 Nothing in either app renders a packet, a PDF, an email preview, or a paste block. Searching the frontend for "packet" returns nothing.
+
+**Installable PWA and persistent session (#498).** The manager app ships `manifest.webmanifest` (start URL `/board`), `icon-192.png` / `icon-512.png` (copied from the intake app), and a **network-only** `service-worker.js` — it makes the app installable and caches nothing, since offline use is out of scope and a cached build would go stale after deploy. `js/session-persist.js` keeps the sign-in across browser and PWA restarts; see "Manager app authentication" in `RVS_Identity.md`.
 
 ---
 

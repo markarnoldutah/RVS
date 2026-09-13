@@ -134,6 +134,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
                 LocationPhone = location?.Phone,
                 SubmittedAtUtc = request.CreatedAtUtc,
                 StatusLinkUrl = null,   // minted by #427
+                ManagerLinks = ManagerDeepLinks.Build(_managerAppUrlOptions.BaseUrl, request.Id),
                 PasteBlock = PasteBlockGenerator.Generate(
                     request.IssueCategory,
                     request.IssueDescription,

@@ -106,6 +106,27 @@ public class PacketComposerTests
         act.Should().Throw<ArgumentNullException>();
     }
 
+    // ── Manager-app deep links (Spec C-7, issue #498) ───────────────────────
+
+    [Fact]
+    public void Compose_WhenContextHasManagerLinks_ShouldCarryThemOntoThePacket()
+    {
+        var links = ManagerDeepLinks.Build("https://manager.example", "sr_1");
+        var context = FullContext() with { ManagerLinks = links };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.ManagerLinks.Should().BeSameAs(links);
+    }
+
+    [Fact]
+    public void Compose_WhenContextHasNoManagerLinks_ShouldLeaveThemNull()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.ManagerLinks.Should().BeNull();
+    }
+
     // ── Happy path ──────────────────────────────────────────────────────────
 
     [Fact]

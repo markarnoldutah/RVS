@@ -92,11 +92,11 @@ Create under **Applications > Applications** (type: Single Page Application):
 | **Name** | `RVS Blazor Client` |
 | **Application Type** | Single Page Application |
 | **Allowed Callback URLs** | `https://localhost:7008/authentication/login-callback`, `http://localhost:5050/authentication/login-callback`, `https://app.rvserviceflow.com/authentication/login-callback` |
-| **Allowed Logout URLs** | `https://localhost:7008`, `http://localhost:5050`, `https://app.rvserviceflow.com` |
+| **Allowed Logout URLs** | `https://localhost:7008`, `http://localhost:5050`, `https://app.rvserviceflow.com`, and each origin's `/authentication/logout-callback` (e.g. `https://manager.rvserviceflow.com/authentication/logout-callback`). Auth0 matches these exactly: without the callback path, `/oidc/logout` returns 400 and the Auth0 session is not ended (issue #498) |
 | **Allowed Web Origins** | `https://localhost:7008`, `http://localhost:5050`, `https://app.rvserviceflow.com` |
 | **Token Endpoint Auth Method** | None (SPA) |
 | **Refresh Token Rotation** | Enabled |
-| **Refresh Token Expiration** | 15 days rolling (RVS standard) |
+| **Refresh Token Expiration** | Rotating; 30 days absolute, 7 days idle (Spec C-7, issue #498) |
 
 ---
 
@@ -173,7 +173,7 @@ Set on each user under **User Management > Users > {user} > app_metadata**:
 | Setting | Value |
 |---|---|
 | **Access Token Lifetime** | 3600 seconds (1 hour) |
-| **Refresh Token Lifetime** | 1,296,000 seconds (15 days, rolling — RVS standard) |
+| **Refresh Token Lifetime** | 2,592,000 seconds absolute (30 days) and 604,800 seconds idle (7 days), rotating — Spec C-7, issue #498 |
 | **ID Token Lifetime** | 36000 seconds (default) |
 | **Client storage** | Memory-only or `sessionStorage` — **never** `localStorage` |
 

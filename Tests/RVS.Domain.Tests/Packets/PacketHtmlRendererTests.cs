@@ -791,6 +791,78 @@ public class PacketHtmlRendererTests
         html.Should().NotContain("Some images can only be shown in the manager app");
     }
 
+    // ── Manager-app status deep links (Spec C-7, issue #498) ──────────────
+
+    private static ServicePacket PacketWithManagerLinks() =>
+        FullPacket() with { ManagerLinks = ManagerDeepLinks.Build("https://manager.example", "sr_1") };
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldLinkEachStatusActionAndTheRequest()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        html.Should().Contain("<!-- section:manager-actions -->");
+        html.Should().Contain("href=\"https://manager.example/sr/sr_1?action=in-progress\"");
+        html.Should().Contain("href=\"https://manager.example/sr/sr_1?action=waiting-on-parts\"");
+        html.Should().Contain("href=\"https://manager.example/sr/sr_1?action=completed\"");
+        html.Should().Contain("href=\"https://manager.example/sr/sr_1\"");
+        html.Should().Contain(">In Progress<");
+        html.Should().Contain(">Waiting on Parts<");
+        html.Should().Contain(">Completed<");
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldPlaceThemAboveTheMasthead()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        Order(html, "<!-- section:manager-actions -->").Should().BeLessThan(Order(html, "<!-- section:unit -->"));
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldUseAPresentationalTableNotFlexOrGrid()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        html.Should().Contain("<table role=\"presentation\" class=\"manager-actions\"");
+        html.Should().NotContain("display:flex").And.NotContain("display:grid");
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldHideThemWhenPrinted()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        html.Should().Contain(".manager-actions { display: none; }");
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksAbsent_ShouldOmitTheSection()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("<!-- section:manager-actions -->");
+        html.Should().NotContain("/sr/");
+    }
+
+    [Fact]
+    public void Render_WhenAManagerLinkIsNotHttp_ShouldNotRenderIt()
+    {
+        var packet = FullPacket() with
+        {
+            ManagerLinks = new PacketManagerLinks
+            {
+                RequestUrl = "javascript:alert(1)",
+                Actions = [new PacketManagerActionLink { Label = "In Progress", Status = "InProgress", Url = "javascript:alert(2)" }],
+            },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("javascript:");
+        html.Should().NotContain("<!-- section:manager-actions -->");
+    }
+
     [Fact]
     public void Render_WhenManyPhotosPresent_ShouldListEveryOneAsATextLine()
     {
