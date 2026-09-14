@@ -2,18 +2,20 @@
   "trailingSlash": "never",
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/appsettings.json", "/appsettings.*.json", "/css/*", "/_framework/*", "/_content/*"]
+    "exclude": ["/appsettings.json", "/appsettings.*.json", "/css/*", "/js/*", "/_framework/*", "/_content/*", "/service-worker.js", "/manifest.webmanifest", "/icon-*.png"]
   },
   "mimeTypes": {
     ".json": "application/json",
     ".wasm": "application/wasm",
-    ".dat": "application/octet-stream"
+    ".dat": "application/octet-stream",
+    ".webmanifest": "application/manifest+json"
   },
   "globalHeaders": {
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin"
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://js.monitor.azure.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.blob.core.windows.net; media-src 'self' blob: https://*.blob.core.windows.net; connect-src 'self' https://app-rvs-api-staging-wus3.azurewebsites.net https://app-rvs-api-prod-wus3.azurewebsites.net https://dev-2jhzz8xmjggh26pm.us.auth0.com https://js.monitor.azure.com https://westus3-1.in.applicationinsights.azure.com https://westus3.livediagnostics.monitor.azure.com; frame-src 'self' https://dev-2jhzz8xmjggh26pm.us.auth0.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
   },
   "routes": [
     {
@@ -32,6 +34,12 @@
       "route": "/appsettings*.json",
       "headers": {
         "Cache-Control": "no-cache, no-store"
+      }
+    },
+    {
+      "route": "/service-worker.js",
+      "headers": {
+        "Cache-Control": "no-cache"
       }
     }
   ]

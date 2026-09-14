@@ -174,15 +174,15 @@ CLIENT_PAYLOAD=$(jq -n --arg name "$SPA_APP_NAME" --arg origin "$MANAGER_ORIGIN"
   token_endpoint_auth_method: "none",
   oidc_conformant: true,
   callbacks: [($origin + "/authentication/login-callback")],
-  allowed_logout_urls: [$origin],
+  allowed_logout_urls: [$origin, ($origin + "/authentication/logout-callback")],
   web_origins: [$origin],
   allowed_origins: [$origin],
   grant_types: ["authorization_code","refresh_token","implicit"],
   refresh_token: {
     rotation_type: "rotating",
     expiration_type: "expiring",
-    token_lifetime: 1296000,
-    idle_token_lifetime: 1296000
+    token_lifetime: 2592000,
+    idle_token_lifetime: 604800
   }
 }')
 CLIENT_RESP=$(api POST /clients "$CLIENT_PAYLOAD")

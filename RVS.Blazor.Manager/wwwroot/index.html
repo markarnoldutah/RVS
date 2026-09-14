@@ -13,21 +13,20 @@
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link href="RVS.Blazor.Manager.styles.css" rel="stylesheet" />
+    <!-- Installable PWA (issue #498) -->
+    <meta name="theme-color" content="#1565C0" />
+    <link href="manifest.webmanifest" rel="manifest" />
+    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
 </head>
 
+<!-- No inline <script> anywhere in this file: the Content-Security-Policy in
+     staticwebapp.config.json forbids it. Put script in wwwroot/js/ instead. -->
 <body>
     <div id="app">
         <!-- Loading screen — replaced by Blazor once the WASM runtime initializes.
-             On the first load we show the full branded splash.  After the auth
-             callback (same session) the WASM runtime is cached so we show a
-             minimal spinner instead to avoid a jarring double-splash. -->
-        <script>
-            (function () {
-                var isReturn = sessionStorage.getItem('rvs-wasm-loaded') === '1';
-                if (!isReturn) sessionStorage.setItem('rvs-wasm-loaded', '1');
-                document.documentElement.setAttribute('data-splash', isReturn ? 'minimal' : 'full');
-            })();
-        </script>
+             js/splash-mode.js picks the full splash or the minimal post-login spinner. -->
+        <script src="js/splash-mode.js"></script>
         <style>
             #splash-bg {
                 display: flex;
@@ -59,14 +58,6 @@
         </style>
         <div id="splash-bg">
             <div class="splash-brand">
-                <!--<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24"
-                     fill="#ffffff" style="margin-bottom:24px;" aria-hidden="true">
-                    <path d="M20 17v-6c0-1.1-.9-2-2-2h-3V7c0-1.1-.9-2-2-2H7c-1.1 0-2 .9-2 2v4H2v6h2
-                             c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h2zm-14
-                             2c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM7 13V7h6v6H7zm10
-                             6c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm1-6h-4V9h3c.55 0
-                             1 .45 1 1v3z"/>
-                </svg>-->
                 <h3 style="margin:0 0 8px;font-weight:500;font-size:1.5rem;color:#ffffff;text-shadow:0 2px 4px rgba(0,0,0,0.5);">
                     RVS Service Flow
                 </h3>
@@ -90,46 +81,19 @@
         <a href="." class="reload">Reload</a>
         <span class="dismiss">🗙</span>
     </div>
+    <!-- Must precede AuthenticationService.js: restores the persisted sign-in before the library reads it (issue #498). -->
+    <script src="js/session-persist.js"></script>
     <script src="_content/Microsoft.AspNetCore.Components.WebAssembly.Authentication/AuthenticationService.js"></script>
 
-    <!-- Application Insights JS SDK v3 — connection string injected at deploy time via appsettings.json -->
+    <!-- Application Insights JS SDK v3 — connection string read from appsettings.json by js/app-insights.js -->
     <script src="https://js.monitor.azure.com/scripts/b/ai.3.gbl.min.js"></script>
-    <script>
-        // Load App Insights connection string from Blazor appsettings.json at startup
-        (async function () {
-            try {
-                var resp = await fetch('appsettings.json');
-                if (!resp.ok) return;
-                var cfg = await resp.json();
-                var cs = (cfg.ApplicationInsights && cfg.ApplicationInsights.ConnectionString) || "";
-                if (!cs) return;
-                var sdkInstance = new Microsoft.ApplicationInsights.ApplicationInsights({
-                    config: { connectionString: cs }
-                });
-                sdkInstance.loadAppInsights();
-                sdkInstance.trackPageView();
-                window.appInsights = sdkInstance;
-            } catch (e) { /* appsettings.json may not exist in dev */ }
-        })();
-    </script>
+    <script src="js/app-insights.js"></script>
 
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="js/download.js"></script>
     <script src="js/auth-refresh.js"></script>
     <script src="_framework/blazor.webassembly.js" autostart="false"></script>
-    <script>
-        // .NET 10: blazor.boot.json was inlined into dotnet.js, so the
-        // blazor-environment response header is no longer read. Detect
-        // the environment at runtime from the hostname instead.
-        const hostname = window.location.hostname;
-        let env = 'Production';
-        if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-            env = 'Development';
-        } else if (hostname.includes('mango') || hostname.includes('staging')) {
-            env = 'Staging';
-        }
-        Blazor.start({ environment: env });
-    </script>
+    <script src="js/blazor-start.js"></script>
 </body>
 
 </html>

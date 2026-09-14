@@ -9,7 +9,7 @@ namespace RVS.Blazor.Manager.Services;
 /// Wraps the default <see cref="IAccessTokenProvider"/> from
 /// <c>AddOidcAuthentication</c> with a refresh-token fallback that talks directly
 /// to Auth0's <c>/oauth/token</c> endpoint. Required so users stay signed in for
-/// the full 15-day rolling refresh-token lifetime (RVS_Technical_PRD.md §10.1)
+/// the full 30-day rotating refresh-token lifetime (Spec C-7, issue #498)
 /// instead of being bounced to login when the default iframe silent-renewal path
 /// fails under third-party-cookie blocking (Safari ITP, Chrome 3rd-party-cookie
 /// phase-out) or after the Auth0 SSO cookie idles out (default 3 days).

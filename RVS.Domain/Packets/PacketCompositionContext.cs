@@ -24,6 +24,12 @@ public sealed record PacketCompositionContext
     /// <summary>Fully-formed customer status URL, or <c>null</c> if none has been minted yet.</summary>
     public string? StatusLinkUrl { get; init; }
 
+    /// <summary>
+    /// Manager-app deep links for this request (<c>Spec C-7</c>, issue #498), built with
+    /// <see cref="ManagerDeepLinks.Build"/>, or <c>null</c> when none are configured.
+    /// </summary>
+    public PacketManagerLinks? ManagerLinks { get; init; }
+
     /// <summary>Pre-generated DMS paste block text, or <c>null</c> if not generated yet.</summary>
     public string? PasteBlock { get; init; }
 

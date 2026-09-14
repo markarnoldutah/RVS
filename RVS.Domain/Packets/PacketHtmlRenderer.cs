@@ -75,6 +75,7 @@ public static class PacketHtmlRenderer
         sb.Append("</head>\n<body>\n");
         sb.Append("<main class=\"packet\">\n");
 
+        AppendManagerActions(sb, packet.ManagerLinks);
         AppendMasthead(sb, packet, submittedUtc);
         AppendCategory(sb, packet.IssueCategory);
         // The AI assessment sits above the verbatim complaint: a service manager should see
@@ -91,6 +92,39 @@ public static class PacketHtmlRenderer
         sb.Append("</main>\n</body>\n</html>\n");
 
         return sb.ToString();
+    }
+
+    // ── Manager-app status actions (Spec C-7, issue #498) ────────────────
+    //
+    // Delivery chrome, not a Spec B-2 section: it sits above the masthead so a service manager
+    // can set status from the email in one tap, and the print stylesheet hides it. The links are
+    // plain navigations into the signed-in manager app — they carry no token and write nothing,
+    // so a mail-security scanner fetching them changes no state. A presentational <table> with
+    // inline styles, never flex/grid, for the same email-client reason as the masthead.
+
+    private static void AppendManagerActions(StringBuilder sb, PacketManagerLinks? links)
+    {
+        if (links is null || !IsHttpUrl(links.RequestUrl))
+        {
+            return;
+        }
+
+        const string buttonStyle =
+            "display:inline-block;margin:1mm 2mm 1mm 0;padding:1.5mm 3mm;border:1px solid #000;color:#000;text-decoration:none;font-weight:700;";
+
+        sb.Append("<!-- section:manager-actions -->\n");
+        sb.Append("<table role=\"presentation\" class=\"manager-actions\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin:0 0 5mm;border:1px solid #000;\">\n<tr>\n");
+        sb.Append("<td style=\"padding:2mm 3mm;font-size:9.5pt;\">\n");
+        sb.Append("<p style=\"margin:0 0 1mm;font-weight:700;\">Set status</p>\n");
+        foreach (var action in links.Actions.Where(a => IsHttpUrl(a.Url)))
+        {
+            sb.Append("<a href=\"").Append(Attr(action.Url)).Append("\" style=\"").Append(buttonStyle).Append("\">")
+                .Append(Text(action.Label)).Append("</a>\n");
+        }
+
+        sb.Append("<p style=\"margin:1mm 0 0;\"><a href=\"").Append(Attr(links.RequestUrl))
+            .Append("\" style=\"color:#000;\">Open in manager app</a></p>\n");
+        sb.Append("</td>\n</tr>\n</table>\n");
     }
 
     // ── Masthead: sections 1 (unit), 2 (customer), 3 (origin) ──────────────
@@ -581,6 +615,8 @@ public static class PacketHtmlRenderer
           body { font-size: 10pt; }
           a { text-decoration: underline; }
           .packet { padding: 0; }
+          /* Manager-app status links are email chrome (issue #498) — never on paper. */
+          .manager-actions { display: none; }
         }
         """;
 }

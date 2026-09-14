@@ -1002,7 +1002,7 @@ public class PacketGenerationServiceTests
     /// A service wired to a deliberately small email budget so a couple of test photos
     /// overflow it without allocating megabytes.
     /// </summary>
-    private PacketGenerationService BuildSutWithEmailBudget(long maxRequestBytes) =>
+    private PacketGenerationService BuildSutWithEmailBudget(long maxRequestBytes, string managerAppBaseUrl = ManagerAppBaseUrl) =>
         new(_srRepoMock.Object,
             _locationRepoMock.Object,
             _photoResolverMock.Object,
@@ -1016,8 +1016,40 @@ public class PacketGenerationServiceTests
                 RetryBaseDelay = TimeSpan.Zero,
                 MaxRequestBytes = maxRequestBytes,
             }),
-            Microsoft.Extensions.Options.Options.Create(new ManagerAppUrlOptions { BaseUrl = ManagerAppBaseUrl }),
+            Microsoft.Extensions.Options.Options.Create(new ManagerAppUrlOptions { BaseUrl = managerAppBaseUrl }),
             Mock.Of<ILogger<PacketGenerationService>>());
+
+    // ── Manager-app status deep links (Spec C-7, issue #498) ───────────────
+
+    [Fact]
+    public async Task GenerateAsync_WhenManagerAppBaseUrlIsConfigured_ShouldPutStatusDeepLinksInBothEmailBodies()
+    {
+        var sut = BuildSutWithEmailBudget(PacketEmailSizeFitter.DefaultMaxRequestBytes);
+
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 50_000, out var sr);
+
+        await Task.CompletedTask;
+        sent.Should().NotBeNull();
+        foreach (var body in new[] { sent!.HtmlBody, sent.PlainTextBody })
+        {
+            body.Should().Contain($"{ManagerAppBaseUrl}/sr/{sr.Id}?action=in-progress");
+            body.Should().Contain($"{ManagerAppBaseUrl}/sr/{sr.Id}?action=waiting-on-parts");
+            body.Should().Contain($"{ManagerAppBaseUrl}/sr/{sr.Id}?action=completed");
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenManagerAppBaseUrlIsBlank_ShouldSendTheEmailWithoutStatusDeepLinks()
+    {
+        var sut = BuildSutWithEmailBudget(PacketEmailSizeFitter.DefaultMaxRequestBytes, managerAppBaseUrl: "");
+
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 50_000, out _);
+
+        await Task.CompletedTask;
+        sent.Should().NotBeNull();
+        sent!.HtmlBody.Should().NotContain("?action=");
+        sent.PlainTextBody.Should().NotContain("?action=");
+    }
 
     /// <summary>
     /// Sets up two resolvable photos whose downloaded bytes are <paramref name="photoBytes"/>
