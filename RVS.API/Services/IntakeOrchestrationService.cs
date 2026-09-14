@@ -351,25 +351,18 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     }
 
     /// <summary>
-    /// Builds the preliminary-assessment seed text: the verbatim issue description, with the
-    /// capability-mismatch note prepended when one was raised. The diagnostic Q&amp;A is
-    /// deliberately <b>not</b> repeated here — the packet renders it in full in its own
-    /// "Reported symptoms &amp; diagnostic Q&amp;A" section (issue #492 item 6).
+    /// Builds the preliminary-assessment seed text: the capability-mismatch note, when one was
+    /// raised, and nothing else (issue #601). It must never echo the issue description — the
+    /// packet renders that verbatim in its own "Complaint" section, and this text renders above
+    /// it labelled "AI-generated"; repeating the same words in both would misrepresent the
+    /// literal text as an AI summary. The diagnostic Q&amp;A is deliberately not repeated here
+    /// either — the packet renders it in full in its own "Reported symptoms &amp; diagnostic
+    /// Q&amp;A" section (issue #492 item 6).
     /// </summary>
-    private static string BuildTechnicianSummary(ServiceRequestCreateRequestDto request)
-    {
-        var parts = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(request.CapabilityMismatchNote))
-        {
-            parts.Add(request.CapabilityMismatchNote.Trim());
-            parts.Add(string.Empty);
-        }
-
-        parts.Add($"Issue: {request.IssueDescription.Trim()}");
-
-        return string.Join("\n", parts);
-    }
+    private static string? BuildTechnicianSummary(ServiceRequestCreateRequestDto request) =>
+        string.IsNullOrWhiteSpace(request.CapabilityMismatchNote)
+            ? null
+            : request.CapabilityMismatchNote.Trim();
 
     /// <summary>
     /// Sends a confirmation notification via the orchestrator without blocking the caller.
