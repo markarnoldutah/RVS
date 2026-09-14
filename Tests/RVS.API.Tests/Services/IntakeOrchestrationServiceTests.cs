@@ -544,27 +544,21 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ShouldBuildTechnicianSummaryFromIssueDescription()
+    public async Task ExecuteAsync_WhenNoCapabilityMismatchNote_TechnicianSummaryShouldBeNull()
     {
+        // Issue #601: the packet's Preliminary assessment section (labelled AI-generated)
+        // must never echo the literal issue description — that duplicates the Complaint
+        // section, which shows the customer's words verbatim. With no capability-mismatch
+        // note there is nothing distinct to say, so the seed text is null.
         SetupFullHappyPath();
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.ServiceRequest.TechnicianSummary.Should().Contain("Slide won't retract");
+        result.ServiceRequest.TechnicianSummary.Should().BeNull();
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenNoCapabilityMismatchNote_TechnicianSummaryShouldStartWithIssue()
-    {
-        SetupFullHappyPath();
-
-        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
-
-        result.ServiceRequest.TechnicianSummary.Should().StartWith("Issue:");
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenCapabilityMismatchNoteProvided_ShouldPrependNoteToTechnicianSummary()
+    public async Task ExecuteAsync_WhenCapabilityMismatchNoteProvided_TechnicianSummaryShouldBeTheNoteOnly()
     {
         SetupFullHappyPath();
         var request = BuildValidRequest() with
@@ -575,23 +569,8 @@ public class IntakeOrchestrationServiceTests
         var result = await _sut.ExecuteAsync("test-slug", request);
 
         result.ServiceRequest.TechnicianSummary.Should()
-            .StartWith("Capability 'diesel-service' was requested");
-        result.ServiceRequest.TechnicianSummary.Should()
-            .Contain("Slide won't retract");
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_TechnicianSummary_ShouldNotRepeatTheDiagnosticResponses()
-    {
-        // Issue #492 item 6: the packet renders the diagnostic Q&A in full in its own
-        // section, so the preliminary-assessment seed text must not duplicate it.
-        SetupFullHappyPath();
-
-        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(includeDiagnostics: true));
-
-        result.ServiceRequest.TechnicianSummary.Should().Be("Issue: Slide won't retract");
-        result.ServiceRequest.TechnicianSummary.Should().NotContain("Diagnostic Responses");
-        result.ServiceRequest.TechnicianSummary.Should().NotContain("→ A:");
+            .Be("Capability 'diesel-service' was requested but is not available at this location. User was advised to contact the location directly.");
+        result.ServiceRequest.TechnicianSummary.Should().NotContain("Slide won't retract");
     }
 
     [Fact]
@@ -910,7 +889,7 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.CustomerSnapshot.FirstName.Should().Be("Jane");
         result.ServiceRequest.CustomerSnapshot.LastName.Should().Be("Doe");
         result.ServiceRequest.AssetInfo.AssetId.Should().Be("1HGBH41JXMN109186");
-        result.ServiceRequest.TechnicianSummary.Should().NotBeNullOrWhiteSpace();
+        result.ServiceRequest.TechnicianSummary.Should().BeNull();
         result.ServiceRequest.DiagnosticResponses.Should().HaveCount(1);
         result.MagicLinkToken.Should().NotBeNullOrWhiteSpace();
     }
