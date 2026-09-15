@@ -16,7 +16,7 @@ public class TenantProvisioningMapperTests
     [Fact]
     public void ToEntity_WhenDtoIsNull_ShouldThrowArgumentNullException()
     {
-        var act = () => ((TenantCreateRequestDto)null!).ToEntity("org_nova", "usr_admin");
+        var act = () => ((TenantCreateRequestDto)null!).ToEntity("ten_nova", "usr_admin");
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -32,10 +32,10 @@ public class TenantProvisioningMapperTests
             Notes = " Pilot P1 ",
         };
 
-        var tenant = dto.ToEntity("org_nova_rv_services", "usr_admin");
+        var tenant = dto.ToEntity("ten_nova_rv_services", "usr_admin");
 
-        tenant.Id.Should().Be("org_nova_rv_services");
-        tenant.TenantId.Should().Be("org_nova_rv_services");
+        tenant.Id.Should().Be("ten_nova_rv_services");
+        tenant.TenantId.Should().Be("ten_nova_rv_services");
         tenant.Name.Should().Be("Nova RV Services");
         tenant.BillingEmail.Should().Be("billing@nova.example.com");
         tenant.Status.Should().Be("Pilot");
@@ -49,7 +49,7 @@ public class TenantProvisioningMapperTests
     {
         var dto = new TenantCreateRequestDto { Name = "Nova", Plan = "location", BillingEmail = " ", Notes = "" };
 
-        var tenant = dto.ToEntity("org_nova", "usr_admin");
+        var tenant = dto.ToEntity("ten_nova", "usr_admin");
 
         tenant.BillingEmail.Should().BeNull();
         tenant.Notes.Should().BeNull();
@@ -100,11 +100,11 @@ public class TenantProvisioningMapperTests
         var overview = new TenantOverview(
             BuildTenant(),
             new TenantAccessGateEmbedded { LoginsEnabled = false, DisabledReason = "PastDue", DisabledAtUtc = disabledAt },
-            [new Location { Id = "loc_nova_1", TenantId = "org_nova", Name = "Hurricane", Slug = "nova-hurricane" }]);
+            [new Location { Id = "loc_nova_1", TenantId = "ten_nova", Name = "Hurricane", Slug = "nova-hurricane" }]);
 
         var dto = overview.ToSummaryDto(IntakeBaseUrl);
 
-        dto.TenantId.Should().Be("org_nova");
+        dto.TenantId.Should().Be("ten_nova");
         dto.Name.Should().Be("Nova RV Services");
         dto.Status.Should().Be("Pilot");
         dto.Plan.Should().Be("mobile");
@@ -127,18 +127,18 @@ public class TenantProvisioningMapperTests
     {
         var expires = DateTime.UtcNow.AddDays(7);
         var result = new TenantProvisioningResult(
-            "org_nova",
+            "ten_nova",
             [
                 new ProvisioningStep(ProvisioningStepNames.Tenant, ProvisioningStepStatus.Created),
                 new ProvisioningStep(ProvisioningStepNames.IdentityUser, ProvisioningStepStatus.AlreadyExisted),
             ],
-            new Location { Id = "loc_nova_1", TenantId = "org_nova", Name = "Hurricane", Slug = "nova-hurricane" },
+            new Location { Id = "loc_nova_1", TenantId = "ten_nova", Name = "Hurricane", Slug = "nova-hurricane" },
             "auth0|u1",
             new PasswordTicket("https://auth.example.com/ticket#abc", expires));
 
         var dto = result.ToResponseDto(IntakeBaseUrl);
 
-        dto.TenantId.Should().Be("org_nova");
+        dto.TenantId.Should().Be("ten_nova");
         dto.Succeeded.Should().BeTrue();
         dto.Steps.Select(s => (s.Step, s.Status)).Should().Equal(
             ("tenant", "created"),
@@ -155,7 +155,7 @@ public class TenantProvisioningMapperTests
     public void ToResponseDto_WhenAStepFailedBeforeLocation_ShouldReportFailureWithoutUrls()
     {
         var result = new TenantProvisioningResult(
-            "org_nova",
+            "ten_nova",
             [
                 new ProvisioningStep(ProvisioningStepNames.Tenant, ProvisioningStepStatus.Failed, "Cosmos unavailable"),
                 new ProvisioningStep(ProvisioningStepNames.Location, ProvisioningStepStatus.Skipped),
@@ -179,12 +179,12 @@ public class TenantProvisioningMapperTests
     {
         var expires = DateTime.UtcNow.AddDays(7);
         var result = new TenantUserProvisioningResult(
-            "org_nova", "auth0|u1", "sam@nova.example.com", "dealer:advisor", Created: false,
+            "ten_nova", "auth0|u1", "sam@nova.example.com", "dealer:advisor", Created: false,
             new PasswordTicket("https://auth.example.com/ticket#xyz", expires));
 
         var dto = result.ToResponseDto();
 
-        dto.TenantId.Should().Be("org_nova");
+        dto.TenantId.Should().Be("ten_nova");
         dto.UserId.Should().Be("auth0|u1");
         dto.Email.Should().Be("sam@nova.example.com");
         dto.Role.Should().Be("dealer:advisor");
@@ -208,11 +208,11 @@ public class TenantProvisioningMapperTests
     [Fact]
     public void ToProvisioningResponseDto_ForLocation_ShouldBuildIntakeUrl()
     {
-        var location = new Location { Id = "loc_2", TenantId = "org_nova", Name = "St. George", Slug = "nova-st-george" };
+        var location = new Location { Id = "loc_2", TenantId = "ten_nova", Name = "St. George", Slug = "nova-st-george" };
 
         var dto = location.ToProvisioningResponseDto("https://rvintake.com");
 
-        dto.TenantId.Should().Be("org_nova");
+        dto.TenantId.Should().Be("ten_nova");
         dto.LocationId.Should().Be("loc_2");
         dto.Name.Should().Be("St. George");
         dto.Slug.Should().Be("nova-st-george");
@@ -221,7 +221,7 @@ public class TenantProvisioningMapperTests
 
     private static Tenant BuildTenant() => new()
     {
-        Id = "org_nova",
+        Id = "ten_nova",
         Name = "Nova RV Services",
         BillingEmail = "billing@nova.example.com",
         Status = "Pilot",

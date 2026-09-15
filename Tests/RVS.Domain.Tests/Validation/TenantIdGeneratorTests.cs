@@ -8,11 +8,11 @@ public class TenantIdGeneratorTests
     // ── FromName ─────────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData("Nova RV Services", "org_nova_rv_services")]
-    [InlineData("  Blue Compass RV  ", "org_blue_compass_rv")]
-    [InlineData("Café & Sons, LLC", "org_cafe_sons_llc")]
-    [InlineData("St. George RV-Repair", "org_st_george_rv_repair")]
-    public void FromName_ShouldReturnOrgPrefixedSnakeCase(string name, string expected)
+    [InlineData("Nova RV Services", "ten_nova_rv_services")]
+    [InlineData("  Blue Compass RV  ", "ten_blue_compass_rv")]
+    [InlineData("Café & Sons, LLC", "ten_cafe_sons_llc")]
+    [InlineData("St. George RV-Repair", "ten_st_george_rv_repair")]
+    public void FromName_ShouldReturnTenPrefixedSnakeCase(string name, string expected)
     {
         TenantIdGenerator.FromName(name).Should().Be(expected);
     }
@@ -33,7 +33,7 @@ public class TenantIdGeneratorTests
         var id = TenantIdGenerator.FromName(new string('a', 200));
 
         id.Length.Should().Be(TenantIdGenerator.MaxLength);
-        id.Should().StartWith("org_");
+        id.Should().StartWith("ten_");
         id.Should().NotEndWith("_");
     }
 
@@ -48,21 +48,21 @@ public class TenantIdGeneratorTests
     // ── Fixed child ids (Spec P-6) ───────────────────────────────────────────
 
     [Fact]
-    public void DealershipIdFor_ShouldStripOrgPrefix()
+    public void DealershipIdFor_ShouldStripTenPrefix()
     {
-        TenantIdGenerator.DealershipIdFor("org_nova_rv").Should().Be("dlr_nova_rv");
+        TenantIdGenerator.DealershipIdFor("ten_nova_rv").Should().Be("dlr_nova_rv");
     }
 
     [Fact]
-    public void FirstLocationIdFor_ShouldStripOrgPrefix()
+    public void FirstLocationIdFor_ShouldStripTenPrefix()
     {
-        TenantIdGenerator.FirstLocationIdFor("org_nova_rv").Should().Be("loc_nova_rv_1");
+        TenantIdGenerator.FirstLocationIdFor("ten_nova_rv").Should().Be("loc_nova_rv_1");
     }
 
     [Fact]
-    public void DealershipIdFor_WhenTenantIdHasNoOrgPrefix_ShouldUseItWhole()
+    public void DealershipIdFor_WhenTenantIdHasNoTenPrefix_ShouldUseItWhole()
     {
-        TenantIdGenerator.DealershipIdFor("ten_legacy").Should().Be("dlr_ten_legacy");
+        TenantIdGenerator.DealershipIdFor("org_legacy").Should().Be("dlr_org_legacy");
     }
 
     [Theory]

@@ -62,7 +62,7 @@ public sealed class Auth0ManagementProvisionerTests
         var create = _handler.Single(HttpMethod.Post, "/api/v2/users");
         using var body = JsonDocument.Parse(create.Body!);
         var metadata = body.RootElement.GetProperty("app_metadata");
-        metadata.GetProperty("tenantId").GetString().Should().Be("org_nova");
+        metadata.GetProperty("tenantId").GetString().Should().Be("ten_nova");
         metadata.GetProperty("orgName").GetString().Should().Be("Nova RV Services");
         metadata.GetProperty("locationIds").EnumerateArray().Select(e => e.GetString()).Should().Equal("loc_nova_1");
     }
@@ -91,7 +91,7 @@ public sealed class Auth0ManagementProvisionerTests
     [Fact]
     public async Task EnsureUserAsync_WhenEmailExistsInSameTenant_ShouldUpdateMetadataAndNotCreate()
     {
-        _handler.UsersByEmailJson = ExistingUserJson("auth0|existing1", tenantId: "org_nova");
+        _handler.UsersByEmailJson = ExistingUserJson("auth0|existing1", tenantId: "ten_nova");
 
         var result = await CreateSut().EnsureUserAsync(OwnerRequest() with { Role = "dealer:manager", LocationIds = ["loc_nova_2"] });
 
@@ -102,7 +102,7 @@ public sealed class Auth0ManagementProvisionerTests
         var patch = _handler.Single(HttpMethod.Patch, "/api/v2/users/auth0%7Cexisting1");
         using var body = JsonDocument.Parse(patch.Body!);
         body.RootElement.GetProperty("name").GetString().Should().Be("Jay Lyons");
-        body.RootElement.GetProperty("app_metadata").GetProperty("tenantId").GetString().Should().Be("org_nova");
+        body.RootElement.GetProperty("app_metadata").GetProperty("tenantId").GetString().Should().Be("ten_nova");
         body.RootElement.GetProperty("app_metadata").GetProperty("locationIds")
             .EnumerateArray().Select(e => e.GetString()).Should().Equal("loc_nova_2");
         _handler.Single(HttpMethod.Post, "/api/v2/roles/rol_manager/users");
@@ -111,7 +111,7 @@ public sealed class Auth0ManagementProvisionerTests
     [Fact]
     public async Task EnsureUserAsync_WhenEmailBelongsToAnotherTenant_ShouldThrowConflictAndChangeNothing()
     {
-        _handler.UsersByEmailJson = ExistingUserJson("auth0|existing1", tenantId: "org_other");
+        _handler.UsersByEmailJson = ExistingUserJson("auth0|existing1", tenantId: "ten_other");
 
         var act = () => CreateSut().EnsureUserAsync(OwnerRequest());
 
@@ -218,7 +218,7 @@ public sealed class Auth0ManagementProvisionerTests
         user.Should().NotBeNull();
         user!.UserId.Should().Be("auth0|u1");
         user.Email.Should().Be("sam@nova.example.com");
-        user.TenantId.Should().Be("org_nova");
+        user.TenantId.Should().Be("ten_nova");
     }
 
     [Fact]
@@ -297,7 +297,7 @@ public sealed class Auth0ManagementProvisionerTests
     private static IdentityUserRequest OwnerRequest() => new(
         Email: "jay@nova.example.com",
         DisplayName: "Jay Lyons",
-        TenantId: "org_nova",
+        TenantId: "ten_nova",
         OrgName: "Nova RV Services",
         LocationIds: [],
         Role: "dealer:owner");
@@ -337,7 +337,7 @@ public sealed class Auth0ManagementProvisionerTests
         };
         public Func<HttpResponseMessage> GetUserResponse { get; set; } = () => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = Json("""{"user_id":"auth0|u1","email":"sam@nova.example.com","app_metadata":{"tenantId":"org_nova","orgName":"Nova RV Services"}}"""),
+            Content = Json("""{"user_id":"auth0|u1","email":"sam@nova.example.com","app_metadata":{"tenantId":"ten_nova","orgName":"Nova RV Services"}}"""),
         };
 
         public RecordedRequest Single(HttpMethod method, string path) =>

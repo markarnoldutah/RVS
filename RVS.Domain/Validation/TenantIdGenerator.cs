@@ -3,7 +3,7 @@ namespace RVS.Domain.Validation;
 /// <summary>
 /// Derives tenant ids and the fixed ids of a tenant's first documents (Spec P-1 / P-6, issue #563).
 ///
-/// Tenant ids are shaped <c>org_{snake_name}</c> (e.g. <c>org_nova_rv_services</c>) — an ordinary
+/// Tenant ids are shaped <c>ten_{snake_name}</c> (e.g. <c>ten_nova_rv_services</c>) — an ordinary
 /// string, not an Auth0 organization identifier. The dealership and first location get ids
 /// derived from the tenant id rather than random GUIDs, so re-submitting a partially failed
 /// provisioning finds the documents the first attempt wrote instead of duplicating them.
@@ -11,13 +11,13 @@ namespace RVS.Domain.Validation;
 public static class TenantIdGenerator
 {
     /// <summary>Prefix every provisioned tenant id carries.</summary>
-    public const string Prefix = "org_";
+    public const string Prefix = "ten_";
 
     /// <summary>Longest tenant id accepted, prefix included.</summary>
     public const int MaxLength = 64;
 
     /// <summary>
-    /// Builds <c>org_{snake_name}</c> from a display name: diacritics stripped, lowercased, every
+    /// Builds <c>ten_{snake_name}</c> from a display name: diacritics stripped, lowercased, every
     /// run of other characters collapsed to one underscore, capped at <see cref="MaxLength"/>.
     /// Returns an empty string when the name has no letters or digits.
     /// </summary>

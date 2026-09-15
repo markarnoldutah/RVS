@@ -16,7 +16,7 @@ namespace RVS.API.Tests.Services;
 /// </summary>
 public sealed class TenantProvisioningServiceTests
 {
-    private const string TenantId = "org_nova_rv_services";
+    private const string TenantId = "ten_nova_rv_services";
     private const string TenantName = "Nova RV Services";
     private const string DealershipId = "dlr_nova_rv_services";
     private const string FirstLocationId = "loc_nova_rv_services_1";
@@ -238,7 +238,7 @@ public sealed class TenantProvisioningServiceTests
     {
         SetupFullyProvisionedTenant(existingUser: true);
         _slugRepoMock.Setup(r => r.GetBySlugAsync(GeneratedSlug, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SlugLookup { Slug = GeneratedSlug, TenantId = "org_other", LocationId = "loc_other" });
+            .ReturnsAsync(new SlugLookup { Slug = GeneratedSlug, TenantId = "ten_other", LocationId = "loc_other" });
 
         var result = await _sut.CreateTenantAsync(ValidCreate());
 
@@ -480,7 +480,7 @@ public sealed class TenantProvisioningServiceTests
     {
         SetupExistingTenant();
         _identityMock.Setup(i => i.GetUserAsync("auth0|other", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new IdentityUser("auth0|other", "x@other.example.com", "org_other"));
+            .ReturnsAsync(new IdentityUser("auth0|other", "x@other.example.com", "ten_other"));
 
         var act = () => _sut.CreatePasswordTicketAsync(TenantId, "auth0|other");
 
@@ -626,21 +626,21 @@ public sealed class TenantProvisioningServiceTests
     [Fact]
     public async Task ListTenantsAsync_ShouldReturnEachTenantWithGateAndLocationsOrderedByName()
     {
-        var zeta = new Tenant { Id = "org_zeta", Name = "Zeta RV", Status = "Active", Plan = "location" };
-        var alpha = new Tenant { Id = "org_alpha", Name = "Alpha RV", Status = "Pilot", Plan = "mobile" };
+        var zeta = new Tenant { Id = "ten_zeta", Name = "Zeta RV", Status = "Active", Plan = "location" };
+        var alpha = new Tenant { Id = "ten_alpha", Name = "Alpha RV", Status = "Pilot", Plan = "mobile" };
         _tenantRepoMock.Setup(r => r.ListAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([zeta, alpha]);
-        _tenantConfigServiceMock.Setup(s => s.GetAccessGateAsync("org_zeta", It.IsAny<CancellationToken>()))
+        _tenantConfigServiceMock.Setup(s => s.GetAccessGateAsync("ten_zeta", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAccessGateEmbedded { LoginsEnabled = false });
-        _tenantConfigServiceMock.Setup(s => s.GetAccessGateAsync("org_alpha", It.IsAny<CancellationToken>()))
+        _tenantConfigServiceMock.Setup(s => s.GetAccessGateAsync("ten_alpha", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAccessGateEmbedded { LoginsEnabled = true });
-        _locationServiceMock.Setup(s => s.ListByTenantAsync("org_zeta", It.IsAny<CancellationToken>()))
+        _locationServiceMock.Setup(s => s.ListByTenantAsync("ten_zeta", It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _locationServiceMock.Setup(s => s.ListByTenantAsync("org_alpha", It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new Location { Id = "loc_a", TenantId = "org_alpha", Name = "Main", Slug = "alpha-main" }]);
+        _locationServiceMock.Setup(s => s.ListByTenantAsync("ten_alpha", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Location { Id = "loc_a", TenantId = "ten_alpha", Name = "Main", Slug = "alpha-main" }]);
 
         var result = await _sut.ListTenantsAsync();
 
-        result.Select(o => o.Tenant.Id).Should().Equal("org_alpha", "org_zeta");
+        result.Select(o => o.Tenant.Id).Should().Equal("ten_alpha", "ten_zeta");
         result[0].AccessGate.LoginsEnabled.Should().BeTrue();
         result[0].Locations.Should().ContainSingle();
         result[1].AccessGate.LoginsEnabled.Should().BeFalse();

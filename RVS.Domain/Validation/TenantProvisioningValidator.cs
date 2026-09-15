@@ -12,7 +12,7 @@ namespace RVS.Domain.Validation;
 public static partial class TenantProvisioningValidator
 {
     /// <summary>Tenant id carried by RVS staff accounts. Never provisionable.</summary>
-    public const string PlatformTenantId = "org_rvs_platform";
+    public const string PlatformTenantId = "ten_rvs_platform";
 
     /// <summary>The one tenant-wide role; every other provisionable role is location-scoped.</summary>
     public const string OwnerRole = "dealer:owner";
@@ -40,7 +40,7 @@ public static partial class TenantProvisioningValidator
     /// <summary>Billing plans (Spec P-1).</summary>
     public static IReadOnlyList<string> Plans { get; } = ["mobile", "location"];
 
-    [GeneratedRegex("^org_[a-z0-9]+(?:_[a-z0-9]+)*$")]
+    [GeneratedRegex("^ten_[a-z0-9]+(?:_[a-z0-9]+)*$")]
     private static partial Regex TenantIdPattern();
 
     /// <summary>Whether <paramref name="role"/> is provisionable and scoped to specific locations.</summary>
@@ -56,7 +56,7 @@ public static partial class TenantProvisioningValidator
     public static string? CanonicalPlan(string? value) => Canonical(Plans, value);
 
     /// <summary>
-    /// Validates a tenant id: <c>org_</c> then lowercase letters and digits in single-underscore
+    /// Validates a tenant id: <c>ten_</c> then lowercase letters and digits in single-underscore
     /// separated groups, at most <see cref="TenantIdGenerator.MaxLength"/> characters, and not
     /// the reserved <see cref="PlatformTenantId"/>.
     /// </summary>
@@ -75,7 +75,7 @@ public static partial class TenantProvisioningValidator
         if (!TenantIdPattern().IsMatch(tenantId))
         {
             return ValidationResult.Failure(
-                "Tenant id must look like 'org_shop_name': 'org_' then lowercase letters and digits separated by single underscores.");
+                "Tenant id must look like 'ten_shop_name': 'ten_' then lowercase letters and digits separated by single underscores.");
         }
 
         if (string.Equals(tenantId, PlatformTenantId, StringComparison.Ordinal))
