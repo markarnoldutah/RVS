@@ -55,7 +55,7 @@ Missing from Spec C: **no resend action anywhere** (C-5), and **no disposition f
 
 Nothing in either app renders a packet, a PDF, an email preview, or a paste block. Searching the frontend for "packet" returns nothing.
 
-**Installable PWA and persistent session (#498).** The manager app ships `manifest.webmanifest` (start URL `/board`), `icon-192.png` / `icon-512.png` (copied from the intake app), and a **network-only** `service-worker.js` — it makes the app installable and caches nothing, since offline use is out of scope and a cached build would go stale after deploy. `js/session-persist.js` keeps the sign-in across browser and PWA restarts; see "Manager app authentication" in `RVS_Identity.md`.
+**Installable PWA and persistent session (#498).** The manager app ships `manifest.webmanifest` (start URL `/board`), `icon-192.png` / `icon-512.png` (copied from the intake app), and a **network-only** `service-worker.js` — it makes the app installable and caches nothing, since offline use is out of scope and a cached build would go stale after deploy. HTTP caching is set in `staticwebapp.config.json`: fingerprinted `_framework/*` files are `immutable`, but `_framework/dotnet.js` (which embeds the boot manifest naming that build's assemblies) and `_framework/blazor.webassembly.js` keep the same name every build, so they — and the unfingerprinted `_content/*` assets — are `no-cache`. Marking them immutable made a soft refresh after a deploy start the previous build, whose router lacked newly added pages ("Page Not Found"). `js/session-persist.js` keeps the sign-in across browser and PWA restarts; see "Manager app authentication" in `RVS_Identity.md`.
 
 ---
 

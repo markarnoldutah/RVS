@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Validation;
@@ -9,8 +10,9 @@ namespace RVS.API.Services;
 
 /// <summary>
 /// Service for managing <see cref="Location"/> entities with atomic slug management.
-/// Creates a <see cref="SlugLookup"/> entry before the location to guarantee slug uniqueness,
-/// and rolls back the slug entry if location creation fails.
+/// Reserves the slug with a create-only <see cref="SlugLookup"/> write before the location is
+/// created — a taken slug is a 409, even when two creates race — and rolls the reservation back
+/// if location creation fails.
 /// </summary>
 public sealed class LocationService : ILocationService
 {
@@ -72,36 +74,41 @@ public sealed class LocationService : ILocationService
 
         ValidatePacketConfig(entity);
 
+        var dealership = await GetDealershipAsync(tenantId, cancellationToken);
+        var alreadyReserved = false;
+
         // Auto-generate a unique slug from the dealership ("org") slug + location name when
         // the caller did not supply one. This keeps slugs uniform, human-readable, and unique
         // per tenant without requiring the UI to pick a slug.
         if (string.IsNullOrWhiteSpace(entity.Slug))
         {
-            entity.Slug = await GenerateUniqueSlugAsync(tenantId, entity.Name, cancellationToken);
+            entity.Slug = await GenerateUniqueSlugAsync(dealership?.Slug, entity.Name, cancellationToken);
         }
         else
         {
-            // Caller supplied a slug — make sure it is not already taken.
+            // Caller supplied a slug — make sure it is not already taken. A reservation that
+            // already points at this very location is left over from an earlier attempt whose
+            // location write failed (Spec P-6), so it is reused rather than rejected.
             var existing = await _slugLookupRepository.GetBySlugAsync(entity.Slug, cancellationToken);
             if (existing is not null)
             {
-                throw new ArgumentException($"Slug '{entity.Slug}' is already in use.", nameof(entity));
+                if (!IsReservationFor(existing, tenantId, entity.Id))
+                {
+                    throw new ConflictException($"Slug '{entity.Slug}' is already in use.");
+                }
+
+                alreadyReserved = true;
             }
         }
 
-        // Step 1: Create slug lookup entry first to reserve the slug
-        var slugLookup = new SlugLookup
+        // Step 1: Reserve the slug. Create-only, so a concurrent create of the same slug fails
+        // here with a ConflictException instead of silently overwriting the other reservation.
+        if (!alreadyReserved)
         {
-            Id = $"slug_{entity.Slug}",
-            TenantId = tenantId,
-            Slug = entity.Slug,
-            LocationId = entity.Id,
-            DealershipName = string.Empty,
-            LocationName = entity.Name,
-            CreatedByUserId = _userContext.UserId
-        };
-
-        await _slugLookupRepository.UpsertAsync(slugLookup, cancellationToken);
+            await _slugLookupRepository.CreateAsync(
+                BuildSlugLookup(tenantId, entity.Slug, entity.Id, dealership, entity.Name),
+                cancellationToken);
+        }
 
         try
         {
@@ -129,11 +136,8 @@ public sealed class LocationService : ILocationService
     /// store for collisions, appending <c>-2</c>, <c>-3</c>, … until a free slug is found.
     /// Falls back to just the location-name slug when the tenant has no dealership yet.
     /// </summary>
-    private async Task<string> GenerateUniqueSlugAsync(string tenantId, string locationName, CancellationToken cancellationToken)
+    private async Task<string> GenerateUniqueSlugAsync(string? orgSlug, string locationName, CancellationToken cancellationToken)
     {
-        var dealerships = await _dealershipRepository.ListByTenantAsync(tenantId, cancellationToken);
-        var orgSlug = dealerships.FirstOrDefault()?.Slug;
-
         var baseSlug = SlugGenerator.ForLocation(orgSlug, locationName);
         if (string.IsNullOrEmpty(baseSlug))
         {
@@ -174,21 +178,15 @@ public sealed class LocationService : ILocationService
         var oldSlug = existing.Slug;
         var newSlug = entity.Slug;
 
-        // If slug changed, manage slug lookup entries atomically
+        // If slug changed, reserve the new one (create-only — a taken slug is a 409 and nothing
+        // else changes), then release the old one.
         if (!string.Equals(oldSlug, newSlug, StringComparison.Ordinal))
         {
-            var slugLookup = new SlugLookup
-            {
-                Id = $"slug_{newSlug}",
-                TenantId = tenantId,
-                Slug = newSlug,
-                LocationId = existing.Id,
-                DealershipName = string.Empty,
-                LocationName = entity.Name,
-                CreatedByUserId = _userContext.UserId
-            };
+            var dealership = await GetDealershipAsync(tenantId, cancellationToken);
 
-            await _slugLookupRepository.UpsertAsync(slugLookup, cancellationToken);
+            await _slugLookupRepository.CreateAsync(
+                BuildSlugLookup(tenantId, newSlug, existing.Id, dealership, entity.Name),
+                cancellationToken);
 
             // Delete old slug entry
             try
@@ -345,6 +343,29 @@ public sealed class LocationService : ILocationService
             throw new ArgumentException(result.ErrorMessage, nameof(entity));
         }
     }
+
+    /// <summary>The tenant's dealership, whose name and slug are denormalized into slug lookups.</summary>
+    private async Task<Dealership?> GetDealershipAsync(string tenantId, CancellationToken cancellationToken) =>
+        (await _dealershipRepository.ListByTenantAsync(tenantId, cancellationToken)).FirstOrDefault();
+
+    /// <summary>
+    /// The slug-lookup document for a location. <see cref="SlugLookup.DealershipName"/> must be
+    /// filled: intake renders it (<c>IntakeOrchestrationService</c>), and it used to be written empty.
+    /// </summary>
+    private SlugLookup BuildSlugLookup(string tenantId, string slug, string locationId, Dealership? dealership, string locationName) => new()
+    {
+        Id = $"slug_{slug}",
+        TenantId = tenantId,
+        Slug = slug,
+        LocationId = locationId,
+        DealershipName = dealership?.Name ?? string.Empty,
+        LocationName = locationName,
+        CreatedByUserId = _userContext.UserId
+    };
+
+    private static bool IsReservationFor(SlugLookup lookup, string tenantId, string locationId) =>
+        string.Equals(lookup.TenantId, tenantId, StringComparison.Ordinal)
+        && string.Equals(lookup.LocationId, locationId, StringComparison.Ordinal);
 
     /// <inheritdoc />
     public async Task DeleteAsync(string tenantId, string id, CancellationToken cancellationToken = default)

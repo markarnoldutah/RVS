@@ -37,9 +37,9 @@ Intake (anonymous) and Manager (bearer token) both call `RVS.API`. Middleware or
 9. `/health` (anonymous)
 10. `MapControllers()`
 
-Controllers open with `_claimsService.GetTenantIdOrThrow()`, delegate to a sealed scoped service, and map entities to DTOs. No `try/catch` in controllers — exceptions map centrally (`ArgumentException` → 400, `UnauthorizedAccessException` → 401, `KeyNotFoundException` → 404, `MagicLinkExpiredException` → 410, else 500), returning `{ message, errorId }`.
+Controllers open with `_claimsService.GetTenantIdOrThrow()`, delegate to a sealed scoped service, and map entities to DTOs. The one exception is `AdminTenantsController` (#563): its caller is RVS staff acting on another tenant, so `tenantId` comes from the route and the `PlatformAdmin` policy (permission plus allowlist) is what authorizes it. No `try/catch` in controllers — exceptions map centrally (`ArgumentException` → 400, `UnauthorizedAccessException` → 401, `KeyNotFoundException` → 404, `ConflictException` → 409, `MagicLinkExpiredException` → 410, else 500), returning `{ message, errorId }`.
 
-Every Cosmos query is single-partition on `tenantId`. Cross-partition access is structurally prevented rather than policed.
+Every Cosmos query is single-partition on `tenantId`. Cross-partition access is structurally prevented rather than policed. The deliberate exception is `CosmosTenantRepository.ListAllAsync`, which lists every tenant for the admin tool and is reachable only through `api/admin/tenants` — see `RVS_DataModel.md`.
 
 ---
 
@@ -66,6 +66,10 @@ Every Cosmos query is single-partition on `tenantId`. Cross-partition access is 
 `api/locations` — GET, GET `{id}`, POST, PUT `{id}`, GET `{id}/qr-code`
 `api/lookups/{category}` · `api/tenants/config` (POST/GET/PUT) · `api/tenants/access-gate`
 `api/dealerships/{dealershipId}/analytics/service-requests/summary`
+
+**Platform admin** (`PlatformAdmin`: `platform:tenants:manage` **and** a caller on `Admin:AllowedUserIds`; tenant from the route, not the token — #563)
+
+`api/admin/tenants` — GET, POST, PUT `{tenantId}`, POST `{tenantId}/users`, POST `{tenantId}/users/{userId}/password-ticket`, PUT `{tenantId}/access-gate`, POST `{tenantId}/locations`
 
 Note: the `{dealershipId}` route segment is decorative. Scoping always comes from the token, never the URL.
 
@@ -126,6 +130,7 @@ This is the honest state of `../RVS_Spec.md`.
 | A-10 VIN from photo (gpt-4o vision) | **Built** | `ai/extract-vin`, step 3; auto-fill ≥ 0.7, auto-decode ≥ 0.9. Specced in issue #429 |
 | A-11 issue insights (urgency, RV usage) | **Built** | `ai/suggest-insights`, step 5; persisted on `ServiceRequest` with provider/confidence. Specced in issue #429 |
 | A-12 capability pre-check | **Built** | `assess-capabilities`, step 5 → 6 boundary; non-blocking alert. Specced in issue #429 |
+| P-1 … P-8 platform provisioning | **Built, not yet run end to end** | Issue #563. `AdminTenantsController` → `TenantProvisioningService` (Cosmos steps with fixed ids, then `IIdentityProvisioner`) → `Auth0ManagementProvisioner` (typed `HttpClient`, cached client-credentials token, no SDK); `UnconfiguredIdentityProvisioner` throws when `Auth0Provisioner:*` is unset. Manager `/admin` pages with `AdminApiClient`. `PlatformAdmin` = permission + `PlatformAdminAllowlistHandler`, covered by an integration test (dealer 403, not allowlisted 403, admin 200). Also fixed: `LocationService` now fills `SlugLookup.dealershipName` and reserves slugs create-only (`ISlugLookupRepository.CreateAsync`, 409 on a taken slug). Needs the one-time Auth0 setup (Auth0 checklist §5); the local and staging end-to-end runs and the first prod tenant are still to do |
 
 **B is built through idempotent, retried email delivery; hard-bounce disabling is built at the domain + service layer with its inbound signal still to wire.** Composition, both renderers, photo SAS, generation orchestration (#430–#434), the DMS paste block (#436), the packet email send (#437), and delivery idempotency + retry/backoff (#438) are in. The paste block is `PasteBlockGenerator` (`RVS.Domain/Packets/`) — a fenced, ASCII-safe block ordered category → verbatim description → status link, with the description truncated at a word boundary to the location's `pasteBlockCharacterCap`; `PacketGenerationService` assembles it into `PacketCompositionContext.PasteBlock`. #437 emails a service manager: after a successful generation `PacketGenerationService` builds a `PacketEmailMessage` with `PacketEmailComposer` (`RVS.Domain/Packets/`, pure) and sends it through `INotificationService.SendPacketEmailAsync` on the existing ACS integration — subject `[RVS] {category} — {year} {make} {model} — {last name}`, packet HTML inline with the paste block as the text-only alternative, PDF + original photos attached per `packetConfig`, to `packetConfig.recipients`. It no-ops when the location config is absent, disabled, or has no recipients. #438 wraps that send in a delivery state machine on `ServiceRequest.packetEmailDelivery` (`PacketEmailDeliveryEmbedded`): skip if the current `packetVersion` is already recorded delivered (idempotent per `(serviceRequestId, packetVersion)`); otherwise up to 3 attempts with an exponential backoff (`PacketEmailOptions.RetryBaseDelay`, default 2 s, doubled each retry), every attempt logged under a `CorrelationId` scope, then one `LogCritical` alert on exhaustion. A delivery failure never fails generation. `Dealership.ServiceEmail` is still populated and mapped but read by no code path — recipients live on `Location.packetConfig` (#435). #439 adds `packetConfig.disabledRecipients[]` and `LocationService.DisableRecipientForBounceAsync` / `ReEnableRecipientAsync`: a hard bounce parks one address (never the whole config), the remaining recipients are notified, and losing the last recipient raises a `LogCritical` for App Insights; the disabled list survives a settings save and re-enables when its address is re-added to `recipients`. What remains for #439: the inbound ACS delivery-report path that would call the disable method. The `statusLinkTtlDays` and `logoUrl` config fields also still await their consumers.
 

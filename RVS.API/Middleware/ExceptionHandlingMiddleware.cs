@@ -49,6 +49,7 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
             ArgumentException => (StatusCodes.Status400BadRequest, "Bad Request", "validation"),
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized", "unauthorized"),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found", "not-found"),
+            ConflictException => (StatusCodes.Status409Conflict, "Conflict", "conflict"),
             MagicLinkExpiredException => (StatusCodes.Status410Gone, "Gone", "token-expired"),
             _ => (StatusCodes.Status500InternalServerError, "Internal Server Error", "internal-server-error")
         };

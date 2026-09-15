@@ -220,7 +220,7 @@ Target: .NET 10, C# 14, nullable enabled, implicit usings enabled.
 ### Exception Handling Middleware
 
 - `ExceptionHandlingMiddleware` implements `IMiddleware`, registered singleton.
-- Exception → HTTP mapping: `ArgumentException` → **400**, `UnauthorizedAccessException` → **401**, `KeyNotFoundException` → **404**, everything else → **500**.
+- Exception → HTTP mapping: `ArgumentException` → **400**, `UnauthorizedAccessException` → **401**, `KeyNotFoundException` → **404**, `ConflictException` → **409**, everything else → **500**.
 - Response body: `{ "message": "<safe message>", "errorId": "<guid>" }`. Dev mode adds `exception` and `stackTrace`.
 - Log full details (exception, tenantId, userId, path) via `ILogger`. Never expose internals to client.
 

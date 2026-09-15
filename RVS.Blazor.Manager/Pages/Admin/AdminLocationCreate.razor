@@ -1,0 +1,127 @@
+@page "/admin/tenants/{TenantId}/locations/new"
+@inject AdminApiClient AdminApi
+
+@* Add location to tenant (Spec P-5, issue #563). *@
+<PageTitle>RVS Admin — Add location</PageTitle>
+
+@if (_forbidden)
+{
+    <AccessDeniedCard />
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="px-0">
+        <MudStack Spacing="3">
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Href="/admin"
+                       Style="align-self: flex-start;">
+                Tenants
+            </MudButton>
+
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h4">Add location</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-family: monospace;">@TenantId</MudText>
+            </MudStack>
+
+            @if (_result is not null)
+            {
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudStack Spacing="3">
+                        <MudAlert Severity="Severity.Success">@_result.Name was added.</MudAlert>
+                        <CopyField Label="Intake URL" Value="@_result.IntakeUrl" />
+                        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                            <MudButton Variant="Variant.Outlined" OnClick="Reset">Add another location</MudButton>
+                            <MudButton Variant="Variant.Outlined" Href="/admin">Back to tenants</MudButton>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudStack Spacing="3">
+                    <MudTextField T="string" @bind-Value="_form.Name" Label="Location name"
+                                  Variant="Variant.Outlined" Placeholder="St. George" />
+                    <MudTextField T="string" @bind-Value="_form.Slug" Label="Intake slug (optional)"
+                                  Variant="Variant.Outlined" HelperText="Leave blank to generate one from the names." />
+                    <MudTextField T="string" @bind-Value="_form.Phone" Label="Phone (optional)"
+                                  InputType="InputType.Telephone" Variant="Variant.Outlined" autocomplete="tel" />
+                    <MudTextField T="string" @bind-Value="_form.Recipients" Label="Packet recipients"
+                                  Lines="4" Variant="Variant.Outlined"
+                                  HelperText="One email per line, 1 to 10." />
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
+                               OnClick="SubmitAsync" Disabled="_saving">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Add location
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudStack>
+    </MudContainer>
+}
+
+@code {
+    [Parameter] public string TenantId { get; set; } = string.Empty;
+
+    private LocationForm _form = new();
+    private TenantLocationProvisioningResponseDto? _result;
+    private bool _saving;
+    private bool _forbidden;
+    private string? _error;
+
+    private async Task SubmitAsync()
+    {
+        _saving = true;
+        _error = null;
+
+        try
+        {
+            _result = await AdminApi.AddLocationAsync(TenantId, new TenantLocationCreateRequestDto
+            {
+                Name = _form.Name ?? string.Empty,
+                Slug = _form.Slug,
+                Phone = _form.Phone,
+                Recipients = [.. (_form.Recipients ?? string.Empty)
+                    .Split(['\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)]
+            });
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Reset()
+    {
+        _result = null;
+        _error = null;
+        _form = new LocationForm();
+    }
+
+    private sealed class LocationForm
+    {
+        public string? Name { get; set; }
+        public string? Slug { get; set; }
+        public string? Phone { get; set; }
+        public string? Recipients { get; set; }
+    }
+}

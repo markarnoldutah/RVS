@@ -19,6 +19,18 @@
   },
   "routes": [
     {
+      "route": "/_framework/dotnet.js",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    },
+    {
+      "route": "/_framework/blazor.webassembly.js",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    },
+    {
       "route": "/_framework/*",
       "headers": {
         "Cache-Control": "public, max-age=31536000, immutable"
@@ -27,7 +39,7 @@
     {
       "route": "/_content/*",
       "headers": {
-        "Cache-Control": "public, max-age=31536000, immutable"
+        "Cache-Control": "no-cache"
       }
     },
     {

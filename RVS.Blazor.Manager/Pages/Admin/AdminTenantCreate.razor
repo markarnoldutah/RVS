@@ -1,0 +1,231 @@
+@page "/admin/tenants/new"
+@using RVS.Domain.Provisioning
+@inject AdminApiClient AdminApi
+
+@* Create tenant (Spec P-1, issue #563). One form, one submit; re-submitting finishes a partial run. *@
+<PageTitle>RVS Admin — New tenant</PageTitle>
+
+@if (_forbidden)
+{
+    <AccessDeniedCard />
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="px-0">
+        <MudStack Spacing="3">
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Href="/admin"
+                       Style="align-self: flex-start;">
+                Tenants
+            </MudButton>
+
+            <MudText Typo="Typo.h4">New tenant</MudText>
+
+            @if (_result is not null)
+            {
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudStack Spacing="3">
+                        @if (_result.Succeeded)
+                        {
+                            <MudAlert Severity="Severity.Success">@_result.TenantId is ready.</MudAlert>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Warning">
+                                Some steps did not finish. Fix the problem and submit again: finished steps will report "already existed".
+                            </MudAlert>
+                        }
+
+                        <MudStack Spacing="1">
+                            @foreach (var step in _result.Steps)
+                            {
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+                                    <MudIcon Icon="@StepIcon(step.Status)" Color="@StepColor(step.Status)" Size="Size.Small" />
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body2"><strong>@step.Step</strong>: @step.Status</MudText>
+                                        @if (!string.IsNullOrWhiteSpace(step.Message))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Error">@step.Message</MudText>
+                                        }
+                                    </MudStack>
+                                </MudStack>
+                            }
+                        </MudStack>
+
+                        @if (!string.IsNullOrWhiteSpace(_result.IntakeUrl))
+                        {
+                            <CopyField Label="Intake URL" Value="@_result.IntakeUrl" />
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(_result.PasswordTicketUrl))
+                        {
+                            <CopyField Label="Set-password link" Value="@_result.PasswordTicketUrl"
+                                       Hint="Valid for 7 days. Nothing is emailed: send this to the user yourself." />
+                        }
+
+                        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                            @if (!_result.Succeeded)
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="_saving">
+                                    Submit again
+                                </MudButton>
+                            }
+                            <MudButton Variant="Variant.Outlined" Href="/admin">Back to tenants</MudButton>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6">Tenant</MudText>
+                    <MudTextField T="string" Value="@_form.Name" ValueChanged="OnNameChanged" Immediate="true"
+                                  Label="Business name" Variant="Variant.Outlined" autocomplete="organization" />
+                    <MudTextField T="string" Value="@_form.TenantId" ValueChanged="OnTenantIdChanged" Immediate="true"
+                                  Label="Tenant id" Variant="Variant.Outlined"
+                                  HelperText="Derived from the name. Edit it to override."
+                                  Style="font-family: monospace;" />
+                    <MudSelect T="string" @bind-Value="_form.Plan" Label="Plan" Variant="Variant.Outlined">
+                        @foreach (var plan in TenantProvisioningValidator.Plans)
+                        {
+                            <MudSelectItem T="string" Value="@plan">@plan</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudTextField T="string" @bind-Value="_form.BillingEmail" Label="Billing email (optional)"
+                                  InputType="InputType.Email" Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_form.Notes" Label="Notes (optional)" Lines="2"
+                                  Variant="Variant.Outlined" />
+
+                    <MudText Typo="Typo.h6">First location</MudText>
+                    <MudTextField T="string" @bind-Value="_form.LocationName" Label="Location name"
+                                  Variant="Variant.Outlined" Placeholder="Hurricane" />
+                    <MudTextField T="string" @bind-Value="_form.LocationSlug" Label="Intake slug (optional)"
+                                  Variant="Variant.Outlined" HelperText="Leave blank to generate one from the names." />
+                    <MudTextField T="string" @bind-Value="_form.LocationPhone" Label="Phone (optional)"
+                                  InputType="InputType.Telephone" Variant="Variant.Outlined" autocomplete="tel" />
+
+                    <MudText Typo="Typo.h6">First user</MudText>
+                    <MudTextField T="string" @bind-Value="_form.OwnerEmail" Label="Email"
+                                  InputType="InputType.Email" Variant="Variant.Outlined"
+                                  HelperText="Also receives this location's packets." />
+                    <MudTextField T="string" @bind-Value="_form.OwnerDisplayName" Label="Name"
+                                  Variant="Variant.Outlined" autocomplete="off" />
+                    <MudSelect T="string" @bind-Value="_form.OwnerRole" Label="Role" Variant="Variant.Outlined">
+                        @foreach (var role in TenantProvisioningValidator.ProvisionableRoles)
+                        {
+                            <MudSelectItem T="string" Value="@role">@role</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
+                               OnClick="SubmitAsync" Disabled="_saving">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Create tenant
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudStack>
+    </MudContainer>
+}
+
+@code {
+    private readonly CreateForm _form = new();
+    private bool _tenantIdEdited;
+    private bool _saving;
+    private bool _forbidden;
+    private string? _error;
+    private TenantProvisioningResponseDto? _result;
+
+    private void OnNameChanged(string? value)
+    {
+        _form.Name = value;
+        if (!_tenantIdEdited)
+        {
+            _form.TenantId = TenantIdGenerator.FromName(value);
+        }
+    }
+
+    private void OnTenantIdChanged(string? value)
+    {
+        _form.TenantId = value;
+        _tenantIdEdited = !string.IsNullOrWhiteSpace(value);
+    }
+
+    private async Task SubmitAsync()
+    {
+        _saving = true;
+        _error = null;
+
+        try
+        {
+            _result = await AdminApi.CreateTenantAsync(new TenantCreateRequestDto
+            {
+                Name = _form.Name ?? string.Empty,
+                TenantId = _form.TenantId,
+                BillingEmail = _form.BillingEmail,
+                Plan = _form.Plan ?? string.Empty,
+                Notes = _form.Notes,
+                LocationName = _form.LocationName ?? string.Empty,
+                LocationSlug = _form.LocationSlug,
+                LocationPhone = _form.LocationPhone,
+                OwnerEmail = _form.OwnerEmail ?? string.Empty,
+                OwnerDisplayName = _form.OwnerDisplayName ?? string.Empty,
+                OwnerRole = _form.OwnerRole ?? string.Empty
+            });
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string StepIcon(string status) => status switch
+    {
+        ProvisioningStepStatus.Created => Icons.Material.Filled.CheckCircle,
+        ProvisioningStepStatus.AlreadyExisted => Icons.Material.Filled.CheckCircleOutline,
+        ProvisioningStepStatus.Failed => Icons.Material.Filled.Error,
+        _ => Icons.Material.Filled.RemoveCircleOutline
+    };
+
+    private static Color StepColor(string status) => status switch
+    {
+        ProvisioningStepStatus.Created => Color.Success,
+        ProvisioningStepStatus.AlreadyExisted => Color.Info,
+        ProvisioningStepStatus.Failed => Color.Error,
+        _ => Color.Default
+    };
+
+    private sealed class CreateForm
+    {
+        public string? Name { get; set; }
+        public string? TenantId { get; set; }
+        public string? Plan { get; set; } = "location";
+        public string? BillingEmail { get; set; }
+        public string? Notes { get; set; }
+        public string? LocationName { get; set; }
+        public string? LocationSlug { get; set; }
+        public string? LocationPhone { get; set; }
+        public string? OwnerEmail { get; set; }
+        public string? OwnerDisplayName { get; set; }
+        public string? OwnerRole { get; set; } = TenantProvisioningValidator.OwnerRole;
+    }
+}

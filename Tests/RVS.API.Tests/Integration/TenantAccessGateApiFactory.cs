@@ -11,10 +11,11 @@ namespace RVS.API.Tests.Integration;
 
 /// <summary>
 /// Boots the real <c>RVS.API</c> host (the actual <c>Program.cs</c> middleware pipeline, DI
-/// lifetimes and allowlist) for the tenant access gate integration tests, swapping only the
-/// pieces that need a live Azure account:
+/// lifetimes and allowlist) for the tenant access gate and admin endpoint integration tests,
+/// swapping only the pieces that need a live Azure account:
 /// <list type="bullet">
 ///   <item><description><see cref="ITenantConfigRepository"/> → <see cref="FakeTenantConfigRepository"/> (seeded per test).</description></item>
+///   <item><description><see cref="ITenantRepository"/> → <see cref="FakeTenantRepository"/>.</description></item>
 ///   <item><description>Authentication → <see cref="TestAuthHandler"/> (header-driven principal).</description></item>
 ///   <item><description>Integration clients forced to their mock/no-op implementations; Cosmos/Blob health checks removed.</description></item>
 /// </list>
@@ -23,6 +24,9 @@ namespace RVS.API.Tests.Integration;
 /// </summary>
 public sealed class TenantAccessGateApiFactory : WebApplicationFactory<Program>
 {
+    /// <summary>The one caller on <c>Admin:AllowedUserIds</c> in the test host (Spec P-7).</summary>
+    public const string AdminUserId = "auth0|platform-admin";
+
     static TenantAccessGateApiFactory()
     {
         // Program.cs reads these during service registration (before the host is built), so
@@ -37,9 +41,13 @@ public sealed class TenantAccessGateApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable(
             "CosmosDb__Key",
             "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==");
+        // The PlatformAdmin policy's allowlist requirement reads this at request time.
+        Environment.SetEnvironmentVariable("Admin__AllowedUserIds__0", AdminUserId);
     }
 
     public FakeTenantConfigRepository TenantConfigRepository { get; } = new();
+
+    public FakeTenantRepository TenantRepository { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -50,6 +58,9 @@ public sealed class TenantAccessGateApiFactory : WebApplicationFactory<Program>
             // Real TenantConfigService, faked backing store.
             services.RemoveAll<ITenantConfigRepository>();
             services.AddSingleton<ITenantConfigRepository>(TenantConfigRepository);
+
+            services.RemoveAll<ITenantRepository>();
+            services.AddSingleton<ITenantRepository>(TenantRepository);
 
             // Header-driven auth in place of Auth0 JWT Bearer. Program.cs sets the default
             // schemes explicitly to "Bearer", so override them after registering the handler.

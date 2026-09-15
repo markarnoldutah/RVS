@@ -42,4 +42,15 @@ public interface ITenantConfigService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">Thrown when the tenant config is not found.</exception>
     Task<TenantAccessGateEmbedded> GetAccessGateAsync(string tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Enables or disables logins for a tenant (Spec P-4). Disabling records the reason and
+    /// <c>DisabledAtUtc</c>; enabling clears both.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier.</param>
+    /// <param name="loginsEnabled">The new gate state.</param>
+    /// <param name="reason">Why logins are disabled. Ignored when enabling.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the tenant config is not found.</exception>
+    Task<TenantConfig> SetAccessGateAsync(string tenantId, bool loginsEnabled, string? reason, CancellationToken cancellationToken = default);
 }

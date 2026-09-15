@@ -1,0 +1,40 @@
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+@* A read-only value with a full-width Copy button, sized for a phone (Spec P-8, issue #563). *@
+<MudStack Spacing="1">
+    <MudText Typo="Typo.subtitle2">@Label</MudText>
+    <MudPaper Outlined="true" Class="pa-2">
+        <MudText Typo="Typo.body2" Style="font-family: monospace; word-break: break-all;">@Value</MudText>
+    </MudPaper>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
+               StartIcon="@Icons.Material.Filled.ContentCopy"
+               OnClick="CopyAsync">
+        Copy
+    </MudButton>
+    @if (!string.IsNullOrWhiteSpace(Hint))
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary">@Hint</MudText>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+
+    [Parameter] public string? Hint { get; set; }
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Value);
+            Snackbar.Add($"{Label} copied.", Severity.Success);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("Could not copy. Press and hold the text to copy it.", Severity.Warning);
+        }
+    }
+}
