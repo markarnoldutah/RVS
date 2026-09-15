@@ -102,7 +102,8 @@ else
 
                     <MudText Typo="Typo.h6">First location</MudText>
                     <MudTextField T="string" @bind-Value="_form.LocationName" Label="Location name"
-                                  Variant="Variant.Outlined" Placeholder="Hurricane" />
+                                  Variant="Variant.Outlined" Placeholder="Hurricane"
+                                  HelperText="Saved with the business name first, e.g. &quot;Nova RV - Hurricane&quot;." />
                     <MudTextField T="string" @bind-Value="_form.LocationSlug" Label="Intake slug (optional)"
                                   Variant="Variant.Outlined" HelperText="Leave blank to generate one from the names." />
                     <MudTextField T="string" @bind-Value="_form.LocationPhone" Label="Phone (optional)"

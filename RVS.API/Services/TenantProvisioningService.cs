@@ -197,7 +197,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             {
                 Id = firstLocationId,
                 TenantId = tenantId,
-                Name = request.LocationName.Trim(),
+                Name = LocationNameGenerator.ForBusiness(existingTenant?.Name ?? name, request.LocationName),
                 Slug = string.IsNullOrWhiteSpace(request.LocationSlug) ? string.Empty : request.LocationSlug.Trim(),
                 Phone = TrimToNull(request.LocationPhone),
                 PacketConfig = new PacketConfigEmbedded { Recipients = [request.OwnerEmail.Trim()] },
@@ -378,12 +378,12 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         ArgumentNullException.ThrowIfNull(request);
         ThrowIfInvalid(TenantProvisioningValidator.ValidateAddLocation(request));
 
-        await GetTenantOrThrowAsync(tenantId, cancellationToken);
+        var tenant = await GetTenantOrThrowAsync(tenantId, cancellationToken);
 
         var location = await _locationService.CreateAsync(tenantId, new Location
         {
             TenantId = tenantId,
-            Name = request.Name.Trim(),
+            Name = LocationNameGenerator.ForBusiness(tenant.Name, request.Name),
             Slug = string.IsNullOrWhiteSpace(request.Slug) ? string.Empty : request.Slug.Trim(),
             Phone = TrimToNull(request.Phone),
             PacketConfig = new PacketConfigEmbedded { Recipients = [.. request.Recipients.Select(r => r.Trim())] },

@@ -44,7 +44,8 @@ else
             <MudPaper Elevation="2" Class="pa-4">
                 <MudStack Spacing="3">
                     <MudTextField T="string" @bind-Value="_form.Name" Label="Location name"
-                                  Variant="Variant.Outlined" Placeholder="St. George" />
+                                  Variant="Variant.Outlined" Placeholder="St. George"
+                                  HelperText="Saved with the business name first, e.g. &quot;Nova RV - St. George&quot;." />
                     <MudTextField T="string" @bind-Value="_form.Slug" Label="Intake slug (optional)"
                                   Variant="Variant.Outlined" HelperText="Leave blank to generate one from the names." />
                     <MudTextField T="string" @bind-Value="_form.Phone" Label="Phone (optional)"

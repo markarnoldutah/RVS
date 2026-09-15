@@ -138,7 +138,7 @@ public sealed class TenantProvisioningServiceTests
             TenantId,
             It.Is<Location>(l => l.Id == FirstLocationId
                 && l.TenantId == TenantId
-                && l.Name == "Hurricane"
+                && l.Name == "Nova RV Services - Hurricane"
                 && l.Phone == "(435) 555-0100"
                 && l.PacketConfig.Recipients.SequenceEqual(new[] { OwnerEmail })
                 && l.CreatedByUserId == AdminUserId),
@@ -697,12 +697,24 @@ public sealed class TenantProvisioningServiceTests
         var location = await _sut.AddLocationAsync(TenantId, ValidLocation());
 
         location.TenantId.Should().Be(TenantId);
-        location.Name.Should().Be("St. George");
+        location.Name.Should().Be("Nova RV Services - St. George");
         location.Slug.Should().Be("nova-st-george");
         location.Phone.Should().Be("(435) 555-0101");
         location.PacketConfig.Recipients.Should().Equal("svc@nova.example.com", "jay@nova.example.com");
         location.CreatedByUserId.Should().Be(AdminUserId);
         VerifyLoggedContaining(TenantId, AdminUserId);
+    }
+
+    [Fact]
+    public async Task AddLocationAsync_WhenNameAlreadyStartsWithBusinessName_ShouldNotPrefixItTwice()
+    {
+        SetupExistingTenant();
+        _locationServiceMock.Setup(s => s.CreateAsync(TenantId, It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, Location l, CancellationToken _) => l);
+
+        var location = await _sut.AddLocationAsync(TenantId, ValidLocation() with { Name = "nova rv services - St. George" });
+
+        location.Name.Should().Be("Nova RV Services - St. George");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
