@@ -17,6 +17,15 @@ public interface ISlugLookupRepository
     Task<SlugLookup?> GetBySlugAsync(string slug, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Creates a slug-lookup document. Create-only: this is what reserves a slug, so two
+    /// concurrent creates of the same slug cannot both succeed.
+    /// </summary>
+    /// <param name="entity">The slug-lookup entity to persist.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="RVS.Domain.Exceptions.ConflictException">The slug is already taken.</exception>
+    Task<SlugLookup> CreateAsync(SlugLookup entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates or replaces a slug-lookup document.
     /// </summary>
     /// <param name="entity">The slug-lookup entity to persist.</param>

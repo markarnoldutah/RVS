@@ -1,0 +1,244 @@
+@page "/admin/tenants/{TenantId}/users/new"
+@inject AdminApiClient AdminApi
+@inject ISnackbar Snackbar
+
+@* Add user to tenant (Spec P-2) with a re-issuable set-password link (P-3), issue #563. *@
+<PageTitle>RVS Admin — Add user</PageTitle>
+
+@if (_forbidden)
+{
+    <AccessDeniedCard />
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="px-0">
+        <MudStack Spacing="3">
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Href="/admin"
+                       Style="align-self: flex-start;">
+                Tenants
+            </MudButton>
+
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h4">Add user</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@(_tenant?.Name ?? TenantId)</MudText>
+            </MudStack>
+
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_tenant is null)
+            {
+                <MudAlert Severity="Severity.Error">@(_error ?? $"Tenant '{TenantId}' was not found.")</MudAlert>
+            }
+            else
+            {
+                @if (_result is not null)
+                {
+                    <MudPaper Elevation="2" Class="pa-4">
+                        <MudStack Spacing="3">
+                            <MudAlert Severity="Severity.Success">
+                                @_result.Email @(_result.Status == "created" ? "was added" : "already existed and was updated")
+                                as @_result.Role.
+                            </MudAlert>
+                            <CopyField Label="Set-password link" Value="@_result.PasswordTicketUrl"
+                                       Hint="@TicketHint(_result.PasswordTicketExpiresAtUtc)" />
+                            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh"
+                                           OnClick="ResendAsync" Disabled="_saving">
+                                    New link
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" OnClick="Reset">Add another user</MudButton>
+                            </MudStack>
+                        </MudStack>
+                    </MudPaper>
+                }
+
+                @if (_error is not null)
+                {
+                    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+                }
+
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudStack Spacing="3">
+                        <MudTextField T="string" @bind-Value="_form.Email" Label="Email"
+                                      InputType="InputType.Email" Variant="Variant.Outlined" />
+                        <MudTextField T="string" @bind-Value="_form.DisplayName" Label="Name"
+                                      Variant="Variant.Outlined" autocomplete="off" />
+                        <MudSelect T="string" @bind-Value="_form.Role" Label="Role" Variant="Variant.Outlined">
+                            @foreach (var role in TenantProvisioningValidator.ProvisionableRoles)
+                            {
+                                <MudSelectItem T="string" Value="@role">@role</MudSelectItem>
+                            }
+                        </MudSelect>
+
+                        @if (TenantProvisioningValidator.IsLocationScopedRole(_form.Role))
+                        {
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.subtitle2">Locations</MudText>
+                                @if (_tenant.Locations.Count == 0)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">This tenant has no locations yet.</MudText>
+                                }
+                                @foreach (var location in _tenant.Locations)
+                                {
+                                    var id = location.LocationId;
+                                    <MudCheckBox T="bool"
+                                                 Value="@_form.LocationIds.Contains(id)"
+                                                 ValueChanged="@(on => ToggleLocation(id, on))"
+                                                 Label="@location.Name"
+                                                 Color="Color.Primary" />
+                                }
+                            </MudStack>
+                        }
+
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
+                                   OnClick="SubmitAsync" Disabled="_saving">
+                            @if (_saving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Add user
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    </MudContainer>
+}
+
+@code {
+    [Parameter] public string TenantId { get; set; } = string.Empty;
+
+    private TenantSummaryResponseDto? _tenant;
+    private UserForm _form = new();
+    private TenantUserProvisioningResponseDto? _result;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _forbidden;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var tenants = await AdminApi.ListTenantsAsync();
+            _tenant = tenants.FirstOrDefault(t => t.TenantId == TenantId);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ToggleLocation(string locationId, bool on)
+    {
+        if (on)
+        {
+            _form.LocationIds.Add(locationId);
+        }
+        else
+        {
+            _form.LocationIds.Remove(locationId);
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _saving = true;
+        _error = null;
+
+        try
+        {
+            _result = await AdminApi.AddUserAsync(TenantId, new TenantUserCreateRequestDto
+            {
+                Email = _form.Email ?? string.Empty,
+                DisplayName = _form.DisplayName ?? string.Empty,
+                Role = _form.Role ?? string.Empty,
+                LocationIds = TenantProvisioningValidator.IsLocationScopedRole(_form.Role) ? [.. _form.LocationIds] : []
+            });
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ResendAsync()
+    {
+        if (_result is null)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var ticket = await AdminApi.CreatePasswordTicketAsync(TenantId, _result.UserId);
+            _result = _result with
+            {
+                PasswordTicketUrl = ticket.PasswordTicketUrl,
+                PasswordTicketExpiresAtUtc = ticket.ExpiresAtUtc
+            };
+            Snackbar.Add("New set-password link issued.", Severity.Success);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Reset()
+    {
+        _result = null;
+        _error = null;
+        _form = new UserForm();
+    }
+
+    private static string TicketHint(DateTime expiresAtUtc) =>
+        $"Expires {expiresAtUtc.ToLocalTime():g}. Nothing is emailed: send this to the user yourself.";
+
+    private sealed class UserForm
+    {
+        public string? Email { get; set; }
+        public string? DisplayName { get; set; }
+        public string? Role { get; set; } = "dealer:manager";
+        public HashSet<string> LocationIds { get; } = [];
+    }
+}

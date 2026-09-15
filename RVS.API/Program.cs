@@ -139,10 +139,18 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("CanReadLookups", policy =>
         policy.RequireClaim("permissions", "lookups:read"));
 
-    // Platform Admin
+    // Platform Admin — the permission AND a caller on Admin:AllowedUserIds (Spec P-7, issue #563)
     options.AddPolicy("PlatformAdmin", policy =>
-        policy.RequireClaim("permissions", "platform:tenants:manage"));
+        policy.RequireClaim("permissions", "platform:tenants:manage")
+              .AddRequirements(new RVS.API.Authorization.PlatformAdminAllowlistRequirement()));
 });
+
+// The allowlist behind the PlatformAdmin policy. In Azure: Key Vault Admin--AllowedUserIds--0, --1, …
+builder.Services.Configure<RVS.API.Options.AdminOptions>(
+    builder.Configuration.GetSection(RVS.API.Options.AdminOptions.SectionName));
+builder.Services.AddSingleton<
+    Microsoft.AspNetCore.Authorization.IAuthorizationHandler,
+    RVS.API.Authorization.PlatformAdminAllowlistHandler>();
 
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -294,6 +302,13 @@ builder.Services.AddScoped<ITenantConfigRepository>(sp =>
     var logger = sp.GetRequiredService<ILogger<CosmosTenantConfigRepository>>();
     return new CosmosTenantConfigRepository(client, cosmosDbId, logger);
 });
+
+builder.Services.AddScoped<ITenantRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosTenantRepository>>();
+    return new CosmosTenantRepository(client, cosmosDbId, logger);
+});
 #endregion
 
 #region Services
@@ -301,6 +316,7 @@ builder.Services.AddScoped<ILookupService, LookupService>();
 builder.Services.AddScoped<IDealershipService, DealershipService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<ITenantConfigService, TenantConfigService>();
+builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
 builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IGlobalCustomerAcctService, GlobalCustomerAcctService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
@@ -603,6 +619,38 @@ if (useMockIntegrations)
 else
 {
     builder.Services.AddSingleton<IImageTranscoder, MagickImageTranscoder>();
+}
+
+// Identity provisioning — the platform-admin tool's Auth0 Management API client (Spec P-2/P-3/P-7,
+// issue #563). Its own M2M application and its own config section: the Auth0Mgmt--* secrets in the
+// staging vault belong to the rvs-config-automation app the Infra/Auth0 scripts use, and the API
+// loads every vault secret. Deliberately no NoOp fallback — when unset, every call throws.
+builder.Services.Configure<RVS.API.Options.Auth0ProvisionerOptions>(
+    builder.Configuration.GetSection(RVS.API.Options.Auth0ProvisionerOptions.SectionName));
+var auth0ProvisionerOptions = builder.Configuration
+    .GetSection(RVS.API.Options.Auth0ProvisionerOptions.SectionName)
+    .Get<RVS.API.Options.Auth0ProvisionerOptions>() ?? new RVS.API.Options.Auth0ProvisionerOptions();
+if (auth0ProvisionerOptions.IsConfigured)
+{
+    builder.Services.AddSingleton<Auth0ManagementTokenCache>();
+    builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddHttpClient<IIdentityProvisioner, Auth0ManagementProvisioner>(client =>
+    {
+        client.BaseAddress = auth0ProvisionerOptions.BaseUri;
+    })
+    // The default HttpClient loggers would record request URIs, and users-by-email carries the email.
+    .RemoveAllLoggers()
+    .AddStandardResilienceHandler(options =>
+    {
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
+        // Never replay a user create or role assignment; re-submitting the admin form is the retry.
+        options.Retry.DisableForUnsafeHttpMethods();
+    });
+}
+else
+{
+    builder.Services.AddSingleton<IIdentityProvisioner, UnconfiguredIdentityProvisioner>();
 }
 #endregion
 

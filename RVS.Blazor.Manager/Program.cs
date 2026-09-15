@@ -57,6 +57,10 @@ builder.Services.AddScoped<RVS.UI.Shared.Services.LookupApiClient>(sp =>
 builder.Services.AddScoped<RVS.UI.Shared.Services.AttachmentApiClient>(sp =>
     new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
 
+// Platform-admin provisioning (issue #563) — the hidden /admin pages. The API is the only gate.
+builder.Services.AddScoped<AdminApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+
 // This device's "Keep me signed in" answer, read from js/session-persist.js once the host is
 // built (below). The OIDC options are resolved lazily on first use, after that read; if they were
 // ever resolved first, the null default fails closed and forces the password prompt.

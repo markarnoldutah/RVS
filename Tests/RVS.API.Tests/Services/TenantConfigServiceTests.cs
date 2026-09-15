@@ -55,6 +55,70 @@ public class TenantConfigServiceTests
         result.Should().BeSameAs(config);
     }
 
+    // ── SetAccessGateAsync (Spec P-4, issue #563) ────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SetAccessGateAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.SetAccessGateAsync(tenantId!, loginsEnabled: true, reason: null);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task SetAccessGateAsync_WhenNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _repoMock.Setup(r => r.GetAsync("ten_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TenantConfig?)null);
+
+        var act = () => _sut.SetAccessGateAsync("ten_missing", loginsEnabled: false, reason: "PastDue");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task SetAccessGateAsync_WhenDisabling_ShouldRecordReasonAndDisabledAtThenSave()
+    {
+        var config = new TenantConfig { Id = "ten_1_config", TenantId = "ten_1" };
+        _repoMock.Setup(r => r.GetAsync("ten_1", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+        var before = DateTimeOffset.UtcNow;
+
+        var result = await _sut.SetAccessGateAsync("ten_1", loginsEnabled: false, reason: "PastDue");
+
+        result.AccessGate.LoginsEnabled.Should().BeFalse();
+        result.AccessGate.DisabledReason.Should().Be("PastDue");
+        result.AccessGate.DisabledAtUtc.Should().NotBeNull().And.BeOnOrAfter(before);
+        result.UpdatedByUserId.Should().Be("usr_test");
+        _repoMock.Verify(r => r.SaveAsync(config, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetAccessGateAsync_WhenEnabling_ShouldClearReasonAndDisabledAt()
+    {
+        var config = new TenantConfig
+        {
+            Id = "ten_1_config",
+            TenantId = "ten_1",
+            AccessGate = new TenantAccessGateEmbedded
+            {
+                LoginsEnabled = false,
+                DisabledReason = "PastDue",
+                DisabledAtUtc = DateTimeOffset.UtcNow.AddDays(-2),
+            },
+        };
+        _repoMock.Setup(r => r.GetAsync("ten_1", It.IsAny<CancellationToken>())).ReturnsAsync(config);
+
+        var result = await _sut.SetAccessGateAsync("ten_1", loginsEnabled: true, reason: null);
+
+        result.AccessGate.LoginsEnabled.Should().BeTrue();
+        result.AccessGate.DisabledReason.Should().BeNull();
+        result.AccessGate.DisabledAtUtc.Should().BeNull();
+        _repoMock.Verify(r => r.SaveAsync(config, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ── CreateTenantConfigAsync ──────────────────────────────────────────────
 
     [Theory]

@@ -2,17 +2,23 @@ using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using RVS.API.Authorization;
+using RVS.API.Options;
 
 namespace RVS.API.Tests.Authorization;
 
 public sealed class AuthorizationPolicyTests
 {
+    private const string AllowlistedAdminId = "auth0|platform-admin";
+
     private readonly IAuthorizationService _authorizationService;
 
     public AuthorizationPolicyTests()
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.Configure<AdminOptions>(o => o.AllowedUserIds = [AllowlistedAdminId]);
+        services.AddSingleton<IAuthorizationHandler, PlatformAdminAllowlistHandler>();
         services.AddAuthorization(options =>
         {
             options.AddPolicy("CanReadServiceRequests", policy =>
@@ -49,18 +55,24 @@ public sealed class AuthorizationPolicyTests
                 policy.RequireClaim("permissions", "tenants:config:read", "tenants:config:create", "tenants:config:update"));
             options.AddPolicy("CanReadLookups", policy =>
                 policy.RequireClaim("permissions", "lookups:read"));
+            // Mirrors Program.cs: permission AND allowlisted caller (Spec P-7, issue #563).
             options.AddPolicy("PlatformAdmin", policy =>
-                policy.RequireClaim("permissions", "platform:tenants:manage"));
+                policy.RequireClaim("permissions", "platform:tenants:manage")
+                      .AddRequirements(new PlatformAdminAllowlistRequirement()));
         });
 
         var provider = services.BuildServiceProvider();
         _authorizationService = provider.GetRequiredService<IAuthorizationService>();
     }
 
-    private static ClaimsPrincipal CreateUserWithPermissions(params string[] permissions)
+    private static ClaimsPrincipal CreateUserWithPermissions(params string[] permissions) =>
+        CreateUser("test-user", permissions);
+
+    private static ClaimsPrincipal CreateUser(string userId, params string[] permissions)
     {
         var claims = permissions.Select(p => new Claim("permissions", p)).ToList();
         claims.Add(new Claim(ClaimTypes.Name, "test-user"));
+        claims.Add(new Claim(ClaimTypes.NameIdentifier, userId));
         var identity = new ClaimsIdentity(claims, "TestScheme");
         return new ClaimsPrincipal(identity);
     }
@@ -87,7 +99,6 @@ public sealed class AuthorizationPolicyTests
     [InlineData("CanUpdateLocations", "locations:update")]
     [InlineData("CanReadAnalytics", "analytics:read")]
     [InlineData("CanReadLookups", "lookups:read")]
-    [InlineData("PlatformAdmin", "platform:tenants:manage")]
     public async Task Policy_WithCorrectPermission_ShouldSucceed(string policyName, string permission)
     {
         var user = CreateUserWithPermissions(permission);
@@ -167,9 +178,9 @@ public sealed class AuthorizationPolicyTests
     }
 
     [Fact]
-    public async Task PlatformAdmin_WithPlatformTenantsManagePermission_ShouldSucceed()
+    public async Task PlatformAdmin_WithPermissionAndAllowlistedCaller_ShouldSucceed()
     {
-        var user = CreateUserWithPermissions("platform:tenants:manage");
+        var user = CreateUser(AllowlistedAdminId, "platform:tenants:manage");
 
         var result = await _authorizationService.AuthorizeAsync(user, "PlatformAdmin");
 
@@ -177,9 +188,19 @@ public sealed class AuthorizationPolicyTests
     }
 
     [Fact]
-    public async Task PlatformAdmin_WithNonPlatformPermission_ShouldFail()
+    public async Task PlatformAdmin_WithPermissionButCallerNotAllowlisted_ShouldFail()
     {
-        var user = CreateUserWithPermissions("tenants:config:update");
+        var user = CreateUser("auth0|someone-else", "platform:tenants:manage");
+
+        var result = await _authorizationService.AuthorizeAsync(user, "PlatformAdmin");
+
+        result.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PlatformAdmin_WithAllowlistedCallerButNonPlatformPermission_ShouldFail()
+    {
+        var user = CreateUser(AllowlistedAdminId, "tenants:config:update");
 
         var result = await _authorizationService.AuthorizeAsync(user, "PlatformAdmin");
 

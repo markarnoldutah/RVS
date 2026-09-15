@@ -1,0 +1,315 @@
+@page "/admin"
+@inject AdminApiClient AdminApi
+@inject ISnackbar Snackbar
+
+@* Platform-admin tenant list (issue #563). Not in the nav; the API is the only gate. *@
+<PageTitle>RVS Admin — Tenants</PageTitle>
+
+@if (_forbidden)
+{
+    <AccessDeniedCard />
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="px-0">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.h4">Tenants</MudText>
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                       StartIcon="@Icons.Material.Filled.Add" Href="/admin/tenants/new">
+                New tenant
+            </MudButton>
+
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+            else if (_tenants.Count == 0)
+            {
+                <MudText Color="Color.Secondary">No tenants yet.</MudText>
+            }
+            else
+            {
+                @foreach (var tenant in _tenants)
+                {
+                    var t = tenant;
+                    <MudCard Elevation="2">
+                        <MudCardContent>
+                            <MudStack Spacing="2">
+                                <MudStack Spacing="0">
+                                    <MudText Typo="Typo.h6">@t.Name</MudText>
+                                    <MudText Typo="Typo.caption" Style="font-family: monospace;">@t.TenantId</MudText>
+                                </MudStack>
+
+                                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                    <MudChip T="string" Size="Size.Small" Color="@StatusColor(t.Status)">@t.Status</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@t.Plan</MudChip>
+                                </MudStack>
+
+                                <MudSwitch T="bool" Value="@t.LoginsEnabled"
+                                           ValueChanged="@(enabled => OnGateToggledAsync(t, enabled))"
+                                           Disabled="@(_busyTenantId == t.TenantId)"
+                                           Color="Color.Success"
+                                           Label="@GateLabel(t)" />
+
+                                @if (_disablingTenantId == t.TenantId)
+                                {
+                                    <MudTextField T="string" @bind-Value="_disableReason"
+                                                  Label="Reason for disabling"
+                                                  Placeholder="PastDue"
+                                                  Variant="Variant.Outlined" />
+                                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Error"
+                                                   Disabled="@(string.IsNullOrWhiteSpace(_disableReason) || _busyTenantId == t.TenantId)"
+                                                   OnClick="@(() => DisableAsync(t))">
+                                            Disable logins
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Text" OnClick="CancelDisable">Cancel</MudButton>
+                                    </MudStack>
+                                }
+
+                                @if (t.Locations.Count > 0)
+                                {
+                                    <MudStack Spacing="1">
+                                        @foreach (var location in t.Locations)
+                                        {
+                                            <MudStack Spacing="0">
+                                                <MudText Typo="Typo.body2"><strong>@location.Name</strong></MudText>
+                                                <MudLink Href="@location.IntakeUrl" Target="_blank" Typo="Typo.caption"
+                                                         Style="word-break: break-all;">
+                                                    @location.IntakeUrl
+                                                </MudLink>
+                                            </MudStack>
+                                        }
+                                    </MudStack>
+                                }
+
+                                @if (_editingTenantId == t.TenantId)
+                                {
+                                    <MudDivider />
+                                    <MudSelect T="string" @bind-Value="_edit.Status" Label="Status" Variant="Variant.Outlined">
+                                        @foreach (var status in TenantProvisioningValidator.Statuses)
+                                        {
+                                            <MudSelectItem T="string" Value="@status">@status</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                    <MudSelect T="string" @bind-Value="_edit.Plan" Label="Plan" Variant="Variant.Outlined">
+                                        @foreach (var plan in TenantProvisioningValidator.Plans)
+                                        {
+                                            <MudSelectItem T="string" Value="@plan">@plan</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                    <MudTextField T="string" @bind-Value="_edit.BillingEmail" Label="Billing email"
+                                                  InputType="InputType.Email" Variant="Variant.Outlined" />
+                                    <MudTextField T="string" @bind-Value="_edit.Notes" Label="Notes" Lines="3"
+                                                  Variant="Variant.Outlined" />
+                                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                                   Disabled="@(_busyTenantId == t.TenantId)"
+                                                   OnClick="@(() => SaveEditAsync(t))">
+                                            Save
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Text" OnClick="CancelEdit">Cancel</MudButton>
+                                    </MudStack>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit"
+                                           OnClick="@(() => StartEdit(t))">
+                                    Edit
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PersonAdd"
+                                           Href="@AddUserPath(t)">
+                                    Add user
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AddLocation"
+                                           Href="@AddLocationPath(t)">
+                                    Add location
+                                </MudButton>
+                            </MudStack>
+                        </MudCardActions>
+                    </MudCard>
+                }
+            }
+        </MudStack>
+    </MudContainer>
+}
+
+@code {
+    private List<TenantSummaryResponseDto> _tenants = [];
+    private bool _loading = true;
+    private bool _forbidden;
+    private string? _error;
+
+    private string? _busyTenantId;
+    private string? _disablingTenantId;
+    private string? _disableReason;
+    private string? _editingTenantId;
+    private EditForm _edit = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _tenants = await AdminApi.ListTenantsAsync();
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnGateToggledAsync(TenantSummaryResponseDto tenant, bool enabled)
+    {
+        if (!enabled)
+        {
+            // Disabling needs a reason; the switch stays on until the admin confirms.
+            _disablingTenantId = tenant.TenantId;
+            _disableReason = null;
+            return;
+        }
+
+        await SetGateAsync(tenant, new TenantAccessGateUpdateRequestDto { LoginsEnabled = true }, "Logins enabled.");
+    }
+
+    private Task DisableAsync(TenantSummaryResponseDto tenant) =>
+        SetGateAsync(
+            tenant,
+            new TenantAccessGateUpdateRequestDto { LoginsEnabled = false, Reason = _disableReason },
+            "Logins disabled.");
+
+    private async Task SetGateAsync(TenantSummaryResponseDto tenant, TenantAccessGateUpdateRequestDto request, string successMessage)
+    {
+        _busyTenantId = tenant.TenantId;
+        try
+        {
+            Replace(await AdminApi.SetAccessGateAsync(tenant.TenantId, request));
+            _disablingTenantId = null;
+            Snackbar.Add(successMessage, Severity.Success);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busyTenantId = null;
+        }
+    }
+
+    private void CancelDisable()
+    {
+        _disablingTenantId = null;
+        _disableReason = null;
+    }
+
+    private void StartEdit(TenantSummaryResponseDto tenant)
+    {
+        _editingTenantId = tenant.TenantId;
+        _edit = new EditForm
+        {
+            Status = tenant.Status,
+            Plan = tenant.Plan,
+            BillingEmail = tenant.BillingEmail,
+            Notes = tenant.Notes
+        };
+    }
+
+    private void CancelEdit() => _editingTenantId = null;
+
+    private async Task SaveEditAsync(TenantSummaryResponseDto tenant)
+    {
+        _busyTenantId = tenant.TenantId;
+        try
+        {
+            Replace(await AdminApi.UpdateTenantAsync(tenant.TenantId, new TenantUpdateRequestDto
+            {
+                Status = _edit.Status,
+                Plan = _edit.Plan,
+                BillingEmail = _edit.BillingEmail ?? string.Empty,
+                Notes = _edit.Notes ?? string.Empty
+            }));
+            _editingTenantId = null;
+            Snackbar.Add("Tenant saved.", Severity.Success);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busyTenantId = null;
+        }
+    }
+
+    private void Replace(TenantSummaryResponseDto updated)
+    {
+        var index = _tenants.FindIndex(t => t.TenantId == updated.TenantId);
+        if (index >= 0)
+        {
+            _tenants[index] = updated;
+        }
+    }
+
+    private static string GateLabel(TenantSummaryResponseDto tenant) =>
+        tenant.LoginsEnabled
+            ? "Logins enabled"
+            : string.IsNullOrWhiteSpace(tenant.DisabledReason)
+                ? "Logins disabled"
+                : $"Logins disabled: {tenant.DisabledReason}";
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Pilot" => Color.Info,
+        _ => Color.Default
+    };
+
+    private static string AddUserPath(TenantSummaryResponseDto tenant) =>
+        $"/admin/tenants/{Uri.EscapeDataString(tenant.TenantId)}/users/new";
+
+    private static string AddLocationPath(TenantSummaryResponseDto tenant) =>
+        $"/admin/tenants/{Uri.EscapeDataString(tenant.TenantId)}/locations/new";
+
+    private sealed class EditForm
+    {
+        public string? Status { get; set; }
+        public string? Plan { get; set; }
+        public string? BillingEmail { get; set; }
+        public string? Notes { get; set; }
+    }
+}

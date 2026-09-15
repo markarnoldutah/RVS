@@ -19,7 +19,7 @@ Configuration changes go through `Infra/Auth0/auth0-apply.sh` (plan, review, the
 
 `app_metadata` carries `tenantId`, `orgName`, and optionally `locationIds` and `regionTag`. `app_metadata.tenantId` is the value used everywhere downstream: the Cosmos partition key, the blob path prefix, and the isolation boundary. Its values are conventionally shaped like `org_blue_compass_rv`, but they are ordinary strings — **not** Auth0 organization identifiers.
 
-Consequences worth knowing: there is no per-tenant identity provider and no branded login, both of which would require Organizations. Staff invitations go through the Auth0 dashboard or Management API — an owner adds a user with a matching `tenantId`.
+Consequences worth knowing: there is no per-tenant identity provider and no branded login, both of which would require Organizations. Staff accounts are created by RVS through the provisioning tool (see "Tenant provisioning" below), not by dealers.
 
 ---
 
@@ -29,7 +29,7 @@ Roles are global Auth0 roles. A user at Corporation A cannot see Corporation B b
 
 | Role | Scope | Under new scope |
 |---|---|---|
-| `platform:admin` | Cross-tenant | RVS internal staff. The `PlatformAdmin` policy exists but no endpoint uses it |
+| `platform:admin` | Cross-tenant | RVS internal staff. Grants `platform:tenants:manage`, which the provisioning tool requires together with the `Admin:AllowedUserIds` allowlist (#563) |
 | `dealer:owner` | Tenant | Keep |
 | `dealer:corporate-admin` | Tenant | Keep |
 | `dealer:regional-manager` | Tenant + region | Thin — multi-location coordination is archived |
@@ -38,7 +38,7 @@ Roles are global Auth0 roles. A user at Corporation A cannot see Corporation B b
 | `dealer:readonly` | Location | Keep |
 | `dealer:technician` | Location | **Archived** — there is no technician workflow |
 
-At the reduced scope the role set is larger than the product needs. Collapsing it is cheap and safe to defer; the permission model below is what actually gates anything.
+At the reduced scope the role set is larger than the product needs. Collapsing it is cheap and safe to defer; the permission model below is what actually gates anything. The provisioning tool offers only `dealer:owner`, `dealer:manager`, `dealer:advisor` and `dealer:readonly`.
 
 ---
 
@@ -65,7 +65,9 @@ Authorization is **per-permission, never per-role**. Policies are declared in `R
 | `CanReadAnalytics` | `analytics:read` | **Archived** — analytics is out of scope |
 | `CanManageTenantConfig` | `tenants:config:read` / `create` / `update` | Any one of the three satisfies it |
 | `CanReadLookups` | `lookups:read` | |
-| `PlatformAdmin` | `platform:tenants:manage` | Declared, unused |
+| `PlatformAdmin` | `platform:tenants:manage` | **Plus** the caller's `sub` on `Admin:AllowedUserIds` (`PlatformAdminAllowlistHandler`). Guards `api/admin/tenants` (#563) |
+
+`PlatformAdmin` is the one policy with a second requirement. The permission alone is not enough because the Auth0 tenant is shared across environments and products: a stray `platform:admin` assignment must not open the provisioning tool.
 
 Packet delivery (Spec B) will need new permissions — at minimum resend and per-location packet configuration. Neither exists yet.
 
@@ -73,7 +75,7 @@ Packet delivery (Spec B) will need new permissions — at minimum resend and per
 
 ## Claims and user context
 
-`ClaimsService` (scoped) owns the claim-type constants and all extraction. `GetTenantIdOrThrow()` throws `UnauthorizedAccessException` — surfacing as 401 — when the tenant claim is absent. Every controller action opens with it.
+`ClaimsService` (scoped) owns the claim-type constants and all extraction. `GetTenantIdOrThrow()` throws `UnauthorizedAccessException` — surfacing as 401 — when the tenant claim is absent. Every controller action opens with it, except `AdminTenantsController`, which takes the tenant from the route because its caller is RVS staff acting on another tenant.
 
 Services never touch `HttpContext`. `IUserContextAccessor` lives in Domain and exposes `UserId` and `TenantId`; `HttpUserContextAccessor` in the API reads from `IHttpContextAccessor` and is registered scoped. Audit fields on every entity come from `_userContext.UserId`.
 
@@ -107,8 +109,16 @@ Spec X-5 requires that every anonymous token be ≥128 bits of entropy, **stored
 
 ## Tenant provisioning
 
-Onboarding a dealership requires, in order: create the Auth0 user with `app_metadata.tenantId` and `orgName`; assign a role; create the `Tenant` and `Dealership` documents; create at least one `Location` with a unique slug; write the `slug-lookups` entry; create the `TenantConfig` with the access gate enabled.
+Tenants are provisioned with the platform-admin tool (Spec P-1 … P-8, issue #563): the hidden `/admin` pages of the manager app, backed by `api/admin/tenants` and `TenantProvisioningService`. One submission creates, in order, the `Tenant`, the `TenantConfig` (logins enabled), the `Dealership`, the first `Location` with its `slug-lookups` entry, and the first Auth0 user. Cosmos writes run first, with fixed ids (`org_{name}`, `dlr_{name}`, `loc_{name}_1`); Auth0 runs last. Every step checks for what an earlier attempt left behind, so re-submitting after a partial failure finishes the job without duplicates, and the response reports each step as `created`, `already existed`, `failed` or `skipped`. Adding users and locations, re-issuing set-password links and toggling the access gate are separate actions on the same pages.
 
-`TenantAccessGateMiddleware` reads that config to block disabled tenants with a 403. It allowlists `/health`, `/swagger`, and `/api/tenants/config`. Note that its backing repository is currently unimplemented — see Known gaps in `RVS_Architecture.md`.
+**Who can use it.** The `PlatformAdmin` policy needs the `platform:tenants:manage` permission **and** a caller `sub` on `Admin:AllowedUserIds` (Key Vault `Admin--AllowedUserIds--0`, `--1`, …); either alone is a 403. The admin account carries `app_metadata {tenantId: "org_rvs_platform", orgName: "RVS"}` because the Post-Login Action requires both. `org_rvs_platform` is reserved and cannot be provisioned. MFA is required on the account. The manager app does no permission checks of its own — the ID token carries no permissions — so a non-admin who opens `/admin` gets the API's 403 and sees Access Denied.
 
-The Auth0 half of onboarding (the user, its `app_metadata` and role) is manual. The steps are in `Auth0/Auth0-Portal-Configuration-Checklist.md`, along with the one-time setup the configuration scripts need.
+**How users are created.** `Auth0ManagementProvisioner` calls the Management API as a dedicated Machine-to-Machine application, "RVS API Provisioner", authorised for only `read:users create:users update:users update:users_app_metadata read:roles create:role_members create:user_tickets`. Its credentials are `Auth0Provisioner:Domain`, `ClientId` and `ClientSecret` (Key Vault `Auth0Provisioner--*`). They are deliberately **not** the `Auth0Mgmt--*` secrets: those belong to `rvs-config-automation`, the far broader application the `Infra/Auth0` scripts use, and they sit in the staging vault that the staging API loads in full. When the provisioner settings are absent, `UnconfiguredIdentityProvisioner` is registered and every call throws, so the identity step reports `failed` instead of silently succeeding.
+
+A new user gets a random password nobody sees and a set-password ticket: 7 days, email marked verified, returning to the manager app. An email that already exists on `Username-Password-Authentication` is updated only when its `app_metadata.tenantId` matches. Any other user with that email — another tenant's, or one with no RVS tenant at all, which the shared Auth0 tenant makes possible — is a 409. Passwords and ticket URLs are never logged. Admin writes are audit-logged with the admin's user id and the tenant id (`EventId` 563001–563007), without email addresses.
+
+**Shared-tenant risk.** Provisioning from staging creates real users in the Auth0 tenant production signs in against. Use `+staging` email aliases and test-only tenant ids. Splitting the tenant is `FS-9` in `../RVS_Plan.md`.
+
+`TenantAccessGateMiddleware` reads `TenantConfig.accessGate` from Cosmos `tenant-configs` through `ITenantConfigService.GetAccessGateAsync` and returns 403 for a disabled tenant. It allowlists `/api/tenants/config`, `/api/intake/`, `/api/status/`, `/health` and `/swagger`. The gate and the commercial `Tenant.status` are independent; neither sets the other.
+
+The one-time setup the tool needs — the provisioner application, the admin account, the Key Vault secrets — is §5 of `Auth0/Auth0-Portal-Configuration-Checklist.md`. That checklist's manual user steps (§4) remain as a fallback.

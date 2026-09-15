@@ -196,6 +196,22 @@ param auth0ClientId string = ''
 @description('Auth0 application client secret. Required when deployKeyVault = true.')
 param auth0ClientSecret string = ''
 
+@secure()
+@description('Auth0 tenant domain for the "RVS API Provisioner" M2M app used by the platform-admin tool (issue #563). Optional; the Auth0Provisioner--* secrets are written only when domain, client ID and secret are all set.')
+param auth0ProvisionerDomain string = ''
+
+@secure()
+@description('Client ID of the "RVS API Provisioner" M2M app (issue #563). Optional.')
+param auth0ProvisionerClientId string = ''
+
+@secure()
+@description('Client secret of the "RVS API Provisioner" M2M app (issue #563). Optional.')
+param auth0ProvisionerClientSecret string = ''
+
+@secure()
+@description('Auth0 user id (sub) allowed to use the platform-admin tool, written as Admin--AllowedUserIds--0 (issue #563). Optional.')
+param adminAllowedUserId string = ''
+
 // ── Observability Parameters ──────────────────────────────────
 
 @description('When true, deploys a Log Analytics workspace and Application Insights resource.')
@@ -654,6 +670,10 @@ module auth0KeyVaultSecrets 'modules/auth0-keyvault-secrets.bicep' = if (deployK
     auth0ClientSecret: auth0ClientSecret
     auth0TokenUrl: '${auth0Domain}oauth/token'
     auth0AuthorizationUrl: '${auth0Domain}authorize'
+    auth0ProvisionerDomain: auth0ProvisionerDomain
+    auth0ProvisionerClientId: auth0ProvisionerClientId
+    auth0ProvisionerClientSecret: auth0ProvisionerClientSecret
+    adminAllowedUserId: adminAllowedUserId
   }
 }
 

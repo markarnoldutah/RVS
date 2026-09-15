@@ -24,6 +24,8 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
     public const string AuthenticatedHeader = "X-Test-Authenticated";
     public const string TenantIdHeader = "X-Test-TenantId";
     public const string PermissionsHeader = "X-Test-Permissions";
+    public const string UserIdHeader = "X-Test-UserId";
+    public const string DefaultUserId = "usr_integration_test";
 
     public TestAuthHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
@@ -40,7 +42,11 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, "usr_integration_test") };
+        var userId = Request.Headers[UserIdHeader].ToString();
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, string.IsNullOrWhiteSpace(userId) ? DefaultUserId : userId)
+        };
 
         var tenantId = Request.Headers[TenantIdHeader].ToString();
         if (!string.IsNullOrWhiteSpace(tenantId))

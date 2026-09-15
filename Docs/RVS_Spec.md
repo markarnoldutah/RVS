@@ -3,7 +3,7 @@
 **Version:** 1.0 · September 4, 2026
 **Scope:** Everything RVS does. If it isn't here, it isn't in scope.
 
-Requirements are numbered `A-n` (intake), `B-n` (packet and delivery), `C-n` (manager), `X-n` (cross-cutting). Fresh numbering — the old FR-nnn and OQ-nn series had collisions across documents and are archived with them.
+Requirements are numbered `A-n` (intake), `B-n` (packet and delivery), `C-n` (manager), `X-n` (cross-cutting), `P-n` (platform provisioning, RVS staff only). Fresh numbering — the old FR-nnn and OQ-nn series had collisions across documents and are archived with them.
 
 **Stack:** Azure, .NET, Blazor, Cosmos DB (SQL API), Auth0 (Free tier), Azure Communication Services, Blob Storage.
 
@@ -165,6 +165,25 @@ The entry surface is the manager app detail view (C-2). It also fits a C-7 deep 
 ### Non-functional
 
 Intake submission P95 under 2s. Packet generated P95 under 10s, email delivered P99 under 60s. Nothing in the packet path may block or roll back an intake submission. Free-text problem descriptions are never written to application logs.
+
+---
+
+## P. Platform provisioning — *internal tool, RVS staff only*
+
+A pilot closes with the customer set up live, in the room, from a phone. This is RVS's own tool, not a customer surface: a hidden `/admin` area in the manager app, backed by `api/admin/tenants` on the existing API (issue #563). It adds no Azure resources.
+
+| # | Requirement |
+|---|---|
+| **P-1** | **Create tenant.** One form, submitted once, creates the `Tenant` (`id == tenantId`, name, billing email, status `Pilot`, plan `mobile` or `location`, notes), the `TenantConfig` with logins enabled, the `Dealership`, the first `Location` (its packet recipient defaults to the first user's email), that location's `slug-lookups` entry with dealership and location names filled in, and the first Auth0 user (P-2). `tenantId` is derived as `org_{snake_name}` and can be edited. An existing id with the same name is a retry (P-6); with a different name it is rejected. |
+| **P-2** | **Add user to tenant.** Email, display name, role and, for location-scoped roles, locations. Roles offered: `dealer:owner`, `dealer:manager`, `dealer:advisor`, `dealer:readonly`; archived roles are not. The user is created on `Username-Password-Authentication` with a random password that is never shown or stored, gets `app_metadata {tenantId, orgName, locationIds}` and the role, and the response carries a set-password ticket URL: 7-day lifetime, email marked verified, returning to the manager app. |
+| **P-3** | **Resend set-password link** for an existing user of the tenant. |
+| **P-4** | **Enable/disable tenant.** Toggles `AccessGate.LoginsEnabled` with a reason; disabling sets `DisabledAtUtc`. This controls access only. `Tenant.status` (`Pilot` / `Active` / `Churned`) is the commercial state and is edited separately; neither sets the other. |
+| **P-5** | **Add location.** Name, optional slug, phone, 1–10 packet recipients. |
+| **P-6** | **Safe to retry.** Re-submitting after a partial failure finishes the job without duplicates. Cosmos writes run first, with fixed ids; Auth0 runs last. An existing email is updated when its `tenantId` matches and rejected when it doesn't. The response lists each step as `created`, `already existed` or `failed` — or `skipped`, when an earlier step failed and the step was not attempted. |
+| **P-7** | **Security.** Every `api/admin/*` endpoint requires the `platform:tenants:manage` permission **and** a caller `sub` on `Admin:AllowedUserIds`; otherwise 403. MFA is required on the admin Auth0 account. A dedicated Auth0 M2M application holds only `read:users create:users update:users update:users_app_metadata read:roles create:role_members create:user_tickets`, and its secret lives only in Key Vault. Admin writes are logged (who, what, tenantId); passwords and ticket URLs never are. Missing Auth0 settings fail loudly — there is no no-op fallback. |
+| **P-8** | **Mobile.** Single-column forms, usable at 390px. On success a result card shows the intake URL and the ticket URL, each with a Copy button. Nothing is emailed automatically. |
+
+Out of scope for v1: self-serve signup, bulk import, editing or deleting users, billing automation, branding upload (FS-5), and splitting the shared Auth0 tenant (FS-9).
 
 ---
 

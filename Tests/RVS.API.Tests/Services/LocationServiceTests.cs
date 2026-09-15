@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Services;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 
@@ -21,6 +22,9 @@ public class LocationServiceTests
     public LocationServiceTests()
     {
         _userContextMock.Setup(u => u.UserId).Returns("usr_test");
+        // The slug lookup denormalizes the dealership name, so every create/slug change reads it.
+        _dealershipRepoMock.Setup(r => r.ListByTenantAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         _sut = new LocationService(
             _locationRepoMock.Object,
             _slugRepoMock.Object,
@@ -127,7 +131,7 @@ public class LocationServiceTests
     public async Task CreateAsync_ShouldCreateSlugLookupThenLocation()
     {
         var location = BuildLocation();
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
             .ReturnsAsync(location);
@@ -135,7 +139,7 @@ public class LocationServiceTests
         var result = await _sut.CreateAsync("ten_1", location);
 
         result.Should().BeSameAs(location);
-        _slugRepoMock.Verify(r => r.UpsertAsync(
+        _slugRepoMock.Verify(r => r.CreateAsync(
             It.Is<SlugLookup>(s => s.Slug == location.Slug && s.LocationId == location.Id),
             It.IsAny<CancellationToken>()), Times.Once);
         _locationRepoMock.Verify(r => r.CreateAsync(location, It.IsAny<CancellationToken>()), Times.Once);
@@ -145,7 +149,7 @@ public class LocationServiceTests
     public async Task CreateAsync_WhenLocationCreateFails_ShouldRollbackSlugAndRethrow()
     {
         var location = BuildLocation();
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Cosmos conflict"));
@@ -164,7 +168,7 @@ public class LocationServiceTests
 
         _slugRepoMock.Setup(r => r.GetBySlugAsync("preset-slug", It.IsAny<CancellationToken>()))
             .ReturnsAsync((SlugLookup?)null);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
             .ReturnsAsync(location);
@@ -172,23 +176,79 @@ public class LocationServiceTests
         await _sut.CreateAsync("ten_1", location);
 
         location.Slug.Should().Be("preset-slug");
-        _slugRepoMock.Verify(r => r.UpsertAsync(
+        _slugRepoMock.Verify(r => r.CreateAsync(
             It.Is<SlugLookup>(s => s.Slug == "preset-slug"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task CreateAsync_WhenSlugProvidedButTaken_ShouldThrowArgumentException()
+    public async Task CreateAsync_WhenSlugProvidedButTaken_ShouldThrowConflictException()
     {
         var location = BuildLocation();
         location.Slug = "taken-slug";
 
         _slugRepoMock.Setup(r => r.GetBySlugAsync("taken-slug", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SlugLookup { Slug = "taken-slug" });
+            .ReturnsAsync(new SlugLookup { Slug = "taken-slug", TenantId = "ten_other", LocationId = "loc_other" });
 
         var act = () => _sut.CreateAsync("ten_1", location);
 
-        await act.Should().ThrowAsync<ArgumentException>();
+        await act.Should().ThrowAsync<ConflictException>();
         _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ShouldDenormalizeDealershipNameIntoSlugLookup()
+    {
+        // Intake reads SlugLookup.DealershipName (IntakeOrchestrationService); an empty value
+        // rendered a nameless intake page for every location created through the API (#563).
+        var location = BuildLocation();
+        _dealershipRepoMock.Setup(r => r.ListByTenantAsync("ten_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Dealership { TenantId = "ten_1", Name = "Camping World", Slug = "camping-world" }]);
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        await _sut.CreateAsync("ten_1", location);
+
+        _slugRepoMock.Verify(r => r.CreateAsync(
+            It.Is<SlugLookup>(s => s.DealershipName == "Camping World"
+                && s.LocationName == "Salt Lake Service Center"
+                && s.TenantId == "ten_1"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenSlugReservationLosesARace_ShouldThrowConflictAndNotCreateLocation()
+    {
+        // Check-then-write is not enough: two concurrent creates both see the slug free.
+        // The create-only reservation is what actually enforces uniqueness.
+        var location = BuildLocation();
+        _slugRepoMock.Setup(r => r.GetBySlugAsync(location.Slug, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("Slug 'salt-lake-service-center' is already in use."));
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ConflictException>();
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+        _slugRepoMock.Verify(r => r.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenSlugAlreadyReservedForThisLocation_ShouldReuseReservationAndCreateLocation()
+    {
+        // A retry after the location write failed and its rollback also failed (Spec P-6).
+        var location = BuildLocation();
+        _slugRepoMock.Setup(r => r.GetBySlugAsync(location.Slug, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup { Slug = location.Slug, TenantId = "ten_1", LocationId = location.Id });
+        _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.CreateAsync("ten_1", location);
+
+        result.Should().BeSameAs(location);
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -201,7 +261,7 @@ public class LocationServiceTests
             .ReturnsAsync([new Dealership { TenantId = "ten_1", Slug = "camping-world" }]);
         _slugRepoMock.Setup(r => r.GetBySlugAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SlugLookup?)null);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Location e, CancellationToken _) => e);
@@ -223,7 +283,7 @@ public class LocationServiceTests
             .ReturnsAsync(new SlugLookup());
         _slugRepoMock.Setup(r => r.GetBySlugAsync("camping-world-salt-lake-service-center-2", It.IsAny<CancellationToken>()))
             .ReturnsAsync((SlugLookup?)null);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Location e, CancellationToken _) => e);
@@ -243,7 +303,7 @@ public class LocationServiceTests
             .ReturnsAsync([]);
         _slugRepoMock.Setup(r => r.GetBySlugAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SlugLookup?)null);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Location e, CancellationToken _) => e);
@@ -265,7 +325,7 @@ public class LocationServiceTests
         var act = () => _sut.CreateAsync("ten_1", location);
 
         await act.Should().ThrowAsync<ArgumentException>();
-        _slugRepoMock.Verify(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
         _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -281,7 +341,7 @@ public class LocationServiceTests
 
         _slugRepoMock.Setup(r => r.GetBySlugAsync("preset-slug", It.IsAny<CancellationToken>()))
             .ReturnsAsync((SlugLookup?)null);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
             .ReturnsAsync(location);
@@ -348,7 +408,7 @@ public class LocationServiceTests
 
         await _sut.UpdateAsync("ten_1", existing.Id, updated);
 
-        _slugRepoMock.Verify(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
         _slugRepoMock.Verify(r => r.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -368,19 +428,62 @@ public class LocationServiceTests
 
         _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Location e, CancellationToken _) => e);
 
         var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
 
-        _slugRepoMock.Verify(r => r.UpsertAsync(
+        _slugRepoMock.Verify(r => r.CreateAsync(
             It.Is<SlugLookup>(s => s.Slug == "new-slug"),
             It.IsAny<CancellationToken>()), Times.Once);
         _slugRepoMock.Verify(r => r.DeleteAsync(oldSlug, It.IsAny<CancellationToken>()), Times.Once);
         result.Name.Should().Be("Renamed Location");
         result.UpdatedByUserId.Should().Be("usr_test");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenSlugChanged_ShouldDenormalizeDealershipName()
+    {
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.Slug = "new-slug";
+
+        _dealershipRepoMock.Setup(r => r.ListByTenantAsync("ten_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Dealership { TenantId = "ten_1", Name = "Camping World", Slug = "camping-world" }]);
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        _slugRepoMock.Verify(r => r.CreateAsync(
+            It.Is<SlugLookup>(s => s.Slug == "new-slug" && s.DealershipName == "Camping World"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenNewSlugTaken_ShouldThrowConflictAndLeaveLocationAndOldSlug()
+    {
+        var existing = BuildLocation();
+        var oldSlug = existing.Slug;
+        var updated = BuildLocation();
+        updated.Slug = "taken-slug";
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("Slug 'taken-slug' is already in use."));
+
+        var act = () => _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        await act.Should().ThrowAsync<ConflictException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+        _slugRepoMock.Verify(r => r.DeleteAsync(oldSlug, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

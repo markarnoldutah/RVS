@@ -1,3 +1,5 @@
+> **Superseded for new users (issue #563).** Create tenants and users with the provisioning tool, `/admin` in the Manager app; it does steps 3–5 below and writes the Cosmos documents in the same submission. One-time setup is §5 of `Auth0/Auth0-Portal-Configuration-Checklist.md`. This page is kept as the record of how Jay's account was set up by hand.
+
 1. Allow the prod manager URLs
 Applications → Applications, then open the manager app. Its Client ID is CBdytt7GQhJSejyVwSrCZZRYUkLMXdiY.
 On the Settings tab, add each value to the end of the existing comma-separated list:

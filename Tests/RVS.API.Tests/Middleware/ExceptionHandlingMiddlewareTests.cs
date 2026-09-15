@@ -93,6 +93,24 @@ public sealed class ExceptionHandlingMiddlewareTests
     }
 
     [Fact]
+    public async Task ConflictException_Returns409_WithProblemDetails()
+    {
+        var context = CreateHttpContext();
+        RequestDelegate next = _ => throw new ConflictException("Slug 'nova-hurricane' is already in use.");
+
+        await _middleware.InvokeAsync(context, next);
+
+        var problem = await DeserializeProblemDetails(context);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        context.Response.ContentType.Should().Contain("application/problem+json");
+        problem.Type.Should().Be("https://api.rvserviceflow.com/errors/conflict");
+        problem.Title.Should().Be("Conflict");
+        problem.Status.Should().Be(409);
+        problem.Detail.Should().Be("Slug 'nova-hurricane' is already in use.");
+        problem.Instance.Should().Be("/api/test");
+    }
+
+    [Fact]
     public async Task UnhandledException_Returns500_WithProblemDetails()
     {
         var context = CreateHttpContext();

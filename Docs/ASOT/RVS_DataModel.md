@@ -17,7 +17,7 @@ Database `rvs-db`, SQL API, serverless in every environment today. Provisioned m
 | `customer-profiles` | `/tenantId` | `/tenantId`, `/email` | Yes |
 | `global-customer-accounts` | `/email` | — | Yes |
 | `asset-ledger` | `/assetId` | `/assetId`, `/serviceRequestId` | Yes |
-| `dealerships` | `/tenantId` | — | Yes — also stores `Tenant` documents |
+| `dealerships` | `/tenantId` | — | Yes — also stores `Tenant` documents (`CosmosTenantRepository`, #563) |
 | `locations` | `/tenantId` | `/tenantId`, `/slug` | Yes |
 | `slug-lookups` | `/slug` | — | Yes |
 | `tenant-configs` | `/tenantId` | — | Yes |
@@ -26,7 +26,9 @@ Database `rvs-db`, SQL API, serverless in every environment today. Provisioned m
 
 `service-requests` carries two composite indexes. Everything else uses default indexing.
 
-Two containers are partitioned by something other than `tenantId` — `global-customer-accounts` by `/email` and `asset-ledger` by `/assetId`. Both are deliberately cross-tenant. They are the only places where a query is not tenant-scoped by partition, and both are read through repositories that scope explicitly.
+Two containers are partitioned by something other than `tenantId` — `global-customer-accounts` by `/email` and `asset-ledger` by `/assetId`. Both are deliberately cross-tenant, and both are read through repositories that scope explicitly.
+
+**One deliberate cross-partition query over tenant data:** `CosmosTenantRepository.ListAllAsync` reads every `type = 'tenant'` document in `dealerships` across partitions, to list tenants for the platform-admin tool (Spec P-7, #563). It is reachable only through `api/admin/tenants`, behind the `PlatformAdmin` policy (permission plus allowlist). Nothing else lists across tenants.
 
 ---
 
@@ -83,11 +85,15 @@ This is Spec X-2. Nothing else reads it, and that is correct. It exists so the r
 
 ### TenantConfig — `tenant-configs`
 
-`accessGate` (`loginsEnabled`, `disabledReason`) and `availableCapabilities[]`. Read by `TenantAccessGateMiddleware`.
+Id `{tenantId}_config`. `accessGate` (`loginsEnabled`, `disabledReason`, `disabledMessage`, `supportContactEmail`, `disabledAtUtc`) and `availableCapabilities[]`. Read by `TenantAccessGateMiddleware`. The gate is set by the platform-admin tool (`ITenantConfigService.SetAccessGateAsync`, Spec P-4): disabling records `disabledReason` and `disabledAtUtc`, enabling clears both.
+
+### Tenant — `dealerships`
+
+`id == tenantId`, `type = 'tenant'`: `name`, `billingEmail`, `status` (`Pilot` / `Active` / `Churned` — the commercial state, independent of the access gate), `plan` (`mobile` / `location`), `notes`. It is the list of tenants the admin tool reads and holds the billing details for hand-sent invoices. Written only by the platform-admin tool (#563), which also gives the tenant's first documents fixed ids — `dlr_{name}` for the dealership, `loc_{name}_1` for the first location — so a re-submitted provisioning run finds them instead of duplicating them. Read by id single-partition; listed through the one cross-partition query noted under Containers.
 
 ### Supporting
 
-`Dealership` and `Tenant` share the `dealerships` container. `slug-lookups` resolves a public slug to a tenant and location without a cross-partition query. `lookup-sets` holds controlled vocabulary, partitioned by `/category`.
+`Dealership` and `Tenant` share the `dealerships` container. `slug-lookups` resolves a public slug to a tenant and location without a cross-partition query; `dealershipName` and `locationName` are denormalized onto it for the intake page. A slug is reserved with a create-only write, so a taken slug is a 409 even when two creates race (#563). `lookup-sets` holds controlled vocabulary, partitioned by `/category`.
 
 ---
 
