@@ -1,0 +1,48 @@
+{
+  "name": "RVS Blazor Manager",
+  "app_type": "spa",
+  "token_endpoint_auth_method": "none",
+  "oidc_conformant": true,
+  "is_first_party": true,
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "cross_origin_authentication": false,
+  "sso_disabled": false,
+  "jwt_configuration": {
+    "alg": "RS256",
+    "lifetime_in_seconds": 36000
+  },
+  "refresh_token": {
+    "expiration_type": "expiring",
+    "idle_token_lifetime": 604800,
+    "infinite_idle_token_lifetime": false,
+    "infinite_token_lifetime": false,
+    "leeway": 0,
+    "rotation_type": "rotating",
+    "token_lifetime": 2592000
+  },
+  "organization_usage": "deny",
+  "_urls": {
+    "callbacks": {
+      "from": "AUTH0_MANAGER_ORIGINS",
+      "format": "{}/authentication/login-callback"
+    },
+    "allowed_logout_urls": {
+      "from": "AUTH0_MANAGER_ORIGINS",
+      "format": "{}/authentication/logout-callback"
+    },
+    "web_origins": {
+      "from": "AUTH0_MANAGER_ORIGINS",
+      "format": "{}"
+    }
+  },
+  "_grant": {
+    "subject_type": "user",
+    "scope": "all"
+  },
+  "_connections": [
+    "Username-Password-Authentication"
+  ]
+}

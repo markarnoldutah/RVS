@@ -1,0 +1,45 @@
+{
+  "name": "Swagger SPA Client",
+  "app_type": "spa",
+  "token_endpoint_auth_method": "none",
+  "oidc_conformant": true,
+  "is_first_party": true,
+  "grant_types": [
+    "authorization_code",
+    "implicit",
+    "refresh_token"
+  ],
+  "cross_origin_authentication": false,
+  "sso_disabled": false,
+  "jwt_configuration": {
+    "alg": "RS256",
+    "lifetime_in_seconds": 36000
+  },
+  "refresh_token": {
+    "expiration_type": "expiring",
+    "idle_token_lifetime": 1296000,
+    "infinite_idle_token_lifetime": false,
+    "infinite_token_lifetime": false,
+    "leeway": 0,
+    "rotation_type": "rotating",
+    "token_lifetime": 2592000
+  },
+  "_urls": {
+    "callbacks": {
+      "from": "AUTH0_SWAGGER_CALLBACKS",
+      "format": "{}"
+    },
+    "allowed_logout_urls": {
+      "from": "AUTH0_SWAGGER_LOGOUT_URLS",
+      "format": "{}"
+    }
+  },
+  "_grant": {
+    "subject_type": "user",
+    "scope": []
+  },
+  "_connections": [
+    "Username-Password-Authentication",
+    "google-oauth2"
+  ]
+}
