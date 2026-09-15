@@ -10,7 +10,7 @@ public sealed record TenantCreateRequestDto
     /// <summary>Display name of the corporation; also the dealership name and the user's <c>orgName</c>.</summary>
     public string Name { get; init; } = string.Empty;
 
-    /// <summary>Optional tenant id. When omitted it is derived as <c>org_{snake_name}</c> from <see cref="Name"/>.</summary>
+    /// <summary>Optional tenant id. When omitted it is derived as <c>ten_{snake_name}</c> from <see cref="Name"/>.</summary>
     public string? TenantId { get; init; }
 
     /// <summary>Where hand-sent invoices go. Optional.</summary>

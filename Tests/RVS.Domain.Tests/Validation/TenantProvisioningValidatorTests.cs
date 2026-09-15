@@ -9,9 +9,9 @@ public class TenantProvisioningValidatorTests
     // ── ValidateTenantId ─────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData("org_nova_rv")]
-    [InlineData("org_a")]
-    [InlineData("org_shop_2")]
+    [InlineData("ten_nova_rv")]
+    [InlineData("ten_a")]
+    [InlineData("ten_shop_2")]
     public void ValidateTenantId_WhenWellFormed_ShouldPass(string tenantId)
     {
         TenantProvisioningValidator.ValidateTenantId(tenantId).IsValid.Should().BeTrue();
@@ -21,12 +21,13 @@ public class TenantProvisioningValidatorTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("nova_rv")]
-    [InlineData("org_")]
-    [InlineData("org_Nova")]
-    [InlineData("org_nova-rv")]
-    [InlineData("org__nova")]
-    [InlineData("org_nova_")]
-    [InlineData("org_nova rv")]
+    [InlineData("ten_")]
+    [InlineData("ten_Nova")]
+    [InlineData("org_nova_rv")]
+    [InlineData("ten_nova-rv")]
+    [InlineData("ten__nova")]
+    [InlineData("ten_nova_")]
+    [InlineData("ten_nova rv")]
     public void ValidateTenantId_WhenMalformed_ShouldFail(string? tenantId)
     {
         TenantProvisioningValidator.ValidateTenantId(tenantId).IsValid.Should().BeFalse();
@@ -35,7 +36,7 @@ public class TenantProvisioningValidatorTests
     [Fact]
     public void ValidateTenantId_WhenLongerThanMax_ShouldFail()
     {
-        var tenantId = "org_" + new string('a', TenantIdGenerator.MaxLength);
+        var tenantId = "ten_" + new string('a', TenantIdGenerator.MaxLength);
 
         TenantProvisioningValidator.ValidateTenantId(tenantId).IsValid.Should().BeFalse();
     }
@@ -127,7 +128,7 @@ public class TenantProvisioningValidatorTests
         { "name too long", ValidCreate() with { Name = new string('a', 101) } },
         { "name with markup", ValidCreate() with { Name = "<b>Nova</b>" } },
         { "bad tenant id", ValidCreate() with { TenantId = "Nova RV" } },
-        { "platform tenant id", ValidCreate() with { TenantId = "org_rvs_platform" } },
+        { "platform tenant id", ValidCreate() with { TenantId = "ten_rvs_platform" } },
         { "bad billing email", ValidCreate() with { BillingEmail = "not-an-email" } },
         { "unknown plan", ValidCreate() with { Plan = "enterprise" } },
         { "blank plan", ValidCreate() with { Plan = "" } },
@@ -309,7 +310,7 @@ public class TenantProvisioningValidatorTests
     private static TenantCreateRequestDto ValidCreate() => new()
     {
         Name = "Nova RV Services",
-        TenantId = "org_nova_rv_services",
+        TenantId = "ten_nova_rv_services",
         BillingEmail = "billing@nova.example.com",
         Plan = "mobile",
         Notes = "Pilot P1",

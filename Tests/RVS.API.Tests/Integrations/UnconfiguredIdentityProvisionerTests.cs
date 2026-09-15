@@ -15,7 +15,7 @@ public sealed class UnconfiguredIdentityProvisionerTests
     [Fact]
     public async Task EnsureUserAsync_ShouldThrowNamingTheMissingSettings()
     {
-        var act = () => _sut.EnsureUserAsync(new IdentityUserRequest("a@b.example.com", "A", "org_a", "A", [], "dealer:owner"));
+        var act = () => _sut.EnsureUserAsync(new IdentityUserRequest("a@b.example.com", "A", "ten_a", "A", [], "dealer:owner"));
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Auth0Provisioner*");
     }
