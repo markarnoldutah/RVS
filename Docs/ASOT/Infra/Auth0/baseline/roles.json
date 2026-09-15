@@ -1,0 +1,161 @@
+[
+  {
+    "name": "dealer:advisor",
+    "description": "Service advisor who creates and manages service requests day to day",
+    "permissions": [
+      "attachments:read",
+      "attachments:upload",
+      "dealerships:read",
+      "locations:read",
+      "lookups:read",
+      "service-requests:create",
+      "service-requests:read",
+      "service-requests:search",
+      "service-requests:update"
+    ]
+  },
+  {
+    "name": "dealer:corporate-admin",
+    "description": "Corporate HQ employee with full access across all locations",
+    "permissions": [
+      "analytics:read",
+      "attachments:delete",
+      "attachments:read",
+      "attachments:upload",
+      "dealerships:read",
+      "dealerships:update",
+      "locations:create",
+      "locations:read",
+      "locations:update",
+      "lookups:read",
+      "service-requests:create",
+      "service-requests:delete",
+      "service-requests:read",
+      "service-requests:search",
+      "service-requests:update",
+      "service-requests:update-service-event",
+      "tenants:config:create",
+      "tenants:config:read",
+      "tenants:config:update"
+    ]
+  },
+  {
+    "name": "dealer:manager",
+    "description": "Service dept manager at a single location",
+    "permissions": [
+      "analytics:read",
+      "attachments:delete",
+      "attachments:read",
+      "attachments:upload",
+      "dealerships:read",
+      "locations:read",
+      "locations:update",
+      "lookups:read",
+      "service-requests:create",
+      "service-requests:delete",
+      "service-requests:read",
+      "service-requests:search",
+      "service-requests:update",
+      "service-requests:update-service-event"
+    ]
+  },
+  {
+    "name": "dealer:owner",
+    "description": "Business owner or general manager with full control of their organization",
+    "permissions": [
+      "analytics:read",
+      "attachments:delete",
+      "attachments:read",
+      "attachments:upload",
+      "dealerships:read",
+      "dealerships:update",
+      "locations:create",
+      "locations:read",
+      "locations:update",
+      "lookups:read",
+      "service-requests:create",
+      "service-requests:delete",
+      "service-requests:read",
+      "service-requests:search",
+      "service-requests:update",
+      "service-requests:update-service-event",
+      "tenants:config:create",
+      "tenants:config:read",
+      "tenants:config:update"
+    ]
+  },
+  {
+    "name": "dealer:readonly",
+    "description": "View only access for observers such as accounting or auditors",
+    "permissions": [
+      "analytics:read",
+      "attachments:read",
+      "dealerships:read",
+      "locations:read",
+      "lookups:read",
+      "service-requests:read",
+      "service-requests:search"
+    ]
+  },
+  {
+    "name": "dealer:regional-manager",
+    "description": "Manager with visibility across multiple locations within their region",
+    "permissions": [
+      "analytics:read",
+      "attachments:delete",
+      "attachments:read",
+      "attachments:upload",
+      "dealerships:read",
+      "locations:read",
+      "locations:update",
+      "lookups:read",
+      "service-requests:create",
+      "service-requests:delete",
+      "service-requests:read",
+      "service-requests:search",
+      "service-requests:update",
+      "service-requests:update-service-event"
+    ]
+  },
+  {
+    "name": "dealer:technician",
+    "description": "Technician who views assigned work and logs repair details",
+    "permissions": [
+      "attachments:read",
+      "attachments:upload",
+      "dealerships:read",
+      "locations:read",
+      "lookups:read",
+      "service-requests:read",
+      "service-requests:search",
+      "service-requests:update-service-event"
+    ]
+  },
+  {
+    "name": "platform:admin",
+    "description": "RVS internal staff.  Full system access across all tenants.",
+    "permissions": [
+      "analytics:read",
+      "attachments:delete",
+      "attachments:read",
+      "attachments:upload",
+      "dealerships:read",
+      "dealerships:update",
+      "locations:create",
+      "locations:read",
+      "locations:update",
+      "lookups:read",
+      "platform:lookups:manage",
+      "platform:tenants:manage",
+      "service-requests:create",
+      "service-requests:delete",
+      "service-requests:read",
+      "service-requests:search",
+      "service-requests:update",
+      "service-requests:update-service-event",
+      "tenants:config:create",
+      "tenants:config:read",
+      "tenants:config:update"
+    ]
+  }
+]

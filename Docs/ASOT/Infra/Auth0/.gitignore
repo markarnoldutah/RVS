@@ -1,0 +1,4 @@
+# Full tenant snapshots from auth0-export.sh include other products' configuration
+# and the tenant's security settings, and this repository is public. Keep them local;
+# the committed desired state for RVS is baseline/.
+snapshots/

@@ -1,0 +1,104 @@
+{
+  "allow_offline_access": true,
+  "enforce_policies": true,
+  "name": "RV Service Flow API",
+  "scopes": [
+    {
+      "description": "View service request details",
+      "value": "service-requests:read"
+    },
+    {
+      "description": "Search / filter service requests",
+      "value": "service-requests:search"
+    },
+    {
+      "description": "Create a service request from the dealer dashboard",
+      "value": "service-requests:create"
+    },
+    {
+      "description": "Update service request (status, notes, category)",
+      "value": "service-requests:update"
+    },
+    {
+      "description": "Update Section10A fields (repair action, parts, labor)",
+      "value": "service-requests:update-service-event"
+    },
+    {
+      "description": "Delete a service request",
+      "value": "service-requests:delete"
+    },
+    {
+      "description": "View / download attachments",
+      "value": "attachments:read"
+    },
+    {
+      "description": "Upload an attachment",
+      "value": "attachments:upload"
+    },
+    {
+      "description": "Delete an attachment",
+      "value": "attachments:delete"
+    },
+    {
+      "description": "View dealership details",
+      "value": "dealerships:read"
+    },
+    {
+      "description": "Update dealership settings",
+      "value": "dealerships:update"
+    },
+    {
+      "description": "View location details and list",
+      "value": "locations:read"
+    },
+    {
+      "description": "Create a new physical location",
+      "value": "locations:create"
+    },
+    {
+      "description": "Update location settings",
+      "value": "locations:update"
+    },
+    {
+      "description": "View service request analytics",
+      "value": "analytics:read"
+    },
+    {
+      "description": "View tenant configuration",
+      "value": "tenants:config:read"
+    },
+    {
+      "description": "Bootstrap tenant configuration",
+      "value": "tenants:config:create"
+    },
+    {
+      "description": "Update tenant configuration",
+      "value": "tenants:config:update"
+    },
+    {
+      "description": "Read lookup sets",
+      "value": "lookups:read"
+    },
+    {
+      "description": "Create / disable / enable tenants",
+      "value": "platform:tenants:manage"
+    },
+    {
+      "description": "Create / update global lookup sets",
+      "value": "platform:lookups:manage"
+    }
+  ],
+  "signing_alg": "RS256",
+  "skip_consent_for_verifiable_first_party_clients": true,
+  "subject_type_authorization": {
+    "client": {
+      "policy": "require_client_grant"
+    },
+    "user": {
+      "policy": "require_client_grant"
+    }
+  },
+  "token_dialect": "access_token_authz",
+  "token_lifetime": 3600,
+  "token_lifetime_for_web": 3600
+}

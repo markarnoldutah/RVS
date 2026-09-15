@@ -9,9 +9,13 @@ Only the Manager app authenticates. **The intake app is anonymous and must stay 
 
 ## Tenant model
 
-Auth0 tenant `rvserviceflow.auth0.com`, API audience `https://api.rvserviceflow.com`, custom claim namespace `https://rvserviceflow.com/`.
+Auth0 tenant `dev-2jhzz8xmjggh26pm.us.auth0.com`, API audience `https://api.rvserviceflow.com`, custom claim namespace `https://rvserviceflow.com/`.
 
-**RVS does not use Auth0 Organizations.** Tenant context lives in each user's `app_metadata` and is injected into the access token by a Post-Login Action (`Auth0/Add metadata to accessToken.js`). This runs on the Auth0 Free plan with no organization cap, and keeps tenant-scoping logic in `ClaimsService` rather than in Auth0.
+**One Auth0 tenant serves development, staging and production** (#610). A second tenant needs a paid Auth0 plan, so the split is deferred until usage justifies the cost. The accepted risks: any Auth0 change reaches every environment at once, and a test account carrying a real dealer's `tenantId` can sign in to the production Manager app and see that dealer's data. Test accounts must use test-only `tenantId` values. The tenant also hosts unrelated products; RVS owns only what `Infra/Auth0/baseline/` declares.
+
+Configuration changes go through `Infra/Auth0/auth0-apply.sh` (plan, review, then `--apply`), not the dashboard. See `Infra/Auth0/README.md`, including how to split into per-environment tenants later.
+
+**RVS does not use Auth0 Organizations.** Tenant context lives in each user's `app_metadata` and is injected into the access token by a Post-Login Action (`Infra/Auth0/baseline/actions/add-metadata-to-accesstoken-claims.js`). The Action denies login when the user has no `tenantId`, no role, or no `orgName`. This runs on the Auth0 Free plan with no organization cap, and keeps tenant-scoping logic in `ClaimsService` rather than in Auth0.
 
 `app_metadata` carries `tenantId`, `orgName`, and optionally `locationIds` and `regionTag`. `app_metadata.tenantId` is the value used everywhere downstream: the Cosmos partition key, the blob path prefix, and the isolation boundary. Its values are conventionally shaped like `org_blue_compass_rv`, but they are ordinary strings — **not** Auth0 organization identifiers.
 
@@ -83,7 +87,7 @@ A custom `RefreshingAccessTokenProvider` decorates `IAccessTokenProvider` and ex
 
 **Persistent session (Spec C-7, issue #498).** The framework keeps the OIDC user record — including the rotating refresh token — in `sessionStorage` and offers no option to change the store, so a closed tab or installed PWA used to mean a fresh login. `wwwroot/js/session-persist.js` loads before `AuthenticationService.js`, restores that one record from a `localStorage` mirror on startup, and mirrors every later write or removal (sign-in, refresh, sign-out).
 
-Persistence is **opt-in per device**. After sign-in, `KeepSignedInPrompt` asks once, "Keep me signed in on this device?", and warns against shared computers; the answer is stored in `localStorage` (`rvs.keepSignedIn`). Until the user says yes, nothing is mirrored and the session dies with the tab, as before; saying no removes any mirror left over from earlier. Refresh tokens are rotating, **30 days absolute and 7 days idle** (`auth0-bootstrap-prod.sh`; the staging tenant is set by hand in the Auth0 dashboard). On sign-out, `LoginDisplay` revokes the refresh token at Auth0's `/oauth/revoke` (`RefreshTokenRevocationClient`) and clears the mirror before the framework's own sign-out, so a token copied earlier stops working.
+Persistence is **opt-in per device**. After sign-in, `KeepSignedInPrompt` asks once, "Keep me signed in on this device?", and warns against shared computers; the answer is stored in `localStorage` (`rvs.keepSignedIn`). Until the user says yes, nothing is mirrored and the session dies with the tab, as before; saying no removes any mirror left over from earlier. Refresh tokens are rotating, **30 days absolute and 7 days idle** (`Infra/Auth0/baseline/clients/rvs-blazor-manager.json`). On sign-out, `LoginDisplay` revokes the refresh token at Auth0's `/oauth/revoke` (`RefreshTokenRevocationClient`) and clears the mirror before the framework's own sign-out, so a token copied earlier stops working.
 
 **Auth0's own session follows the same answer.** Auth0 keeps a separate session cookie on its domain, and the Blazor authentication library silently signs in against it on page load, so the app's opt-in alone would not stop Auth0 signing the next person into a shared computer. `KeepSignedInPolicy` (`RVS.UI.Shared`) therefore adds `prompt=login` to every authorize request unless the device opted in. An interactive sign-in then always asks for the password, and the silent sign-in fails fast: Auth0 rejects a request carrying both `prompt=none` and `prompt=login` with `invalid_request` (verified against the tenant). Token renewal still works through the refresh token. Sign-out goes through Auth0's `/oidc/logout` (advertised as `end_session_endpoint`), which ends the Auth0 session — but only if `{origin}/authentication/logout-callback` is an Allowed Logout URL, because Auth0 matches that list exactly and returns 400 otherwise.
 
@@ -107,4 +111,4 @@ Onboarding a dealership requires, in order: create the Auth0 user with `app_meta
 
 `TenantAccessGateMiddleware` reads that config to block disabled tenants with a 403. It allowlists `/health`, `/swagger`, and `/api/tenants/config`. Note that its backing repository is currently unimplemented — see Known gaps in `RVS_Architecture.md`.
 
-Portal-side configuration steps are in `Auth0/Auth0-Portal-Configuration-Checklist.md`.
+The Auth0 half of onboarding (the user, its `app_metadata` and role) is manual. The steps are in `Auth0/Auth0-Portal-Configuration-Checklist.md`, along with the one-time setup the configuration scripts need.

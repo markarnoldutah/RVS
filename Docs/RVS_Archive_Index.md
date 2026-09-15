@@ -53,7 +53,7 @@ The other 73 files. Most were superseded by the five technical documents in `ASO
 | `ARCHIVE/Marketing/RVS_Arch_Overview.md`, `ARCHIVE/Marketing/RVS_Product_Architecture.md` | Architecture summaries that lived in the marketing folder | `ASOT/RVS_Architecture.md` |
 | `ARCHIVE/ASOT/pricing`, `ARCHIVE/ASOT/scratch.md`, `ARCHIVE/ASOT/AI/AI_Manager_Capabilities.md`, `ARCHIVE/ASOT/Architecture/RVS_Stamp_Scaleout.md` | Empty or scratch files | — |
 
-Two files exist in both the archive and the live tree because they are still current: `ASOT/Auth0/Add metadata to accessToken.js` and `ASOT/Auth0/Auth0-Portal-Configuration-Checklist.md`. Edit the live copies under `ASOT/`. The same is true of `Marketing/Dealerships/LazyDays_Repair.md`, which is field research rather than strategy.
+Two Auth0 files have older copies in the archive. Their current versions are `ASOT/Infra/Auth0/baseline/actions/add-metadata-to-accesstoken-claims.js` (the deployed Post-Login Action, formerly `ASOT/Auth0/Add metadata to accessToken.js`) and `ASOT/Auth0/Auth0-Portal-Configuration-Checklist.md`. Edit the live copies. The same is true of `Marketing/Dealerships/LazyDays_Repair.md`, which is field research rather than strategy.
 
 ### Two cautions
 
