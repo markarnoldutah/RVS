@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────────────────────
 // Module: Store Storage Account secrets in Key Vault
 // ──────────────────────────────────────────────────────────────
-// Stores the Blob Storage endpoint in Key Vault for the RVS API
-// configuration provider. The API uses Managed Identity for Blob
-// access (no key needed).
+// Stores the Blob and Table Storage endpoints in Key Vault for the
+// RVS API configuration provider. The API uses Managed Identity for
+// both (no keys needed).
 // ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
@@ -33,6 +33,16 @@ resource blobEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   name: 'BlobStorage--Endpoint'
   properties: {
     value: storageAccount.properties.primaryEndpoints.blob
+    contentType: 'text/plain'
+  }
+}
+
+@description('Table Storage endpoint — the go.rvintake.com redirect hit log (Spec A-13, #599). Same Managed Identity auth as Blob. When this secret is absent the API falls back to a no-op hit log: redirects still work and the channel still reaches the service request, only the conversion denominator is lost.')
+resource tableEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
+  parent: keyVault
+  name: 'TableStorage--Endpoint'
+  properties: {
+    value: storageAccount.properties.primaryEndpoints.table
     contentType: 'text/plain'
   }
 }

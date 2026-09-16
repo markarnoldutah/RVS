@@ -146,6 +146,16 @@ public class ServiceRequest : EntityBase
     public string? ApproxPurchaseDate { get; set; }
 
     /// <summary>
+    /// Distribution channel the customer arrived through (<c>Spec A-13</c>, issue #599) — the
+    /// normalised <c>src</c> carried by the <c>go.rvintake.com</c> short link, defaulting to
+    /// <c>print</c> when the link carried none. This is the authoritative source-of-job record:
+    /// the raw redirect hit log says how many links were fetched, this says which channel
+    /// produced an actual request. Null only for requests created before the field existed.
+    /// </summary>
+    [JsonProperty("intakeSource")]
+    public string? IntakeSource { get; init; }
+
+    /// <summary>
     /// Board display order within a status column. Lower values appear first.
     /// Defaults to 0; updated when cards are reordered on the Service Board.
     /// </summary>

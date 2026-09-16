@@ -17,7 +17,7 @@ Infrastructure as Code for the RVS Azure platform. Supports **independent deploy
 |---|---|---|---|
 | App Service (API) | `app-service.bicep` | Free F1 ($0/mo) | Basic B1 (~$12/mo) or Standard S1 (~$58/mo) + staging slot |
 | Cosmos DB | `cosmos-db.bicep` | Serverless | Serverless |
-| Blob Storage | `storage-account.bicep` | Standard LRS | Standard LRS |
+| Blob + Table Storage | `storage-account.bicep` | Standard LRS | Standard LRS |
 | Key Vault | `key-vault.bicep` | RBAC model | RBAC model |
 | Log Analytics | `log-analytics.bicep` | Per env | Per env |
 | Application Insights | `app-insights.bicep` | /health test | /health test |
@@ -284,11 +284,65 @@ repeats this. Commands are in `deployment-cmds.azcli` §4e (2)(c).
 5. **Warm the domain.** Let Jay Lyons's real intake traffic (P1, `#525`) send through `mail.rvintake.com` for **2–3 weeks** before any *other* shop's mailbox receives a packet. Ramp volume gradually; watch the ACS delivery / bounce metrics and the DMARC `rua` reports. Sustained ACS failures above ~1 % risk throttling.
 6. **In-room deliverability check (second pilot onward — `FS-7` in `RVS_Plan.md`).** When onboarding a shop after Jay: send a test packet while you are with the service manager, confirm it lands in the inbox and not Junk, and have them mark the sender safe on the spot. Not needed for the first pilot.
 
+**Step 5 — bind the `go.<zone>` redirect host (`#599`, once per environment, ~10 minutes).**
+See the standalone section below; it applies to staging too, where the label is
+`go-staging` instead of `go`.
+
 **Redeploys** are step 1 again, with the Auth0 values optional. ARM
 incremental mode leaves the apex TXT record and binding alone (the template
-does not declare them), and re-asserts the ACS domain, its link and its
-SPF/DKIM/DMARC records as no-ops while `acsCustomDomainVerified = true` —
-redeploys never re-trigger verification.
+does not declare them), leaves the `go` hostname binding and its managed
+certificate alone for the same reason, and re-asserts the ACS domain, its link
+and its SPF/DKIM/DMARC records as no-ops while
+`acsCustomDomainVerified = true` — redeploys never re-trigger verification.
+
+### Bind the `go.<zone>` redirect host (`#599`)
+
+`go.rvintake.com` (prod) and `go-staging.rvintake.com` (staging) front the
+**API**, not the Intake SWA: the redirect writes to the hit log, and a static
+host could serve a redirect but could not count it. `Spec A-13` routes every
+distribution path — QR sticker, texted link, printed card — through it.
+
+Bicep writes both DNS records: the CNAME to the Web App's default hostname and
+the `asuid.<label>` ownership TXT, whose value comes from the site's own
+`customDomainVerificationId`. What it does **not** declare is the hostname
+binding and the managed certificate, for the same reason it does not declare
+the Intake apex binding: the binding waits on DNS to validate and the
+certificate waits on the binding, so a first bring-up from one template
+deadlocks on records that template has not written yet.
+
+Run this once per environment, after a deploy that has written the records.
+Substitute the API app name, its resource group, and the label/zone.
+
+```bash
+APP=app-rvs-api-prod-wus3              # staging: app-rvs-api-staging-wus3
+RG=rg-rvs-prod-westus3                 # the API's resource group
+HOST=go.rvintake.com                   # staging: go-staging.rvintake.com
+
+# 1. Confirm DNS is in place (Bicep wrote both; these should already answer)
+dig +short CNAME "$HOST"               # -> <app>.azurewebsites.net
+dig +short TXT  "asuid.${HOST%%.*}.rvintake.com"
+
+# 2. Bind the hostname (SNI SSL comes with the certificate in step 3)
+az webapp config hostname add --webapp-name "$APP" -g "$RG" --hostname "$HOST"
+
+# 3. Issue and bind a free App Service managed certificate
+az webapp config ssl create --name "$APP" -g "$RG" --hostname "$HOST"
+THUMB=$(az webapp config ssl list -g "$RG" \
+  --query "[?subjectName=='$HOST'].thumbprint | [0]" -o tsv)
+az webapp config ssl bind --name "$APP" -g "$RG" \
+  --certificate-thumbprint "$THUMB" --ssl-type SNI
+
+# 4. Verify end to end — 302 to the intake host, tagged and uncached
+curl -sSI "https://$HOST/<some-location-slug>?src=qr" | head -5
+```
+
+Then set `Intake:RedirectBaseUrl` for that environment to
+`https://$HOST` (it is already committed in `appsettings.json` for prod and
+`appsettings.Staging.json` for staging). **Leave it unset in an environment
+whose host is not yet bound** — the API then falls back to the Intake host and
+hands out working but untagged links, rather than links to a host that does not
+answer. Managed certificates renew automatically; redeploys leave the binding
+alone.
 
 ### Pre-Provision Resource Groups (all environments)
 
@@ -469,20 +523,21 @@ The `cosmos-db.bicep` module creates 10 containers with optimized index policies
 
 ---
 
-## Blob Storage
+## Blob and Table Storage
 
 The `storage-account.bicep` module creates:
 
 - **Storage account**: Standard LRS, TLS 1.2, no public blob access
 - **`rvs-attachments` container**: `PublicAccess = None` — holds intake file attachments and, since #434, generated packet PDFs under the `packets/` prefix
+- **`intakeRedirectHits` table** (`#599`): the append-only `go.rvintake.com` redirect hit log, partitioned by location. No CORS — nothing in a browser talks to it. Table names are alphanumeric only, which is why this one is camelCase where the Cosmos containers are kebab-case
 - **CORS rules**: Configured per environment for browser-based SAS uploads
-- **Role assignments**: Storage Blob Data Contributor + Blob Delegator for the API managed identity (and the staging deployment slot's identity when present)
+- **Role assignments**: Storage Blob Data Contributor + Blob Delegator, and Storage Table Data Contributor, for the API managed identity (and the staging deployment slot's identity when present)
 
 ### Developer / manual blob access (`devBlobAccessPrincipalId`)
 
 The running app authenticates with its managed identity. A **local API run uses `AzureCliCredential`**, i.e. the developer's own Entra identity, so that identity needs the same two data-plane roles on the storage account it talks to (packet generation is the first dev path that exercises Blob — a blank `BlobStorage:Endpoint` also makes `BlobServiceClient` throw at startup).
 
-`devBlobAccessPrincipalId` (main → `storage-account.bicep`) takes the **object ID of an Entra group** (`sg-rvs-dev-blob`); the module grants it Storage Blob Data Contributor + Storage Blob Delegator, scoped to that storage account only, with `principalType: 'Group'`. Add or remove developers via **group membership** — no redeploy.
+`devBlobAccessPrincipalId` (main → `storage-account.bicep`) takes the **object ID of an Entra group** (`sg-rvs-dev-blob`); the module grants it Storage Blob Data Contributor + Storage Blob Delegator + Storage Table Data Contributor (`#599`), scoped to that storage account only, with `principalType: 'Group'`. Add or remove developers via **group membership** — no redeploy.
 
 - **Set it only in non-prod parameter files.** `staging.bicepparam` carries a `TODO` placeholder plus the `az ad group create` / `member add` / `show` commands. Deploy succeeds with it left as `''`.
 - **Prod leaves it unset** (explicit comment in the prod param files). Humans get prod blob data access **just-in-time** (PIM-eligible activation) or via break-glass, never standing.

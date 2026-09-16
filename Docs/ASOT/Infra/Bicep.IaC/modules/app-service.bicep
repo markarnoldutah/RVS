@@ -140,6 +140,9 @@ output name string = webApp.name
 @description('Default hostname of the Web App (e.g. app-rvs-api-staging-wus3.azurewebsites.net).')
 output defaultHostname string = webApp.properties.defaultHostName
 
+@description('The site-scoped token an "asuid.<label>" TXT record must carry before a custom hostname can be bound to this Web App. Used for the go.rvintake.com redirect host (Spec A-13, #599).')
+output customDomainVerificationId string = webApp.properties.customDomainVerificationId
+
 @description('Principal ID of the system-assigned managed identity.')
 output principalId string = webApp.identity.principalId
 

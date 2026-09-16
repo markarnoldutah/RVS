@@ -180,6 +180,11 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         // the controlled vocabulary so an unrecognised value can never reach the packet.
         var issueCategory = IssueCategoryVocabulary.Normalize(request.IssueCategory);
 
+        // A-13: the channel the customer arrived through, as forwarded by the intake app from
+        // the go.rvintake.com redirect. Normalised rather than validated — an unrecognised or
+        // malformed tag costs the request its channel, never the submission.
+        var intakeSource = IntakeSourceVocabulary.Normalize(request.IntakeSource);
+
         var technicianSummary = BuildTechnicianSummary(request);
 
         var priorRequestCount = profile.TotalRequestCount;
@@ -197,6 +202,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             RvUsage = request.RvUsage?.Trim(),
             HasExtendedWarranty = request.HasExtendedWarranty?.Trim(),
             ApproxPurchaseDate = request.ApproxPurchaseDate?.Trim(),
+            IntakeSource = intakeSource,
             CustomerSnapshot = new CustomerSnapshotEmbedded
             {
                 FirstName = request.Customer.FirstName.Trim(),

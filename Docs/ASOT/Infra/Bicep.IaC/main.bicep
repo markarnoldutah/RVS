@@ -136,6 +136,9 @@ param managerDnsPrefix string = environmentName == 'prod' ? 'manager' : 'manager
 @description('Subdomain prefix for the Intake SWA CNAME record in non-prod envs (e.g. "staging" -> staging.rvintake.com). Ignored in prod where Intake binds to the apex.')
 param intakeDnsPrefix string = environmentName == 'prod' ? '' : environmentName
 
+@description('Subdomain prefix for the channel-tagging redirect host that fronts the API (Spec A-13, #599) — "go" in prod (go.rvintake.com), "go-<env>" elsewhere (go-staging.rvintake.com). A sibling label rather than a child of the Intake host, so each environment\'s redirect is independent and a single-label wildcard certificate is never needed.')
+param redirectDnsPrefix string = environmentName == 'prod' ? 'go' : 'go-${environmentName}'
+
 @description('Object IDs of principals (e.g. the staging GitHub Actions service principal) that need DNS Zone Contributor on the shared zones. Granted at zone scope so they cannot touch other prod resources. Set this in prod params, not staging.')
 param dnsZoneContributorPrincipalIds string[] = []
 
@@ -617,6 +620,37 @@ var acsCustomDomainOwnershipTxtRecords = acsCustomDomainOn ? [
 ] : []
 var acsCustomDomainTxtRecords = acsCustomDomainOn ? concat(acsCustomDomainOwnershipTxtRecords, [ acsCustomDomainDmarcRecord ]) : []
 
+// ── go.rvintake.com — the channel-tagging redirect (Spec A-13, #599) ──
+//
+// Every distribution path — QR sticker, texted link, printed card — is supposed to route
+// through this host so the hit is logged and the channel observed before the customer reaches
+// the intake form. It fronts the API, not the Intake SWA, because the redirect has to write to
+// the hit log; a static host could serve the redirect but could not count it.
+//
+// Declared here: the CNAME to the Web App and the "asuid" ownership TXT, whose value the site
+// itself supplies (customDomainVerificationId), so neither needs a human.
+//
+// NOT declared here, deliberately, and for the same reason the Intake apex binding is not:
+// the hostname binding waits on DNS to validate, and the App Service managed certificate waits
+// on the binding, so a first bring-up from a single template deadlocks on records the same
+// template has not written yet. Both are one-time out-of-band steps — README.md "Bind the
+// go.<zone> redirect host". Redeploys never touch them.
+var redirectCnameRecords = deployAppService ? [
+  {
+    name: redirectDnsPrefix
+    #disable-next-line BCP318
+    target: appService.outputs.defaultHostname
+  }
+] : []
+
+var redirectTxtRecords = deployAppService ? [
+  {
+    name: 'asuid.${redirectDnsPrefix}'
+    #disable-next-line BCP318
+    values: [ appService.outputs.customDomainVerificationId ]
+  }
+] : []
+
 module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs && deployKeyVault) {
   name: 'deploy-acs-kv-secrets-${environmentName}'
   scope: rgPrimary
@@ -770,7 +804,7 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         #disable-next-line BCP318
         target: swaIntake.outputs.defaultHostname
       }
-    ], acsCustomDomainCnameRecords)
+    ], acsCustomDomainCnameRecords, redirectCnameRecords)
     aRecords: environmentName == 'prod' ? [
       {
         name: '@'
@@ -778,7 +812,7 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         targetResourceId: swaIntake.outputs.id
       }
     ] : []
-    txtRecords: acsCustomDomainTxtRecords
+    txtRecords: concat(acsCustomDomainTxtRecords, redirectTxtRecords)
   }
 }
 
@@ -1013,6 +1047,9 @@ output dnsIntakeNameServers array = (deploySwa && deployDns) ? dnsIntake.outputs
 
 @description('FQDN for the Intake SWA custom domain — apex in prod, subdomain elsewhere.')
 output intakeFqdn string = environmentName == 'prod' ? intakeZoneName : '${intakeDnsPrefix}.${intakeZoneName}'
+
+@description('FQDN of the channel-tagging redirect host (Spec A-13, #599). Its DNS records are deployed; the hostname binding and managed certificate are one-time out-of-band steps — README.md "Bind the go.<zone> redirect host".')
+output redirectFqdn string = '${redirectDnsPrefix}.${intakeZoneName}'
 
 @description('FQDN for the Manager SWA custom domain.')
 output managerFqdn string = '${managerDnsPrefix}.${managerZoneName}'

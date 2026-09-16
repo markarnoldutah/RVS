@@ -30,6 +30,13 @@ public sealed record ServiceRequestDetailResponseDto
     public AiEnrichmentMetadataDto? AiEnrichment { get; init; }
 
     /// <summary>
+    /// Distribution channel the customer arrived through (<c>Spec A-13</c>) — <c>qr</c>,
+    /// <c>textrepl</c>, <c>quickreply</c>, <c>print</c>, or an ad-hoc tag. Null on requests
+    /// created before channel tagging existed.
+    /// </summary>
+    public string? IntakeSource { get; init; }
+
+    /// <summary>
     /// The current manager-authored customer status note (<c>Spec C-9</c>), or <c>null</c> when
     /// none is set. Shown to the customer on the status page; editable only from the manager app.
     /// </summary>

@@ -28,6 +28,17 @@ Each test is a checkbox. Check it off only after observing the described outcome
 - [ ] Submit the form rapidly many times in a row (or reload/resubmit) from one IP — confirm the per-IP rate limit eventually blocks further submissions with a clear message, not a silent failure or a 500.
 - [ ] Reload the page mid-form — confirm the app fails gracefully (either restores progress or restarts cleanly), never leaving a blank or broken screen.
 
+### 1.1b Channel-tagged links (A-13)
+
+- [ ] Open the short link (`go.rvintake.com/{locationSlug}`) — confirm it redirects to the intake form and the address bar ends with `?src=print`.
+- [ ] Open it with `?src=qr` — confirm the redirect carries `src=qr` through.
+- [ ] Open it with a channel nobody has defined (`?src=nfc`) — confirm it still redirects, tagged `nfc`, and does not error.
+- [ ] Open it with rubbish (`?src=<script>`) — confirm it still redirects, tagged `other`.
+- [ ] Open it with a slug that does not exist — confirm it still redirects and the **intake app** shows its own "location not found" page. A 404 from the redirect itself is a failure.
+- [ ] Scan the QR code downloaded from the manager app — confirm it goes through the short link tagged `src=qr`, not straight to the intake host.
+- [ ] Submit a request from each of `qr`, `textrepl` and a bare link, then read `GET api/locations/{id}/intake-sources` — confirm each submission landed under the channel you used, and the bare one under `print`.
+- [ ] Paste the short link into iMessage but **do not send it** — then check the report: the preview fetch should appear in the raw hit count and **not** in the reported hit count. Confirm no dealer-facing number presents raw hits as "opens".
+
 ### 1.2 Contact and vehicle details (A-2, A-3, A-7)
 
 - [ ] Complete the contact step with name, phone, email, and preferred contact method (`Phone` / `Text` / `Email`) — all four are required before advancing.

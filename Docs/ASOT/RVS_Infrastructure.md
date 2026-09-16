@@ -29,7 +29,7 @@
 | Ops action group + 5 packet-pipeline alert rules | `monitor-alerts.bicep` | `deployObservability` |
 | Key Vault + role assignments | `key-vault.bicep` | `deployKeyVault` |
 | Cosmos account, database, 10 containers | `cosmos-db.bicep` | `deployCosmosDb` |
-| Storage account, CORS, `rvs-attachments`, 4 role assignments | `storage-account.bicep` | `deployStorageAccount` |
+| Storage account, CORS, `rvs-attachments`, `intakeRedirectHits` table, 7 role assignments | `storage-account.bicep` | `deployStorageAccount` |
 | ACS + Email Service + managed domain + 2 role assignments (+ a `CustomerManaged` sending domain when `acsCustomEmailDomain` is set) | `communication-services.bicep` | `deployAcs`; role assignments only when an App Service principal is supplied; custom domain in staging and prod (`#532`) |
 | Two Static Web Apps + custom domains | `static-web-app.bicep` | `deploySwa` |
 | DNS zones + record sets | `dns.bicep` | `deploySwa && deployDns` |
@@ -69,7 +69,7 @@ Two things to know before using these:
 
 **Cosmos** — Standard offer, Session consistency, `EnableServerless`, single region westus3, not zone-redundant, continuous backup, TLS 1.2, system-assigned identity. `publicNetworkAccess: Enabled`, `disableLocalAuth: false` — consumed by key, not RBAC.
 
-**Storage** — StorageV2, `Standard_LRS`, Hot, TLS 1.2, `allowBlobPublicAccess: false`, network ACL default `Allow`.
+**Storage** — StorageV2, `Standard_LRS`, Hot, TLS 1.2, `allowBlobPublicAccess: false`, network ACL default `Allow`. Two data services on the one account: the `rvs-attachments` blob container, and the `intakeRedirectHits` table (`#599`) holding the append-only `go.rvintake.com` redirect hit log, partitioned by location. The table carries no CORS — nothing in a browser talks to it — and its access grant is **Storage Table Data Contributor** on the same three principals as the blob roles (app identity, staging slot, the dev Entra group). Shape and rationale in `RVS_DataModel.md`.
 
 **Azure OpenAI** — both accounts `kind: OpenAI`, SKU `S0`, custom subdomain, system-assigned identity. `gpt-4o` version `2024-11-20`; Whisper model `whisper` version `001`. Whisper is in northcentralus because Whisper 001 Standard is not offered in westus3.
 
@@ -125,7 +125,7 @@ Role assignments:
 
 There is no RBAC grant to Cosmos or OpenAI. Both are consumed by key, read from Key Vault.
 
-Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint, key, vision/text/whisper deployment names, Whisper endpoint and key), `CosmosDb--Endpoint/Key/DatabaseId`, `BlobStorage--Endpoint`, `AzureCommunicationServices--Endpoint/ConnectionString`, `ApplicationInsights--ConnectionString`, `Auth0--*`.
+Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint, key, vision/text/whisper deployment names, Whisper endpoint and key), `CosmosDb--Endpoint/Key/DatabaseId`, `BlobStorage--Endpoint`, `TableStorage--Endpoint` (`#599`), `AzureCommunicationServices--Endpoint/ConnectionString`, `ApplicationInsights--ConnectionString`, `Auth0--*`.
 
 `app-service-config.bicep` sets four app settings — `ASPNETCORE_ENVIRONMENT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `KeyVault__VaultUri`, and (when `deployAcs`) `AzureCommunicationServices__Email__FromAddress` = `DoNotReply@<ACS sender domain>`, so the packet-email sender tracks the deployed ACS resource instead of a hardcoded value. The sender domain is `mail.rvintake.com` when `acsCustomEmailDomain` is set (prod, `#532`) and the Azure-managed domain otherwise; `main.bicep` chooses between `communicationServices.outputs.customFromSenderDomain` and `.azureManagedMailFrom`. Everything else is pulled by the Key Vault configuration provider at startup using the managed identity. Locally, development uses `appsettings.Development.json` plus `dotnet user-secrets`, and Blob and ACS use `AzureCliCredential` directly to avoid the managed-identity probe timeout. The local API borrows staging's storage account and staging's ACS resource, sending From `DoNotReply@mail.staging.rvintake.com`, and never touches prod's.
 
@@ -133,7 +133,11 @@ Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint,
 
 ## Networking and DNS
 
-Two public DNS zones — `rvserviceflow.com` (Manager) and `rvintake.com` (Intake) — both living in `rg-rvs-prod-westus3`. Subdomains bind to the Static Web Apps by CNAME delegation, with the binding (`swa-custom-domain.bicep`) ordered after the record it validates against. The production apex is an ALIAS A record that tracks the Intake SWA resource — no IP is pinned — plus a one-time out-of-band TXT-token registration that Bicep does not declare. The `rvintake.com` zone also carries the ACS custom-sending-domain records for `mail.rvintake.com` (prod) and `mail.staging.rvintake.com` (staging) (`#532`) — SPF, DKIM + DKIM2, a domain-ownership TXT, and a DMARC `p=none` record — written by the `dnsIntake` module from `communicationServices` outputs. `dns-zone-contributor.bicep` grants the staging deployer zone-scoped rights so it can write records into prod-owned zones.
+Two public DNS zones — `rvserviceflow.com` (Manager) and `rvintake.com` (Intake) — both living in `rg-rvs-prod-westus3`. Subdomains bind to the Static Web Apps by CNAME delegation, with the binding (`swa-custom-domain.bicep`) ordered after the record it validates against. The production apex is an ALIAS A record that tracks the Intake SWA resource — no IP is pinned — plus a one-time out-of-band TXT-token registration that Bicep does not declare. The `rvintake.com` zone also carries the ACS custom-sending-domain records for `mail.rvintake.com` (prod) and `mail.staging.rvintake.com` (staging) (`#532`) — SPF, DKIM + DKIM2, a domain-ownership TXT, and a DMARC `p=none` record — written by the `dnsIntake` module from `communicationServices` outputs, plus the `go` redirect host's CNAME and `asuid` TXT (`#599`, below). `dns-zone-contributor.bicep` grants the staging deployer zone-scoped rights so it can write records into prod-owned zones.
+
+**`go.rvintake.com` — the channel-tagging redirect (`Spec A-13`, `#599`).** A sibling label in the Intake zone, `go` in prod and `go-staging` in staging, pointed at the **API** App Service rather than the Intake SWA — the redirect has to write to the hit log, and a static host could serve a redirect but could not count it. Bicep writes both records it can know: the CNAME to the Web App's default hostname, and the `asuid.<label>` ownership TXT, whose value the site itself supplies (`customDomainVerificationId`).
+
+What Bicep does **not** declare, for the same reason it does not declare the Intake apex binding: the hostname binding waits on DNS to validate and the App Service managed certificate waits on the binding, so a first bring-up from a single template would deadlock on records that template has not written yet. Binding the hostname and issuing the certificate are one-time out-of-band steps — `Infra/Bicep.IaC/README.md`, "Bind the go.<zone> redirect host". Redeploys never touch them. Until that is done in an environment, `Intake:RedirectBaseUrl` should stay unset there: the API then falls back to the Intake host and hands out working but untagged links rather than links to a host that does not answer.
 
 **There are no VNets, no private endpoints, and no private DNS zones anywhere.** Cosmos, Key Vault, Storage, Log Analytics, App Insights and both Azure OpenAI accounts (GPT-4o + Whisper) are all reachable publicly, with Storage, Key Vault and the OpenAI accounts' network ACLs defaulting to `Allow` (`bypass: AzureServices`). Blob CORS permits GET/HEAD/PUT from the Static Web App custom domains only.
 

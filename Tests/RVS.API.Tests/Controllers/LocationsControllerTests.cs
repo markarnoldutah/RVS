@@ -24,6 +24,8 @@ public class LocationsControllerTests
 
     private const string IntakeBaseUrl = "https://rvintake.com";
 
+    private const string RedirectBaseUrl = "https://go.rvintake.com";
+
     public LocationsControllerTests()
     {
         _claimsService = BuildClaimsService(TenantId);
@@ -178,6 +180,46 @@ public class LocationsControllerTests
         var fileResult = result.Should().BeOfType<FileContentResult>().Subject;
         fileResult.FileDownloadName.Should().Be($"qr-{location.Slug}.png");
         fileResult.FileContents.Should().NotBeEmpty();
+    }
+
+    // ── Spec A-13: channel-tagged links ──────────────────────────────────
+
+    [Fact]
+    public async Task GetIntakeLinks_ShouldRouteEveryChannelThroughTheRedirectHost()
+    {
+        var location = BuildLocation();
+        _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var sut = new LocationsController(_serviceMock.Object, _claimsService, MsOptions.Create(
+            new IntakeUrlOptions { BaseUrl = IntakeBaseUrl, RedirectBaseUrl = RedirectBaseUrl }));
+
+        var result = await sut.GetIntakeLinks(location.Id, CancellationToken.None);
+
+        var dto = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<LocationIntakeLinksResponseDto>().Subject;
+
+        dto.PrintUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}");
+        dto.QrUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=qr");
+        dto.TextReplacementUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=textrepl");
+        dto.QuickReplyUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=quickreply");
+    }
+
+    [Fact]
+    public async Task GetIntakeLinks_WhenNoRedirectHostConfigured_ShouldFallBackToTheIntakeApp()
+    {
+        // An environment with no go host bound still hands out working links; they simply
+        // arrive untagged rather than failing.
+        var location = BuildLocation();
+        _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.GetIntakeLinks(location.Id, CancellationToken.None);
+
+        var dto = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<LocationIntakeLinksResponseDto>().Subject;
+
+        dto.PrintUrl.Should().Be($"{IntakeBaseUrl}/{location.Slug}");
     }
 
     private static Location BuildLocation(string id = "loc_test", string name = "Test Location") => new()

@@ -927,10 +927,55 @@ public class IntakeOrchestrationServiceTests
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    // ── Spec A-13: channel attribution ───────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldPersistTheChannelOnTheServiceRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "qr"));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Qr);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNoChannelSupplied_ShouldRecordItAsPrint()
+    {
+        // A submission that arrived without a src came from printed material, which cannot
+        // carry a query string — not from an unknown channel.
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: null));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Print);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenChannelUnknown_ShouldKeepItRatherThanRejectTheSubmission()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "nfc"));
+
+        result.ServiceRequest.IntakeSource.Should().Be("nfc");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenChannelMalformed_ShouldCoerceItRatherThanRejectTheSubmission()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "<script>"));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Other);
+    }
+
     private static ServiceRequestCreateRequestDto BuildValidRequest(
         bool includeDiagnostics = false,
         bool smsOptOut = false,
-        bool emailOptOut = false)
+        bool emailOptOut = false,
+        string? intakeSource = null)
     {
         return new ServiceRequestCreateRequestDto
         {
@@ -955,6 +1000,7 @@ public class IntakeOrchestrationServiceTests
             RvUsage = "Full-time",
             SmsOptOut = smsOptOut,
             EmailOptOut = emailOptOut,
+            IntakeSource = intakeSource,
             DiagnosticResponses = includeDiagnostics
                 ?
                 [

@@ -15,6 +15,7 @@ Product canon is `../RVS_Overview.md`, `../RVS_Spec.md`, `../RVS_Plan.md`. This 
 | `RVS.Domain` | Entities, DTOs, interfaces, validation. Zero infra dependencies | Core |
 | `RVS.Infra.AzCosmosRepository` | Cosmos repositories | Core |
 | `RVS.Infra.AzBlobRepository` | Blob storage, SAS generation | Core |
+| `RVS.Infra.AzTableRepository` | Append-only `go.rvintake.com` redirect hit log (Table Storage, `#599`) | Core |
 | `RVS.Blazor.Intake` | Anonymous intake WASM app | Core |
 | `RVS.Blazor.Manager` | Authenticated manager WASM app | Core, needs descoping |
 | `RVS.UI.Shared` | Typed API clients, validators, badge components | Core |
@@ -29,7 +30,7 @@ Intake (anonymous) and Manager (bearer token) both call `RVS.API`. Middleware or
 1. Dev-only OpenAPI / Swagger UI
 2. HTTPS redirection (non-dev)
 3. CORS — named, environment-specific policy. Never `AllowAnyOrigin`
-4. Rate limiter — `IntakeEndpoint` (20/min), `StatusEndpoint` (10/min), each partitioned per caller IP (`X-Forwarded-For`, socket fallback); `429` on reject
+4. Rate limiter — `IntakeEndpoint` (20/min), `StatusEndpoint` (10/min), `RedirectEndpoint` (120/min, `#599`), each partitioned per caller IP (`X-Forwarded-For`, socket fallback); `429` on reject
 5. `ExceptionHandlingMiddleware` — `IMiddleware`, singleton
 6. Authentication → Authorization
 7. `CorrelationLoggingMiddleware` — after auth so claims are populated
@@ -57,13 +58,14 @@ Every Cosmos query is single-partition on `tenantId`. Cross-partition access is 
 | `POST api/intake/{slug}/ai/extract-vin` · `transcribe-issue` · `refine-issue-text` · `suggest-category` · `suggest-insights` | See AI surface below |
 | `POST api/intake/{slug}/diagnostic-questions` · `assess-capabilities` | — |
 | `GET api/status/{token}` | Customer status feed |
+| `GET /{locationSlug}` · `GET /go/{locationSlug}` | `go.rvintake.com` channel-tagging redirect (`Spec A-13`, `#599`). Optional `?src=`; absent means `print`. 302 with `Cache-Control: no-store`, never 301 — a cached redirect is followed without touching the endpoint, and every later tap would go unlogged. Both templates carry a slug-shaped route constraint so nothing else at the API root is swallowed; `/{locationSlug}` is what the `go` host serves and `/go/{locationSlug}` is the same endpoint on the API's own hostname |
 
 **Authenticated** (per-permission policies, not roles)
 
 `api/dealerships/{dealershipId}/service-requests` — POST, GET `{srId}`, POST `search`, PUT `{srId}`, PATCH `batch-outcome`, DELETE `{srId}`
 `.../service-requests/{srId}/attachments` — POST `upload-url`, POST `confirm`, GET `{attachmentId}/sas`, DELETE `{attachmentId}`
 `api/dealerships` — GET, GET `{id}`, PUT `{id}`
-`api/locations` — GET, GET `{id}`, POST, PUT `{id}`, GET `{id}/qr-code`
+`api/locations` — GET, GET `{id}`, POST, PUT `{id}`, GET `{id}/qr-code`, GET `{id}/intake-links`, GET `{id}/intake-sources`
 `api/lookups/{category}` · `api/tenants/config` (POST/GET/PUT) · `api/tenants/access-gate`
 `api/dealerships/{dealershipId}/analytics/service-requests/summary`
 
@@ -72,6 +74,15 @@ Every Cosmos query is single-partition on `tenantId`. Cross-partition access is 
 `api/admin/tenants` — GET, POST, PUT `{tenantId}`, POST `{tenantId}/users`, POST `{tenantId}/users/{userId}/password-ticket`, PUT `{tenantId}/access-gate`, POST `{tenantId}/locations`
 
 Note: the `{dealershipId}` route segment is decorative. Scoping always comes from the token, never the URL.
+
+### Channel attribution (`Spec A-13`, `#599`)
+
+One redirect in front of every distribution path, so there is one place a channel can be observed:
+
+- `GoController` → `IntakeRedirectService` resolves the slug (for the hit's partition only), normalises `src` through `IntakeSourceVocabulary`, appends a hit, and 302s. Every failure on that path is caught and logged: an unknown slug redirects anyway (the Intake app owns the "no such location" page, and a 404 here would turn a typo on a printed sticker into a dead link), and a hit-log outage costs the hit, never the redirect.
+- `IntakeLinkBuilder` is the only place a customer-facing link is composed — `ShortLink` for what a dealer hands out, `IntakeUrl` for the redirect target. The QR endpoint, `GET {id}/intake-links` and the provisioning response all go through it, which is what makes "did we repoint everything?" a question with an answer.
+- Hits land in Azure Table Storage (`AzTableIntakeRedirectHitRepository`), partitioned by `locationId`, row key `{inverted ticks}-{guid}` so ascending row-key order — the only order Table Storage offers — reads newest-first. Append-only; no update, no delete. `NoOpIntakeRedirectHitRepository` takes over when `TableStorage:Endpoint` is unset, which is a developer machine with no storage account.
+- `IntakeSourceReportService` joins the two stores per location (`GET api/locations/{id}/intake-sources`): submissions from Cosmos, hits from Table Storage, conversion rate from both. Link-preview fetchers are flagged on write (`BotUserAgentFilter`) and excluded from reported hit counts; the unfiltered number is kept alongside for diagnosis only. **Submissions by source is the metric; raw hits are the denominator and nothing else.**
 
 ---
 
@@ -130,6 +141,7 @@ This is the honest state of `../RVS_Spec.md`.
 | A-10 VIN from photo (gpt-4o vision) | **Built** | `ai/extract-vin`, step 3; auto-fill ≥ 0.7, auto-decode ≥ 0.9. Specced in issue #429 |
 | A-11 issue insights (urgency, RV usage) | **Built** | `ai/suggest-insights`, step 5; persisted on `ServiceRequest` with provider/confidence. Specced in issue #429 |
 | A-12 capability pre-check | **Built** | `assess-capabilities`, step 5 → 6 boundary; non-blocking alert. Specced in issue #429 |
+| A-13 channel-tagged intake links | **Built, one step left out of band** | Issue #599. `GoController` (`/{slug}` and `/go/{slug}`, anonymous, `RedirectEndpoint` 120/min) → `IntakeRedirectService`: normalise `src`, append a hit, 302 no-store. `IntakeSourceVocabulary` keeps unknown-but-well-formed tags and coerces malformed ones to `other`, so the redirect never fails on a `src`. Hits go to Table Storage (`intakeRedirectHits`, partitioned by `locationId`); `src` is persisted as `ServiceRequest.intakeSource` and reported by `GET api/locations/{id}/intake-sources`. The QR endpoint, `GET {id}/intake-links` and the provisioning `intakeUrl` all compose through `IntakeLinkBuilder` against the redirect host. **Out of band:** the DNS records for `go.<zone>` are in Bicep, but the App Service hostname binding and its managed certificate are one-time manual steps — `Infra/Bicep.IaC/README.md`, "Bind the go.<zone> redirect host". Until that is done each environment falls back to the Intake host and links are handed out untagged. **Still to write:** the three device guides (iOS / stock Android / Samsung) in `../Guides/`, which need menu paths verified on real hardware |
 | P-1 … P-8 platform provisioning | **Built, not yet run end to end** | Issue #563. `AdminTenantsController` → `TenantProvisioningService` (Cosmos steps with fixed ids, then `IIdentityProvisioner`) → `Auth0ManagementProvisioner` (typed `HttpClient`, cached client-credentials token, no SDK); `UnconfiguredIdentityProvisioner` throws when `Auth0Provisioner:*` is unset. Manager `/admin` pages with `AdminApiClient`. `PlatformAdmin` = permission + `PlatformAdminAllowlistHandler`, covered by an integration test (dealer 403, not allowlisted 403, admin 200). Also fixed: `LocationService` now fills `SlugLookup.dealershipName` and reserves slugs create-only (`ISlugLookupRepository.CreateAsync`, 409 on a taken slug). Needs the one-time Auth0 setup (Auth0 checklist §5); the local and staging end-to-end runs and the first prod tenant are still to do |
 
 **B is built through idempotent, retried email delivery; hard-bounce disabling is built at the domain + service layer with its inbound signal still to wire.** Composition, both renderers, photo SAS, generation orchestration (#430–#434), the DMS paste block (#436), the packet email send (#437), and delivery idempotency + retry/backoff (#438) are in. The paste block is `PasteBlockGenerator` (`RVS.Domain/Packets/`) — a fenced, ASCII-safe block ordered category → verbatim description → status link, with the description truncated at a word boundary to the location's `pasteBlockCharacterCap`; `PacketGenerationService` assembles it into `PacketCompositionContext.PasteBlock`. #437 emails a service manager: after a successful generation `PacketGenerationService` builds a `PacketEmailMessage` with `PacketEmailComposer` (`RVS.Domain/Packets/`, pure) and sends it through `INotificationService.SendPacketEmailAsync` on the existing ACS integration — subject `[RVS] {category} — {year} {make} {model} — {last name}`, packet HTML inline with the paste block as the text-only alternative, PDF + original photos attached per `packetConfig`, to `packetConfig.recipients`. It no-ops when the location config is absent, disabled, or has no recipients. #438 wraps that send in a delivery state machine on `ServiceRequest.packetEmailDelivery` (`PacketEmailDeliveryEmbedded`): skip if the current `packetVersion` is already recorded delivered (idempotent per `(serviceRequestId, packetVersion)`); otherwise up to 3 attempts with an exponential backoff (`PacketEmailOptions.RetryBaseDelay`, default 2 s, doubled each retry), every attempt logged under a `CorrelationId` scope, then one `LogCritical` alert on exhaustion. A delivery failure never fails generation. `Dealership.ServiceEmail` is still populated and mapped but read by no code path — recipients live on `Location.packetConfig` (#435). #439 adds `packetConfig.disabledRecipients[]` and `LocationService.DisableRecipientForBounceAsync` / `ReEnableRecipientAsync`: a hard bounce parks one address (never the whole config), the remaining recipients are notified, and losing the last recipient raises a `LogCritical` for App Insights; the disabled list survives a settings save and re-enables when its address is re-added to `recipients`. What remains for #439: the inbound ACS delivery-report path that would call the disable method. The `statusLinkTtlDays` and `logoUrl` config fields also still await their consumers.
