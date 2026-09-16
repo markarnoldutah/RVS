@@ -327,12 +327,31 @@ az webapp config hostname add --webapp-name "$APP" -g "$RG" --hostname "$HOST"
 
 # 3. Issue and bind a free App Service managed certificate
 az webapp config ssl create --name "$APP" -g "$RG" --hostname "$HOST"
-THUMB=$(az webapp config ssl list -g "$RG" \
-  --query "[?subjectName=='$HOST'].thumbprint | [0]" -o tsv)
+
+# Read the thumbprint off the certificate RESOURCE, not `ssl list`. A freshly
+# created managed certificate has a null serverFarmId, and `az webapp config
+# ssl list` filters those out — it returns [] even though the certificate
+# exists and is valid. Verified on staging, 2026-09-16.
+THUMB=$(az resource show --resource-type Microsoft.Web/certificates \
+  -n "$HOST" -g "$RG" --query properties.thumbprint -o tsv)
+echo "$THUMB"   # must be non-empty before the bind
+
 az webapp config ssl bind --name "$APP" -g "$RG" \
   --certificate-thumbprint "$THUMB" --ssl-type SNI
 
-# 4. Verify end to end — 302 to the intake host, tagged and uncached
+# 4. Confirm the binding took. These fields are FLATTENED to the top level —
+#    querying properties.sslState returns null and means nothing.
+az webapp config hostname list --webapp-name "$APP" -g "$RG" \
+  --query "[?name=='$HOST'].{host:name, sslState:sslState, thumb:thumbprint}" -o json
+# expect sslState "SniEnabled" and the thumbprint from step 3
+
+# 5. Verify end to end. The SNI binding takes a minute or two to reach the
+#    front ends; until it does, TLS serves the *.azurewebsites.net wildcard and
+#    curl fails with "no alternative certificate subject name matches". That is
+#    propagation, not a misconfiguration — re-run until the CN matches.
+echo | openssl s_client -connect "$HOST:443" -servername "$HOST" 2>/dev/null \
+  | openssl x509 -noout -subject          # expect CN=$HOST
+
 curl -sSI "https://$HOST/<some-location-slug>?src=qr" | head -5
 ```
 
