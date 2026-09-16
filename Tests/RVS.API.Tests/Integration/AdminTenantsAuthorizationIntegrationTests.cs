@@ -15,7 +15,7 @@ public sealed class AdminTenantsAuthorizationIntegrationTests : IClassFixture<Te
 {
     private const string TenantsPath = "/api/admin/tenants";
     private const string PlatformPermission = "platform:tenants:manage";
-    private const string PlatformTenant = "org_rvs_platform";
+    private const string PlatformTenant = "ten_rvs_platform";
 
     private readonly TenantAccessGateApiFactory _factory;
 
@@ -29,7 +29,7 @@ public sealed class AdminTenantsAuthorizationIntegrationTests : IClassFixture<Te
     {
         var request = Authed(HttpMethod.Get, TenantsPath,
             userId: "auth0|dealer-owner",
-            tenantId: "org_dealer_rv",
+            tenantId: "ten_dealer_rv",
             permissions: "service-requests:read,locations:create,tenants:config:update");
 
         var response = await _factory.CreateClient().SendAsync(request);
@@ -87,11 +87,11 @@ public sealed class AdminTenantsAuthorizationIntegrationTests : IClassFixture<Te
 
     [Theory]
     [InlineData("POST", "/api/admin/tenants")]
-    [InlineData("PUT", "/api/admin/tenants/org_dealer_rv")]
-    [InlineData("POST", "/api/admin/tenants/org_dealer_rv/users")]
-    [InlineData("POST", "/api/admin/tenants/org_dealer_rv/users/auth0%7Cu1/password-ticket")]
-    [InlineData("PUT", "/api/admin/tenants/org_dealer_rv/access-gate")]
-    [InlineData("POST", "/api/admin/tenants/org_dealer_rv/locations")]
+    [InlineData("PUT", "/api/admin/tenants/ten_dealer_rv")]
+    [InlineData("POST", "/api/admin/tenants/ten_dealer_rv/users")]
+    [InlineData("POST", "/api/admin/tenants/ten_dealer_rv/users/auth0%7Cu1/password-ticket")]
+    [InlineData("PUT", "/api/admin/tenants/ten_dealer_rv/access-gate")]
+    [InlineData("POST", "/api/admin/tenants/ten_dealer_rv/locations")]
     public async Task WriteEndpoints_PlatformPermissionButNotAllowlisted_Return403(string method, string path)
     {
         var request = Authed(new HttpMethod(method), path,

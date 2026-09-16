@@ -13,8 +13,8 @@ namespace RVS.API.Tests.Integration;
 /// </summary>
 public sealed class TenantAccessGateIntegrationTests : IClassFixture<TenantAccessGateApiFactory>
 {
-    private const string EnabledTenant = "org_enabled_rv";
-    private const string DisabledTenant = "org_disabled_rv";
+    private const string EnabledTenant = "ten_enabled_rv";
+    private const string DisabledTenant = "ten_disabled_rv";
     private const string GatedPath = "/api/gate-probe";
 
     private readonly TenantAccessGateApiFactory _factory;
@@ -71,7 +71,7 @@ public sealed class TenantAccessGateIntegrationTests : IClassFixture<TenantAcces
     [Fact]
     public async Task UnknownTenant_AuthenticatedGatedRequest_ReachesController()
     {
-        var response = await CreateClient().SendAsync(AuthedGet(GatedPath, "org_never_seeded"));
+        var response = await CreateClient().SendAsync(AuthedGet(GatedPath, "ten_never_seeded"));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }

@@ -102,7 +102,7 @@ WASM workload is required for Blazor projects. CI installs it via `dotnet worklo
 
 ## Architecture at a Glance
 
-**Multi-tenant B2B SaaS for RV dealerships.** Tenant = corporation, partitioned by `tenantId`. **RVS does not use Auth0 Organizations** — `tenantId` comes from the user's `app_metadata`, injected into the JWT by a Post-Login Action. Values are conventionally shaped like `org_acme_rv`, but they are ordinary strings, not Auth0 org identifiers. Two client apps share one API.
+**Multi-tenant B2B SaaS for RV dealerships.** Tenant = corporation, partitioned by `tenantId`. **RVS does not use Auth0 Organizations** — `tenantId` comes from the user's `app_metadata`, injected into the JWT by a Post-Login Action. Values are conventionally shaped like `ten_acme_rv`, but they are ordinary strings, not Auth0 org identifiers. Two client apps share one API.
 
 ### Request → Response Flow
 

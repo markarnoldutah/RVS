@@ -57,7 +57,7 @@ Create each dealer user under **User Management → Users**, assign one role, an
 
 ```json
 {
-  "tenantId": "org_blue_compass_rv",
+  "tenantId": "ten_blue_compass_rv",
   "orgName": "Blue Compass RV",
   "locationIds": ["loc_blue_compass_slc"],
   "regionTag": "west"
@@ -90,7 +90,7 @@ The `/admin` pages create users through the Management API, so they need their o
 2. **Admin account.** On the admin's user page: assign the `platform:admin` role, set `app_metadata` to the following (the Post-Login Action denies login without both fields), and enrol MFA. Copy the user id (`auth0|…`).
 
    ```json
-   { "tenantId": "org_rvs_platform", "orgName": "RVS" }
+   { "tenantId": "ten_rvs_platform", "orgName": "RVS" }
    ```
 
 3. **Key Vault secrets**, in each environment's API vault. Pass them as the optional `auth0Provisioner*` and `adminAllowedUserId` Bicep parameters, or set them directly:
