@@ -111,6 +111,131 @@ Without the provisioner secrets the tool still opens, but every create reports t
 
 ---
 
+## 6. Custom domain (once per tenant)
+
+Moves the login URL from `dev-2jhzz8xmjggh26pm.us.auth0.com` to `login.rvintake.com`. A raw `.auth0.com` address in the browser bar is the biggest "this looks sketchy" tell for a service advisor signing in.
+
+`rvintake.com`, not `rvserviceflow.com`: every hostname a human types, clicks or reads is on the intake brand, and the corporate domain keeps the API origin and the JWT claim namespace. Sign-in is the most visible surface there is. This also settles §8's sending-domain question before it is asked — see the note there.
+
+**Read this before you start.** A custom domain is a *tenant-wide* setting, and this tenant is shared two ways:
+
+- Development, staging and production all use it (#610). One custom domain serves all three; the Free plan includes exactly one, so there is no per-environment login domain.
+- The tenant also hosts unrelated products' applications ([`../Infra/Auth0/README.md`](../Infra/Auth0/README.md)). Those applications' login pages move to `login.rvintake.com` too. Decide that's acceptable before enabling it.
+
+### 6.1 Verify billing
+
+The Free plan includes one custom domain but requires a card on file to activate it. **Settings → Billing** and add one. There is no charge.
+
+### 6.2 Create the domain in Auth0
+
+**Branding → Custom Domains → Add Domain.**
+
+- Domain: `login.rvintake.com`. Use a subdomain — Auth0 does not support an apex custom domain. That constraint decides it here regardless: the `rvintake.com` apex is the Intake SWA, so the login host has to be a label under it.
+- Certificate: **Auth0-managed**. Self-managed means you own renewal.
+
+Auth0 then shows one verification record — type, host and value. Copy it **verbatim**; the value contains a per-tenant token.
+
+### 6.3 Publish the DNS record through Bicep, not the portal
+
+`rvintake.com` is IaC in this repo. A record created by hand in the Azure portal is reverted by the next infrastructure deploy.
+
+The record goes in the **`dnsIntake`** module in [`../Infra/Bicep.IaC/main.bicep`](../Infra/Bicep.IaC/main.bicep) — the zone is `rvintake.com`, not the corporate zone. Its `cnameRecords` is a `concat(...)` of per-concern lists rather than a literal array, so add the login record as its own variable next to `redirectCnameRecords` and append it:
+
+```bicep
+// Auth0 custom domain (§6 of the Auth0 portal checklist). Tenant-wide and
+// environment-independent — the value is a token Auth0 mints once, so it is
+// written here by hand rather than derived. Both environments' deploys upsert
+// the same record with the same value, which is why this is not env-guarded.
+var auth0CnameRecords = [
+  {
+    name: 'login'
+    target: '<value Auth0 showed>'   // e.g. <tenant>-cd-<hash>.edge.tenants.us.auth0.com
+  }
+]
+```
+
+then add `auth0CnameRecords` to the `concat(...)` in `dnsIntake`'s `cnameRecords`.
+
+If Auth0 gave you a TXT record instead, build the same shape (`{ name: 'login', values: [ '...' ] }`) and append it to that module's `txtRecords` concat — see [`modules/dns.bicep`](../Infra/Bicep.IaC/modules/dns.bicep).
+
+This mirrors how the ACS email domain is verified (#532): Azure mints the token, so the value cannot be pre-written in source and lands in the param/record by hand once.
+
+Deploy the DNS resource group, then wait for propagation.
+
+### 6.4 Verify and enable
+
+Back in **Branding → Custom Domains**, click **Verify**. Status goes to **Ready** once the record resolves and Auth0 finishes issuing the certificate — allow a few minutes for the certificate.
+
+Then turn on **Enable custom domains for email and phone notifications** on the same screen. Without it, the link inside a password-reset email still points at the raw tenant domain, which defeats most of the point. Easy to miss.
+
+### 6.5 Cut the applications over
+
+The issuer in every token changes from `https://dev-2jhzz8xmjggh26pm.us.auth0.com/` to `https://login.rvintake.com/`. Four places pin it:
+
+| Where | What to change |
+| --- | --- |
+| Key Vault `Auth0--Domain`, per environment | the new domain; restart the API (it reads Key Vault at startup) |
+| [`RVS.Blazor.Manager/wwwroot/appsettings.{Development,Staging,Production}.json`](../../../RVS.Blazor.Manager/wwwroot/) | `Auth0:Authority` |
+| [`RVS.Blazor.Manager/wwwroot/staticwebapp.config.json`](../../../RVS.Blazor.Manager/wwwroot/staticwebapp.config.json) | the CSP `connect-src` **and** `frame-src` entries — miss either and login fails silently in the browser |
+| [`../RVS_Identity.md`](../RVS_Identity.md) | the stated tenant domain |
+
+**Leave `AUTH0_DOMAIN` in [`../Infra/Auth0/tenants/shared.env`](../Infra/Auth0/tenants/shared.env) on the canonical `.us.auth0.com` domain.** The configuration scripts talk to the Management API, which stays on the canonical domain, and `lib.sh` fails the run if the tenant file and the vault's `Auth0Mgmt--Domain` disagree.
+
+**Set `AUTH0_APP_AUTHORITY` in the same file first, or every later plan run is noise.** `auth0-apply.sh` cross-checks each Manager appsettings file against `https://$AUTH0_DOMAIN/`. Once the apps point at `https://login.rvintake.com/` while `AUTH0_DOMAIN` stays canonical — as the paragraph above requires — that check reports a false mismatch on all three files, on every run, forever. `AUTH0_APP_AUTHORITY` is what the apps use; `AUTH0_DOMAIN` is what the Management API uses. They are the same value until a custom domain exists, and different afterwards.
+
+Because the tenant is shared, this cutover hits all three environments at once, and every signed-in user is logged out when the issuer changes. Do it at a quiet hour.
+
+To roll back: point `Auth0--Domain` and the appsettings authorities at the canonical domain again. The custom domain can stay defined in Auth0 while unused.
+
+---
+
+## 7. Universal Login branding (once per tenant)
+
+**Tenant-wide, on a shared tenant** — the same caveat as §6. The other products in this tenant get the RVS logo and colors on their login pages. Confirm that's acceptable first.
+
+1. **Confirm the New Universal Login experience.** **Branding → Universal Login**. The no-code customization below applies to the new experience; Classic is templated differently.
+2. **Branding → Universal Login → Customization**, and set:
+   - **Logo** — a public HTTPS URL, reachable anonymously (Auth0's servers fetch it, not the browser alone). Roughly square, ~150×150. Host it as a static asset on the Manager SWA (`https://manager.rvintake.com/...`) so it is already public and CDN-backed.
+   - **Primary color** — `#1565C0`, the MudBlazor theme primary used across both Blazor apps.
+   - **Page background** — keep neutral; avoid a second brand color competing with the button.
+3. **Leave the watermark alone for now.** Free-plan tenants show a "Powered by Auth0" badge below the widget and it cannot be removed on Free — removing it means the paid Essentials tier (~$35/mo). It reads as "they didn't roll their own auth", not as a phishing signal. Revisit once there are paying customers.
+
+These settings apply automatically to the login, password-reset and MFA screens; there is nothing separate to configure for those.
+
+Don't try to script this. The configuration scripts deliberately don't manage tenant-wide settings.
+
+---
+
+## 8. Email provider — custom mail server (once per tenant)
+
+This is the one that matters more than the watermark. Auth0's built-in sender sends from **`no-reply@auth0user.net`**, is capped at 10 messages/minute, and Auth0 documents it as not for production. A password-reset email arriving at a dealership from an unrecognised third-party domain is exactly the shape corporate mail filters flag.
+
+Unlike the watermark, this is **not** gated by the Auth0 plan — it's gated by plugging in your own provider. Tenant-wide, so the shared-tenant caveat from §6 applies again.
+
+### Option A — reuse the existing ACS (try this first)
+
+RVS already sends the packet email through Azure Communication Services with a verified custom sending domain — `mail.rvintake.com` in production, `mail.staging.rvintake.com` in staging, sending as `DoNotReply@mail.<domain>`. ACS offers an SMTP relay, and Auth0's provider list includes a generic SMTP option, so the two should meet without standing up SendGrid or SES.
+
+1. Create SMTP credentials for the ACS resource (an Entra application authorized against the Communication Service, exposed as an SMTP username/password).
+2. **Branding → Email Provider → SMTP** in Auth0. Host `smtp.azurecomm.net`, port 587, STARTTLS, the credentials from step 1.
+3. Set the From address and send the built-in test message.
+
+Two things to decide before you commit to it:
+
+- **Brand is already aligned — nothing to decide here.** The sending domain is `mail.rvintake.com`, the Manager app is `manager.rvintake.com`, and §6 puts login on `login.rvintake.com`. A dealer resetting a password sees one brand end to end. An earlier draft of this section proposed adding `mail.rvserviceflow.com` as a second ACS domain to match a `rvserviceflow.com` login host; that host no longer exists, so the second domain isn't needed. Worth knowing why it would have been expensive: `main.bicep` requires the ACS custom domain to be a subdomain of `intakeZoneName`, so it would have been a template change, not a parameter — plus a full #532 record set and the out-of-band verification dance.
+- **Verify ACS SMTP relay is available** for this resource and region before building on it. I could not confirm it live from this machine. If it isn't workable, fall back to Option B rather than writing a custom Action.
+
+### Option B — a dedicated email vendor
+
+SendGrid, Amazon SES, Mailgun and Postmark are first-class integrations in **Branding → Email Provider**. Well-trodden and quick, at the cost of another vendor and another sending domain to warm up and monitor.
+
+### After a provider is configured
+
+- **Branding → Email Templates** unlocks. Custom templates and a custom From address are only editable once a provider exists. Set the From to your own domain and put the RVS logo in the body.
+- Re-check that §6.4's notification toggle is on, so the link inside the reset email points at `login.rvintake.com`.
+
+---
+
 ## Not used
 
-**Auth0 Organizations.** Tenant scoping is permanently via `app_metadata`, which keeps RVS on the Free plan with no organization cap. The trade-offs are no per-tenant identity provider and no branded login.
+**Auth0 Organizations.** Tenant scoping is permanently via `app_metadata`, which keeps RVS on the Free plan with no organization cap. The trade-offs are no per-tenant identity provider and no *per-customer* branded login — tenant-wide branding is still available and is covered in §7.
