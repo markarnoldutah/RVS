@@ -266,7 +266,9 @@ left is the data-plane verification, linking the verified domain, and the
 warming window — none expressible in Bicep. The `acsCustomDomainAction` deployment output
 repeats this. Commands are in `deployment-cmds.azcli` §4e (2)(c).
 
-1. **Confirm the zone records match ACS.** `az communication email domain show --domain-name mail.rvintake.com --email-service-name <acs>-email -g rg-rvs-prod-westus3 --query properties.verificationRecords` and spot-check each against the `rvintake.com` zone. They should already agree — Bicep wrote them from the same source.
+1. **Confirm the zone records match ACS.** `az communication email domain show --domain-name mail.rvintake.com --email-service-name <acs>-email -g rg-rvs-prod-westus3 --query verificationRecords`, and spot-check each against the `rvintake.com` zone. They should already agree — Bicep wrote them from the same source.
+
+   **Query `verificationRecords`, not `properties.verificationRecords`.** This command flattens `properties.*` to the top level, so the longer path matches nothing and prints an *empty result rather than an error* — it reads as "the domain has no records" when in fact the query is wrong. `verificationStates` flattens the same way. Same trap as `az webapp config hostname list` further below. Hit for real, 2026-09-17.
 2. **Initiate verification** for each record type (`Domain`, `SPF`, `DKIM`, `DKIM2`):
    ```bash
    for t in Domain SPF DKIM DKIM2; do
@@ -276,7 +278,7 @@ repeats this. Commands are in `deployment-cmds.azcli` §4e (2)(c).
        --verification-type $t
    done
    ```
-   Then poll until every entry in `properties.verificationStates` is `Verified` (minutes, since the zone is on Azure DNS). Sends From `mail.rvintake.com` fail until then; the Azure-managed domain stays linked as a fallback.
+   Then poll until every entry in `verificationStates` is `Verified` (minutes, since the zone is on Azure DNS). Sends From `mail.rvintake.com` fail until then; the Azure-managed domain stays linked as a fallback.
 
    **Link the verified domain.** ACS rejects linking an unverified domain, so a brand-new custom domain's first deploy runs with `acsCustomDomainVerified = false` — that deploy only creates the domain and writes its DNS records. Once Domain, SPF, DKIM and DKIM2 all read `Verified`, set `acsCustomDomainVerified = true` in the parameter file and redeploy (step 1). `prod.bicepparam` and `staging.bicepparam` already carry `true` for their linked domains; **never set it back to `false`** — the next deploy would unlink the domain. Confirm with `az communication show -n <acs> -g rg-rvs-prod-westus3 --query linkedDomains` (the domain's own `linkedAccount` field reads `null` even when linked).
 3. **Check DMARC resolves:** `dig +short TXT _dmarc.mail.rvintake.com` → `v=DMARC1; p=none; rua=mailto:dmarc-reports@rvserviceflow.com`. Make sure that mailbox (or a DMARC-processor address) is actually monitored — `p=none` is only useful if someone reads the aggregate reports. As of 2026-09-12 it is not (`#608`).
