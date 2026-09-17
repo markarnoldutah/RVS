@@ -407,9 +407,16 @@ sync_actions() {
 check_appsettings() {
   [[ -n "${AUTH0_MANAGER_APPSETTINGS:-}" && -n "${AUTH0_MANAGER_CLIENT:-}" ]] || return 0
   log "Manager appsettings (checked, not edited)"
-  local root cid f authority client audience
+  local root cid f authority client audience want_authority
   root="$(cd "$AUTH0_SCRIPTS_DIR" && git rev-parse --show-toplevel)"
   cid="$(jq -r --arg k "$AUTH0_MANAGER_CLIENT" '.[$k] // ""' <<<"$CLIENT_IDS")"
+  # What the BROWSER apps use as their OIDC authority. Same as AUTH0_DOMAIN until the
+  # tenant gets a custom domain (Auth0 checklist §6), and different afterwards: the apps
+  # move to https://login.<brand>/ while AUTH0_DOMAIN must stay on the canonical
+  # .us.auth0.com host, because that is where the Management API lives and lib.sh
+  # gates the run on it matching the vault. Comparing appsettings against AUTH0_DOMAIN
+  # once those diverge reports a mismatch on every file, on every run.
+  want_authority="${AUTH0_APP_AUTHORITY:-https://$AUTH0_DOMAIN/}"
   for f in $AUTH0_MANAGER_APPSETTINGS; do
     if [[ ! -f "$root/$f" ]]; then
       warn "$f not found"
@@ -418,11 +425,11 @@ check_appsettings() {
     authority="$(jq -r '.Auth0.Authority // ""' "$root/$f")"
     client="$(jq -r '.Auth0.ClientId // ""' "$root/$f")"
     audience="$(jq -r '.Auth0.Audience // ""' "$root/$f")"
-    if [[ "$authority" == "https://$AUTH0_DOMAIN/" && "$audience" == "$AUTH0_API_IDENTIFIER" && ( -z "$cid" || "$client" == "$cid" ) ]]; then
+    if [[ "$authority" == "$want_authority" && "$audience" == "$AUTH0_API_IDENTIFIER" && ( -z "$cid" || "$client" == "$cid" ) ]]; then
       echo "  = $f"
     else
       echo "  ! $f: Authority=$authority ClientId=$client Audience=$audience"
-      echo "      expected Authority=https://$AUTH0_DOMAIN/ ClientId=${cid:-<client_id of the new application>} Audience=$AUTH0_API_IDENTIFIER"
+      echo "      expected Authority=$want_authority ClientId=${cid:-<client_id of the new application>} Audience=$AUTH0_API_IDENTIFIER"
     fi
   done
 }
