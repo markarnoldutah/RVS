@@ -106,6 +106,24 @@ WASM workload is required for Blazor projects. CI installs it via `dotnet worklo
 
 **Multi-tenant B2B SaaS for RV dealerships.** Tenant = corporation, partitioned by `tenantId`. **RVS does not use Auth0 Organizations** — `tenantId` comes from the user's `app_metadata`, injected into the JWT by a Post-Login Action. Values are conventionally shaped like `ten_acme_rv`, but they are ordinary strings, not Auth0 org identifiers. Two client apps share one API.
 
+### Domains
+
+Two domains, split by audience rather than by app. **Every hostname a human reads is on `rvintake.com`**; `rvserviceflow.com` is corporate.
+
+| Host | Serves |
+| --- | --- |
+| `rvintake.com` / `staging.rvintake.com` | Intake SWA (prod is the apex) |
+| `manager.rvintake.com` / `manager-staging.rvintake.com` | Manager SWA |
+| `go.rvintake.com` / `go-staging.rvintake.com` | API redirect endpoint (Spec A-13) |
+| `mail.rvintake.com` / `mail.staging.rvintake.com` | ACS sending domain |
+| `api.rvserviceflow.com` / `api-staging.rvserviceflow.com` | API origin — XHR only, never typed |
+
+The `RVS` acronym is unaffected: resource names, project names and document names all keep it.
+
+**Three things on `rvserviceflow.com` are opaque identifiers, not addresses — never change them to match a hostname:** the Auth0 audience `https://api.rvserviceflow.com`, the claim namespace `https://rvserviceflow.com/tenantId` / `/locationIds` (pinned in seven places plus the Auth0 Action), and `ErrorBaseUri` in `ExceptionHandlingMiddleware`. Changing the audience invalidates every token and grant; changing the namespace breaks claim extraction.
+
+`manager*.rvserviceflow.com` was retired September 17 2026 and does not resolve.
+
 ### Request → Response Flow
 
 1. **Intake WASM** (anonymous, rate-limited) and **Manager WASM** (Auth0 OIDC + bearer token) call **RVS.API**.

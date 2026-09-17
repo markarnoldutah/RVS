@@ -1,7 +1,7 @@
 # RV ServiceFlow — Pilot Agreement
 
-**Version:** 1.0 · September 11, 2026
-**Status:** Active template. One variant — the evaluation-only variant drafted in v0.1 for Blue Compass is retired and is not to be revived (Gate G5, Pilot Recruitment plan §3/§7, closes issue #533).
+**Version:** 1.1 · September 17, 2026
+**Status:** Active template. v1.1 points the product description at `rvintake.com`; v1.0 named `rvserviceflow.com`, which is now the corporate domain and serves no website (`#634`). The contracting entity is unchanged. One variant — the evaluation-only variant drafted in v0.1 for Blue Compass is retired and is not to be revived (Gate G5, Pilot Recruitment plan §3/§7, closes issue #533).
 
 ---
 
@@ -17,7 +17,7 @@ This Pilot Agreement ("**Agreement**") is between **RV ServiceFlow** ("**RVS**",
 
 ### 1. What you get
 
-RVS provides a hosted intake form, AI-assisted diagnostic questions, and an emailed service packet (readable write-up, photos, printable PDF) for each Location, plus a customer status link. Full description: `rvserviceflow.com` and the current product overview.
+RVS provides a hosted intake form, AI-assisted diagnostic questions, and an emailed service packet (readable write-up, photos, printable PDF) for each Location, plus a customer status link. Full description: `rvintake.com` and the current product overview.
 
 ### 2. Pilot term and price
 
