@@ -10,7 +10,7 @@ namespace RVS.API.Options;
 public sealed class ManagerAppUrlOptions
 {
     /// <summary>
-    /// Origin (scheme + host) of the Manager app, e.g. <c>https://manager.rvserviceflow.com</c>.
+    /// Origin (scheme + host) of the Manager app, e.g. <c>https://manager.rvintake.com</c>.
     /// Trailing slash is tolerated — callers should trim before composing paths.
     /// </summary>
     public string BaseUrl { get; set; } = string.Empty;

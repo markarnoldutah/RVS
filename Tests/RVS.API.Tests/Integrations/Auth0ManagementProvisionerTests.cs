@@ -18,7 +18,7 @@ namespace RVS.API.Tests.Integrations;
 public sealed class Auth0ManagementProvisionerTests
 {
     private const string Domain = "nova-test.us.auth0.com";
-    private const string ManagerBaseUrl = "https://manager.rvserviceflow.com";
+    private const string ManagerBaseUrl = "https://manager.rvintake.com";
     private const string TicketUrl = "https://nova-test.us.auth0.com/lo/reset?ticket=s3cret#";
 
     private readonly FakeAuth0Handler _handler = new();

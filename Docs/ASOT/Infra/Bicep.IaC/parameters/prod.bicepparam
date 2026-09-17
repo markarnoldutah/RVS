@@ -44,7 +44,7 @@ param deployStorageAccount = true
 param storageAllowSharedKeyAccess = false
 param storageCorsOrigins = [
   'https://rvintake.com'
-  'https://manager.rvserviceflow.com'
+  'https://manager.rvintake.com'
 ]
 // devBlobAccessPrincipalId intentionally unset for prod — the app uses its managed
 // identity; humans get blob data access just-in-time (PIM) or via break-glass, never standing.
@@ -89,9 +89,11 @@ param swaLocation = 'westus2'
 param swaResourceGroupName = 'rg-rvs-prod-westus2'
 param swaSkuName = 'Standard'
 
-// DNS — Manager: CNAME manager.rvserviceflow.com, bound by Bicep.
+// DNS — Manager: CNAME manager.rvintake.com, bound by Bicep (#632).
 //       Intake:  ALIAS A record at the rvintake.com apex → Intake SWA, written by
 //                Bicep; the apex *binding* is the one-time out-of-band step above.
+//       rvserviceflow.com is kept as the corporate zone — no customer-facing host,
+//                but it holds the DMARC rua mailbox and the API origin (#633).
 param deployDns = true
 
 // Grant DNS Zone Contributor (zone-scoped, NOT RG-wide) to the staging

@@ -124,13 +124,13 @@ param deployDns bool = false
 @description('Resource group that owns the DNS zones. Apex zones are shared across environments and owned by the prod RG.')
 param dnsResourceGroupName string = 'rg-rvs-prod-westus3'
 
-@description('DNS zone for the Manager SWA (CNAME subdomain in every env).')
-param managerZoneName string = 'rvserviceflow.com'
+@description('Corporate DNS zone. Holds the API origin host (#633) and the DMARC reporting mailbox; no customer-facing hostname lives here. Formerly managerZoneName — the Manager SWA moved to the intake zone in #632.')
+param apiZoneName string = 'rvserviceflow.com'
 
-@description('DNS zone for the Intake SWA (apex in prod, subdomain CNAME in non-prod envs).')
+@description('DNS zone for every customer-facing host: Intake (apex in prod, subdomain CNAME in non-prod envs), Manager, the channel-tagging redirect, the ACS sending domain and the Auth0 login host.')
 param intakeZoneName string = 'rvintake.com'
 
-@description('Subdomain prefix for the Manager SWA CNAME record.')
+@description('Subdomain prefix for the Manager SWA CNAME record, in the INTAKE zone (#632) — "manager" in prod, "manager-<env>" elsewhere. The literal "staging" in the non-prod label is load-bearing: RVS.Blazor.Manager/wwwroot/js/blazor-start.js selects its environment by matching that substring against the browser hostname, so a label without it would boot Production config against staging.')
 param managerDnsPrefix string = environmentName == 'prod' ? 'manager' : 'manager-${environmentName}'
 
 @description('Subdomain prefix for the Intake SWA CNAME record in non-prod envs (e.g. "staging" -> staging.rvintake.com). Ignored in prod where Intake binds to the apex.')
@@ -236,9 +236,9 @@ var resolvedStorageAccountName = empty(storageAccountNameOverride)
 
 // Environment-aware default CORS origins for browser-based SAS uploads.
 var defaultCorsOrigins = environmentName == 'prod'
-  ? ['https://rvintake.com', 'https://manager.rvserviceflow.com']
+  ? ['https://rvintake.com', 'https://manager.rvintake.com']
   : environmentName == 'staging'
-      ? ['https://staging.rvintake.com', 'https://manager-staging.rvserviceflow.com']
+      ? ['https://staging.rvintake.com', 'https://manager-staging.rvintake.com']
       : [
           'https://localhost:7008'
           'https://localhost:7116'
@@ -651,6 +651,23 @@ var redirectTxtRecords = deployAppService ? [
   }
 ] : []
 
+// ── manager.rvintake.com — the dealer-facing Manager SWA (#632) ────
+//
+// In the INTAKE zone, not the corporate one: a service advisor signs in here, so it carries the
+// brand every other host they and their customers touch already carries. The corporate zone
+// keeps the API origin and the DMARC mailbox, neither of which anyone types.
+//
+// Unlike the redirect host above, this one binds entirely in-template — it is a subdomain
+// CNAME, so swa-custom-domain.bicep can validate it with cname-delegation once the record
+// exists. That is why swaManagerDomain below dependsOn dnsIntake.
+var managerCnameRecords = [
+  {
+    name: managerDnsPrefix
+    #disable-next-line BCP318
+    target: swaManager.outputs.defaultHostname
+  }
+]
+
 module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs && deployKeyVault) {
   name: 'deploy-acs-kv-secrets-${environmentName}'
   scope: rgPrimary
@@ -751,21 +768,24 @@ module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
   }
 }
 
-// ── DNS: Manager zone (rvserviceflow.com) — CNAME subdomain ────
-// Every env maps a subdomain of rvserviceflow.com to the Manager SWA.
+// ── DNS: corporate zone (rvserviceflow.com) ───────────────
+// No customer-facing hostname lives here: the Manager SWA moved to the intake
+// zone in #632, so every host a human types is on rvintake.com.
+//
+// The module is kept with no records rather than deleted, for two reasons.
+// The zone itself must keep existing — the DMARC rua mailbox is on this domain,
+// and #633 binds the API origin (api / api-<env>) here next. And dns.bicep
+// CREATES the zone, so dropping the only call that names this zone would let a
+// deploy delete it out from under the records added by hand.
+//
+// dns.bicep defaults every record array to [], so this is a no-op on records
+// while still keeping the zone under IaC.
 
-module dnsManager 'modules/dns.bicep' = if (deploySwa && deployDns) {
-  name: 'deploy-dns-manager-${environmentName}'
+module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
+  name: 'deploy-dns-api-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
   params: {
-    zoneName: managerZoneName
-    cnameRecords: [
-      {
-        name: managerDnsPrefix
-        #disable-next-line BCP318
-        target: swaManager.outputs.defaultHostname
-      }
-    ]
+    zoneName: apiZoneName
   }
 }
 
@@ -804,7 +824,7 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         #disable-next-line BCP318
         target: swaIntake.outputs.defaultHostname
       }
-    ], acsCustomDomainCnameRecords, redirectCnameRecords)
+    ], managerCnameRecords, acsCustomDomainCnameRecords, redirectCnameRecords)
     aRecords: environmentName == 'prod' ? [
       {
         name: '@'
@@ -830,12 +850,12 @@ module swaManagerDomain 'modules/swa-custom-domain.bicep' = if (deploySwa && dep
   name: 'deploy-swa-manager-domain-${environmentName}'
   scope: rgSwa
   dependsOn: [
-    dnsManager
+    dnsIntake
   ]
   params: {
     #disable-next-line BCP318
     staticSiteName: swaManager.outputs.name
-    hostname: '${managerDnsPrefix}.${managerZoneName}'
+    hostname: '${managerDnsPrefix}.${intakeZoneName}'
     validationMethod: 'cname-delegation'
   }
 }
@@ -859,14 +879,14 @@ module swaIntakeDomain 'modules/swa-custom-domain.bicep' = if (deploySwa && depl
 // Grants DNS Zone Contributor on each zone — NOT on the RG — so
 // non-prod deployers can write record sets without broader access.
 
-module dnsManagerRbac 'modules/dns-zone-contributor.bicep' = if (deploySwa && deployDns && environmentName == 'prod' && !empty(dnsZoneContributorPrincipalIds)) {
-  name: 'deploy-dns-mgr-rbac-${environmentName}'
+module dnsApiRbac 'modules/dns-zone-contributor.bicep' = if (deploySwa && deployDns && environmentName == 'prod' && !empty(dnsZoneContributorPrincipalIds)) {
+  name: 'deploy-dns-api-rbac-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
   dependsOn: [
-    dnsManager
+    dnsApi
   ]
   params: {
-    zoneName: managerZoneName
+    zoneName: apiZoneName
     principalIds: dnsZoneContributorPrincipalIds
   }
 }
@@ -1037,9 +1057,9 @@ output swaManagerDeploymentToken string = deploySwa ? swaManager.outputs.deploym
 
 // ── DNS ───────────────────────────────────────────────────────
 
-@description('Azure-assigned nameservers for the Manager DNS zone (rvserviceflow.com). Empty when deployDns = false.')
+@description('Azure-assigned nameservers for the corporate DNS zone (rvserviceflow.com). Empty when deployDns = false.')
 #disable-next-line BCP318
-output dnsManagerNameServers array = (deploySwa && deployDns) ? dnsManager.outputs.nameServers : []
+output dnsApiNameServers array = (deploySwa && deployDns) ? dnsApi.outputs.nameServers : []
 
 @description('Azure-assigned nameservers for the Intake DNS zone (rvintake.com). Empty when deployDns = false.')
 #disable-next-line BCP318
@@ -1051,8 +1071,8 @@ output intakeFqdn string = environmentName == 'prod' ? intakeZoneName : '${intak
 @description('FQDN of the channel-tagging redirect host (Spec A-13, #599). Its DNS records are deployed; the hostname binding and managed certificate are one-time out-of-band steps — README.md "Bind the go.<zone> redirect host".')
 output redirectFqdn string = '${redirectDnsPrefix}.${intakeZoneName}'
 
-@description('FQDN for the Manager SWA custom domain.')
-output managerFqdn string = '${managerDnsPrefix}.${managerZoneName}'
+@description('FQDN for the Manager SWA custom domain, in the intake zone (#632).')
+output managerFqdn string = '${managerDnsPrefix}.${intakeZoneName}'
 
 @description('Manual follow-up after a prod deploy. Bicep writes the rvintake.com apex ALIAS record but cannot bind the apex custom domain — Azure mints the ownership token only at registration time. Until this one-time step is done, rvintake.com resolves but https:// fails with a cert error. Empty for non-prod (subdomain CNAMEs bind in-template).')
 output intakeApexAction string = (deploySwa && deployDns && environmentName == 'prod')

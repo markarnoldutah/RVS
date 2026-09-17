@@ -186,7 +186,7 @@ az deployment sub create `
 # ── 2b. PRODUCTION first bring-up — the one-time apex registration ───────────
 # Full narrative with the portal path: README.md "Deploy Production". Summary:
 #
-#   Bicep (Section 1b) creates everything, binds manager.rvserviceflow.com, and
+#   Bicep (Section 1b) creates everything, binds manager.rvintake.com, and
 #   writes an ALIAS A record at the rvintake.com apex → Intake SWA. Azure DNS
 #   tracks the SWA's address itself, so no IP is pinned anywhere.
 #
@@ -318,7 +318,7 @@ az role assignment list --assignee "$DEPLOYER_APP_ID" --all \
 
 # ── 4b. Cross-env DNS Zone Contributor (zone-scoped, least privilege) ────────
 # Both DNS zones live in rg-rvs-prod-westus3. The staging deploy writes CNAMEs
-# (staging.rvintake.com, manager-staging.rvserviceflow.com) into them, so the
+# (staging.rvintake.com, manager-staging.rvintake.com) into them, so the
 # staging deployer SP needs write access to the ZONES ONLY — never RG-wide
 # Contributor on the prod RG.
 #
