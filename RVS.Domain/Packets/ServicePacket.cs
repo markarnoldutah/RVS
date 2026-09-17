@@ -26,13 +26,26 @@ public sealed record ServicePacket
     public string? IssueCategory { get; init; }
 
     /// <summary>
+    /// 4b. The AI-curated restatement of the complaint, rendered as the "Issue" section directly
+    /// above the preliminary assessment (issue #601). <c>null</c> when curation produced nothing
+    /// the verbatim complaint does not already say — a typed description that was never refined,
+    /// or a request captured before the verbatim text was recorded — so the same words are never
+    /// shown under two headings.
+    /// </summary>
+    public string? CuratedIssue { get; init; }
+
+    /// <summary>
     /// 5. AI summary, always labelled as AI-generated. <c>null</c> when no summary exists.
     /// Rendered above the customer's description so the concise recreation of the problem
     /// is read first (<c>Spec B-2</c> item 5).
     /// </summary>
     public PacketAiSummary? AiSummary { get; init; }
 
-    /// <summary>6. The customer's description, verbatim — never trimmed or rewritten.</summary>
+    /// <summary>
+    /// 6. The customer's words, verbatim — never trimmed or rewritten. The pre-curation text
+    /// when one was recorded, otherwise the submitted description (issue #601). Always present:
+    /// the complaint block never disappears from a packet.
+    /// </summary>
     public required string IssueDescription { get; init; }
 
     /// <summary>7. Diagnostic Q&amp;A. Empty when no diagnostic responses were captured.</summary>

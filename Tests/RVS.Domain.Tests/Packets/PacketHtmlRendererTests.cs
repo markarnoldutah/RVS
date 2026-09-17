@@ -44,6 +44,7 @@ public class PacketHtmlRendererTests
             ReferenceCode = "A1B2C3D4",
         },
         IssueCategory = "Electrical",
+        CuratedIssue = "Generator shuts down under load after roughly ten minutes, with a hot smell.",
         IssueDescription = "Generator quits after ten minutes. Smells hot.",
         Diagnostics =
         [
@@ -147,13 +148,15 @@ public class PacketHtmlRendererTests
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        // Spec B-2 order, with the AI assessment lifted above the complaint.
+        // Spec B-2 order, with the curated issue and the AI assessment lifted above the
+        // verbatim complaint (issue #601).
         var order = new[]
         {
             Order(html, "section:unit"),
             Order(html, "section:customer"),
             Order(html, "section:origin"),
             Order(html, "section:category"),
+            Order(html, "section:curated-issue"),
             Order(html, "section:ai-summary"),
             Order(html, "section:description"),
             Order(html, "section:diagnostics"),
@@ -172,6 +175,54 @@ public class PacketHtmlRendererTests
 
         Order(html, "section:ai-summary").Should().BeLessThan(Order(html, "section:description"));
         Order(html, "section:category").Should().BeLessThan(Order(html, "section:ai-summary"));
+    }
+
+    // ── Curated issue — the "Issue" section (issue #601) ───────────────────
+
+    [Fact]
+    public void Render_ShouldPlaceTheCuratedIssueDirectlyAboveThePreliminaryAssessment()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        Order(html, "section:category").Should().BeLessThan(Order(html, "section:curated-issue"));
+        Order(html, "section:curated-issue").Should().BeLessThan(Order(html, "section:ai-summary"));
+        Order(html, "section:curated-issue").Should().BeLessThan(Order(html, "section:description"));
+    }
+
+    [Fact]
+    public void Render_ShouldHeadTheCuratedIssueSectionIssue()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var block = html[Order(html, "section:curated-issue")..Order(html, "section:ai-summary")];
+
+        block.Should().Contain("Issue");
+        block.Should().Contain("Generator shuts down under load after roughly ten minutes, with a hot smell.");
+    }
+
+    [Fact]
+    public void Render_WhenCuratedIssueIsNull_ShouldOmitTheIssueSection()
+    {
+        var packet = FullPacket() with { CuratedIssue = null };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("section:curated-issue");
+        html.Should().Contain("section:description");
+    }
+
+    [Fact]
+    public void Render_ShouldHtmlEncodeTheCuratedIssue()
+    {
+        var packet = FullPacket() with { CuratedIssue = "it won't \"start\" <b>at all</b> & smells hot" };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var block = html[Order(html, "section:curated-issue")..Order(html, "section:ai-summary")];
+
+        block.Should().NotContain("<b>at all</b>");
+        block.Should().Contain("&lt;b&gt;at all&lt;/b&gt;");
+        block.Should().Contain("&amp;");
     }
 
     // ── 1. Unit header ─────────────────────────────────────────────────────

@@ -47,8 +47,15 @@ internal sealed record PacketPdfLayout
         sections.Add(BuildOrigin(packet.Origin));
         sections.Add(BuildCategory(packet.IssueCategory));
 
-        // The AI assessment sits above the verbatim complaint so the service manager reads
-        // the concise problem recreation first (matches PacketHtmlRenderer; Spec B-2).
+        // The curated issue and the AI assessment sit above the verbatim complaint so the
+        // service manager reads the concise problem recreation first, then the customer's own
+        // words (matches PacketHtmlRenderer; Spec B-2, issue #601).
+        var curatedIssue = BuildCuratedIssue(packet.CuratedIssue);
+        if (curatedIssue is not null)
+        {
+            sections.Add(curatedIssue);
+        }
+
         var aiSummary = BuildAiSummary(packet.AiSummary);
         if (aiSummary is not null)
         {
@@ -165,6 +172,18 @@ internal sealed record PacketPdfLayout
         Heading = "Issue category",
         Body = string.IsNullOrWhiteSpace(category) ? "Uncategorized" : category,
     };
+
+    // ── 4b. Issue — the curated restatement of the complaint (issue #601) ─
+
+    private static PacketPdfLayoutSection? BuildCuratedIssue(string? curatedIssue) =>
+        curatedIssue is null
+            ? null
+            : new PacketPdfLayoutSection
+            {
+                Id = "curated-issue",
+                Heading = "Issue",
+                Body = curatedIssue,
+            };
 
     // ── 6. Complaint — the customer's words, verbatim ───────────────────
 

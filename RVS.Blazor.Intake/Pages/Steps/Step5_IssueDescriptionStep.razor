@@ -36,7 +36,7 @@
                         else if (_isRefining)
                         {
                             <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
-                            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Cleaning up transcript...</MudText>
+                            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Cleaning up description...</MudText>
                         }
                     </MudStack>
 
@@ -47,7 +47,8 @@
                         </MudAlert>
                     }
 
-                    <MudTextField @bind-Value="State.IssueDescription"
+                    <MudTextField Value="State.IssueDescription"
+                                  ValueChanged="OnDescriptionChanged"
                                   T="string"
                                   Validation="@(new Func<string?, string?>(ValidateDescription))"
                                   Lines="5"
@@ -156,6 +157,7 @@
                        Color="Color.Primary"
                        FullWidth="true"
                        OnClick="HandleNext"
+                       Disabled="@(_isRecording || _isTranscribing || _isRefining)"
                        Style="text-transform: none;"
                        Class="mt-6">
                 Continue
@@ -259,6 +261,12 @@
                 var rawTranscript = result.Result.RawTranscript ?? string.Empty;
                 State.IssueDescription = result.Result.CleanedDescription
                     ?? rawTranscript;
+
+                // Keep what the customer actually said: the packet renders it as
+                // "Complaint — word for word" beneath the curated text (issue #601).
+                State.IssueDescriptionVerbatim = string.IsNullOrWhiteSpace(rawTranscript)
+                    ? null
+                    : rawTranscript;
 
                 // Fire insights extraction from the raw transcript immediately —
                 // the refine prompt strips lifestyle/urgency context we need.
@@ -374,6 +382,17 @@
         }
     }
 
+    /// <summary>
+    /// A manual edit replaces whatever curation last produced, so any stored pre-curation text
+    /// is now stale — it belongs to words the customer has since changed. Clearing it lets
+    /// Continue curate the edited text afresh (issue #601).
+    /// </summary>
+    private void OnDescriptionChanged(string? value)
+    {
+        State.IssueDescription = value ?? string.Empty;
+        State.IssueDescriptionVerbatim = null;
+    }
+
     private void OnCategoryChanged(string? value)
     {
         State.IssueCategory = value ?? string.Empty;
@@ -457,6 +476,10 @@
         await _form.Validate();
         if (!_form.IsValid) return;
 
+        // Curate a typed description before anything downstream reads it, so the capability
+        // assessment and the packet both work from the cleaned text (issue #601).
+        await CurateTypedDescriptionAsync();
+
         // Capability assessment for the boundary of Step 5 → Step 6.
         // Best-effort: any failure leaves CapabilityAssessment unchanged so the wizard
         // continues without a fallback alert.
@@ -479,6 +502,56 @@
 
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Curates a typed description on Continue, the same way the mic path curates a transcript
+    /// (issue #601): the cleaned text becomes the submitted description and the words the
+    /// customer typed are kept for the packet's verbatim complaint. Skipped when the mic path
+    /// already recorded pre-curation words. Best-effort — if the call fails or changes nothing,
+    /// the typed text stands as both the description and the complaint.
+    /// </summary>
+    private async Task CurateTypedDescriptionAsync()
+    {
+        if (State.IssueDescriptionVerbatim is not null)
+        {
+            return;
+        }
+
+        var typed = State.IssueDescription?.Trim();
+        if (string.IsNullOrEmpty(typed))
+        {
+            return;
+        }
+
+        _isRefining = true;
+        StateHasChanged();
+
+        try
+        {
+            var refined = await IntakeApi.RefineIssueTextAsync(
+                State.Slug,
+                new IssueTextRefinementRequestDto
+                {
+                    RawTranscript = typed,
+                    IssueCategory = string.IsNullOrWhiteSpace(State.IssueCategory) ? null : State.IssueCategory
+                });
+
+            var cleaned = refined?.Result?.CleanedDescription?.Trim();
+            if (!string.IsNullOrWhiteSpace(cleaned) && cleaned != typed)
+            {
+                State.IssueDescriptionVerbatim = typed;
+                State.IssueDescription = cleaned;
+            }
+        }
+        catch (Exception)
+        {
+            // Curation is advisory — never block the wizard on it.
+        }
+        finally
+        {
+            _isRefining = false;
+        }
     }
 
     /// <summary>

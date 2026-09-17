@@ -19,8 +19,9 @@ namespace RVS.Domain.Packets;
 /// Layout follows the Integrated Dealer Systems (IDS) work-order idiom so a service
 /// manager reads it on daily muscle memory: a right-aligned tracking number in the
 /// masthead (<c>RVS #</c>, mirroring IDS <c>W/O #</c>), a three-column Customer / Location
-/// / Unit band, then the AI <c>Preliminary assessment</c> above <c>COMPLAINT</c> (the
-/// verbatim customer text) so the concise problem recreation is read first, and a running
+/// / Unit band, then the curated <c>Issue</c> and the AI <c>Preliminary assessment</c> above
+/// <c>COMPLAINT</c> (the verbatim customer text, pre-curation) so the concise problem
+/// recreation is read first and can be checked against the customer's own words, and a running
 /// page footer carrying the reference and page count. It deliberately omits everything IDS
 /// uses for the repair-authorization contract — pricing, parts/labour tables, signatures,
 /// arbitration text — none of which belongs in an intake packet (<c>Spec B-2</c>).
@@ -78,9 +79,10 @@ public static class PacketHtmlRenderer
         AppendManagerActions(sb, packet.ManagerLinks);
         AppendMasthead(sb, packet, submittedUtc);
         AppendCategory(sb, packet.IssueCategory);
-        // The AI assessment sits above the verbatim complaint: a service manager should see
-        // the concise recreation of the problem first, then the customer's own words, then
-        // the diagnostic detail (issue #431 follow-up; Spec B-2).
+        // The curated issue and the AI assessment sit above the verbatim complaint: a service
+        // manager should see the concise recreation of the problem first, then the customer's
+        // own words, then the diagnostic detail (issue #431 follow-up, #601; Spec B-2).
+        AppendCuratedIssue(sb, packet.CuratedIssue);
         AppendAiSummary(sb, packet.AiSummary);
         AppendDescription(sb, packet.IssueDescription);
         AppendDiagnostics(sb, packet.Diagnostics);
@@ -233,6 +235,27 @@ public static class PacketHtmlRenderer
         sb.Append("<p>")
             .Append(string.IsNullOrWhiteSpace(category) ? "Uncategorized" : Text(category))
             .Append("</p>\n");
+        sb.Append("</section>\n");
+    }
+
+    // ── 4b. Issue — the curated restatement of the complaint (issue #601) ──
+    //
+    // Sits between the category and the assessment: the manager reads the clean version of the
+    // problem first and can drop to the verbatim complaint below to check it. Labelled
+    // AI-generated for the same reason the assessment is — the packet never passes machine
+    // wording off as the customer's.
+
+    private static void AppendCuratedIssue(StringBuilder sb, string? curatedIssue)
+    {
+        if (curatedIssue is null)
+        {
+            return;
+        }
+
+        sb.Append("<!-- section:curated-issue -->\n");
+        sb.Append("<section class=\"curated-issue\">\n");
+        sb.Append("<h2>Issue <span class=\"tag\">AI-generated</span></h2>\n");
+        sb.Append("<p>").Append(Text(curatedIssue)).Append("</p>\n");
         sb.Append("</section>\n");
     }
 
@@ -587,7 +610,8 @@ public static class PacketHtmlRenderer
         .diagnostics .empty { margin: 0; font-style: italic; }
         .diagnostics .no-answer { font-style: italic; }
 
-        .ai-summary .tag {
+        .ai-summary .tag,
+        .curated-issue .tag {
           font-size: 8pt;
           font-weight: 700;
           text-transform: uppercase;

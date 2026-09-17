@@ -690,6 +690,85 @@ public class PacketComposerTests
         packet.IssueDescription.Should().Be("\tit won't \"start\" — tried everything…  \n");
     }
 
+    // ── Curated issue vs verbatim complaint (issue #601) ───────────────────
+    //
+    // The packet carries two texts: the curated restatement, rendered as "Issue" above the
+    // Preliminary assessment, and the customer's words before curation, rendered lower as
+    // "Complaint — word for word". The complaint block always renders, so it falls back to
+    // the submitted text; the Issue section only appears when curation actually said
+    // something different.
+
+    [Fact]
+    public void Compose_WhenVerbatimDiffersFromSubmitted_ShouldCurateAboveAndShowVerbatimAsTheComplaint()
+    {
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = "um so like the genny it uh quits after like ten minutes and smells hot";
+        request.IssueDescription = "Generator quits after ten minutes. Smells hot.";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.CuratedIssue.Should().Be("Generator quits after ten minutes. Smells hot.");
+        packet.IssueDescription.Should()
+            .Be("um so like the genny it uh quits after like ten minutes and smells hot");
+    }
+
+    [Fact]
+    public void Compose_WhenVerbatimIsNull_ShouldFallBackToSubmittedTextAndOmitTheCuratedIssue()
+    {
+        // Service requests captured before #601 stored one text only. The complaint block must
+        // still render, and there is nothing curated to put above it.
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = null;
+        request.IssueDescription = "Generator quits after ten minutes.";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.IssueDescription.Should().Be("Generator quits after ten minutes.");
+        packet.CuratedIssue.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("Generator quits after ten minutes.")]
+    [InlineData("  Generator quits after ten minutes.  ")]
+    public void Compose_WhenCurationAddedNothing_ShouldOmitTheCuratedIssue(string verbatim)
+    {
+        // A typed description with the refinement call unavailable, so both texts are the same
+        // words. Rendering them under two headings is the duplication #601 reported.
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = verbatim;
+        request.IssueDescription = "Generator quits after ten minutes.";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.CuratedIssue.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenVerbatimIsBlank_ShouldFallBackToSubmittedTextAndOmitTheCuratedIssue()
+    {
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = "   ";
+        request.IssueDescription = "Generator quits after ten minutes.";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.IssueDescription.Should().Be("Generator quits after ten minutes.");
+        packet.CuratedIssue.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_ShouldTrimTheCuratedIssueButNeverTheVerbatimComplaint()
+    {
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = "\tum so the genny quits  \n";
+        request.IssueDescription = "  Generator quits after ten minutes.  ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.CuratedIssue.Should().Be("Generator quits after ten minutes.");
+        packet.IssueDescription.Should().Be("\tum so the genny quits  \n");
+    }
+
     // ── Degradation: context-supplied fields ───────────────────────────────
 
     [Fact]

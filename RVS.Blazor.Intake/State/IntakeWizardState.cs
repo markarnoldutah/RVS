@@ -112,6 +112,14 @@ public sealed class IntakeWizardState
     /// <summary>Issue description text, max 2000 characters (Step 5).</summary>
     public string IssueDescription { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The customer's words before AI curation replaced <see cref="IssueDescription"/>
+    /// (issue #601) — the raw Whisper transcript when dictated, the typed text when typed.
+    /// <c>null</c> until curation runs; the packet then treats the submitted description as
+    /// the customer's own words.
+    /// </summary>
+    public string? IssueDescriptionVerbatim { get; set; }
+
     /// <summary>Urgency level (Step 5).</summary>
     public string? Urgency { get; set; }
 
@@ -315,6 +323,9 @@ public sealed class IntakeWizardState
             },
             IssueCategory = IssueCategory.Trim(),
             IssueDescription = IssueDescription.Trim(),
+            IssueDescriptionVerbatim = string.IsNullOrWhiteSpace(IssueDescriptionVerbatim)
+                ? null
+                : IssueDescriptionVerbatim.Trim(),
             Urgency = string.IsNullOrWhiteSpace(Urgency) ? null : Urgency.Trim(),
             RvUsage = string.IsNullOrWhiteSpace(RvUsage) ? null : RvUsage.Trim(),
             SmsOptOut = SmsOptOut,
@@ -374,6 +385,7 @@ public sealed class IntakeWizardState
             IssueCategory = IssueCategory,
             IsCategorySuggestedByAi = IsCategorySuggestedByAi,
             IssueDescription = IssueDescription,
+            IssueDescriptionVerbatim = IssueDescriptionVerbatim,
             Urgency = Urgency,
             RvUsage = RvUsage,
             HasExtendedWarranty = HasExtendedWarranty,
@@ -422,6 +434,7 @@ public sealed class IntakeWizardState
             IssueCategory = data.IssueCategory;
             IsCategorySuggestedByAi = data.IsCategorySuggestedByAi;
             IssueDescription = data.IssueDescription;
+            IssueDescriptionVerbatim = data.IssueDescriptionVerbatim;
             Urgency = data.Urgency;
             RvUsage = data.RvUsage;
             HasExtendedWarranty = data.HasExtendedWarranty;
@@ -469,6 +482,7 @@ public sealed class IntakeWizardState
         IsUrgencySuggestedByAi = false;
         IsRvUsageSuggestedByAi = false;
         IssueDescription = string.Empty;
+        IssueDescriptionVerbatim = null;
         Urgency = null;
         RvUsage = null;
         HasExtendedWarranty = null;
@@ -726,6 +740,7 @@ internal sealed class IntakeWizardStateData
     public string IssueCategory { get; set; } = string.Empty;
     public bool IsCategorySuggestedByAi { get; set; }
     public string IssueDescription { get; set; } = string.Empty;
+    public string? IssueDescriptionVerbatim { get; set; }
     public string? Urgency { get; set; }
     public string? RvUsage { get; set; }
     public string? HasExtendedWarranty { get; set; }

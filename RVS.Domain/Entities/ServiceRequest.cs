@@ -47,10 +47,25 @@ public class ServiceRequest : EntityBase
     public AssetInfoEmbedded AssetInfo { get; set; } = new();
 
     /// <summary>
-    /// Customer-provided description of the issue.
+    /// The description the customer submitted — the AI-curated text when curation ran and the
+    /// customer accepted it, otherwise exactly what they typed. This is the text every
+    /// downstream consumer reads (paste block, asset ledger, categorization, assessment) and
+    /// the packet's "Issue" section. <see cref="IssueDescriptionVerbatim"/> keeps the words
+    /// curation started from.
     /// </summary>
     [JsonProperty("issueDescription")]
     public string IssueDescription { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The customer's words <em>before</em> AI curation (issue #601) — the raw speech-to-text
+    /// transcript for a dictated description, or the typed text for a typed one. Rendered in the
+    /// packet as "Complaint — word for word", so a service manager can always check the curated
+    /// text against what the customer actually said. <c>null</c> for service requests captured
+    /// before this was recorded; the packet then falls back to <see cref="IssueDescription"/>.
+    /// Never written to application logs (same rule as <see cref="IssueDescription"/>).
+    /// </summary>
+    [JsonProperty("issueDescriptionVerbatim")]
+    public string? IssueDescriptionVerbatim { get; set; }
 
     /// <summary>
     /// Category of the issue from a LookupSet.

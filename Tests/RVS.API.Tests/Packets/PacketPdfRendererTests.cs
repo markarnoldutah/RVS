@@ -56,6 +56,7 @@ public class PacketPdfRendererTests
             ReferenceCode = "A1B2C3D4",
         },
         IssueCategory = "Electrical",
+        CuratedIssue = "Generator shuts down under load after roughly ten minutes, with a hot smell.",
         IssueDescription = "Generator quits after ten minutes. Smells hot.",
         Diagnostics =
         [
@@ -109,10 +110,11 @@ public class PacketPdfRendererTests
         return index;
     }
 
-    // Spec B-2 order, with the AI assessment lifted above the complaint.
+    // Spec B-2 order, with the curated issue and the AI assessment lifted above the verbatim
+    // complaint (issue #601).
     private static readonly string[] SectionIdsInB2Order =
     [
-        "unit", "customer", "origin", "category", "ai-summary",
+        "unit", "customer", "origin", "category", "curated-issue", "ai-summary",
         "description", "diagnostics", "photos", "paste-block", "status-link",
     ];
 
@@ -465,6 +467,27 @@ public class PacketPdfRendererTests
     public void Build_WhenCategoryNull_ShouldFallBackToUncategorized()
     {
         Section(FullPacket() with { IssueCategory = null }, "category").Body.Should().Be("Uncategorized");
+    }
+
+    // ── 4b. Curated issue — the "Issue" section (issue #601) ─────────────
+
+    [Fact]
+    public void Build_ShouldHeadTheCuratedIssueSectionIssue_CarryingTheCuratedText()
+    {
+        var section = Section(FullPacket(), "curated-issue");
+
+        section.Heading.Should().Be("Issue");
+        section.Body.Should()
+            .Be("Generator shuts down under load after roughly ten minutes, with a hot smell.");
+    }
+
+    [Fact]
+    public void Build_WhenCuratedIssueIsNull_ShouldOmitTheIssueSection()
+    {
+        var layout = Layout(FullPacket() with { CuratedIssue = null });
+
+        layout.Sections.Should().NotContain(s => s.Id == "curated-issue");
+        layout.Sections.Should().Contain(s => s.Id == "description");
     }
 
     // ── 5. Description, verbatim ─────────────────────────────────────────
