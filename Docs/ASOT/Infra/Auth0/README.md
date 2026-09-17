@@ -41,8 +41,8 @@ Common edits:
 
 - Delete a resource. Removing a role or application from `baseline/` leaves it in the tenant; delete it in the dashboard. Within a managed resource the baseline is authoritative: a permission not in the baseline is removed from the RVS API, RVS roles and the Manager grant.
 - Touch users. Onboarding users (with `app_metadata`) is covered in the checklist and in `RVS_Identity.md`.
-- Manage tenant-wide settings (session lifetimes, attack protection, Universal Login prompts). While the tenant is shared with other products, those aren't RVS's to set.
-- Edit Manager `appsettings.*.json` or Key Vault. The apply script checks that the appsettings files listed in the tenant file point at this tenant and application, and reports any mismatch.
+- Manage tenant-wide settings (session lifetimes, attack protection, Universal Login prompts). While the tenant is shared with other products, most of those aren't RVS's to set. The exceptions RVS does set — the custom domain, Universal Login branding and the email provider — are deliberate, done by hand, and written up in [`../../Auth0/Auth0-Portal-Configuration-Checklist.md`](../../Auth0/Auth0-Portal-Configuration-Checklist.md) §6–§8. Each one reaches the other products in this tenant as well.
+- Edit Manager `appsettings.*.json` or Key Vault. The apply script checks that the appsettings files listed in the tenant file point at this tenant and application, and reports any mismatch. The authority it expects is `AUTH0_APP_AUTHORITY`, falling back to `https://$AUTH0_DOMAIN/`. Those differ once the tenant has a custom domain: the apps move to it, `AUTH0_DOMAIN` stays on the canonical `.us.auth0.com` host for the Management API.
 
 ## Splitting environments later
 
