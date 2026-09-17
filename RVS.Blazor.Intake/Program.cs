@@ -7,6 +7,7 @@ using RVS.Blazor.Intake.Services;
 using RVS.Blazor.Intake.State;
 using RVS.UI.Shared.Services;
 
+
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
