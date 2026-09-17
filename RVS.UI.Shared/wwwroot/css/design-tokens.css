@@ -33,8 +33,10 @@
     --rvs-status-new-fg: #2E7D32;
     --rvs-status-in-progress-bg: #E3F2FD;
     --rvs-status-in-progress-fg: #1565C0;
-    --rvs-status-awaiting-parts-bg: #FFF3E0;
-    --rvs-status-awaiting-parts-fg: #E65100;
+    --rvs-status-waiting-on-parts-bg: #FFF3E0;
+    --rvs-status-waiting-on-parts-fg: #E65100;
+    --rvs-status-waiting-on-customer-bg: #E0F2F1;
+    --rvs-status-waiting-on-customer-fg: #00695C;
     --rvs-status-completed-bg: #F3E5F5;
     --rvs-status-completed-fg: #6A1B9A;
     --rvs-status-cancelled-bg: #FAFAFA;
