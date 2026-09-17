@@ -6,7 +6,7 @@
 // the ACS resource; phone numbers are provisioned via the
 // Azure portal (not Bicep) for the MVP.
 //
-// When `customDomainName` is set (staging — mail.staging.rvintake.com;
+// When `customDomainName` is set (staging — mail-staging.rvintake.com;
 // prod — mail.rvintake.com; issue #532) a second, CustomerManaged domain is
 // provisioned alongside the Azure-managed one. The Azure-managed
 // *.azurecomm.net domain caps at 10 emails/hour with no support path to raise
@@ -120,7 +120,7 @@ resource azureManagedDomain 'Microsoft.Communication/emailServices/domains@2023-
 }
 
 // ── Custom (CustomerManaged) Sending Domain — #532 ────────────
-// Provisioned as mail.rvintake.com in prod and mail.staging.rvintake.com
+// Provisioned as mail.rvintake.com in prod and mail-staging.rvintake.com
 // in staging, each on its own ACS resource. On creation ACS returns
 // `verificationRecords` (Domain + SPF as TXT, DKIM + DKIM2 as CNAME) —
 // deterministic from the domain name and region, available before

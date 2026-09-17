@@ -89,7 +89,7 @@ param deployAcs bool = false
 @description('ACS data residency location.')
 param acsDataLocation string = 'United States'
 
-@description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in staging (mail.staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the follow-up link deploy (acsCustomDomainVerified) out of band — README "Deploy Production" step 4. (#532)')
+@description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in staging (mail-staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the follow-up link deploy (acsCustomDomainVerified) out of band — README "Deploy Production" step 4. (#532)')
 param acsCustomEmailDomain string = ''
 
 @description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. (#532)')
@@ -552,7 +552,7 @@ module communicationServices 'modules/communication-services.bicep' = if (deploy
 }
 
 // ── ACS custom sending domain — derived values (#532) ─────────
-// True in staging (mail.staging.rvintake.com) and prod (mail.rvintake.com).
+// True in staging (mail-staging.rvintake.com) and prod (mail.rvintake.com).
 var acsCustomDomainOn = deployAcs && !empty(acsCustomEmailDomain)
 
 // Packet-email From address: the custom verified subdomain when configured,
@@ -569,17 +569,25 @@ var acsEmailFromAddress = empty(acsMailFromSenderDomain) ? '' : 'DoNotReply@${ac
 // follow-up link deploy stay manual (README "Deploy Production" step 4).
 //
 // ACS's `verificationRecords[*].name` values are NOT zone-relative — confirmed
-// against a live `az communication email domain show` for mail.staging.rvintake.com
-// (2026-09-12): DKIM/DKIM2 come back as a bare selector with no domain suffix
-// at all ('selector1-azurecomm-prod-net._domainkey'), and Domain/SPF come back
-// as the full custom-domain FQDN ('mail.staging.rvintake.com'). Passing either
-// straight through as a dns.bicep record-set name inside the PARENT zone
-// (rvintake.com) is wrong: the FQDN form double-suffixes into
-// 'mail.staging.rvintake.com.rvintake.com', and the bare-selector form is
-// missing the subdomain host it needs to sit under. Both are corrected here
-// by combining them with the subdomain's own label under the zone —
-// 'mail.staging' for mail.staging.rvintake.com, 'mail' for mail.rvintake.com —
-// the same label the DMARC record below already uses.
+// against a live `az communication email domain show` (2026-09-12, when staging's
+// domain was still the two-label mail.staging.rvintake.com): DKIM/DKIM2 come back
+// as a bare selector with no domain suffix at all
+// ('selector1-azurecomm-prod-net._domainkey'), and Domain/SPF come back as the
+// full custom-domain FQDN. Passing either straight through as a dns.bicep
+// record-set name inside the PARENT zone (rvintake.com) is wrong: the FQDN form
+// double-suffixes (the observed failure was
+// 'mail.staging.rvintake.com.rvintake.com'), and the bare-selector form is
+// missing the subdomain host it needs to sit under. Both are corrected here by
+// combining them with the subdomain's own label under the zone — 'mail' for
+// mail.rvintake.com, 'mail-staging' for mail-staging.rvintake.com — the same
+// label the DMARC record below already uses.
+//
+// Since #634 that label is a SINGLE label in every environment: staging's domain
+// was renamed from mail.staging.rvintake.com to mail-staging.rvintake.com to match
+// the <function>-staging convention the other hosts use. The replace() below
+// handles either shape, so this is a parameter change rather than a code one —
+// but a single label is the shape the rest of this template assumes, and it
+// removes the double-suffix trap above rather than relying on the fix.
 var acsCustomDomainSubLabel = acsCustomDomainOn ? replace(acsCustomEmailDomain, '.${intakeZoneName}', '') : ''
 
 var acsCustomDomainCnameRecords = acsCustomDomainOn ? [
@@ -839,7 +847,7 @@ module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
 //           Production". Incremental deploys leave them alone thereafter.
 
 // The Intake zone also carries the ACS custom-sending-domain records
-// (SPF/DKIM/DMARC for mail.rvintake.com in prod, mail.staging.rvintake.com in
+// (SPF/DKIM/DMARC for mail.rvintake.com in prod, mail-staging.rvintake.com in
 // staging) when acsCustomEmailDomain is set — see "ACS custom sending domain —
 // derived values (#532)" above. The two use distinct record names, so neither
 // environment's deploy touches the other's. An env without acsCustomEmailDomain

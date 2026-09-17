@@ -26,7 +26,7 @@ public sealed class AcsEmailNotificationService : INotificationService
         _emailClient = emailClient;
         _logger = logger;
         // No default for the From address, on purpose. The sending domain is per-environment
-        // — mail.rvintake.com in prod, mail.staging.rvintake.com in staging — and Bicep injects
+        // — mail.rvintake.com in prod, mail-staging.rvintake.com in staging — and Bicep injects
         // it as an app setting. Any hardcoded fallback is wrong somewhere, and a wrong sender is
         // not a soft failure: ACS rejects the send outright for an unverified domain, and
         // PacketGenerationService swallows packet-email failures, so it surfaces as a packet that

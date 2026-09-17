@@ -781,7 +781,7 @@ union traces, exceptions
 
 `communication-services.bicep` provisions the ACS account, an Email Service, and
 an **Azure-managed email domain** (`<guid>.azurecomm.net`). In **staging and prod**
-it also provisions a **CustomerManaged sending subdomain** — `mail.staging.rvintake.com`
+it also provisions a **CustomerManaged sending subdomain** — `mail-staging.rvintake.com`
 and `mail.rvintake.com` respectively (`acsCustomEmailDomain`, issue `#532`) — and
 links both domains to that environment's account.
 `AcsEmailNotificationService` sends the service-department packet email (`#437`)
@@ -798,12 +798,12 @@ propagation can take a few minutes.
 
 **Local development** sends through **staging's** ACS resource, never prod's.
 `RVS.API/appsettings.Development.json` sets the staging endpoint and the From
-address `DoNotReply@mail.staging.rvintake.com`, and the API authenticates with
+address `DoNotReply@mail-staging.rvintake.com`, and the API authenticates with
 `AzureCliCredential` (the same shortcut Blob uses). Your `az login` identity
 therefore needs **Contributor** on `acs-rvs-notify-staging-wus3-s01-001`;
 subscription Owner already covers it. Local intake runs send real email.
 
-### Custom sending domains — `mail.rvintake.com`, `mail.staging.rvintake.com` (`#532`)
+### Custom sending domains — `mail.rvintake.com`, `mail-staging.rvintake.com` (`#532`)
 
 The Azure-managed `*.azurecomm.net` domain caps at **5 emails/min, 10/hour with
 no support path to raise it** (`#521`) and carries no sender reputation — a spam
@@ -851,11 +851,11 @@ Commands for each are in `deployment-cmds.azcli` §4e. Summary:
 2. **Read back the real sender domain** (`properties.fromSenderDomain`) and confirm the deployed `AzureCommunicationServices__Email__FromAddress` app setting is `DoNotReply@<that domain>`.
 3. **Confirm the RBAC grant landed** (`az role assignment list --scope <acs-resource-id>`). If not (older Bicep, or propagation), assign **Contributor** on the ACS resource by hand — §4e (1).
 4. **Check the ACS email send quota.** A verified custom domain starts at 30/min, 100/hour — enough for staging and for the prod pilot, so there is no request to file at bring-up. Prod raises it against `mail.rvintake.com` when the `#603` volume alert fires — "Deploy Production" step 4. An environment left on the Azure-managed domain is capped at 10/hour, and no request lifts that.
-5. **Set a real recipient on a staging Location.** Seed data uses RFC 2606 `.example.com` addresses that hard-bounce. Point at least one location's `packetConfig.recipients` at a mailbox you control — `PUT /api/dealers/{dealerId}/locations/{locationId}` or directly in Cosmos. `packetConfig.enabled` defaults to `true`. Only ever use mailboxes you control in staging: it is the rule that keeps `mail.staging.rvintake.com` from affecting `rvintake.com`'s reputation.
+5. **Set a real recipient on a staging Location.** Seed data uses RFC 2606 `.example.com` addresses that hard-bounce. Point at least one location's `packetConfig.recipients` at a mailbox you control — `PUT /api/dealers/{dealerId}/locations/{locationId}` or directly in Cosmos. `packetConfig.enabled` defaults to `true`. Only ever use mailboxes you control in staging: it is the rule that keeps `mail-staging.rvintake.com` from affecting `rvintake.com`'s reputation.
 6. **Bind the custom hostnames on the API Web App.** `go.<intake zone>` (`#599`) and `api.<corporate zone>` (`#633`). Bicep writes both sets of DNS records but can declare neither binding — see "Bind the `go.<zone>` redirect host" and "Bind the `api.<zone>` host" above. The `apiHostBindingAction` deployment output repeats this. Until the `api.` host answers, leave the Blazor apps' `ApiBaseUrl` on the `*.azurewebsites.net` name.
 7. **Run the end-to-end check.** Complete a staging intake; App Insights should show `ACS packet email send initiated …` from `AcsEmailNotificationService`. A failure logs `Packet email dispatch failed …` from `PacketGenerationService` and is otherwise swallowed (packet generation still reports `Succeeded`; retry/idempotency is `#438`). Confirm the mail arrives with the PDF + photo attachments, subject `[RVS] {category} — {year} {make} {model} — {customer last name}`.
 
-> **Prod sends from `mail.rvintake.com` and staging from `mail.staging.rvintake.com`,
+> **Prod sends from `mail.rvintake.com` and staging from `mail-staging.rvintake.com`,
 > not the managed domain** — provisioned by Bicep (`acsCustomEmailDomain`), verified
 > by hand, and warmed in prod only. See "Custom sending domains" above and "Deploy
 > Production" step 4.

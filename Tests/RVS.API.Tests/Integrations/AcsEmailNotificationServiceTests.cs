@@ -131,7 +131,7 @@ public class AcsEmailNotificationServiceTests
     public void Constructor_WhenFromAddressIsMissing_ShouldThrowInvalidOperationException(string? fromAddress)
     {
         // There is no correct default here: the sending domain is per-environment
-        // (mail.rvintake.com in prod, mail.staging.rvintake.com in staging) and is injected
+        // (mail.rvintake.com in prod, mail-staging.rvintake.com in staging) and is injected
         // by Bicep as an app setting. Falling back to a hardcoded address means ACS rejects
         // every send for an unverified sender — and packet email failures are swallowed by
         // PacketGenerationService, so that lands as silence rather than an error. Fail loudly.
@@ -159,7 +159,7 @@ public class AcsEmailNotificationServiceTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["AzureCommunicationServices:Email:FromAddress"] = "DoNotReply@mail.staging.rvintake.com"
+                ["AzureCommunicationServices:Email:FromAddress"] = "DoNotReply@mail-staging.rvintake.com"
             })
             .Build();
 
@@ -184,7 +184,7 @@ public class AcsEmailNotificationServiceTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["AzureCommunicationServices:Email:FromAddress"] = "DoNotReply@mail.staging.rvintake.com",
+                ["AzureCommunicationServices:Email:FromAddress"] = "DoNotReply@mail-staging.rvintake.com",
                 ["AzureCommunicationServices:Email:SenderDisplayName"] = "Test RVS"
             })
             .Build();

@@ -72,15 +72,33 @@ param deployAcs = true
 // never prod's. ACS tracks failures, the suppression list and send quota per
 // resource and domain, and staging fails many sends (seeded recipients are
 // .example.com), so sharing prod's would spend prod's bounce budget while it
-// warms. A sibling of mail.rvintake.com, not a child of it. Replaces the
+// warms. A sibling of mail.rvintake.com, not a child of it — literally so since
+// #634 renamed it from mail.staging.rvintake.com: both are now direct labels
+// under rvintake.com, which also makes the derived DNS sub-label a single label
+// in every environment, the shape the rest of main.bicep already assumes.
+// Replaces the
 // Azure-managed *.azurecomm.net domain (10/hour, not raisable, lands in Junk).
 // Manual follow-up is verification only — no quota request, no warming:
 // README "Communication Services — Email". Keep staging recipients to
 // mailboxes we control; that is what keeps rvintake.com's reputation clean.
-param acsCustomEmailDomain = 'mail.staging.rvintake.com'
+param acsCustomEmailDomain = 'mail-staging.rvintake.com'
 param dmarcReportingAddress = 'dmarc-reports@rvserviceflow.com'
-// Verified and linked. Must stay true: false unlinks the domain on redeploy.
-param acsCustomDomainVerified = true
+// ⚠ MID-MIGRATION (#634): deliberately false, and this is the ONLY correct value
+// right now. mail-staging.rvintake.com is a NEW ACS domain — the resource is keyed
+// by the domain string, so renaming provisions a fresh one that has never been
+// verified. Linking an unverified domain fails the deploy.
+//
+// Sequence, all against THIS file (never prod's):
+//   1. deploy with false  → creates the domain, writes its DKIM/DKIM2/SPF/
+//      ownership/DMARC records under the new `mail-staging` label
+//   2. az communication email domain initiate-verification ×4, confirm Verified
+//   3. flip this to true and deploy again → links it
+//
+// Between 1 and 3 staging sends From the Azure-managed *.azurecomm.net domain,
+// capped at 10/hour. That is expected, and staging-only.
+//
+// Once step 3 is done this must stay true: false unlinks the domain on redeploy.
+param acsCustomDomainVerified = false
 
 // Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
 param deploySwa = true
