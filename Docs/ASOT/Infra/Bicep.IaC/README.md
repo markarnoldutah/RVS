@@ -316,24 +316,27 @@ Substitute the API app name, its resource group, and the label/zone.
 ```bash
 APP=app-rvs-api-prod-wus3              # staging: app-rvs-api-staging-wus3
 RG=rg-rvs-prod-westus3                 # the API's resource group
-HOST=go.rvintake.com                   # staging: go-staging.rvintake.com
+GO_HOST=go.rvintake.com                # staging: go-staging.rvintake.com
+# NOT "HOST" — zsh defines HOST as a built-in holding the local machine name,
+# so a line pasted into a fresh zsh resolves it to your laptop and openssl
+# reports "Could not find certificate from <stdin>". Hit for real, 2026-09-16.
 
 # 1. Confirm DNS is in place (Bicep wrote both; these should already answer)
-dig +short CNAME "$HOST"               # -> <app>.azurewebsites.net
-dig +short TXT  "asuid.${HOST%%.*}.rvintake.com"
+dig +short CNAME "$GO_HOST"               # -> <app>.azurewebsites.net
+dig +short TXT  "asuid.${GO_HOST%%.*}.rvintake.com"
 
 # 2. Bind the hostname (SNI SSL comes with the certificate in step 3)
-az webapp config hostname add --webapp-name "$APP" -g "$RG" --hostname "$HOST"
+az webapp config hostname add --webapp-name "$APP" -g "$RG" --hostname "$GO_HOST"
 
 # 3. Issue and bind a free App Service managed certificate
-az webapp config ssl create --name "$APP" -g "$RG" --hostname "$HOST"
+az webapp config ssl create --name "$APP" -g "$RG" --hostname "$GO_HOST"
 
 # Read the thumbprint off the certificate RESOURCE, not `ssl list`. A freshly
 # created managed certificate has a null serverFarmId, and `az webapp config
 # ssl list` filters those out — it returns [] even though the certificate
 # exists and is valid. Verified on staging, 2026-09-16.
 THUMB=$(az resource show --resource-type Microsoft.Web/certificates \
-  -n "$HOST" -g "$RG" --query properties.thumbprint -o tsv)
+  -n "$GO_HOST" -g "$RG" --query properties.thumbprint -o tsv)
 echo "$THUMB"   # must be non-empty before the bind
 
 az webapp config ssl bind --name "$APP" -g "$RG" \
@@ -342,17 +345,17 @@ az webapp config ssl bind --name "$APP" -g "$RG" \
 # 4. Confirm the binding took. These fields are FLATTENED to the top level —
 #    querying properties.sslState returns null and means nothing.
 az webapp config hostname list --webapp-name "$APP" -g "$RG" \
-  --query "[?name=='$HOST'].{host:name, sslState:sslState, thumb:thumbprint}" -o json
+  --query "[?name=='$GO_HOST'].{host:name, sslState:sslState, thumb:thumbprint}" -o json
 # expect sslState "SniEnabled" and the thumbprint from step 3
 
 # 5. Verify end to end. The SNI binding takes a minute or two to reach the
 #    front ends; until it does, TLS serves the *.azurewebsites.net wildcard and
 #    curl fails with "no alternative certificate subject name matches". That is
 #    propagation, not a misconfiguration — re-run until the CN matches.
-echo | openssl s_client -connect "$HOST:443" -servername "$HOST" 2>/dev/null \
-  | openssl x509 -noout -subject          # expect CN=$HOST
+echo | openssl s_client -connect "$GO_HOST:443" -servername "$GO_HOST" 2>/dev/null \
+  | openssl x509 -noout -subject          # expect CN=$GO_HOST
 
-curl -sSI "https://$HOST/<some-location-slug>?src=qr" | head -5
+curl -sSI "https://$GO_HOST/<some-location-slug>?src=qr" | head -5
 ```
 
 Then set `Intake:RedirectBaseUrl` for that environment to
