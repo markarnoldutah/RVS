@@ -33,7 +33,7 @@ public static class ManagerDeepLinks
     /// <summary>
     /// Builds the manager-app links for one service request.
     /// </summary>
-    /// <param name="managerAppBaseUrl">Origin of the manager app, e.g. <c>https://manager.rvserviceflow.com</c>.</param>
+    /// <param name="managerAppBaseUrl">Origin of the manager app, e.g. <c>https://manager.rvintake.com</c>.</param>
     /// <param name="serviceRequestId">The service request id.</param>
     /// <returns>The links, or <c>null</c> when the base URL is blank or not http(s) — the email then goes out without them.</returns>
     /// <exception cref="ArgumentException"><paramref name="serviceRequestId"/> is blank.</exception>

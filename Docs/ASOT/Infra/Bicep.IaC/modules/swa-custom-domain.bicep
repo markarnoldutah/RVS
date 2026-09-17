@@ -26,7 +26,7 @@ targetScope = 'resourceGroup'
 @description('Name of the existing Static Web App in this resource group.')
 param staticSiteName string
 
-@description('Custom hostname to bind (e.g. manager-staging.rvserviceflow.com).')
+@description('Custom hostname to bind (e.g. manager-staging.rvintake.com).')
 param hostname string
 
 @description('Validation method. cname-delegation for subdomains (the CNAME must already resolve); dns-txt-token for apex domains.')

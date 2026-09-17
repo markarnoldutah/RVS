@@ -27,7 +27,7 @@ Infrastructure as Code for the RVS Azure platform. Supports **independent deploy
 | Communication Services | `communication-services.bicep` | Email + SMS | Email + SMS |
 | Static Web App (Intake) | `static-web-app.bicep` | Standard | Standard |
 | Static Web App (Manager) | `static-web-app.bicep` | Standard | Standard |
-| DNS (Manager + Intake zones) | `dns.bicep` (×2) | Shared zones | Shared zones |
+| DNS (corporate + intake zones) | `dns.bicep` (×2) | Shared zones | Shared zones |
 
 ---
 
@@ -125,7 +125,7 @@ az deployment sub create \
 
 One parameter file, `prod.bicepparam`, deployable as committed — there is no
 phase 1 / phase 2 and nothing to fill in afterwards. Bicep stands up every
-resource, binds `manager.rvserviceflow.com`, and writes an **ALIAS** A record
+resource, binds `manager.rvintake.com`, and writes an **ALIAS** A record
 at the `rvintake.com` apex that tracks the Intake SWA (no pinned IP). The one
 thing it does not do is *register* the apex with the SWA: Azure mints the
 ownership token at registration time, so that is a one-time step you do by
@@ -140,7 +140,7 @@ before relying on any record Bicep writes:
 
 ```bash
 dig NS rvintake.com +short          # expect ns*-0*.azure-dns.* (x4)
-dig NS rvserviceflow.com +short     # same check for the Manager zone
+dig NS rvserviceflow.com +short     # same check for the corporate zone
 ```
 
 If a check returns something else, copy the zone's current nameservers
@@ -197,7 +197,7 @@ az deployment sub create `
   --name "rvs-prod-$ts"
 ```
 
-When it finishes: `manager.rvserviceflow.com` is bound and serving;
+When it finishes: `manager.rvintake.com` is bound and serving;
 `rvintake.com` resolves (the ALIAS record is in place) but the SWA does not
 yet accept that hostname, so the apex returns an Azure placeholder page —
 and `https://` fails with a cert-name mismatch — until step 2. The
@@ -247,7 +247,7 @@ az staticwebapp hostname show -n stapp-rvs-intake-prod -g rg-rvs-prod-westus2 \
 
 ```bash
 dig +short rvintake.com A                       # resolves via the ALIAS
-dig +short manager.rvserviceflow.com CNAME      # → <name>.azurestaticapps.net
+dig +short manager.rvintake.com CNAME      # → <name>.azurestaticapps.net
 az staticwebapp hostname list -n stapp-rvs-intake-prod  -g rg-rvs-prod-westus2 -o table
 az staticwebapp hostname list -n stapp-rvs-manager-prod -g rg-rvs-prod-westus2 -o table
 curl -sSI https://rvintake.com | head -1        # 200 once the app is deployed by CI
@@ -366,6 +366,39 @@ hands out working but untagged links, rather than links to a host that does not
 answer. Managed certificates renew automatically; redeploys leave the binding
 alone.
 
+### Retire the old Manager host (`#632`)
+
+The Manager SWA moved from `manager.rvserviceflow.com` to
+`manager.rvintake.com` (`manager-staging.*` in staging). Bicep writes the new
+CNAME and binds the new hostname on its own — but **removing the old record
+from the template does not delete it from Azure.** Deployments run in
+incremental mode, which leaves a record set nobody declares any more exactly
+where it is, still resolving, still bound, still holding a certificate.
+
+So the teardown is explicit, once per environment, and only **after** the new
+host is confirmed serving:
+
+```bash
+ENV=staging                                   # or prod
+SUFFIX=-staging                               # or "" for prod
+
+# 1. Unbind the hostname from the SWA (releases its managed certificate)
+az staticwebapp hostname delete \
+  -n "stapp-rvs-manager-$ENV" -g "rg-rvs-$ENV-westus2" \
+  --hostname "manager$SUFFIX.rvserviceflow.com"
+
+# 2. Delete the now-orphaned CNAME from the corporate zone
+az network dns record-set cname delete \
+  -g rg-rvs-prod-westus3 -z rvserviceflow.com -n "manager$SUFFIX"
+
+# 3. Confirm it is gone — must return nothing, not a redirect
+dig +short "manager$SUFFIX.rvserviceflow.com"
+```
+
+Do **not** delete the `rvserviceflow.com` zone itself. It stays under IaC (the
+`dnsApi` module declares it with no records) because the DMARC `rua` mailbox is
+on that domain and the API origin host binds there next — `#633`.
+
 ### Pre-Provision Resource Groups (all environments)
 
 **PowerShell**
@@ -482,9 +515,11 @@ az deployment sub create \
 
 Both DNS zones (`rvserviceflow.com`, `rvintake.com`) live in the **prod** RG
 (`rg-rvs-prod-westus3`) by design — apex zones are global. The staging
-deployment writes CNAME records into those zones (`manager-staging`,
-`staging`), so the staging GitHub Actions service principal needs write
-access to the zones.
+deployment writes CNAME records into those zones (`manager-staging` and
+`staging`, both now in `rvintake.com` — #632), so the staging GitHub Actions
+service principal needs write access to the zones. `rvserviceflow.com` carries
+no records of its own yet; it is kept under IaC because the zone must survive
+for the DMARC rua mailbox and the API origin host (#633).
 
 We grant **DNS Zone Contributor** (`befefa01-2a29-4197-83a8-272ff33ce314`)
 **at the zone scope only** — never at the prod RG scope.

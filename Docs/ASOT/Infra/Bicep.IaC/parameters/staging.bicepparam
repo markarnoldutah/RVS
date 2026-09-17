@@ -33,7 +33,7 @@ param deployStorageAccount = true
 param storageAllowSharedKeyAccess = false
 param storageCorsOrigins = [
   'https://staging.rvintake.com'
-  'https://manager-staging.rvserviceflow.com'
+  'https://manager-staging.rvintake.com'
 ]
 
 // Developer / manual blob access on the staging storage account. Local API runs
@@ -88,5 +88,6 @@ param swaLocation = 'westus2'
 param swaResourceGroupName = 'rg-rvs-staging-westus2'
 param swaSkuName = 'Standard'
 
-// DNS — Manager: CNAME manager-staging.rvserviceflow.com. Intake: CNAME staging.rvintake.com (separate zone).
+// DNS — Manager: CNAME manager-staging.rvintake.com (#632). Intake: CNAME staging.rvintake.com.
+//       Both now in the rvintake.com zone; rvserviceflow.com is corporate-only.
 param deployDns = true
