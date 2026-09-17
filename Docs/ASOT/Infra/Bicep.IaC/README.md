@@ -366,6 +366,81 @@ hands out working but untagged links, rather than links to a host that does not
 answer. Managed certificates renew automatically; redeploys leave the binding
 alone.
 
+### Bind the `api.<zone>` host (`#633`)
+
+`api.rvserviceflow.com` (prod) and `api-staging.rvserviceflow.com` (staging)
+are the origin the browser apps call. **This is the one host that stays on the
+corporate domain** — an XHR target is seen in devtools and a CSP, not on a
+sticker. The `go.<zone>` redirect fronts the same Web App from the intake zone,
+because a link on a QR code very much is customer-facing.
+
+Until `#633` the name existed only as the Auth0 resource-server identifier — an
+opaque audience string with no DNS behind it — while both Blazor apps called
+the `*.azurewebsites.net` default hostname. **The audience value is unrelated
+and does not change**; that it matches this hostname is a convenience, not a
+coupling. Changing it would invalidate every issued token and grant.
+
+Bicep writes the CNAME and the `asuid.<label>` ownership TXT. It does not
+declare the hostname binding or the certificate, for the same reason as the
+`go.<zone>` host above: the binding waits on DNS and the certificate waits on
+the binding.
+
+Run once per environment, after a deploy that has written the records.
+
+```bash
+APP=app-rvs-api-prod-wus3              # staging: app-rvs-api-staging-wus3
+RG=rg-rvs-prod-westus3                 # the API's resource group
+API_HOST=api.rvserviceflow.com         # staging: api-staging.rvserviceflow.com
+# NOT "HOST" — zsh defines HOST as a built-in holding the local machine name,
+# so a line pasted into a fresh zsh resolves it to your laptop and openssl
+# reports "Could not find certificate from <stdin>".
+
+# 1. Confirm DNS is in place (Bicep wrote both)
+dig +short CNAME "$API_HOST"                          # -> <app>.azurewebsites.net
+dig +short TXT  "asuid.${API_HOST%%.*}.rvserviceflow.com"
+
+# 2. Bind the hostname
+az webapp config hostname add --webapp-name "$APP" -g "$RG" --hostname "$API_HOST"
+
+# 3. Issue and bind a free App Service managed certificate
+az webapp config ssl create --name "$APP" -g "$RG" --hostname "$API_HOST"
+
+# Read the thumbprint off the certificate RESOURCE, not `ssl list`. A freshly
+# created managed certificate has a null serverFarmId, and `az webapp config
+# ssl list` filters those out — it returns [] even though the certificate
+# exists and is valid.
+THUMB=$(az resource show --resource-type Microsoft.Web/certificates \
+  -n "$API_HOST" -g "$RG" --query properties.thumbprint -o tsv)
+echo "$THUMB"   # must be non-empty before the bind
+
+az webapp config ssl bind --name "$APP" -g "$RG" \
+  --certificate-thumbprint "$THUMB" --ssl-type SNI
+
+# 4. Confirm. These fields are FLATTENED to the top level — querying
+#    properties.sslState returns null and means nothing.
+az webapp config hostname list --webapp-name "$APP" -g "$RG" \
+  --query "[?name=='$API_HOST'].{host:name, sslState:sslState, thumb:thumbprint}" -o json
+
+# 5. Verify end to end. The SNI binding takes a minute or two to reach the front
+#    ends; until it does, TLS serves the *.azurewebsites.net wildcard and curl
+#    fails with "no alternative certificate subject name matches". That is
+#    propagation, not a misconfiguration — re-run until the CN matches.
+echo | openssl s_client -connect "$API_HOST:443" -servername "$API_HOST" 2>/dev/null \
+  | openssl x509 -noout -subject          # expect CN=$API_HOST
+
+curl -sS "https://$API_HOST/health"
+```
+
+The App Service now answers on two custom hostnames — this one and
+`go.<intake zone>` — plus its default. That is intended.
+
+Once **both** environments answer, drop the two `*.azurewebsites.net` entries
+from `connect-src` in
+[`RVS.Blazor.Manager/wwwroot/staticwebapp.config.json`](../../../../RVS.Blazor.Manager/wwwroot/staticwebapp.config.json).
+They are kept there during the cutover so the apps keep working if a binding
+lags; leaving them permanently would mean the CSP still permits an origin
+nothing should be using.
+
 ### Retire the old Manager host (`#632`)
 
 The Manager SWA moved from `manager.rvserviceflow.com` to
@@ -772,7 +847,8 @@ Commands for each are in `deployment-cmds.azcli` §4e. Summary:
 3. **Confirm the RBAC grant landed** (`az role assignment list --scope <acs-resource-id>`). If not (older Bicep, or propagation), assign **Contributor** on the ACS resource by hand — §4e (1).
 4. **Check the ACS email send quota.** A verified custom domain starts at 30/min, 100/hour — enough for staging and for the prod pilot, so there is no request to file at bring-up. Prod raises it against `mail.rvintake.com` when the `#603` volume alert fires — "Deploy Production" step 4. An environment left on the Azure-managed domain is capped at 10/hour, and no request lifts that.
 5. **Set a real recipient on a staging Location.** Seed data uses RFC 2606 `.example.com` addresses that hard-bounce. Point at least one location's `packetConfig.recipients` at a mailbox you control — `PUT /api/dealers/{dealerId}/locations/{locationId}` or directly in Cosmos. `packetConfig.enabled` defaults to `true`. Only ever use mailboxes you control in staging: it is the rule that keeps `mail.staging.rvintake.com` from affecting `rvintake.com`'s reputation.
-6. **Run the end-to-end check.** Complete a staging intake; App Insights should show `ACS packet email send initiated …` from `AcsEmailNotificationService`. A failure logs `Packet email dispatch failed …` from `PacketGenerationService` and is otherwise swallowed (packet generation still reports `Succeeded`; retry/idempotency is `#438`). Confirm the mail arrives with the PDF + photo attachments, subject `[RVS] {category} — {year} {make} {model} — {customer last name}`.
+6. **Bind the custom hostnames on the API Web App.** `go.<intake zone>` (`#599`) and `api.<corporate zone>` (`#633`). Bicep writes both sets of DNS records but can declare neither binding — see "Bind the `go.<zone>` redirect host" and "Bind the `api.<zone>` host" above. The `apiHostBindingAction` deployment output repeats this. Until the `api.` host answers, leave the Blazor apps' `ApiBaseUrl` on the `*.azurewebsites.net` name.
+7. **Run the end-to-end check.** Complete a staging intake; App Insights should show `ACS packet email send initiated …` from `AcsEmailNotificationService`. A failure logs `Packet email dispatch failed …` from `PacketGenerationService` and is otherwise swallowed (packet generation still reports `Succeeded`; retry/idempotency is `#438`). Confirm the mail arrives with the PDF + photo attachments, subject `[RVS] {category} — {year} {make} {model} — {customer last name}`.
 
 > **Prod sends from `mail.rvintake.com` and staging from `mail.staging.rvintake.com`,
 > not the managed domain** — provisioned by Bicep (`acsCustomEmailDomain`), verified
