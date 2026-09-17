@@ -139,6 +139,9 @@ param intakeDnsPrefix string = environmentName == 'prod' ? '' : environmentName
 @description('Subdomain prefix for the channel-tagging redirect host that fronts the API (Spec A-13, #599) — "go" in prod (go.rvintake.com), "go-<env>" elsewhere (go-staging.rvintake.com). A sibling label rather than a child of the Intake host, so each environment\'s redirect is independent and a single-label wildcard certificate is never needed.')
 param redirectDnsPrefix string = environmentName == 'prod' ? 'go' : 'go-${environmentName}'
 
+@description('Subdomain prefix for the API origin host in the corporate zone (#633) — "api" in prod (api.rvserviceflow.com), "api-<env>" elsewhere (api-staging.rvserviceflow.com). This is the origin the browser apps call; it is not customer-facing, which is why it stays on rvserviceflow.com while every host a human reads moved to rvintake.com. Note the Auth0 resource-server identifier is the same string, but that is an opaque audience value and unrelated — do not couple them.')
+param apiDnsPrefix string = environmentName == 'prod' ? 'api' : 'api-${environmentName}'
+
 @description('Object IDs of principals (e.g. the staging GitHub Actions service principal) that need DNS Zone Contributor on the shared zones. Granted at zone scope so they cannot touch other prod resources. Set this in prod params, not staging.')
 param dnsZoneContributorPrincipalIds string[] = []
 
@@ -651,6 +654,38 @@ var redirectTxtRecords = deployAppService ? [
   }
 ] : []
 
+// ── api.rvserviceflow.com — the API origin (#633) ─────────────
+//
+// Until this, api.rvserviceflow.com existed only as the Auth0 resource-server identifier: an
+// opaque audience string with no DNS behind it, while both Blazor apps called the API at its
+// *.azurewebsites.net default hostname. This binds the name for real.
+//
+// In the CORPORATE zone, unlike every other host: an XHR origin is not something a customer
+// reads. The redirect host above fronts the same Web App from the intake zone, because a link
+// on a QR sticker very much is.
+//
+// Same split as the redirect host: the CNAME and the "asuid" ownership TXT are declared here
+// (the site supplies customDomainVerificationId itself, so neither needs a human), but the
+// hostname binding and the managed certificate are NOT — the binding waits on DNS to validate
+// and the certificate waits on the binding, so a first bring-up from a single template
+// deadlocks on records that template has not written yet. Both are one-time out-of-band steps,
+// per environment — README.md "Bind the api.<zone> host". Redeploys never touch them.
+var apiCnameRecords = deployAppService ? [
+  {
+    name: apiDnsPrefix
+    #disable-next-line BCP318
+    target: appService.outputs.defaultHostname
+  }
+] : []
+
+var apiTxtRecords = deployAppService ? [
+  {
+    name: 'asuid.${apiDnsPrefix}'
+    #disable-next-line BCP318
+    values: [ appService.outputs.customDomainVerificationId ]
+  }
+] : []
+
 // ── manager.rvintake.com — the dealer-facing Manager SWA (#632) ────
 //
 // In the INTAKE zone, not the corporate one: a service advisor signs in here, so it carries the
@@ -770,22 +805,21 @@ module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
 
 // ── DNS: corporate zone (rvserviceflow.com) ───────────────
 // No customer-facing hostname lives here: the Manager SWA moved to the intake
-// zone in #632, so every host a human types is on rvintake.com.
+// zone in #632, so every host a human reads is on rvintake.com. What remains is
+// the API origin (#633) — an XHR target, seen in devtools and a CSP, not on a
+// sticker — plus the DMARC rua mailbox on this domain.
 //
-// The module is kept with no records rather than deleted, for two reasons.
-// The zone itself must keep existing — the DMARC rua mailbox is on this domain,
-// and #633 binds the API origin (api / api-<env>) here next. And dns.bicep
-// CREATES the zone, so dropping the only call that names this zone would let a
-// deploy delete it out from under the records added by hand.
-//
-// dns.bicep defaults every record array to [], so this is a no-op on records
-// while still keeping the zone under IaC.
+// Only the CNAME and asuid TXT are declared. The hostname binding and managed
+// certificate are out-of-band, one-time, per environment: see the apiCnameRecords
+// comment above and README.md "Bind the api.<zone> host".
 
 module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
   name: 'deploy-dns-api-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
   params: {
     zoneName: apiZoneName
+    cnameRecords: apiCnameRecords
+    txtRecords: apiTxtRecords
   }
 }
 
@@ -1071,10 +1105,18 @@ output intakeFqdn string = environmentName == 'prod' ? intakeZoneName : '${intak
 @description('FQDN of the channel-tagging redirect host (Spec A-13, #599). Its DNS records are deployed; the hostname binding and managed certificate are one-time out-of-band steps — README.md "Bind the go.<zone> redirect host".')
 output redirectFqdn string = '${redirectDnsPrefix}.${intakeZoneName}'
 
+@description('FQDN of the API origin host (#633). Its DNS records are deployed; the hostname binding and managed certificate are one-time out-of-band steps — README.md "Bind the api.<zone> host".')
+output apiFqdn string = '${apiDnsPrefix}.${apiZoneName}'
+
 @description('FQDN for the Manager SWA custom domain, in the intake zone (#632).')
 output managerFqdn string = '${managerDnsPrefix}.${intakeZoneName}'
 
 @description('Manual follow-up after a prod deploy. Bicep writes the rvintake.com apex ALIAS record but cannot bind the apex custom domain — Azure mints the ownership token only at registration time. Until this one-time step is done, rvintake.com resolves but https:// fails with a cert error. Empty for non-prod (subdomain CNAMEs bind in-template).')
 output intakeApexAction string = (deploySwa && deployDns && environmentName == 'prod')
   ? 'ACTION REQUIRED: register the rvintake.com apex on the Intake SWA (dns-txt-token) — see Infra/Bicep.IaC/README.md "Deploy Production" step 2.'
+  : ''
+
+@description('Manual follow-up after any deploy that first introduces the API origin host (#633). Bicep writes the CNAME and the asuid ownership TXT, but the App Service hostname binding waits on DNS to validate and the managed certificate waits on the binding, so neither can be declared in the same template that writes the records. Until this one-time step is run, the host resolves but TLS serves the *.azurewebsites.net wildcard and the apps must keep calling the default hostname.')
+output apiHostBindingAction string = (deployAppService && deployDns)
+  ? 'ACTION REQUIRED: bind ${apiDnsPrefix}.${apiZoneName} on the API Web App and issue its managed certificate — see Infra/Bicep.IaC/README.md "Bind the api.<zone> host". Once it answers, repoint ApiBaseUrl in both Blazor apps and drop the *.azurewebsites.net entries from the Manager CSP.'
   : ''
