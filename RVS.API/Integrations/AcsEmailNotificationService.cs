@@ -15,6 +15,9 @@ public sealed class AcsEmailNotificationService : INotificationService
     private readonly string _fromAddress;
     private readonly string _senderDisplayName;
 
+    /// <summary>The display name shown as the sender on every outgoing message.</summary>
+    internal string SenderDisplayName => _senderDisplayName;
+
     public AcsEmailNotificationService(
         EmailClient emailClient,
         ILogger<AcsEmailNotificationService> logger,
@@ -22,10 +25,24 @@ public sealed class AcsEmailNotificationService : INotificationService
     {
         _emailClient = emailClient;
         _logger = logger;
-        _fromAddress = configuration["AzureCommunicationServices:Email:FromAddress"]
-            ?? "noreply@notifications.rvserviceflow.com";
+        // No default for the From address, on purpose. The sending domain is per-environment
+        // — mail.rvintake.com in prod, mail.staging.rvintake.com in staging — and Bicep injects
+        // it as an app setting. Any hardcoded fallback is wrong somewhere, and a wrong sender is
+        // not a soft failure: ACS rejects the send outright for an unverified domain, and
+        // PacketGenerationService swallows packet-email failures, so it surfaces as a packet that
+        // simply never arrives. Better to fail where the cause is legible.
+        _fromAddress = configuration["AzureCommunicationServices:Email:FromAddress"] is { } configured
+                       && !string.IsNullOrWhiteSpace(configured)
+            ? configured
+            : throw new InvalidOperationException(
+                "AzureCommunicationServices:Email:FromAddress is not configured. In Azure it is injected "
+                + "by Bicep (app-service-config.bicep) as AzureCommunicationServices__Email__FromAddress; "
+                + "locally it is set in appsettings.Development.json.");
+
+        // A display name does have a sensible default, but it is the customer-facing brand,
+        // matching appsettings.json — the packet email is read by a service advisor.
         _senderDisplayName = configuration["AzureCommunicationServices:Email:SenderDisplayName"]
-            ?? "RV Service Flow";
+            ?? "RV Intake";
     }
 
     /// <inheritdoc />

@@ -232,13 +232,13 @@ public class NotificationOrchestratorTests
     public async Task SendMagicLinkAsync_DefaultOptOuts_ShouldSendBothChannels()
     {
         await _sut.SendMagicLinkAsync(
-            false, false, "user@example.com", "+18015551234", "https://app.rvserviceflow.com/status/abc");
+            false, false, "user@example.com", "+18015551234", "https://rvintake.com/status/abc");
 
         _emailMock.Verify(
             e => e.SendEmailAsync("user@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Once);
         _smsMock.Verify(
-            s => s.SendMagicLinkSmsAsync("+18015551234", "https://app.rvserviceflow.com/status/abc", It.IsAny<CancellationToken>()),
+            s => s.SendMagicLinkSmsAsync("+18015551234", "https://rvintake.com/status/abc", It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -246,7 +246,7 @@ public class NotificationOrchestratorTests
     public async Task SendMagicLinkAsync_SmsOptOut_ShouldSendEmailOnly()
     {
         await _sut.SendMagicLinkAsync(
-            true, false, "user@example.com", "+18015551234", "https://app.rvserviceflow.com/status/abc");
+            true, false, "user@example.com", "+18015551234", "https://rvintake.com/status/abc");
 
         _emailMock.Verify(
             e => e.SendEmailAsync("user@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -260,13 +260,13 @@ public class NotificationOrchestratorTests
     public async Task SendMagicLinkAsync_EmailOptOut_ShouldSendSmsOnly()
     {
         await _sut.SendMagicLinkAsync(
-            false, true, "user@example.com", "+18015551234", "https://app.rvserviceflow.com/status/abc");
+            false, true, "user@example.com", "+18015551234", "https://rvintake.com/status/abc");
 
         _emailMock.Verify(
             e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _smsMock.Verify(
-            s => s.SendMagicLinkSmsAsync("+18015551234", "https://app.rvserviceflow.com/status/abc", It.IsAny<CancellationToken>()),
+            s => s.SendMagicLinkSmsAsync("+18015551234", "https://rvintake.com/status/abc", It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
