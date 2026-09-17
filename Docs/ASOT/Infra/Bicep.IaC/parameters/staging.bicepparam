@@ -83,22 +83,16 @@ param deployAcs = true
 // mailboxes we control; that is what keeps rvintake.com's reputation clean.
 param acsCustomEmailDomain = 'mail-staging.rvintake.com'
 param dmarcReportingAddress = 'dmarc-reports@rvserviceflow.com'
-// ⚠ MID-MIGRATION (#634): deliberately false, and this is the ONLY correct value
-// right now. mail-staging.rvintake.com is a NEW ACS domain — the resource is keyed
-// by the domain string, so renaming provisions a fresh one that has never been
-// verified. Linking an unverified domain fails the deploy.
+// Verified and linked. Must stay true: false unlinks the domain on redeploy.
 //
-// Sequence, all against THIS file (never prod's):
-//   1. deploy with false  → creates the domain, writes its DKIM/DKIM2/SPF/
-//      ownership/DMARC records under the new `mail-staging` label
-//   2. az communication email domain initiate-verification ×4, confirm Verified
-//   3. flip this to true and deploy again → links it
-//
-// Between 1 and 3 staging sends From the Azure-managed *.azurecomm.net domain,
-// capped at 10/hour. That is expected, and staging-only.
-//
-// Once step 3 is done this must stay true: false unlinks the domain on redeploy.
-param acsCustomDomainVerified = false
+// The #634 rename ran the full three-phase sequence on 2026-09-17: deploy with
+// false (creating the domain and its records under the new `mail-staging` label),
+// verify out of band, then this flip to link it. Domain, SPF, DKIM and DKIM2 all
+// read Verified before it was flipped — ACS rejects linking an unverified domain,
+// so a fresh domain always starts at false. DMARC stays NotStarted by design:
+// Bicep authors that record itself rather than taking it from ACS, so it is not
+// part of ACS's verification set.
+param acsCustomDomainVerified = true
 
 // Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
 param deploySwa = true
