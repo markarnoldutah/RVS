@@ -197,6 +197,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             Status = "New",
             IssueCategory = issueCategory,
             IssueDescription = request.IssueDescription.Trim(),
+            IssueDescriptionVerbatim = NullIfBlank(request.IssueDescriptionVerbatim),
             TechnicianSummary = technicianSummary,
             Urgency = request.Urgency?.Trim(),
             RvUsage = request.RvUsage?.Trim(),
@@ -365,6 +366,9 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     /// either — the packet renders it in full in its own "Reported symptoms &amp; diagnostic
     /// Q&amp;A" section (issue #492 item 6).
     /// </summary>
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private static string? BuildTechnicianSummary(ServiceRequestCreateRequestDto request) =>
         string.IsNullOrWhiteSpace(request.CapabilityMismatchNote)
             ? null

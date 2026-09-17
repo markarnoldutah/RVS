@@ -14,6 +14,13 @@ public sealed record ServiceRequestDetailResponseDto
     public AssetInfoDto Asset { get; init; } = default!;
     public string IssueCategory { get; init; } = default!;
     public string IssueDescription { get; init; } = default!;
+
+    /// <summary>
+    /// The customer's words before AI curation (issue #601). <c>null</c> when no curation ran,
+    /// or for requests captured before this was recorded.
+    /// </summary>
+    public string? IssueDescriptionVerbatim { get; init; }
+
     public string? TechnicianSummary { get; init; }
     public string? Urgency { get; init; }
     public string? RvUsage { get; init; }

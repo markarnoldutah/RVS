@@ -9,6 +9,15 @@ public sealed record ServiceRequestCreateRequestDto
     public required AssetInfoDto Asset { get; init; }
     public required string IssueCategory { get; init; }
     public required string IssueDescription { get; init; }
+
+    /// <summary>
+    /// The customer's words before AI curation (issue #601) — the raw speech-to-text transcript
+    /// when the description was dictated, or the typed text when it was typed and then refined.
+    /// The packet renders it as "Complaint — word for word" so the curated
+    /// <see cref="IssueDescription"/> can always be checked against it. Omit it when no curation
+    /// ran; the packet then shows the submitted description as the complaint.
+    /// </summary>
+    public string? IssueDescriptionVerbatim { get; init; }
     public string? Urgency { get; init; }
     public string? RvUsage { get; init; }
     public string? HasExtendedWarranty { get; init; }

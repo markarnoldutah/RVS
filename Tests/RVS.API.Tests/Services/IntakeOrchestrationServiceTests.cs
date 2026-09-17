@@ -544,6 +544,37 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ShouldPersistTheVerbatimIssueDescription()
+    {
+        // Issue #601: the pre-curation text is what the packet's "Complaint — word for word"
+        // section renders, so it has to survive intake alongside the curated description.
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with
+        {
+            IssueDescriptionVerbatim = "  um so like the slide it uh wont retract  ",
+        };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.IssueDescriptionVerbatim.Should().Be("um so like the slide it uh wont retract");
+        result.ServiceRequest.IssueDescription.Should().Be("Slide won't retract");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ExecuteAsync_WhenNoVerbatimDescriptionSupplied_ShouldLeaveItNull(string? verbatim)
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with { IssueDescriptionVerbatim = verbatim };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.IssueDescriptionVerbatim.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenNoCapabilityMismatchNote_TechnicianSummaryShouldBeNull()
     {
         // Issue #601: the packet's Preliminary assessment section (labelled AI-generated)

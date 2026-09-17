@@ -37,8 +37,9 @@ public static class PacketComposer
                 ReferenceCode = DeriveReferenceCode(request.Id),
             },
             IssueCategory = NullIfBlank(request.IssueCategory),
+            CuratedIssue = ComposeCuratedIssue(request),
             AiSummary = ComposeAiSummary(request.TechnicianSummary, request.PreliminaryAssessment),
-            IssueDescription = request.IssueDescription ?? string.Empty,
+            IssueDescription = ComposeComplaint(request),
             Diagnostics = ComposeDiagnostics(request.DiagnosticResponses),
             Photos = ComposePhotos(request.Attachments, context.PhotoUrls),
             PasteBlock = NullIfBlank(context.PasteBlock),
@@ -111,6 +112,33 @@ public static class PacketComposer
         }
 
         return entries;
+    }
+
+    /// <summary>
+    /// The "Complaint — word for word" text: the words curation started from when they were
+    /// recorded, otherwise the submitted description. Never trimmed — this block is the one
+    /// place in the packet that reproduces the customer exactly.
+    /// </summary>
+    private static string ComposeComplaint(ServiceRequest request) =>
+        NullIfBlank(request.IssueDescriptionVerbatim) ?? request.IssueDescription ?? string.Empty;
+
+    /// <summary>
+    /// The "Issue" text: the submitted (curated) description, but only when it actually differs
+    /// from the verbatim complaint rendered below it. Whitespace alone is not a difference, and
+    /// a request with no verbatim text has nothing to curate against — both cases return
+    /// <c>null</c> so the packet never shows one complaint under two headings (issue #601).
+    /// </summary>
+    private static string? ComposeCuratedIssue(ServiceRequest request)
+    {
+        var verbatim = NullIfBlank(request.IssueDescriptionVerbatim)?.Trim();
+        var curated = NullIfBlank(request.IssueDescription)?.Trim();
+
+        if (verbatim is null || curated is null || verbatim == curated)
+        {
+            return null;
+        }
+
+        return curated;
     }
 
     private static PacketAiSummary? ComposeAiSummary(

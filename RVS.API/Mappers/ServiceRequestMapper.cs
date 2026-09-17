@@ -30,6 +30,7 @@ public static class ServiceRequestMapper
             Asset = entity.AssetInfo.ToDto(),
             IssueCategory = entity.IssueCategory ?? string.Empty,
             IssueDescription = entity.IssueDescription,
+            IssueDescriptionVerbatim = entity.IssueDescriptionVerbatim,
             TechnicianSummary = entity.TechnicianSummary,
             Urgency = entity.Urgency,
             RvUsage = entity.RvUsage,
@@ -141,6 +142,9 @@ public static class ServiceRequestMapper
             Status = "New",
             IssueCategory = dto.IssueCategory.Trim(),
             IssueDescription = dto.IssueDescription.Trim(),
+            IssueDescriptionVerbatim = string.IsNullOrWhiteSpace(dto.IssueDescriptionVerbatim)
+                ? null
+                : dto.IssueDescriptionVerbatim.Trim(),
             Urgency = dto.Urgency?.Trim(),
             RvUsage = dto.RvUsage?.Trim(),
             HasExtendedWarranty = dto.HasExtendedWarranty?.Trim(),

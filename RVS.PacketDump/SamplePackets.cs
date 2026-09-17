@@ -12,12 +12,20 @@ internal static class SamplePackets
     /// <summary>Every section populated — the packet at its longest.</summary>
     public static ServicePacket Full()
     {
+        // What the customer dictated, before curation — the "Complaint — word for word" block.
         const string issueDescription =
-            "The Onan generator runs fine for about ten minutes, then shuts off on its own. "
-            + "When it quits there's a hot smell near the rear compartment. It will not restart "
-            + "for maybe half an hour, then does the same thing again.\n\n"
-            + "Happened three times on our last trip. Shore power and the inverter both work "
-            + "normally.";
+            "um so the the onan generator it runs okay for like about ten minutes and then it "
+            + "just uh shuts itself off, and when it quits theres this real hot smell kinda near "
+            + "the back compartment there. it wont start back up for i dunno maybe half an hour "
+            + "and then it just does the same thing over again.\n\n"
+            + "it happened uh three times on our last trip. the shore power and the inverter "
+            + "those both work fine.";
+
+        // The curated restatement, rendered above the assessment as "Issue".
+        const string curatedIssue =
+            "Onan generator runs about ten minutes, then shuts off on its own, with a hot smell "
+            + "near the rear compartment. Will not restart for roughly half an hour, then repeats. "
+            + "Occurred three times on the last trip. Shore power and inverter both unaffected.";
         const string statusUrl = "https://status.rvserviceflow.com/s/abc123";
 
         return new()
@@ -46,6 +54,7 @@ internal static class SamplePackets
                 ReferenceCode = "A1B2C3D4",
             },
             IssueCategory = "Electrical / Generator",
+            CuratedIssue = curatedIssue,
             IssueDescription = issueDescription,
             Diagnostics =
             [
