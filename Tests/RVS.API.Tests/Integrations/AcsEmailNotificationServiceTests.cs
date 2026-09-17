@@ -124,6 +124,56 @@ public class AcsEmailNotificationServiceTests
         Recipients = ["service@dealer.example"],
     };
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void Constructor_WhenFromAddressIsMissing_ShouldThrowInvalidOperationException(string? fromAddress)
+    {
+        // There is no correct default here: the sending domain is per-environment
+        // (mail.rvintake.com in prod, mail.staging.rvintake.com in staging) and is injected
+        // by Bicep as an app setting. Falling back to a hardcoded address means ACS rejects
+        // every send for an unverified sender — and packet email failures are swallowed by
+        // PacketGenerationService, so that lands as silence rather than an error. Fail loudly.
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AzureCommunicationServices:Email:FromAddress"] = fromAddress
+            })
+            .Build();
+
+        var act = () => new AcsEmailNotificationService(
+            EmailClientForTests(),
+            Mock.Of<ILogger<AcsEmailNotificationService>>(),
+            config);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*AzureCommunicationServices:Email:FromAddress*");
+    }
+
+    [Fact]
+    public void Constructor_WhenSenderDisplayNameIsMissing_ShouldFallBackToTheIntakeBrand()
+    {
+        // Unlike the From address, a display name has a sensible default — but it must be the
+        // customer-facing brand, matching appsettings.json, not the corporate one.
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AzureCommunicationServices:Email:FromAddress"] = "DoNotReply@mail.staging.rvintake.com"
+            })
+            .Build();
+
+        var sut = new AcsEmailNotificationService(
+            EmailClientForTests(),
+            Mock.Of<ILogger<AcsEmailNotificationService>>(),
+            config);
+
+        sut.SenderDisplayName.Should().Be("RV Intake");
+    }
+
+    private static Azure.Communication.Email.EmailClient EmailClientForTests() =>
+        new("endpoint=https://dummy.communication.azure.com;accesskey=dGVzdA==");
+
     /// <summary>
     /// Creates an AcsEmailNotificationService with a mock EmailClient that throws on Send
     /// to verify fire-and-forget semantics (errors are logged, not propagated).
@@ -134,7 +184,7 @@ public class AcsEmailNotificationServiceTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["AzureCommunicationServices:Email:FromAddress"] = "test@notifications.rvserviceflow.com",
+                ["AzureCommunicationServices:Email:FromAddress"] = "DoNotReply@mail.staging.rvintake.com",
                 ["AzureCommunicationServices:Email:SenderDisplayName"] = "Test RVS"
             })
             .Build();

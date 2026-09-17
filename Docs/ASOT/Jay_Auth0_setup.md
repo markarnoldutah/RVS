@@ -1,5 +1,7 @@
 > **Superseded for new users (issue #563).** Create tenants and users with the provisioning tool, `/admin` in the Manager app; it does steps 3–5 below and writes the Cosmos documents in the same submission. One-time setup is §5 of `Auth0/Auth0-Portal-Configuration-Checklist.md`. This page is kept as the record of how Jay's account was set up by hand.
 
+> **The Manager hostname below is retired (#634).** It read `manager.rvserviceflow.com` when these steps were run; the Manager app now lives at `manager.rvintake.com`, and the old host no longer resolves. The URLs are left as written because this is a record of what was done, not instructions to repeat — but do not copy them into Auth0 today. Manager origins are now managed in `Infra/Auth0/tenants/shared.env` (`AUTH0_MANAGER_ORIGINS`) and applied with `auth0-apply.sh`, not edited by hand in the dashboard. The API identifier `https://api.rvserviceflow.com` and the claim namespace `https://rvserviceflow.com/` are unchanged and still correct.
+
 1. Allow the prod manager URLs
 Applications → Applications, then open the manager app. Its Client ID is CBdytt7GQhJSejyVwSrCZZRYUkLMXdiY.
 On the Settings tab, add each value to the end of the existing comma-separated list:

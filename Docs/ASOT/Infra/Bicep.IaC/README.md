@@ -443,6 +443,11 @@ nothing should be using.
 
 ### Retire the old Manager host (`#632`)
 
+> **Done — both environments, September 17 2026.** `manager.rvserviceflow.com` and
+> `manager-staging.rvserviceflow.com` are unbound and their CNAMEs deleted; neither
+> resolves. The corporate zone now holds only the API origin records. Kept below as the
+> record of what was run, and as the pattern for retiring any future host.
+
 The Manager SWA moved from `manager.rvserviceflow.com` to
 `manager.rvintake.com` (`manager-staging.*` in staging). Bicep writes the new
 CNAME and binds the new hostname on its own — but **removing the old record

@@ -238,16 +238,13 @@ var resolvedStorageAccountName = empty(storageAccountNameOverride)
   : storageAccountNameOverride
 
 // Environment-aware default CORS origins for browser-based SAS uploads.
+// Two branches only: environmentName is constrained to staging|prod above, so a third
+// (localhost) arm was unreachable — and it listed a port 7008 no project has ever served.
+// Local development does not deploy this template; it uses Cors:AllowedOrigins in
+// RVS.API/appsettings.Development.json.
 var defaultCorsOrigins = environmentName == 'prod'
   ? ['https://rvintake.com', 'https://manager.rvintake.com']
-  : environmentName == 'staging'
-      ? ['https://staging.rvintake.com', 'https://manager-staging.rvintake.com']
-      : [
-          'https://localhost:7008'
-          'https://localhost:7116'
-          'https://localhost:7200'
-          'https://localhost:7300'
-        ]
+  : ['https://staging.rvintake.com', 'https://manager-staging.rvintake.com']
 
 var resolvedCorsOrigins = !empty(storageCorsOrigins) ? storageCorsOrigins : defaultCorsOrigins
 

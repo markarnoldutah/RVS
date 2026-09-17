@@ -49,7 +49,7 @@ public class AcsSmsNotificationServiceTests
     public async Task SendMagicLinkSmsAsync_WhenPhoneIsNullOrWhiteSpace_ShouldThrowArgumentException(string? phone)
     {
         var sut = CreateService();
-        var act = () => sut.SendMagicLinkSmsAsync(phone!, "https://app.rvserviceflow.com/status/abc123");
+        var act = () => sut.SendMagicLinkSmsAsync(phone!, "https://rvintake.com/status/abc123");
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
@@ -68,7 +68,7 @@ public class AcsSmsNotificationServiceTests
     public async Task SendMagicLinkSmsAsync_WithValidInputs_ShouldNotThrow()
     {
         var sut = CreateService();
-        var act = () => sut.SendMagicLinkSmsAsync("+18015551234", "https://app.rvserviceflow.com/status/abc123");
+        var act = () => sut.SendMagicLinkSmsAsync("+18015551234", "https://rvintake.com/status/abc123");
         await act.Should().NotThrowAsync();
     }
 

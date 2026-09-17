@@ -26,7 +26,7 @@ internal static class SamplePackets
             "Onan generator runs about ten minutes, then shuts off on its own, with a hot smell "
             + "near the rear compartment. Will not restart for roughly half an hour, then repeats. "
             + "Occurred three times on the last trip. Shore power and inverter both unaffected.";
-        const string statusUrl = "https://status.rvserviceflow.com/s/abc123";
+        const string statusUrl = "https://rvintake.com/status/abc123";
 
         return new()
         {

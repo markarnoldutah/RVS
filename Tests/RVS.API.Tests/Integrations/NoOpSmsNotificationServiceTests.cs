@@ -19,7 +19,7 @@ public class NoOpSmsNotificationServiceTests
     [Fact]
     public async Task SendMagicLinkSmsAsync_ShouldCompleteWithoutThrowing()
     {
-        var act = () => _sut.SendMagicLinkSmsAsync("+18015551234", "https://app.rvserviceflow.com/status/abc123");
+        var act = () => _sut.SendMagicLinkSmsAsync("+18015551234", "https://rvintake.com/status/abc123");
         await act.Should().NotThrowAsync();
     }
 
