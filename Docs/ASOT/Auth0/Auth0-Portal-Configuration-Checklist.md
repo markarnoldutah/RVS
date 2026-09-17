@@ -214,7 +214,7 @@ Unlike the watermark, this is **not** gated by the Auth0 plan — it's gated by 
 
 ### Option A — reuse the existing ACS (try this first)
 
-RVS already sends the packet email through Azure Communication Services with a verified custom sending domain — `mail.rvintake.com` in production, `mail.staging.rvintake.com` in staging, sending as `DoNotReply@mail.<domain>`. ACS offers an SMTP relay, and Auth0's provider list includes a generic SMTP option, so the two should meet without standing up SendGrid or SES.
+RVS already sends the packet email through Azure Communication Services with a verified custom sending domain — `mail.rvintake.com` in production, `mail-staging.rvintake.com` in staging, sending as `DoNotReply@mail.<domain>`. ACS offers an SMTP relay, and Auth0's provider list includes a generic SMTP option, so the two should meet without standing up SendGrid or SES.
 
 1. Create SMTP credentials for the ACS resource (an Entra application authorized against the Communication Service, exposed as an SMTP username/password).
 2. **Branding → Email Provider → SMTP** in Auth0. Host `smtp.azurecomm.net`, port 587, STARTTLS, the credentials from step 1.

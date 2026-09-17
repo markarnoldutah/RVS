@@ -443,7 +443,7 @@ az communication email domain show \
 #     matches DoNotReply@<domain>. Staging and prod send From their custom domain
 #     (#532); use --domain-name AzureManagedDomain for an env without one:
 az communication email domain show \
-  --domain-name mail.staging.rvintake.com \
+  --domain-name mail-staging.rvintake.com \
   --email-service-name acs-rvs-notify-staging-wus3-s01-001-email \
   --resource-group rg-rvs-staging-westus3 \
   --query 'properties.fromSenderDomain' -o tsv
@@ -453,7 +453,7 @@ az webapp config appsettings list \
 
 # (c) ACS email send quota + custom sending domains — issue #532.
 #     Both environments set acsCustomEmailDomain, each on its OWN ACS resource:
-#       STAGING → mail.staging.rvintake.com     PROD → mail.rvintake.com
+#       STAGING → mail-staging.rvintake.com     PROD → mail.rvintake.com
 #     Bicep provisions a CustomerManaged domain and writes its SPF (-all) / DKIM /
 #     DKIM2 / domain-ownership records + a DMARC p=none record into the rvintake.com
 #     zone. The Azure-managed domain stays linked as a fallback only (5 emails/min,
@@ -462,8 +462,8 @@ az webapp config appsettings list \
 #     summary.
 #
 #     STAGING runs steps 1–3 only — no warming — with the domain
-#     mail.staging.rvintake.com, DMARC host
-#     _dmarc.mail.staging.rvintake.com, and:
+#     mail-staging.rvintake.com, DMARC host
+#     _dmarc.mail-staging.rvintake.com, and:
 #       ACS_EMAIL_SVC=acs-rvs-notify-staging-wus3-s01-001-email
 #       ACS_RG=rg-rvs-staging-westus3
 #     The rvintake.com zone lives in rg-rvs-prod-westus3 in both cases — use that RG
