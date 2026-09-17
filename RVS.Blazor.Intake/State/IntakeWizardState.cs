@@ -41,6 +41,14 @@ public sealed class IntakeWizardState
     /// <summary>Optional magic-link token from the intake URL query string.</summary>
     public string? Token { get; set; }
 
+    /// <summary>
+    /// Distribution channel the customer arrived through (<c>Spec A-13</c>, issue #599) — the
+    /// <c>src</c> query parameter the go.rvintake.com redirect put on the intake URL. Forwarded
+    /// verbatim on submission and normalised server-side; a customer who opened a bare intake
+    /// URL has none, and the API records that as print.
+    /// </summary>
+    public string? IntakeSource { get; set; }
+
     /// <summary>Location configuration fetched from the API.</summary>
     public IntakeConfigResponseDto? Config { get; set; }
 
@@ -315,6 +323,7 @@ public sealed class IntakeWizardState
             ApproxPurchaseDate = string.IsNullOrWhiteSpace(ApproxPurchaseDate) ? null : ApproxPurchaseDate.Trim(),
             DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null,
             CapabilityMismatchNote = BuildCapabilityMismatchNote(),
+            IntakeSource = IntakeSource,
             ExpectedAttachmentCount = PendingUploadCount
         };
     }
@@ -348,6 +357,7 @@ public sealed class IntakeWizardState
         {
             CurrentStep = CurrentStep,
             Slug = Slug,
+            IntakeSource = IntakeSource,
             FirstName = FirstName,
             LastName = LastName,
             Email = Email,
@@ -395,6 +405,7 @@ public sealed class IntakeWizardState
 
             CurrentStep = data.CurrentStep;
             Slug = data.Slug;
+            IntakeSource = data.IntakeSource;
             FirstName = data.FirstName;
             LastName = data.LastName;
             Email = data.Email;
@@ -438,6 +449,7 @@ public sealed class IntakeWizardState
     {
         CurrentStep = 1;
         Slug = string.Empty;
+        IntakeSource = null;
         Config = null;
         FirstName = string.Empty;
         LastName = string.Empty;
@@ -694,6 +706,10 @@ internal sealed class IntakeWizardStateData
 {
     public int CurrentStep { get; set; } = 1;
     public string Slug { get; set; } = string.Empty;
+
+    /// <summary>Distribution channel the intake URL carried (<c>Spec A-13</c>).</summary>
+    public string? IntakeSource { get; set; }
+
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;

@@ -89,6 +89,12 @@ else
     [Parameter] public string Slug { get; set; } = string.Empty;
     [SupplyParameterFromQuery(Name = "token")] public string? Token { get; set; }
 
+    // Spec A-13 (issue #599): the channel tag the go.rvintake.com redirect puts on the intake
+    // URL. Carried through the wizard and sent with the submission so the resulting service
+    // request records which distribution path produced it. A bare intake URL has none; the API
+    // records that as print.
+    [SupplyParameterFromQuery(Name = "src")] public string? Src { get; set; }
+
     [Inject] private IntakeWizardState _state { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
@@ -100,6 +106,7 @@ else
         _state.OnChange += StateHasChanged;
        _state.Slug = Slug;
        _state.Token = Token;
+       _state.IntakeSource = Src;
 
         await _state.RestoreAsync();
 
@@ -109,6 +116,15 @@ else
             await _state.ClearAsync();
             _state.Slug = Slug;
            _state.Token = Token;
+           _state.IntakeSource = Src;
+        }
+        else if (!string.IsNullOrWhiteSpace(Src))
+        {
+            // A restored session predates this visit's link. The URL just used is the truer
+            // account of how the customer got here, so it wins — but only when it says
+            // something: a bare reload must not erase the channel of the link that started
+            // the session.
+            _state.IntakeSource = Src;
         }
 
         _initializing = false;
@@ -118,6 +134,10 @@ else
     {
         _state.Slug = Slug;
         _state.Token = Token;
+        if (!string.IsNullOrWhiteSpace(Src))
+        {
+            _state.IntakeSource = Src;
+        }
     }
 
     private async Task HandleNextStep()

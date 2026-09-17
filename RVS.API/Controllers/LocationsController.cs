@@ -7,6 +7,8 @@ using RVS.API.Options;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Links;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Controllers;
 
@@ -107,6 +109,11 @@ public class LocationsController : ControllerBase
 
     /// <summary>
     /// Generates and returns a QR code PNG image for the location's intake form URL.
+    ///
+    /// The code encodes the <c>go.rvintake.com</c> short link tagged <c>src=qr</c>
+    /// (<c>Spec A-13</c>, issue #599), not the intake URL directly — a scan that bypassed the
+    /// redirect would be a scan nobody could count, and every sticker already printed would
+    /// stay uncounted for as long as it is on a counter.
     /// </summary>
     /// <param name="id">Location identifier.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -117,8 +124,8 @@ public class LocationsController : ControllerBase
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
         var entity = await _service.GetByIdAsync(tenantId, id, ct);
-        var baseUrl = _intakeUrlOptions.BaseUrl.TrimEnd('/');
-        var intakeUrl = $"{baseUrl}/{entity.Slug}";
+        var intakeUrl = IntakeLinkBuilder.ShortLink(
+            _intakeUrlOptions.RedirectOrIntakeBaseUrl, entity.Slug, IntakeSourceVocabulary.Qr);
 
         using var qrGenerator = new QRCodeGenerator();
         using var qrData = qrGenerator.CreateQrCode(intakeUrl, QRCodeGenerator.ECCLevel.Q);
@@ -126,5 +133,36 @@ public class LocationsController : ControllerBase
         var pngBytes = qrCode.GetGraphic(20);
 
         return File(pngBytes, "image/png", $"qr-{entity.Slug}.png");
+    }
+
+    /// <summary>
+    /// Returns the location's channel-tagged intake links — the short link to print, the one
+    /// encoded in the QR sticker, and the ones to paste into a Text Replacement snippet or a
+    /// canned quick reply (<c>Spec A-13</c>, issue #599).
+    ///
+    /// Exists so the links a dealer hands out are copied from one place rather than typed from
+    /// memory: a hand-built link that skips the redirect is a channel that silently stops being
+    /// measured.
+    /// </summary>
+    /// <param name="id">Location identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpGet("{id}/intake-links")]
+    [Authorize(Policy = "CanReadLocations")]
+    public async Task<ActionResult<LocationIntakeLinksResponseDto>> GetIntakeLinks(string id, CancellationToken ct)
+    {
+        var tenantId = _claimsService.GetTenantIdOrThrow();
+
+        var entity = await _service.GetByIdAsync(tenantId, id, ct);
+        var baseUrl = _intakeUrlOptions.RedirectOrIntakeBaseUrl;
+
+        return Ok(new LocationIntakeLinksResponseDto
+        {
+            LocationId = entity.Id,
+            Slug = entity.Slug,
+            PrintUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug),
+            QrUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug, IntakeSourceVocabulary.Qr),
+            TextReplacementUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug, IntakeSourceVocabulary.TextReplacement),
+            QuickReplyUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug, IntakeSourceVocabulary.QuickReply)
+        });
     }
 }

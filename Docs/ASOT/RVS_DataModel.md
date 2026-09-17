@@ -1,7 +1,7 @@
 # RVS — Data Model
 
 **Version:** 1.0 · September 4, 2026
-**Scope:** Cosmos DB and Blob Storage as actually declared. Verified against `modules/cosmos-db.bicep` and `RVS.Data.Cosmos.Seed/Program.cs`.
+**Scope:** Cosmos DB, Blob Storage and Table Storage as actually declared. Verified against `modules/cosmos-db.bicep` and `RVS.Data.Cosmos.Seed/Program.cs`.
 
 Database `rvs-db`, SQL API, serverless in every environment today. Provisioned mode puts autoscale at the database level, not per container. Session consistency is set account-level in `modules/cosmos-db.bicep` (`defaultConsistencyLevel: 'Session'`), not in client code. `CosmosClient` is constructed with `ConnectionMode.Gateway` explicitly in [RVS.API/Program.cs](../../RVS.API/Program.cs) and [RVS.Data.Cosmos.Seed/Program.cs](../../RVS.Data.Cosmos.Seed/Program.cs) — the .NET SDK default is Direct. No integrated cache is configured (it would require a provisioned dedicated gateway, absent from the Bicep).
 
@@ -50,6 +50,7 @@ The central document. Field groups:
 | Attachments | `attachments[]` | Core |
 | Diagnostics | `diagnosticResponses[]` | Core — this is the packet's most valuable block |
 | AI | `aiEnrichment` metadata | Core |
+| Channel | `intakeSource` — normalised `src` from the `go.rvintake.com` redirect (`textrepl`, `quickreply`, `qr`, `print`, or an ad-hoc tag) | Core (issue #599, `Spec A-13`). The authoritative source-of-job record: raw redirect hits say how many links were fetched, this says which channel produced a request. Never blank on a new request — an absent `src` is stored as `print` — and `null` only on requests created before the field existed. Exposed on the detail DTO; grouped by `GET api/locations/{id}/intake-sources` |
 | Preliminary assessment | `preliminaryAssessment` — `probableCause`, `possibleFixes[]`, `likelyParts[]`, `confidence` (`high` / `medium` / `low` / `abstain`), `provider`, `generatedAtUtc` | Core (issue #507). Null until the first packet generation, which fills it once; regenerations reuse it. Rendered in the packet's Preliminary assessment section; on `abstain` the other fields are empty and nothing structured renders. Not exposed on any API DTO |
 | Packet | `packetGeneration` — `status`, `attemptCount`, `lastAttemptAtUtc`, `lastError`, `generatedAtUtc`, `packetVersion`, `pdfBlobPath`, `alertRaised`, `expectedAttachmentCount` | Core (issue #434). Async packet-generation state; `lastError` never holds customer issue text (`Spec X-7`); `MaxAttempts` = 3 then a `LogCritical` alert. The packet's "short reference code" is **not stored** — it is derived at compose time as the first hyphen-delimited segment of `id`, upper-cased (`#472`). `expectedAttachmentCount` (issue #516) is how many attachments intake declared it was about to upload; generation defers while `attachments` is short of it and the 2-minute window from `createdAtUtc` is open, so a packet is never rendered before the customer's photos land. `0` for every non-intake origin. Preserved across `ResetForRegeneration` |
 | Packet delivery | `packetEmailDelivery` — `status`, `attemptCount`, `lastAttemptAtUtc`, `deliveredPacketVersion`, `deliveredAtUtc`, `lastError`, `alertRaised` | Core (issue #438). Idempotent, retried packet-email state; delivery is skipped when `deliveredPacketVersion` already equals the current `packetGeneration.packetVersion` (idempotency per `(serviceRequestId, packetVersion)`, `Spec B-4`); `MaxAttempts` = 3 with exponential backoff, then a `LogCritical` alert; `lastError` never holds customer issue text (`Spec X-7`) |
@@ -114,6 +115,24 @@ Access is entirely SAS-based and time-limited: the browser requests an upload UR
 Accepted upload types: jpeg, png, mp4, m4a, wav, pdf. Cap is 10 files, 25 MB each.
 
 CORS on the blob service allows GET/HEAD/PUT from the Static Web App custom domains only.
+
+---
+
+## Table Storage
+
+One table, `intakeRedirectHits`, on the same storage account as the attachment container (`modules/storage-account.bicep`, issue #599). Append-only: the application never updates or deletes a row, and retention is a storage-lifecycle concern rather than application code.
+
+| | |
+|---|---|
+| PartitionKey | `locationId` — or the literal `unresolved` when the slug did not resolve to a location. Every read is a single-partition query, the same discipline the Cosmos repositories keep |
+| RowKey | `{inverted ticks:D19}-{guid:N}`. Table Storage sorts row keys ascending as strings, so inverting the tick count puts the newest hit first and makes "the last N days" a prefix range rather than a scan; the guid suffix keeps hits recorded in the same tick from colliding, which link-preview bursts make a real case |
+| Columns | `TenantId`, `Slug`, `Source`, `OccurredAtUtc`, `IsLikelyBot`, `UserAgent` (truncated to 256 chars) |
+
+**Why not Cosmos.** Redirect hits are a high-volume write path read occasionally, and most of them never convert — messaging clients fetch the URL to build a link preview the moment it is composed, possibly once per send. Cosmos would charge request units on every one of those writes to serve a query somebody runs once a month. Here the cost is storage.
+
+**No customer identity.** No IP address, no cookie, no token. The only client-supplied value stored is a truncated User-Agent, kept so the `IsLikelyBot` classification can be re-evaluated later if the preview-fetcher landscape shifts.
+
+Auth is the app's managed identity with **Storage Table Data Contributor**, granted in the same module as the blob roles. When `TableStorage:Endpoint` is unset the API registers `NoOpIntakeRedirectHitRepository` instead: redirects still work and `ServiceRequest.intakeSource` is still recorded, only the conversion denominator is lost.
 
 ---
 

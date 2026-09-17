@@ -45,7 +45,7 @@ public sealed class AdminTenantsController : ControllerBase
     {
         var tenants = await _service.ListTenantsAsync(ct);
 
-        return Ok(tenants.Select(t => t.ToSummaryDto(_intakeUrlOptions.BaseUrl)).ToList());
+        return Ok(tenants.Select(t => t.ToSummaryDto(_intakeUrlOptions.RedirectOrIntakeBaseUrl)).ToList());
     }
 
     /// <summary>Edits a tenant's commercial details (status, plan, billing email, notes).</summary>
@@ -55,7 +55,7 @@ public sealed class AdminTenantsController : ControllerBase
     {
         var overview = await _service.UpdateTenantAsync(tenantId, request, ct);
 
-        return Ok(overview.ToSummaryDto(_intakeUrlOptions.BaseUrl));
+        return Ok(overview.ToSummaryDto(_intakeUrlOptions.RedirectOrIntakeBaseUrl));
     }
 
     /// <summary>Provisions a tenant, its first location and its first user (P-1). Safe to re-submit (P-6).</summary>
@@ -65,7 +65,7 @@ public sealed class AdminTenantsController : ControllerBase
     {
         var result = await _service.CreateTenantAsync(request, ct);
 
-        return Ok(result.ToResponseDto(_intakeUrlOptions.BaseUrl));
+        return Ok(result.ToResponseDto(_intakeUrlOptions.RedirectOrIntakeBaseUrl));
     }
 
     /// <summary>Adds a user to a tenant and returns a set-password link (P-2).</summary>
@@ -95,7 +95,7 @@ public sealed class AdminTenantsController : ControllerBase
     {
         var overview = await _service.SetAccessGateAsync(tenantId, request, ct);
 
-        return Ok(overview.ToSummaryDto(_intakeUrlOptions.BaseUrl));
+        return Ok(overview.ToSummaryDto(_intakeUrlOptions.RedirectOrIntakeBaseUrl));
     }
 
     /// <summary>Adds a location to a tenant (P-5).</summary>
@@ -105,6 +105,6 @@ public sealed class AdminTenantsController : ControllerBase
     {
         var location = await _service.AddLocationAsync(tenantId, request, ct);
 
-        return Ok(location.ToProvisioningResponseDto(_intakeUrlOptions.BaseUrl));
+        return Ok(location.ToProvisioningResponseDto(_intakeUrlOptions.RedirectOrIntakeBaseUrl));
     }
 }

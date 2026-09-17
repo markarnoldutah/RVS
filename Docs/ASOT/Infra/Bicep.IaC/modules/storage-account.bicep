@@ -51,6 +51,7 @@ param allowSharedKeyAccess bool = true
 // https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageBlobDelegatorRoleId = 'db58b8e5-c6ad-4a2a-8342-4190687cbf4a'
+var storageTableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 
 // ── Resources ─────────────────────────────────────────────────
 
@@ -121,6 +122,24 @@ resource attachmentsContainer 'Microsoft.Storage/storageAccounts/blobServices/co
   }
 }
 
+// ── Table Service (go.rvintake.com redirect hit log, #599) ─────
+
+// Spec A-13 keeps redirect hits out of Cosmos on purpose: they are a high-volume write path
+// read occasionally, most of them never convert, and link-preview fetchers alone produce
+// several per link composed. Cosmos would charge request units on every one of those; here the
+// cost is storage. No CORS — nothing in a browser ever talks to this table directly.
+
+resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2025-01-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+@description('Append-only log of go.rvintake.com redirect hits, partitioned by location (Spec A-13, #599). Table names are alphanumeric only — Table Storage forbids the hyphens the Cosmos containers use.')
+resource intakeRedirectHitsTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2025-01-01' = {
+  parent: tableService
+  name: 'intakeRedirectHits'
+}
+
 // ── Role Assignments ───────────────────────────────────────────
 
 // Storage Blob Data Contributor — read/write blobs, create containers
@@ -175,6 +194,37 @@ resource stagingSlotBlobDelegatorRole 'Microsoft.Authorization/roleAssignments@2
   }
 }
 
+// ── Table Role Assignments (redirect hit log, #599) ────────────
+
+// Storage Table Data Contributor — read/write entities in the redirect hit log. Scoped to the
+// storage account, like the blob roles above; the same managed identity serves both, so a
+// separate identity would buy nothing but another thing to rotate.
+resource tableDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(blobAccessPrincipalId)) {
+  name: guid(storageAccount.id, empty(blobAccessPrincipalId) ? 'unset-app' : blobAccessPrincipalId, storageTableDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      storageTableDataContributorRoleId
+    )
+    principalId: blobAccessPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource stagingSlotTableDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(stagingSlotBlobAccessPrincipalId)) {
+  name: guid(storageAccount.id, empty(stagingSlotBlobAccessPrincipalId) ? 'unset-staging-slot' : stagingSlotBlobAccessPrincipalId, storageTableDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      storageTableDataContributorRoleId
+    )
+    principalId: stagingSlotBlobAccessPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // ── Developer / Manual Access Role Assignments (Entra group) ───
 
 // The running application uses its managed identity (assignments above). This grants the same
@@ -207,6 +257,21 @@ resource devBlobDelegatorRole 'Microsoft.Authorization/roleAssignments@2022-04-0
   }
 }
 
+// Storage Table Data Contributor — the same developer access for the redirect hit log, so a
+// workstation pointed at this account (AzureCliCredential) can read and write it locally.
+resource devTableDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(devBlobAccessPrincipalId)) {
+  name: guid(storageAccount.id, empty(devBlobAccessPrincipalId) ? 'unset-dev' : devBlobAccessPrincipalId, storageTableDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      storageTableDataContributorRoleId
+    )
+    principalId: devBlobAccessPrincipalId
+    principalType: 'Group'
+  }
+}
+
 // ── Outputs ───────────────────────────────────────────────────
 output resourceId string = storageAccount.id
 
@@ -215,5 +280,8 @@ output name string = storageAccount.name
 
 @description('The primary blob service endpoint URL.')
 output blobEndpoint string = storageAccount.properties.primaryEndpoints.blob
+
+@description('The primary table service endpoint URL — the go.rvintake.com redirect hit log (Spec A-13, #599).')
+output tableEndpoint string = storageAccount.properties.primaryEndpoints.table
 
 // reading

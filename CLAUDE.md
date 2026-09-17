@@ -20,6 +20,7 @@ There is no target number of these. One authoritative home per fact; a document 
 
 - Infra source of truth: Bicep files in [Docs/ASOT/Infra/Bicep.IaC/](Docs/ASOT/Infra/Bicep.IaC/). Do not trust hand-drawn diagrams or older docs for Azure resource configuration.
 - GTM material: [Docs/Marketing/](Docs/Marketing/) — Positioning, GoToMarket, Objections.
+- Customer-facing how-tos: [Docs/Guides/](Docs/Guides/) — per-device guides for sending a channel-tagged intake link (Spec A-13). Written for a non-technical service advisor, not for engineers.
 - [Docs/ARCHIVE/](Docs/ARCHIVE/) and [Docs/Obsolete/](Docs/Obsolete/) are frozen snapshots. **Never cite them as current.**
 - Per-language instruction files also live in [.github/instructions/](.github/instructions/) (C#, ASP.NET, Blazor, Markdown, Testing).
 
@@ -48,6 +49,7 @@ Solution file is [RVS.slnx](RVS.slnx) (new SLNX format — `dotnet` CLI handles 
 | [RVS.Domain](RVS.Domain/) | Entities, DTOs, Interfaces, Validation, Exceptions. **Zero infra dependencies.** |
 | [RVS.Infra.AzCosmosRepository](RVS.Infra.AzCosmosRepository/) | Cosmos DB repository implementations. |
 | [RVS.Infra.AzBlobRepository](RVS.Infra.AzBlobRepository/) | Azure Blob Storage (attachments). |
+| [RVS.Infra.AzTableRepository](RVS.Infra.AzTableRepository/) | Azure Table Storage — the append-only `go.rvintake.com` redirect hit log (Spec A-13). Falls back to a no-op when `TableStorage:Endpoint` is unset. |
 | [RVS.Blazor.Intake](RVS.Blazor.Intake/) | Blazor **WASM** — anonymous 8-step customer intake wizard. |
 | [RVS.Blazor.Manager](RVS.Blazor.Manager/) | Blazor **WASM** — authenticated dealer manager desktop (OIDC/Auth0, PKCE). |
 | [RVS.UI.Shared](RVS.UI.Shared/) | Shared typed API clients (`IntakeApiClient`, `ServiceRequestApiClient`, `LookupApiClient`, `AttachmentApiClient`, and `AnalyticsApiClient` — archived scope), client-side validators, badge components. **`ThemeService` is not here** — each Blazor app has its own copy. |
@@ -118,6 +120,10 @@ WASM workload is required for Blazor projects. CI installs it via `dotnet worklo
 3. **Controllers** (`[ApiController]`, `[Authorize]`, kebab-case nested routes): every action starts with `_claimsService.GetTenantIdOrThrow()`, delegates to sealed service, maps entity → DTO. **No try/catch in controllers.**
 4. **Services** (sealed, scoped): guard clauses → repository → return domain entities.
 5. **Repositories** (scoped, Cosmos): all queries are **single-partition on `tenantId`** — cross-partition is structurally prevented.
+
+### Channel-tagged intake links (Spec A-13)
+
+Every customer-facing link routes through `go.rvintake.com/{locationSlug}` — `GoController` (anonymous, `/{slug}` and `/go/{slug}`) → `IntakeRedirectService` → 302 to the intake app with a normalised `src`. `IntakeLinkBuilder` (Domain) is the **only** place a customer-facing link is composed; the QR endpoint, `GET api/locations/{id}/intake-links` and the provisioning `intakeUrl` all go through it. `src` lands on `ServiceRequest.intakeSource`; raw hits go to Table Storage, never Cosmos. The redirect must never fail — unknown slug, unknown `src`, storage outage all still redirect.
 
 ### Cosmos DB (10 containers, kebab-case)
 

@@ -27,6 +27,7 @@ public sealed record TenantLocationSummaryDto
     public string Name { get; init; } = string.Empty;
     public string Slug { get; init; } = string.Empty;
 
-    /// <summary>Public intake URL, e.g. <c>https://rvintake.com/{slug}</c>.</summary>
+    /// <summary>Public intake link to hand out, e.g. <c>https://go.rvintake.com/{slug}</c> — the
+    /// channel-tagging redirect (<c>Spec A-13</c>), not the intake app directly.</summary>
     public string IntakeUrl { get; init; } = string.Empty;
 }

@@ -1,6 +1,7 @@
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
+using RVS.Domain.Links;
 using RVS.Domain.Provisioning;
 using RVS.Domain.Validation;
 
@@ -8,7 +9,8 @@ namespace RVS.API.Mappers;
 
 /// <summary>
 /// Maps between the platform-admin provisioning DTOs and <see cref="Tenant"/> / provisioning
-/// results (issue #563). Intake URLs are composed from the caller-supplied base URL.
+/// results (issue #563). Intake URLs are composed from the caller-supplied base URL, which is
+/// the channel-tagging redirect host when one is configured (<c>Spec A-13</c>).
 /// </summary>
 public static class TenantProvisioningMapper
 {
@@ -167,7 +169,14 @@ public static class TenantProvisioningMapper
         };
     }
 
-    private static string IntakeUrl(string baseUrl, string slug) => $"{baseUrl.TrimEnd('/')}/{slug}";
+    /// <summary>
+    /// The link a location is handed out under. Composed through
+    /// <see cref="IntakeLinkBuilder.ShortLink"/> so it points at the <c>go.rvintake.com</c>
+    /// redirect rather than the intake app directly (<c>Spec A-13</c>, issue #599) — this URL
+    /// is what ends up on business cards and invoices, and printed material cannot carry a
+    /// query string, so it is deliberately bare and recorded as the print channel.
+    /// </summary>
+    private static string IntakeUrl(string baseUrl, string slug) => IntakeLinkBuilder.ShortLink(baseUrl, slug);
 
     private static string? TrimToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

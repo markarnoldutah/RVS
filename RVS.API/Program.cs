@@ -8,7 +8,9 @@ using RVS.API.Middleware;
 using RVS.API.Packets;
 using RVS.API.RateLimiting;
 using RVS.API.Workers;
+using Azure.Data.Tables;
 using RVS.Infra.AzBlobRepository;
+using RVS.Infra.AzTableRepository;
 using RVS.API.Services;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
@@ -198,6 +200,19 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = 20,
                 Window = TimeSpan.FromMinutes(1)
             }));
+
+    // go.rvintake.com redirect (Spec A-13, issue #599). A looser window than intake on
+    // purpose: this endpoint does no writing to Cosmos and is hit by link-preview fetchers as
+    // well as customers, several per link composed, and an RV park's guests can share one
+    // NATed address. Throttling here costs a customer their intake form.
+    options.AddPolicy("RedirectEndpoint", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientIpResolver.Resolve(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 });
 
 // Register Middleware
@@ -236,6 +251,24 @@ builder.Services.AddSingleton<BlobServiceClient>(sp =>
 
     return new BlobServiceClient(new Uri(endpoint), credential);
 });
+
+// Table Storage client — the append-only go.rvintake.com redirect hit log (Spec A-13,
+// issue #599). Same storage account and same credential story as Blob: DefaultAzureCredential
+// (managed identity) in Azure, AzureCliCredential locally to skip the managed-identity probe.
+// Registered only when an endpoint is configured; without one the repository below falls back
+// to the no-op and hits are dropped rather than the redirect failing.
+var tableStorageEndpoint = builder.Configuration["TableStorage:Endpoint"];
+if (!string.IsNullOrWhiteSpace(tableStorageEndpoint))
+{
+    builder.Services.AddSingleton<TableServiceClient>(sp =>
+    {
+        TokenCredential credential = builder.Environment.IsDevelopment()
+            ? new AzureCliCredential()
+            : new DefaultAzureCredential();
+
+        return new TableServiceClient(new Uri(tableStorageEndpoint), credential);
+    });
+}
 
 #region Repositories
 var cosmosDbId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvs-db";
@@ -309,6 +342,26 @@ builder.Services.AddScoped<ITenantRepository>(sp =>
     var logger = sp.GetRequiredService<ILogger<CosmosTenantRepository>>();
     return new CosmosTenantRepository(client, cosmosDbId, logger);
 });
+
+// go.rvintake.com redirect hits (Spec A-13, issue #599) — Azure Table Storage, not Cosmos.
+// High-volume writes read occasionally, most of which never convert; Cosmos would charge
+// request units on every machine-made link-preview fetch. Degrades to the no-op when no
+// TableStorage:Endpoint is set, which is what a developer machine without a storage account
+// gets: the redirect still works and the channel still reaches the service request, only the
+// conversion denominator is missing.
+if (!string.IsNullOrWhiteSpace(tableStorageEndpoint))
+{
+    builder.Services.AddScoped<IIntakeRedirectHitRepository>(sp =>
+    {
+        var client = sp.GetRequiredService<TableServiceClient>();
+        var logger = sp.GetRequiredService<ILogger<AzTableIntakeRedirectHitRepository>>();
+        return new AzTableIntakeRedirectHitRepository(client, logger);
+    });
+}
+else
+{
+    builder.Services.AddScoped<IIntakeRedirectHitRepository, NoOpIntakeRedirectHitRepository>();
+}
 #endregion
 
 #region Services
@@ -324,6 +377,8 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IIntakeOrchestrationService, IntakeOrchestrationService>();
+builder.Services.AddScoped<IIntakeRedirectService, IntakeRedirectService>();
+builder.Services.AddScoped<IIntakeSourceReportService, IntakeSourceReportService>();
 builder.Services.AddScoped<IPacketPhotoUrlResolver, PacketPhotoUrlResolver>();
 
 // Packet generation (issue #434): non-blocking in-process queue + background worker.

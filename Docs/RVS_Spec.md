@@ -11,7 +11,7 @@ Requirements are numbered `A-n` (intake), `B-n` (packet and delivery), `C-n` (ma
 
 ## A. Intake app — *substantially built*
 
-Anonymous Blazor web form at `rvintake.com/{locationSlug}`. No login, ever.
+Anonymous Blazor web form at `rvintake.com/{locationSlug}`. No login, ever. Customers reach it through `go.rvintake.com/{locationSlug}`, which redirects and records the channel (A-13).
 
 | # | Requirement |
 |---|---|
@@ -27,10 +27,15 @@ Anonymous Blazor web form at `rvintake.com/{locationSlug}`. No login, ever.
 | **A-10** | **VIN from photo.** The customer can photograph the VIN plate instead of typing it. Azure OpenAI gpt-4o vision (`ai/extract-vin`) returns a VIN and a confidence score: at ≥ 0.7 the VIN field is auto-filled, at ≥ 0.9 the A-3 decode also fires automatically, below 0.7 the result is discarded. The extracted value is always editable. Failure degrades to manual entry — submission still succeeds. |
 | **A-11** | **Issue insights.** From the description, AI infers urgency and RV-usage context (`ai/suggest-insights`), shown to the customer as advisory "Suggested" chips. Advisory only, never blocks submission; accepted values are stored on the request with their provider and confidence. |
 | **A-12** | **Capability pre-check.** On leaving the description step, the issue is checked against the location's enabled service capabilities (`assess-capabilities`). If the location is unlikely to be able to help, intake shows a non-blocking alert; the customer may still submit. |
+| **A-13** | **Channel-tagged intake links.** Every distribution path routes through `go.rvintake.com/{locationSlug}`, which redirects to the location's intake URL and logs the hit. A `src` query parameter names the channel: `textrepl` (Text Replacement snippet sent from a Recents entry), `quickreply` (iOS Respond with Text / Android Quick Response, sent from an incoming call), `qr` (QR sticker or NFC tag), and no `src` at all for `print` — printed material cannot carry a query string, so its absence *is* the print channel. The redirect never fails: an unknown `src`, an unknown slug, or a hit-log outage all still send the customer to the form. `src` is persisted on the resulting `ServiceRequest` and reported per location. |
 
 All four AI capabilities in A-9–A-12 are in scope — decision Q8 / issue #429. Each has a rule-based or no-op fallback behind the same interface; none is a hard dependency for a successful submission.
 
 **Controlled vocabulary at launch: `issue-category` only.** 13 codes, finalised in issue #452: Slides, Electrical, Plumbing (Plumbing & Water), HVAC, Generator, LPGas (LP / Propane), Appliances (Appliances & Refrigerator), Roof (Roof & Seals), Awning, Chassis (Chassis & Running Gear), Exterior (Body & Exterior), Interior (Interior & Cabinetry), Other. The single source of truth is `RVS.Domain.Validation.IssueCategoryVocabulary`; the Cosmos `lookup-sets` seed, the rule-based categorization fallbacks and the capability map all derive from it. A submitted or AI-suggested value outside the list is coerced to `Other` before it is stored, so the packet never shows a phantom category. The four technician-side vocabularies — component type, failure mode, repair action, part number — are archived. They were never populated at intake anyway; they filled in after a technician closed a job, which is a workflow RVS no longer has.
+
+**Two stores, because they are two different things (A-13).** Redirect hits and service requests have different volumes and lifecycles, and most hits never convert. `src` on the `ServiceRequest` is the authoritative source-of-job record and lives in Cosmos with the request. Raw redirect hits go to an append-only Azure Table Storage table partitioned by location, where a write costs storage rather than Cosmos request units on a path that is written constantly and read occasionally. A conversion rate per channel is computable from the two together.
+
+**Redirect hits are not opens, and are never reported as such.** iMessage and most messaging clients fetch a URL to build a link preview the moment it is composed — before anybody taps anything, possibly once per send, at a rate that varies by client. Obvious bot user agents are flagged and excluded from reported counts, but the filter is coarse by design and the residue is still not a count of people. **Submissions by source** is the metric a dealer is shown. Raw open counts are not.
 
 This means the packet's structured content is: decoded unit, one category, the customer's own words, the diagnostic Q&A, and photos. That is the honest scope, and it is enough. The diagnostic Q&A block is the part that reads as expert on paper — *"Does the slide move at all? — Motor hums, no movement"* is worth more to a service manager than any taxonomy label. Invest the effort there.
 

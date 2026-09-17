@@ -36,6 +36,14 @@ public sealed record ServiceRequestCreateRequestDto
     public string? CapabilityMismatchNote { get; init; }
 
     /// <summary>
+    /// Distribution channel the customer arrived through (<c>Spec A-13</c>, issue #599) — the
+    /// <c>src</c> the intake app was opened with, forwarded verbatim. Normalised server-side, so
+    /// an unrecognised or malformed value costs the request its channel, never the submission.
+    /// Absent (the default) is recorded as <c>print</c>.
+    /// </summary>
+    public string? IntakeSource { get; init; }
+
+    /// <summary>
     /// How many attachments the client is about to upload (issue #516). Attachments are
     /// confirmed after this submission returns, so packet generation waits for this many to
     /// arrive before rendering — otherwise the packet ships with no photos. Leave at <c>0</c>

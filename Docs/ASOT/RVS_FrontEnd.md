@@ -11,7 +11,7 @@ Stack: Blazor WebAssembly, **MudBlazor 9.x** (Material Design 3). Do not introdu
 
 Anonymous. No auth packages, no token handler, plain `HttpClient`, plain `Router`. Keep it that way.
 
-Shell is `Pages/IntakeWizard.razor`, routed at `/{Slug}` with an optional `?token=` magic link. Wizard state lives in `State/IntakeWizardState.cs` and persists to sessionStorage across reloads.
+Shell is `Pages/IntakeWizard.razor`, routed at `/{Slug}` with an optional `?token=` magic link and an optional `?src=` channel tag (`Spec A-13`, `#599` — put there by the `go.rvintake.com` redirect). Wizard state lives in `State/IntakeWizardState.cs` and persists to sessionStorage across reloads; `src` rides along on `IntakeWizardState.IntakeSource` and is sent with the submission, where the API normalises it. A `src` on the current URL wins over a restored one — the link just used is the truer account of how the customer got here — but a bare reload never erases the channel of the link that started the session.
 
 **The wizard has eight steps, not seven.** Older documentation said seven; the `switch` in the shell has eight and the header reads "Step N of 8". All eight are fully implemented — there are no placeholder steps.
 
