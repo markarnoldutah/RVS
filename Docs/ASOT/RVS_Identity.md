@@ -11,6 +11,8 @@ Only the Manager app authenticates. **The intake app is anonymous and must stay 
 
 Auth0 tenant `dev-2jhzz8xmjggh26pm.us.auth0.com`, API audience `https://api.rvserviceflow.com`, custom claim namespace `https://rvserviceflow.com/`.
 
+> Both of those are **opaque identifiers**, not addresses to resolve. Since `#633` the API is also *served* at `api.rvserviceflow.com`, and since `#634` the claim namespace is the only other thing on that domain — but neither is coupled to the hostname. Changing the audience invalidates every issued token and every grant; changing the namespace breaks claim extraction in seven places. Moving a hostname is not a reason to touch either. The user-facing brand moved to `rvintake.com`; these did not, and should not.
+
 **One Auth0 tenant serves development, staging and production** (#610). A second tenant needs a paid Auth0 plan, so the split is deferred until usage justifies the cost. The accepted risks: any Auth0 change reaches every environment at once, and a test account carrying a real dealer's `tenantId` can sign in to the production Manager app and see that dealer's data. Test accounts must use test-only `tenantId` values. The tenant also hosts unrelated products; RVS owns only what `Infra/Auth0/baseline/` declares.
 
 Configuration changes go through `Infra/Auth0/auth0-apply.sh` (plan, review, then `--apply`), not the dashboard. See `Infra/Auth0/README.md`, including how to split into per-environment tenants later.
