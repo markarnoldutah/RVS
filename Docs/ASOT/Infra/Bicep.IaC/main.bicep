@@ -142,6 +142,12 @@ param redirectDnsPrefix string = environmentName == 'prod' ? 'go' : 'go-${enviro
 @description('Subdomain prefix for the API origin host in the corporate zone (#633) — "api" in prod (api.rvserviceflow.com), "api-<env>" elsewhere (api-staging.rvserviceflow.com). This is the origin the browser apps call; it is not customer-facing, which is why it stays on rvserviceflow.com while every host a human reads moved to rvintake.com. Note the Auth0 resource-server identifier is the same string, but that is an opaque audience value and unrelated — do not couple them.')
 param apiDnsPrefix string = environmentName == 'prod' ? 'api' : 'api-${environmentName}'
 
+@description('Auth0 Universal Login host in the INTAKE zone (Auth0 checklist §6, #627). Deliberately NOT environment-suffixed, unlike every other prefix above: the Free plan includes exactly one custom domain and dev/staging/prod share one Auth0 tenant (#610), so there is a single login host serving all three. A subdomain is also forced — Auth0 does not support an apex custom domain, and the rvintake.com apex is the Intake SWA.')
+param auth0LoginDnsPrefix string = 'login'
+
+@description('CNAME target Auth0 mints for the custom domain, shown once on Branding -> Custom Domains after the domain is added (shaped like <tenant>-cd-<hash>.edge.tenants.us.auth0.com). EMPTY UNTIL THE DOMAIN IS CREATED IN THE PORTAL — the record is then a no-op and login stays on the canonical tenant domain. Tenant-wide and environment-independent, so both environments upsert the identical record and this is not env-guarded; that is also why it is a hand-entered string rather than something the template can derive. Same shape of out-of-band token as the ACS domain verification (#532). Fill it in as Auth0 checklist §6.3, then deploy the DNS resource group.')
+param auth0CustomDomainCnameTarget string = 'dev-2jhzz8xmjggh26pm-cd-mdl9vngn46azp32y.edge.tenants.us.auth0.com'
+
 @description('Object IDs of principals (e.g. the staging GitHub Actions service principal) that need DNS Zone Contributor on the shared zones. Granted at zone scope so they cannot touch other prod resources. Set this in prod params, not staging.')
 param dnsZoneContributorPrincipalIds string[] = []
 
@@ -708,6 +714,28 @@ var managerCnameRecords = [
   }
 ]
 
+// ── login.rvintake.com — the Auth0 Universal Login host (#627) ──────
+//
+// In the INTAKE zone with every other host a human reads: a raw dev-<hash>.us.auth0.com address
+// in the browser bar is the biggest "this looks sketchy" tell for a service advisor signing in.
+//
+// One record for all three environments, not one per environment. The Free plan includes exactly
+// one custom domain and dev/staging/prod share a single Auth0 tenant (#610), so there is nothing
+// to suffix — both environments' deploys upsert the same name with the same value, by design.
+//
+// Inert until auth0CustomDomainCnameTarget is filled in: the value is a token Auth0 mints when
+// the domain is added in the portal, so it cannot be derived here, and until it exists this
+// evaluates to an empty list and the deploy writes nothing. Auth0 checklist §6.3.
+//
+// If Auth0 asks for a TXT verification record instead of a CNAME, build the same shape
+// ({ name: auth0LoginDnsPrefix, values: [ '...' ] }) and append it to dnsIntake's txtRecords.
+var auth0CnameRecords = empty(auth0CustomDomainCnameTarget) ? [] : [
+  {
+    name: auth0LoginDnsPrefix
+    target: auth0CustomDomainCnameTarget
+  }
+]
+
 module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs && deployKeyVault) {
   name: 'deploy-acs-kv-secrets-${environmentName}'
   scope: rgPrimary
@@ -888,6 +916,11 @@ module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
 // derived values (#532)" above. The two use distinct record names, so neither
 // environment's deploy touches the other's. An env without acsCustomEmailDomain
 // leaves acsCustomDomain* empty, so this is a no-op there.
+//
+// It also carries the Auth0 Universal Login record (login.rvintake.com, #627) once
+// auth0CustomDomainCnameTarget is set — see "login.rvintake.com" above. That one is
+// tenant-wide rather than per-environment, so unlike every other record here both
+// environments write the same name and value.
 module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
   name: 'deploy-dns-intake-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
@@ -899,7 +932,7 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         #disable-next-line BCP318
         target: swaIntake.outputs.defaultHostname
       }
-    ], managerCnameRecords, acsCustomDomainCnameRecords, redirectCnameRecords)
+    ], managerCnameRecords, acsCustomDomainCnameRecords, redirectCnameRecords, auth0CnameRecords)
     aRecords: environmentName == 'prod' ? [
       {
         name: '@'

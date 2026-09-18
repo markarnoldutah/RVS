@@ -330,7 +330,11 @@ All Blazor projects use **MudBlazor 9.x** (Material Design 3). **Do not** use `M
 
 ### Theme
 
-Single `MudTheme` defined in `MainLayout.razor` with `PaletteLight` (Primary `#1565C0`, Secondary `#00897B`). Apply via `<MudThemeProvider Theme="_theme" />`. Never inline ad-hoc colors.
+Themes live in each app's own `Services/ThemeService.cs` — **not** in `MainLayout.razor`, and not in `RVS.UI.Shared`. Both apps declare the same `IndigoTheme`: `PaletteLight` Primary `#3F51B5` (Indigo 500), `PrimaryDarken`/`AppbarBackground` `#303F9F` (Indigo 700), Secondary `#00897B` (Teal 600), Background `#FAFAFA`.
+
+Each app also declares a `HighContrastTheme`, and `ThemeService.Mode` selects between them — `Light`/`Dark`/`HighContrast` in Manager, `Light`/`HighContrast` in Intake — persisting the choice to `localStorage`. `MainLayout.razor` binds the result rather than defining it: `<MudThemeProvider Theme="ThemeService.CurrentTheme" />`, plus `IsDarkMode="ThemeService.IsDarkMode"` in Manager.
+
+Never inline ad-hoc colors. When an external surface needs the brand color — the Auth0 Universal Login page, for instance — read it from `ThemeService.cs` rather than from a doc; `#1565C0` appeared in this file and in the Auth0 checklist for a while and has never been in the code.
 
 ### Component Conventions
 

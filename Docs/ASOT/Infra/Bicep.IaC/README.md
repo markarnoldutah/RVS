@@ -902,14 +902,34 @@ Commands for each are in `deployment-cmds.azcli` §4e. Summary:
 
 ## Post-Deployment: Auth0 Configuration
 
-Auth0 is configured outside of Bicep (external SaaS). For each environment:
+Auth0 is configured outside of Bicep (external SaaS), and almost all of it is
+scripted rather than clicked: the API, permissions, roles, applications, grants,
+connections and the Post-Login Action are declared in `Infra/Auth0/baseline/` and
+applied with `auth0-apply.sh`. See **`Docs/ASOT/Auth0/Auth0-Portal-Configuration-Checklist.md`**
+for the portal-only remainder, and `Docs/ASOT/RVS_Identity.md` for the model.
 
-1. Create a separate Auth0 tenant (e.g. `rvs-staging.us.auth0.com`, `rvs.us.auth0.com`)
-2. Configure API audience matching the App Service hostname
-3. Create an Organization per tenant
-4. Seed test users with appropriate roles
+Three earlier statements here were wrong and are worth naming, because each is
+the opposite of how it works:
 
-> **Important:** Never share Auth0 tenants across environments.
+- **One tenant serves development, staging and production** — `dev-2jhzz8xmjggh26pm.us.auth0.com`
+  (#610). A second tenant needs a paid plan, so the split is deferred. Not "never
+  share tenants across environments"; sharing is the current, deliberate design,
+  with the risks recorded in `RVS_Identity.md`.
+- **RVS does not use Auth0 Organizations.** Tenant context is `app_metadata.tenantId`,
+  injected into the access token by a Post-Login Action. There is no Organization
+  per customer and there is not meant to be.
+- **The audience is not the App Service hostname.** It is the fixed opaque string
+  `https://api.rvserviceflow.com`. Since #633 a host of the same name also exists;
+  they are not coupled, and changing the audience invalidates every issued token.
+
+### DNS this template writes for Auth0
+
+One record, once the Auth0 custom domain exists: `login.rvintake.com` in the
+`dnsIntake` module, from `auth0CustomDomainCnameTarget` (#627). It is the only
+record here that is **not** per-environment — one custom domain serves all three
+environments, so both parameter files write the same name and value. The
+parameter is empty until the domain is created in the Auth0 dashboard, and the
+record is a no-op until then. Checklist §6.3.
 
 ---
 
