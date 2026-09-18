@@ -206,7 +206,16 @@ Four places pin the issuer:
 
 **Order.** Key Vault and the API restart first, then the Manager deploy. There is a window either way — an old-issuer token hitting a new-authority API is a 401, and so is the reverse — and this order makes that window "nobody can call the API for a minute", which is indistinguishable from the logout everyone is getting anyway.
 
-**1. Key Vault, both vaults.** `Auth0--Domain` is the JWT authority ([`RVS.API/Program.cs`](../../../RVS.API/Program.cs) — `options.Authority`). Do **not** touch `Auth0Mgmt--Domain` or `Auth0Provisioner--Domain`: both are Management API clients and the Management API stays on the canonical host.
+**0. Sign out of the Manager app first**, in every browser and installed PWA where you answered "yes" to the keep-signed-in prompt.
+[`js/session-persist.js`](../../../RVS.Blazor.Manager/wwwroot/js/session-persist.js) mirrors the OIDC user record into `localStorage` under `rvs.persist.oidc.user:<authority>:<clientId>` — keyed by authority.
+After the cutover the library reads a different key, so the old mirror is never restored and never cleaned up: it strands a live, rotating refresh token for the canonical issuer in `localStorage` on that device, indefinitely.
+Signing out clears the mirror on the way through. Nothing breaks if you skip this — login works fine — which is exactly why it is easy to leave behind.
+
+The service worker needs no such care: [`service-worker.js`](../../../RVS.Blazor.Manager/wwwroot/service-worker.js) is deliberately network-only with no cache, so there is no stale `appsettings` to evict after the deploy.
+
+**1. Key Vault, both vaults.** `Auth0--Domain` is the JWT authority ([`RVS.API/Program.cs`](../../../RVS.API/Program.cs) — `options.Authority`).
+Do **not** touch `Auth0Mgmt--Domain` or `Auth0Provisioner--Domain`: both are Management API clients and the Management API stays on the canonical host.
+`Auth0Mgmt--*` exists only in the **staging** vault — that is correct, not a gap: `shared.env` points `AUTH0_MGMT_KEYVAULT` there for the shared tenant, so a `secret show` against the prod vault returning `SecretNotFound` is the expected answer.
 
 ```bash
 for KV in kv-rvs-staging-wus3 kv-rvs-prod-wus3; do
@@ -222,7 +231,17 @@ az webapp restart -n app-rvs-api-staging-wus3 -g rg-rvs-staging-westus3
 az webapp restart -n app-rvs-api-prod-wus3    -g rg-rvs-prod-westus3
 ```
 
-`Auth0--AuthorizationUrl` and `Auth0--TokenUrl` are written by [`modules/auth0-keyvault-secrets.bicep`](../Infra/Bicep.IaC/modules/auth0-keyvault-secrets.bicep) and **nothing currently reads them** — Swagger derives both from `Auth0:Domain` at request time.
+**Set all three, and note that the prod pair is currently malformed.** `main.bicep` builds them as `'${auth0Domain}oauth/token'`, which assumes `auth0Domain` ends in a slash. Prod was deployed without one, so the prod vault holds:
+
+```text
+Auth0--AuthorizationUrl   https://dev-2jhzz8xmjggh26pm.us.auth0.comauthorize
+Auth0--TokenUrl           https://dev-2jhzz8xmjggh26pm.us.auth0.comoauth/token
+```
+
+Staging's are correct.
+The commands above overwrite both with well-formed values, which is the cheapest moment to fix it — but if you ever redeploy with the `auth0Domain` parameter, pass it **with** a trailing slash or the malformation comes back.
+
+`Auth0--AuthorizationUrl` and `Auth0--TokenUrl` are written by [`modules/auth0-keyvault-secrets.bicep`](../Infra/Bicep.IaC/modules/auth0-keyvault-secrets.bicep) and **nothing currently reads them** — Swagger derives both from `Auth0:Domain` at request time, via `.TrimEnd('/')`, which is why the prod malformation has never surfaced.
 Set them anyway so a later `auth0Domain` redeploy doesn't reintroduce the canonical host, and so the next person reading the vault isn't misled.
 
 The alternative to the loop above is a redeploy with `--parameters auth0Domain=https://login.rvintake.com/ …`, which rewrites all three. That needs every other `auth0*` parameter supplied in the same command (the module is skipped entirely when `auth0Domain` is empty), so the `az keyvault secret set` route is usually less work.
