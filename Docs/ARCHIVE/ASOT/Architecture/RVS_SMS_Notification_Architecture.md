@@ -70,12 +70,11 @@ The opt-out choices are saved on both `CustomerProfile` and `GlobalCustomerAcct`
 
 | Capability | **Twilio** | **Azure Communication Services (ACS)** |
 |---|---|---|
-| **SMS Send (US)** | Toll-free, local, short code, 10DLC | Toll-free, short code; 10DLC via preview |
+| **SMS Send (US)** | Toll-free, local, short code | Toll-free, short code |
 | **SMS Receive (Inbound)** | Webhook-based, mature | Event Grid-based, generally available |
 | **Two-way conversations** | Native Conversations API | Manual routing via Event Grid + custom logic |
 | **MMS (photos/media)** | Supported (US/Canada) | Not supported (text only) |
 | **Toll-free verification** | Self-service portal | Self-service via Azure portal |
-| **10DLC registration** | Mature, self-service TCR integration | Preview; limited tooling |
 | **Short code provisioning** | Self-service, 8-12 week lead time | Available, similar lead time |
 | **Delivery receipts** | Webhook callbacks per message | Event Grid delivery status events |
 | **International SMS** | 180+ countries | 180+ countries |
@@ -113,7 +112,6 @@ Pricing as of April 2026. All prices USD.
 | Outbound SMS (short code) | $0.0079/msg | $0.0079/msg |
 | Inbound SMS (short code) | $0.0079/msg | $0.0079/msg |
 | Carrier surcharges (toll-free) | ~$0.003/msg (variable) | ~$0.003/msg (variable) |
-| Carrier surcharges (10DLC) | ~$0.003-$0.006/msg | ~$0.003-$0.006/msg |
 
 > **Key insight:** Per-message costs are nearly identical. The differentiation is in platform features, operational complexity, and ecosystem integration — not raw SMS pricing.
 
@@ -121,8 +119,6 @@ Pricing as of April 2026. All prices USD.
 
 | Registration | **Twilio** | **ACS** |
 |---|---|---|
-| 10DLC brand registration | $4 (one-time) | $4 (one-time, via TCR) |
-| 10DLC campaign registration | $15/mo | $15/mo (via TCR) |
 | Toll-free verification | Free (self-service) | Free (self-service) |
 
 #### RVS Volume Estimate (MVP to Growth)
@@ -165,7 +161,6 @@ Pricing as of April 2026. All prices USD.
 | **Transactional-only workload** | High | RVS sends zero marketing, reminder, or re-engagement emails. For 1:1 transactional email to engaged recipients, ACS Email's Microsoft-managed IP pools deliver reliably (>99% inbox placement). The IP reputation advantages of SendGrid are irrelevant for this use case. |
 | **Inbound SMS via Event Grid** | Medium | Event Grid subscriptions route inbound SMS to the same App Service (or an Azure Function) without exposing a public webhook endpoint. |
 | **Per-message cost** | Low | Identical to SendGrid for email and identical to Twilio for SMS. No cost advantage either way. |
-| **10DLC maturity** | Low (negative) | Twilio's 10DLC tooling is more mature. However, RVS will start with toll-free numbers (10DLC not needed at MVP scale). |
 
 ### 2.3 ACS Email — Deliverability for Transactional Email
 
@@ -190,7 +185,6 @@ Twilio + SendGrid would be the better choice if any of the following become requ
 2. **MMS support** — If dealers need to send photos or media via text (e.g., "Here is a photo of the damage we found"), Twilio supports MMS; ACS does not. Workaround: Send a link to a Blob Storage SAS URL in the SMS body.
 3. **Multi-channel conversations** — If RVS builds a unified inbox combining SMS, WhatsApp, and Facebook Messenger, Twilio Conversations provides this out of the box. ACS would require manual integration of each channel.
 4. **Local phone numbers** — If dealers require a local area code number for SMS (not toll-free), Twilio supports local numbers; ACS does not offer local numbers for SMS.
-5. **Advanced 10DLC requirements** — If high-volume 10DLC campaigns with per-brand registration become critical, Twilio's mature TCR integration is an advantage.
 
 ### 2.5 Migration Risk Assessment
 
@@ -400,17 +394,7 @@ The TCPA governs unsolicited text messages in the United States. Non-compliance 
 | **Message frequency disclosure** | "You will receive approximately 2-5 messages per service request." |
 | **Transactional vs marketing** | All RVS messages are transactional (service-related). No marketing messages. Transactional messages have more lenient TCPA rules but still require consent. |
 
-### 4.2 10DLC Registration
-
-10DLC (10-digit long code) is the carrier-mandated registration system for A2P (application-to-person) messaging on local phone numbers. **Not required for toll-free numbers**, which is why the MVP recommendation uses toll-free.
-
-If RVS later adopts local numbers or 10DLC:
-
-- **Brand registration** ($4 one-time) — Register "RV Service Flow" as an A2P brand with The Campaign Registry (TCR)
-- **Campaign registration** ($15/mo) — Register each message use case (e.g., "Service request notifications")
-- **Vetting** — TCR reviews brand reputation; higher trust scores get higher throughput limits
-
-### 4.3 Multi-Tenant Compliance Responsibility
+### 4.2 Multi-Tenant Compliance Responsibility
 
 | Responsibility | Owner | Implementation |
 |---|---|---|
