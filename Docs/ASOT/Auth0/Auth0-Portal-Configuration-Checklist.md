@@ -189,6 +189,21 @@ Back in **Branding → Custom Domains**, click **Verify**. Status goes to **Read
 Then turn on **Enable custom domains for email and phone notifications** — on the same screen in current dashboards, under **Settings → Custom Domains** in older ones. Without it, the link inside a password-reset email still points at the canonical tenant domain, which defeats most of the point at the one moment the user is most likely to read the address bar.
 Easy to miss, and nothing fails visibly when it is off.
 
+**Also set it as the tenant's default custom domain** — the dashboard offers this as **Switch to custom** once the domain is Ready. Only a verified domain can be made default, which is why this belongs here and not earlier.
+
+The default domain governs Auth0-generated notification links (password reset, email verification, welcome, SMS) *and* **Management API requests that trigger a notification without the optional `auth0-custom-domain` header**. With no default set, Auth0 falls back to the canonical tenant domain for all of them.
+
+That second clause is the one that decides it. [`Auth0ManagementProvisioner.cs`](../../../RVS.API/Integrations/Auth0ManagementProvisioner.cs) calls `POST api/v2/tickets/password-change` and sends no such header — the string appears nowhere in the codebase. That ticket is the **set-password link a brand-new dealer clicks during onboarding** (#563, Spec P-1…P-8).
+Left on the canonical domain, the first URL a customer ever receives from RVS points at `dev-2jhzz8xmjggh26pm.us.auth0.com` — the precise failure §6 exists to prevent, at the moment there is least trust to spend. The alternative is passing the header on every such call, which is a code change; the default setting is free and covers every flow at once.
+
+**Shared-tenant consequence, stated plainly:** the other products in this tenant get `login.rvintake.com` in their notification links too. Narrower than it sounds — interactive login stays per-application, as the top of §6 explains — but it is a real RVS-brand leak, and each of those products can override per request with the `auth0-custom-domain` header if it ever matters.
+
+Decide it together with §8 rather than on its own. Once Auth0's email provider points at the RVS ACS resource, those same products' identity mail arrives *from* `DoNotReply@mail.rvintake.com`; a From address is a larger leak than a link. If the §8 footprint is acceptable, this is strictly smaller.
+If it is not, the answer is to split the tenant (#610), not to leave reset links on a raw `.auth0.com` host.
+
+**Verify both empirically, not by inspection.** The toggle and the default interact, and neither shows an error when wrong. Trigger a real password reset and read the link; then, separately, provision a user through `/admin` and read *that* link.
+They travel different code paths — the reset is Auth0's own notification, the ticket is the Management API path above — so one working does not prove the other.
+
 Leaving §6 here is a valid stopping point. The custom domain is live and unused; no user sees any difference until §6.5.
 
 ### 6.5 Cut the applications over
