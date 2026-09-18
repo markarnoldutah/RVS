@@ -818,13 +818,49 @@ module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
 // certificate are out-of-band, one-time, per environment: see the apiCnameRecords
 // comment above and README.md "Bind the api.<zone> host".
 
+// Mail posture for the corporate zone. It neither sends nor receives: the packet
+// email goes out From mail.rvintake.com, and there are no mailboxes here.
+// Saying so explicitly is what stops the domain being usable for spoofing — with
+// no SPF and no DMARC, anyone can forge From: anything@rvserviceflow.com and a
+// receiver has nothing to check it against. The domain appears in the pilot
+// agreement's history and in the JWT claim namespace, so it is guessable.
+//
+//   null MX (RFC 7505) — preference 0, exchange "." — "accepts no mail", so a
+//     sender fails immediately rather than retrying for days. Replace this entry
+//     with a real exchanger if corporate mailboxes are ever added here.
+//   SPF "-all" with no mechanisms — no host is authorised to send as this domain.
+//   DMARC p=reject — act on that, rather than merely publishing it.
+//
+// No rua on this record, deliberately. A reporting address at rvintake.com would
+// be cross-organizational-domain and would need its own RFC 7489 §7.1
+// authorization record in the intake zone; a policy-only DMARC record is valid,
+// needs no such record, and there is nothing here worth reporting on anyway.
+var corporateNullMxRecords = [
+  {
+    name: '@'
+    records: [ { preference: 0, exchange: '.' } ]
+  }
+]
+
+var corporateMailPolicyTxtRecords = [
+  {
+    name: '@'
+    values: [ 'v=spf1 -all' ]
+  }
+  {
+    name: '_dmarc'
+    values: [ 'v=DMARC1; p=reject; adkim=s; aspf=s' ]
+  }
+]
+
 module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
   name: 'deploy-dns-api-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
   params: {
     zoneName: apiZoneName
     cnameRecords: apiCnameRecords
-    txtRecords: apiTxtRecords
+    txtRecords: concat(apiTxtRecords, corporateMailPolicyTxtRecords)
+    mxRecords: corporateNullMxRecords
   }
 }
 

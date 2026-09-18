@@ -8,6 +8,7 @@
 //                   Azure resource by id — Azure DNS then tracks that resource's
 //                   address itself, so nothing is pinned in source.
 //   - TXT records   (commonly used for SWA custom-domain ownership validation)
+//   - MX records    (mail exchangers, or a null MX declaring the domain takes no mail)
 //
 // The zone resource is idempotent: re-deploying with the same zoneName
 // against the same resource group is a no-op on the zone itself and
@@ -32,6 +33,9 @@ param aRecords array = []
 
 @description('TXT record-sets. Each entry: { name: string, values: string[] } where each value in the list is published as a SEPARATE TXT record at that name (e.g. a domain-ownership string and an SPF string sharing one host). A single string over 255 chars must be pre-split by the caller — rare.')
 param txtRecords array = []
+
+@description('MX record-sets. Each entry: { name: string, records: [{ preference: int, exchange: string }] }. Use name="@" for the apex. A "null MX" — a single record with preference 0 and exchange "." — declares per RFC 7505 that the domain accepts no mail, which makes senders fail fast instead of timing out. Declare an MX here rather than by hand: an undeclared record in an IaC-managed zone survives every deploy unnoticed, which is how a placeholder MX pointing at a third party sat on rvserviceflow.com until 2026-09-17.')
+param mxRecords array = []
 
 @description('DNS record TTL in seconds.')
 param ttl int = 3600
@@ -79,6 +83,15 @@ resource txtSet 'Microsoft.Network/dnsZones/TXT@2018-05-01' = [for record in txt
         v
       ]
     }]
+  }
+}]
+
+resource mxSet 'Microsoft.Network/dnsZones/MX@2018-05-01' = [for record in mxRecords: {
+  parent: zone
+  name: record.name
+  properties: {
+    TTL: ttl
+    MXRecords: record.records
   }
 }]
 
