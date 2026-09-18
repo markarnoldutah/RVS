@@ -56,14 +56,18 @@ param deployKeyVault = true
 param deployObservability = true
 param deployAvailabilityTest = true
 
-// Ops alert receivers for the packet-pipeline critical alerts (#494). Left empty
-// here — the ops mailbox is not committed to git, same rule as the Auth0 values.
-// Set it on the deploy:
-//   --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"ops@yourco.com"}]'
-// or add receivers to the ag-rvs-ops-staging-wus3 action group in the portal.
-// Until a receiver exists the alert rules fire but notify nobody
-// (the opsAlertReceiverAction deployment output repeats this).
-param opsAlertEmailReceivers = []
+// Ops alert receivers for the packet-pipeline critical alerts (#494). Committed
+// here rather than left empty — the Action Groups resource provider does a
+// full-replace PUT, so an empty array here deletes any receiver added by hand
+// in the portal on every deploy (#639); the portal is not a safe place to set
+// this. markarnoldutah@gmail.com is a personal address, tracked as a known gap
+// — replace with a real ops alias once one exists (#648).
+param opsAlertEmailReceivers = [
+  {
+    name: 'oncall'
+    email: 'markarnoldutah@gmail.com'
+  }
+]
 
 // Communication Services (Email + SMS)
 param deployAcs = true

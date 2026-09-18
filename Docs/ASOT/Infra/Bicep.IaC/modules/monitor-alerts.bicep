@@ -42,7 +42,7 @@ param environmentName string
 @description('Tags applied to every resource this module creates.')
 param tags object = {}
 
-@description('Email receivers for the ops action group. Each item: { name: string, email: string }. Empty = an action group with no receivers — add them in the portal or pass on the CLI, the same way the Auth0 values are handled.')
+@description('Email receivers for the ops action group. Each item: { name: string, email: string }. Empty = an action group with no receivers. Never rely on adding one via the portal instead: this property is a full-replace PUT, so the next deploy silently deletes any receiver not in this parameter (#639).')
 param opsEmailReceivers array = []
 
 // ── Variables ─────────────────────────────────────────────────
