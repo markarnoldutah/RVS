@@ -11,6 +11,8 @@ Only the Manager app authenticates. **The intake app is anonymous and must stay 
 
 Auth0 tenant `dev-2jhzz8xmjggh26pm.us.auth0.com`, API audience `https://api.rvserviceflow.com`, custom claim namespace `https://rvserviceflow.com/`.
 
+> **Sign-in is still served from the canonical tenant domain.** The Auth0 custom domain `login.rvintake.com` (#627, #634) is planned but **not applied** as of 2026-09-17: no custom domain exists in the tenant, and all three Manager `appsettings` files plus both vaults' `Auth0--Domain` still name the host above. It becomes the issuer at checklist §6.5; update this section in that same change.
+
 > Both of those are **opaque identifiers**, not addresses to resolve. Since `#633` the API is also *served* at `api.rvserviceflow.com`, and since `#634` the claim namespace is the only other thing on that domain — but neither is coupled to the hostname. Changing the audience invalidates every issued token and every grant; changing the namespace breaks claim extraction in seven places. Moving a hostname is not a reason to touch either. The user-facing brand moved to `rvintake.com`; these did not, and should not.
 
 **One Auth0 tenant serves development, staging and production** (#610). A second tenant needs a paid Auth0 plan, so the split is deferred until usage justifies the cost. The accepted risks: any Auth0 change reaches every environment at once, and a test account carrying a real dealer's `tenantId` can sign in to the production Manager app and see that dealer's data. Test accounts must use test-only `tenantId` values. The tenant also hosts unrelated products; RVS owns only what `Infra/Auth0/baseline/` declares.
@@ -21,7 +23,7 @@ Configuration changes go through `Infra/Auth0/auth0-apply.sh` (plan, review, the
 
 `app_metadata` carries `tenantId`, `orgName`, and optionally `locationIds` and `regionTag`. `app_metadata.tenantId` is the value used everywhere downstream: the Cosmos partition key, the blob path prefix, and the isolation boundary. Its values are conventionally shaped like `ten_blue_compass_rv`, but they are ordinary strings — **not** Auth0 organization identifiers. The `ten_` prefix is deliberate: real Auth0 Organization ids start with `org_`, and a tenant id should never be mistaken for one.
 
-Consequences worth knowing: there is no per-tenant identity provider and no branded login, both of which would require Organizations. Staff accounts are created by RVS through the provisioning tool (see "Tenant provisioning" below), not by dealers.
+Consequences worth knowing: there is no per-tenant identity provider, and no **per-customer** branded login — both would require Organizations. Tenant-*wide* branding is available and is not affected by that choice; it is step §7 of the portal checklist. Staff accounts are created by RVS through the provisioning tool (see "Tenant provisioning" below), not by dealers.
 
 ---
 
