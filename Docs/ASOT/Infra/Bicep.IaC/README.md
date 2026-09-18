@@ -701,16 +701,20 @@ landed in Application Insights — into Azure Monitor alerts (#494).
 
 **Ops action group** — `ag-rvs-ops-<env>-wus3` (short name `rvs-ops-stg` /
 `rvs-ops-prod`). Receivers come from the `opsAlertEmailReceivers` parameter,
-left empty in the param files (the ops mailbox is not committed to git, same as
-the Auth0 values) — set it on the deploy or add receivers in the portal:
+committed as a real default in both param files (#639) — do **not** clear it
+back to `[]` and add a receiver in the portal instead. The Action Groups
+resource provider does a full-replace PUT on `emailReceivers`; a template that
+declares (or omits) the property as empty deletes whatever is live, portal-added
+receivers included. To change the receiver, edit the param file or override on
+the deploy:
 
 ```bash
 az deployment sub create ... \
   --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"ops@yourco.com"}]'
 ```
 
-Until a receiver exists the rules evaluate and fire but notify nobody. The
-`opsAlertReceiverAction` deployment output flags this.
+If the parameter is ever left empty, the rules still evaluate and fire but
+notify nobody — the `opsAlertReceiverAction` deployment output flags this.
 
 **Alert rules** — log-search rules (`Microsoft.Insights/scheduledQueryRules`,
 `kind: LogAlert`) scoped to the App Insights component. Each query is

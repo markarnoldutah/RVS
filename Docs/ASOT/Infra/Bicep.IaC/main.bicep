@@ -226,7 +226,7 @@ param deployObservability bool = false
 @description('When true and deployObservability + deployAppService are both true, creates a standard availability test on the API /health endpoint.')
 param deployAvailabilityTest bool = false
 
-@description('Email receivers for the ops action group that packet-pipeline critical alerts route to (#494). Each item: { name: string, email: string }. Empty = the action group is created with no receivers — add them in the portal or pass on the CLI, the same way the Auth0 values are handled. Only used when deployObservability = true.')
+@description('Email receivers for the ops action group that packet-pipeline critical alerts route to (#494). Each item: { name: string, email: string }. Committed as a real default in both param files (#639) — the Action Groups resource provider does a full-replace PUT, so an empty array here deletes any receiver added by hand in the portal on the next deploy; leaving it empty is not a safe way to defer setting a receiver. Only used when deployObservability = true.')
 param opsAlertEmailReceivers array = []
 
 // ── Variables ─────────────────────────────────────────────────
@@ -1037,10 +1037,10 @@ output logAnalyticsWorkspaceName string = deployObservability ? logAnalytics.out
 #disable-next-line BCP318
 output opsActionGroupId string = deployObservability ? monitorAlerts.outputs.actionGroupId : ''
 
-@description('Manual follow-up when opsAlertEmailReceivers is empty: the ops action group deploys with no receivers and no alert reaches a human until one is added.')
+@description('Manual follow-up when opsAlertEmailReceivers is empty: the ops action group deploys with no receivers and no alert reaches a human until one is added. Do not "fix" this by adding a receiver in the portal instead — the Action Groups resource provider does a full-replace PUT, so the next deploy silently deletes it (#639). Set the parameter and redeploy.')
 #disable-next-line BCP318
 output opsAlertReceiverAction string = (deployObservability && empty(opsAlertEmailReceivers))
-  ? 'ACTION REQUIRED: add an email (or other) receiver to the ag-rvs-ops-${environmentName}-wus3 ops action group — portal, or redeploy with --parameters opsAlertEmailReceivers=\'[{"name":"oncall","email":"..."}]\'. Until then packet-pipeline critical alerts fire but notify nobody.'
+  ? 'ACTION REQUIRED: set opsAlertEmailReceivers and redeploy — e.g. --parameters opsAlertEmailReceivers=\'[{"name":"oncall","email":"..."}]\'. Do NOT add a receiver via the portal instead: the next deploy will silently delete it (#639). Until a receiver is set via this parameter, packet-pipeline critical alerts fire but notify nobody.'
   : ''
 
 // ── ACS ───────────────────────────────────────────────────────
