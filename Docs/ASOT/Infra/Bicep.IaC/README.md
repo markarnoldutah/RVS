@@ -372,6 +372,24 @@ hands out working but untagged links, rather than links to a host that does not
 answer. Managed certificates renew automatically; redeploys leave the binding
 alone.
 
+### Corporate domain mail posture (`rvserviceflow.com`)
+
+The corporate zone neither sends nor receives mail. The packet email goes out From `mail.rvintake.com`; there are no mailboxes on `rvserviceflow.com`. Bicep now says so explicitly, in the `dnsApi` module:
+
+| Record | Value | Why |
+| --- | --- | --- |
+| `MX @` | `0 .` | RFC 7505 null MX — "accepts no mail", so senders fail fast instead of retrying for days |
+| `TXT @` | `v=spf1 -all` | no host is authorised to send as this domain |
+| `TXT _dmarc` | `v=DMARC1; p=reject; adkim=s; aspf=s` | act on failures rather than merely observing them |
+
+**Why this matters for a domain nobody mails.** Without SPF and DMARC, anyone can forge `From: someone@rvserviceflow.com` and a receiver has nothing to check it against. The domain is guessable — it appears in the JWT claim namespace, in the Auth0 audience, and in earlier versions of the pilot agreement — so "nobody knows it exists" was never the protection.
+
+**No `rua` on that DMARC record, deliberately.** A reporting address on `rvintake.com` would be cross-organizational-domain and would need its own RFC 7489 §7.1 authorization record in the intake zone. A policy-only DMARC record is valid, needs no such record, and there is nothing sending here to report on.
+
+**If corporate mailboxes are ever added here**, replace the null MX entry with real exchangers and relax SPF in the same change — a null MX with live mailboxes fails every inbound message.
+
+> **History.** This zone carried an MX pointing at `mail.yourmailprovider.com` — a placeholder registered to Domains By Proxy, not ours — until 2026-09-17. It survived indefinitely because `dns.bicep` had no MX support, so no deploy ever asserted otherwise. That is the argument for declaring record types you do not use: an undeclared record in an IaC-managed zone is invisible to the template forever.
+
 ### Bind the `api.<zone>` host (`#633`)
 
 `api.rvserviceflow.com` (prod) and `api-staging.rvserviceflow.com` (staging)
