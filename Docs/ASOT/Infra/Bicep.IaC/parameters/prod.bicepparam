@@ -83,7 +83,25 @@ param deployAcs = true
 // dmarcReportingAddress must be a monitored mailbox (or a DMARC-processor
 // address) — see #608.
 param acsCustomEmailDomain = 'mail.rvintake.com'
-param dmarcReportingAddress = 'dmarc-reports@rvserviceflow.com'
+// DMARC aggregate-report destination. On the SAME organizational domain as the
+// DMARC record itself (rvintake.com), which is what keeps it standards-clean:
+// RFC 7489 §7.1 requires an authorization record
+// (<domain>._report._dmarc.<rua-domain> TXT "v=DMARC1") whenever the rua address
+// sits outside the publishing domain's org domain, and none existed while this
+// pointed at rvserviceflow.com — so conforming reporters had grounds to drop the
+// reports outright. Same org domain, no authorization record needed, ever.
+//
+// It previously read dmarc-reports@rvserviceflow.com. That domain's only MX is
+// mail.yourmailprovider.com, a placeholder registered to Domains By Proxy and
+// controlled by a third party, so reports were addressed somewhere nobody here
+// owns. See the note in #634 / #608.
+//
+// ⚠ rvintake.com has NO MX record, so reports BOUNCE at the reporter rather than
+// arriving. That is deliberate and strictly better than delivery to a stranger,
+// but it means p=none is still doing nothing useful: nobody reads the reports.
+// #608 tracks giving this a real destination — a monitored mailbox or a DMARC
+// processor address. Until then this is a correctness fix, not a working pipeline.
+param dmarcReportingAddress = 'dmarc-reports@rvintake.com'
 // Verified and linked. Must stay true: false unlinks the domain on redeploy.
 param acsCustomDomainVerified = true
 
