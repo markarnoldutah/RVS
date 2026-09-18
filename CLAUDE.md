@@ -30,14 +30,23 @@ There is no target number of these. One authoritative home per fact; a document 
 
 When the user says **"Execute Issue #abc"** (where `abc` is a valid GitHub Issue number), before doing any work:
 
-1. Create a new branch off the current base branch (usually `main`) named `abc-some-meaningful-identifier` — `abc` is the issue number, followed by a short kebab-case slug describing the issue (e.g. `431-packet-html-render`).
-2. Check out that branch, then perform the work for the issue on it.
+1. Determine the branch name: `abc-some-meaningful-identifier` — `abc` is the issue number, followed by a short kebab-case slug describing the issue (e.g. `431-packet-html-render`).
+2. Create a git worktree for it, as a sibling of the main repo folder, on a new branch off the current base branch (usually `main`):
+   git worktree add ../<repo-name>-abc-slug -b abc-slug
+   - If the branch already exists (e.g. from a prior session), check whether a worktree for it already exists first (`git worktree list`). If so, use that worktree rather than creating a duplicate. If the branch exists but has no worktree, add one for it: `git worktree add ../<repo-name>-abc-slug abc-slug`.
+3. If a `.env`, `appsettings.Development.json`, or other untracked local config file exists in the main repo and is needed to build/run, copy it into the new worktree before starting work.
+4. Do all work for this issue inside that worktree directory — restore packages, build/run, edit files — never in the main checkout or another issue's worktree.
 
-Do not commit issue work directly to `main`. If the branch already exists, check it out and continue on it rather than creating a duplicate.
+Do not commit issue work directly to `main`. Work happens on the issue's branch, inside its own worktree.
+
+For any code task that isn't a numbered GitHub issue, use the same worktree approach with a short kebab-case slug in place of `abc-some-meaningful-identifier`, unless I say to work in place or it's a quick one-line fix. If you're unsure whether something warrants its own worktree, ask me before starting.
+
+When an issue's work is done and merged (or I tell you to stop), remove its worktree:
+   git worktree remove ../<repo-name>-abc-slug
 
 ## Committing
 
-**Never commit or push automatically.** Do the work, leave the changes in the working tree, and stop there. Run `git commit` or `git push` only when I explicitly ask for it in that same message. Creating a branch, "executing" an issue, or being told to "make the change" is **not** permission to commit — wait for an explicit "commit this" / "push it" instruction.
+**Never commit or push automatically.** Do the work, leave the changes in the working tree, and stop there. Run `git commit` or `git push` only when I explicitly ask for it in that same message. Creating a branch, creating a worktree, "executing" an issue, or being told to "make the change" is **not** permission to commit — wait for an explicit "commit this" / "push it" instruction.
 
 ## Solution Layout
 
