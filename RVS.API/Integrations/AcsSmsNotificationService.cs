@@ -38,6 +38,9 @@ public sealed class AcsSmsNotificationService : ISmsNotificationService
     }
 
     /// <inheritdoc />
+    public bool IsEnabled => _options.Enabled;
+
+    /// <inheritdoc />
     public async Task SendSmsAsync(
         string tenantId, string locationId, string toPhoneNumber, string message,
         CancellationToken cancellationToken = default)

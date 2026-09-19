@@ -314,6 +314,119 @@ public class IntakeWizardStateTests
         errors.Should().BeEmpty();
     }
 
+    // ── Step 2: opt-outs veto the preferred contact method (Spec A-2, issue #662) ──
+
+    [Theory]
+    [InlineData("Phone", true)]
+    [InlineData("Text", false)]
+    [InlineData("Email", true)]
+    public void IsContactMethodAvailable_WhenSmsOptOut_ShouldDisableTextOnly(string method, bool expected)
+    {
+        var state = CreateState();
+        state.SmsOptOut = true;
+
+        state.IsContactMethodAvailable(method).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("Phone", true)]
+    [InlineData("Text", true)]
+    [InlineData("Email", false)]
+    public void IsContactMethodAvailable_WhenEmailOptOut_ShouldDisableEmailOnly(string method, bool expected)
+    {
+        var state = CreateState();
+        state.EmailOptOut = true;
+
+        state.IsContactMethodAvailable(method).Should().Be(expected);
+    }
+
+    [Fact]
+    public void IsContactMethodAvailable_WhenBothOptedOut_ShouldLeavePhoneAvailable()
+    {
+        var state = CreateState();
+        state.SmsOptOut = true;
+        state.EmailOptOut = true;
+
+        state.IsContactMethodAvailable("Phone").Should().BeTrue();
+        state.IsContactMethodAvailable("Text").Should().BeFalse();
+        state.IsContactMethodAvailable("Email").Should().BeFalse();
+    }
+
+    [Fact]
+    public void SmsOptOut_WhenTextIsSelected_ShouldClearTheSelection()
+    {
+        var state = CreateState();
+        state.PreferredContact = "Text";
+
+        state.SmsOptOut = true;
+
+        state.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void EmailOptOut_WhenEmailIsSelected_ShouldClearTheSelection()
+    {
+        var state = CreateState();
+        state.PreferredContact = "Email";
+
+        state.EmailOptOut = true;
+
+        state.PreferredContact.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("Phone")]
+    [InlineData("Email")]
+    public void SmsOptOut_WhenSelectionDoesNotConflict_ShouldKeepIt(string method)
+    {
+        var state = CreateState();
+        state.PreferredContact = method;
+
+        state.SmsOptOut = true;
+
+        state.PreferredContact.Should().Be(method);
+    }
+
+    [Theory]
+    [InlineData("Phone")]
+    [InlineData("Text")]
+    public void EmailOptOut_WhenSelectionDoesNotConflict_ShouldKeepIt(string method)
+    {
+        var state = CreateState();
+        state.PreferredContact = method;
+
+        state.EmailOptOut = true;
+
+        state.PreferredContact.Should().Be(method);
+    }
+
+    [Theory]
+    [InlineData("Text", true, false)]
+    [InlineData("Email", false, true)]
+    public async Task ValidateCurrentStep_Step2_PreferredContactOptedOut_ShouldReturnError(
+        string preferredContact, bool smsOptOut, bool emailOptOut)
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Phone = "801-555-1234";
+        state.SmsOptOut = smsOptOut;
+        state.EmailOptOut = emailOptOut;
+        // Set after the opt-out, which would otherwise clear it — the shape a hand-built state takes.
+        state.PreferredContact = preferredContact;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().ContainSingle(e => e.Contains("opted out", StringComparison.OrdinalIgnoreCase));
+        state.FieldErrors.Should().ContainKey("PreferredContact");
+    }
+
     [Fact]
     public async Task ValidateCurrentStep_Step3_EmptyVin_ShouldReturnError()
     {

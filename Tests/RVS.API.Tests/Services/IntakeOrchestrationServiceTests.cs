@@ -833,9 +833,26 @@ public class IntakeOrchestrationServiceTests
 
         // BuildValidRequest submits "801-555-1234"; ACS only accepts E.164 (issue #661).
         _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
-            "ten_test", "loc_test",
+            "ten_test", "loc_test", It.IsAny<string?>(),
             It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(),
             "+18015551234",
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldNotifyWithTheNormalisedPreferredContactAndOptOuts()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest(emailOptOut: true);
+        request = request with { Customer = request.Customer with { PreferredContact = "  text " } };
+
+        await _sut.ExecuteAsync("test-slug", request);
+
+        // PreferredContact chooses the confirmation channel; the opt-outs veto it (issue #662).
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), "Text",
+            false, true, It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -850,7 +867,7 @@ public class IntakeOrchestrationServiceTests
         await _sut.ExecuteAsync("test-slug", request);
 
         _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
-            It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
             It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(),
             null,
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),

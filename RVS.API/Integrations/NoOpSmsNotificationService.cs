@@ -16,6 +16,9 @@ public sealed class NoOpSmsNotificationService : ISmsNotificationService
     }
 
     /// <inheritdoc />
+    public bool IsEnabled => false;
+
+    /// <inheritdoc />
     public Task SendSmsAsync(
         string tenantId, string locationId, string toPhoneNumber, string message,
         CancellationToken cancellationToken = default)

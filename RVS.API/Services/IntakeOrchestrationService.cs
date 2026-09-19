@@ -329,9 +329,11 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         // ACS only accepts E.164 (issue #661). A number that doesn't normalise is dropped from the
         // notification rather than sent raw; the profile keeps it as entered.
+        // The preference chooses the channel; the opt-outs veto it (Spec A-2, issue #662).
         _ = FireAndForgetNotificationAsync(
             tenantId,
             locationId,
+            serviceRequest.CustomerSnapshot.PreferredContact,
             request.SmsOptOut,
             request.EmailOptOut,
             request.Customer.Email.Trim(),
@@ -383,7 +385,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     /// Exceptions are caught and logged as warnings.
     /// </summary>
     private async Task FireAndForgetNotificationAsync(
-        string tenantId, string locationId,
+        string tenantId, string locationId, string? preferredContact,
         bool smsOptOut, bool emailOptOut,
         string email, string? phone, string serviceRequestId, string dealershipName,
         string statusUrl, string? dealerPhone)
@@ -393,6 +395,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             await _notificationOrchestrator.SendServiceRequestConfirmationAsync(
                 tenantId,
                 locationId,
+                preferredContact,
                 smsOptOut,
                 emailOptOut,
                 email,

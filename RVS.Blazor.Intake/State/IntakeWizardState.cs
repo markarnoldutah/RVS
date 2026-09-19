@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.JSInterop;
 using RVS.Domain.DTOs;
+using RVS.Domain.Validation;
 using RVS.UI.Shared.Validation;
 
 namespace RVS.Blazor.Intake.State;
@@ -70,11 +71,49 @@ public sealed class IntakeWizardState
     /// </summary>
     public string? PreferredContact { get; set; }
 
-    /// <summary>When <c>true</c>, customer has opted out of SMS notifications (Step 2).</summary>
-    public bool SmsOptOut { get; set; }
+    /// <summary>
+    /// When <c>true</c>, customer has opted out of SMS notifications (Step 2). The opt-out is a
+    /// hard veto over <see cref="PreferredContact"/> (<c>Spec A-2</c>): opting out while
+    /// <c>Text</c> is selected clears the selection.
+    /// </summary>
+    public bool SmsOptOut
+    {
+        get;
+        set
+        {
+            field = value;
+            ClearPreferredContactIfVetoed();
+        }
+    }
 
-    /// <summary>When <c>true</c>, customer has opted out of email notifications (Step 2).</summary>
-    public bool EmailOptOut { get; set; }
+    /// <summary>
+    /// When <c>true</c>, customer has opted out of email notifications (Step 2). Opting out while
+    /// <c>Email</c> is selected clears the selection.
+    /// </summary>
+    public bool EmailOptOut
+    {
+        get;
+        set
+        {
+            field = value;
+            ClearPreferredContactIfVetoed();
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="method"/> can be chosen as the preferred contact method given the
+    /// opt-outs — Step 2 disables the radio for an opted-out channel. <c>Phone</c> is always available.
+    /// </summary>
+    public bool IsContactMethodAvailable(string method) =>
+        NotificationPreferenceValidator.IsContactMethodAvailable(method, SmsOptOut, EmailOptOut);
+
+    private void ClearPreferredContactIfVetoed()
+    {
+        if (PreferredContact is not null && !IsContactMethodAvailable(PreferredContact))
+        {
+            PreferredContact = null;
+        }
+    }
 
     /// <summary>Whether the customer info was prefilled from a magic-link token.</summary>
     public bool IsPrefilled { get; set; }
@@ -582,6 +621,14 @@ public sealed class IntakeWizardState
             var msg = $"A phone number is required when the preferred contact method is {PreferredContact}.";
             errors.Add(msg);
             FieldErrors["Phone"] = msg;
+        }
+
+        var preferenceResult = NotificationPreferenceValidator.Validate(PreferredContact, SmsOptOut, EmailOptOut);
+        if (!preferenceResult.IsValid)
+        {
+            const string msg = "You've opted out of that channel. Choose another preferred contact method.";
+            errors.Add(msg);
+            FieldErrors["PreferredContact"] = msg;
         }
 
         return errors;

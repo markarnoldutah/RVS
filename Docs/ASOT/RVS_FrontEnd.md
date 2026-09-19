@@ -18,7 +18,7 @@ Shell is `Pages/IntakeWizard.razor`, routed at `/{Slug}` with an optional `?toke
 | Step | Component | Does |
 |---|---|---|
 | 1 | `Step1_IntakeLanding` | `GET api/intake/{slug}/config`; applies returning-customer prefill (customer, asset, known assets); handles expired token and invalid slug |
-| 2 | `Step2_CustomerInfoStep` | Name, email, phone, email/SMS opt-out. Shows a "pre-filled from your previous visit" banner |
+| 2 | `Step2_CustomerInfoStep` | Name, email, phone, then Notification Preferences (text/email opt-outs, texting disclosure linking `/sms-terms`) above Preferred contact method. An opt-out disables its radio and clears a conflicting selection (`Spec A-2`, `#662`). Shows a "pre-filled from your previous visit" banner |
 | 3 | `Step3_VinLookupStep` | Previously-seen RVs; VIN entry; **mic → `ai/transcribe-issue`** cleaned by `VinTranscriptCleaner`; **camera → `ai/extract-vin`**, auto-filling at confidence ≥ 0.7 and auto-looking-up at ≥ 0.9; `decode-vin/{vin}` with a "Continue Anyway" fallback |
 | 4 | `Step4_VehicleDetailsStep` | Manufacturer, model, year (editable after decode), extended warranty, approximate purchase date |
 | 5 | `Step5_IssueDescriptionStep` | Mic → transcribe → `ai/refine-issue-text`; `ai/suggest-category` and `ai/suggest-insights` surfaced as "Suggested" chips; calls `assess-capabilities` on continue |
