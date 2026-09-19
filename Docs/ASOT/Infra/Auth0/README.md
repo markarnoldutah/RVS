@@ -28,6 +28,7 @@ The Management API app and its Key Vault secrets are created by hand, once per t
 
 1. On a branch, edit `baseline/` or the tenant file.
 2. Plan: `./auth0-apply.sh shared`. It prints a diff per resource and exits `2` when there are differences, `0` when there are none.
+   A setting it checks but never changes (below) also exits `2`, with a line saying `--apply` won't fix it.
 3. Once the change is reviewed: `./auth0-apply.sh shared --apply`. It plans again against live state, asks you to type the tenant domain, then applies.
 4. Plan again and expect `No differences`.
 
@@ -35,13 +36,25 @@ Common edits:
 
 - **New permission:** add it to `scopes` in `baseline/resource-server.json` and to the roles that need it in `baseline/roles.json`. The Manager's grant (`"scope": "all"`) picks it up automatically. It also needs a policy in `RVS.API/Program.cs`.
 - **New Manager origin:** add it to `AUTH0_MANAGER_ORIGINS` in the tenant file. The callback, logout and web-origin URLs are all derived from it.
+- **Renaming an application in the dashboard:** change `name` in its `baseline/clients/<name>.json` in the same change. Applications are matched by name, so after a dashboard rename the plan reports `+ create application <old name>`,
+  and `--apply` would create a duplicate with a new client ID. The Manager was renamed to "RV Intake Manager" this way.
 - **Action change:** edit `baseline/actions/<name>.js`. Apply updates the Action, waits for the build, deploys it, and makes sure it is bound to its trigger.
 
 ## What the scripts never do
 
 - Delete a resource. Removing a role or application from `baseline/` leaves it in the tenant; delete it in the dashboard. Within a managed resource the baseline is authoritative: a permission not in the baseline is removed from the RVS API, RVS roles and the Manager grant.
 - Touch users. Onboarding users (with `app_metadata`) is covered in the checklist and in `RVS_Identity.md`.
-- Manage tenant-wide settings (session lifetimes, attack protection, Universal Login prompts). While the tenant is shared with other products, most of those aren't RVS's to set. The exceptions RVS does set — the custom domain, Universal Login branding and the email provider — are deliberate, done by hand, and written up in [`../../Auth0/Auth0-Portal-Configuration-Checklist.md`](../../Auth0/Auth0-Portal-Configuration-Checklist.md) §6–§8. Each one reaches the other products in this tenant as well.
+- Manage tenant-wide settings (session lifetimes, attack protection, Universal Login prompts). While the tenant is shared with other products, most of those aren't RVS's to set. The exceptions RVS does set — the custom domain, the Friendly Name, Universal Login branding and the email provider — are deliberate, done by hand, and written up in [`../../Auth0/Auth0-Portal-Configuration-Checklist.md`](../../Auth0/Auth0-Portal-Configuration-Checklist.md) §6–§8. Each one reaches the other products in this tenant as well.
+
+  The apply script **checks** most of them against the tenant file and reports drift. It never changes them, so a dashboard edit by anyone sharing the tenant shows up on the next plan:
+
+  | Setting | Expected value | Scope | If it drifts |
+  | --- | --- | --- | --- |
+  | Friendly Name | `AUTH0_EXPECT_FRIENDLY_NAME` | `read:tenant_settings` | The login card names something else |
+  | Custom domain: ready, and the tenant default | the host in `AUTH0_APP_AUTHORITY` | `read:custom_domains` | `/admin` set-password links fall back to the canonical host |
+  | Email provider and From address | `AUTH0_EXPECT_EMAIL_PROVIDER`, `AUTH0_EXPECT_EMAIL_FROM` | `read:email_provider` | Reset mail comes from `no-reply@auth0user.net`, or someone else's sender |
+
+  An unset value skips its check. A missing scope skips its check with a warning, so a plan works before the scopes are granted. Branding isn't checked yet; there is nothing set to compare against.
 - Edit Manager `appsettings.*.json` or Key Vault. The apply script checks that the appsettings files listed in the tenant file point at this tenant and application, and reports any mismatch. The authority it expects is `AUTH0_APP_AUTHORITY`, falling back to `https://$AUTH0_DOMAIN/`. Those differ once the tenant has a custom domain: the apps move to it, `AUTH0_DOMAIN` stays on the canonical `.us.auth0.com` host for the Management API.
 
 ## Splitting environments later

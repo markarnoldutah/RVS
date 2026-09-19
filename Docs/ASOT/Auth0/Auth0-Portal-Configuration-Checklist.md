@@ -27,6 +27,7 @@ The scripts authenticate as a Machine to Machine application.
    | Needed for | Scopes |
    |---|---|
    | Plan and export | `read:resource_servers` `read:roles` `read:clients` `read:client_grants` `read:connections` `read:actions` `read:triggers` `read:tenant_settings` `read:prompts` `read:attack_protection` |
+   | Plan: tenant-wide checks | `read:custom_domains` `read:email_provider` — optional; without them the plan skips those checks with a warning |
    | Apply | `create:resource_servers` `update:resource_servers` `create:roles` `update:roles` `create:clients` `update:clients` `create:client_grants` `update:client_grants` `update:connections` `create:actions` `update:actions` `update:triggers` |
 
    Grant only the plan scopes until you need to apply. No `delete:*`, user or `read:client_keys` scopes are needed.
