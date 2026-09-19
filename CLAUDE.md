@@ -175,7 +175,7 @@ All integrations have a `Mock*`/`NoOp*` fallback behind the same interface, nomi
 - Issue text refinement + categorization → Azure OpenAI (fallback: `RuleBasedIssueTextRefinementService` / `RuleBasedCategorizationService`)
 - Packet preliminary assessment (probable cause / possible fixes / likely parts) → Azure OpenAI, called from `PacketGenerationService` once per request (fallback: `RuleBasedPreliminaryAssessmentService`)
 - Email → Azure Communication Services (fallback: NoOp). Today it only sends a customer confirmation; **nothing emails a service manager yet** — that is Spec section B, the current work
-- SMS → Azure Communication Services (fallback: NoOp). **Archived scope**, outbound-only, descope target
+- SMS → Azure Communication Services (fallback: NoOp). Outbound-only, in scope as a customer-notification channel (A-14, #600). **Off unless `AzureCommunicationServices:Sms:Enabled` is true** — checked before the endpoint, so the vault's ACS endpoint alone never turns it on. The from-number is Bicep-injected per environment and resolved per location (`ISmsSenderNumberResolver`); recipients go through `PhoneNumberNormalizer` (E.164) and a per-tenant hourly cap. Two-way SMS stays archived
 
 ### Secrets Model
 

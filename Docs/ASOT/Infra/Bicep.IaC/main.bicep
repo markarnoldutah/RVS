@@ -98,6 +98,12 @@ param dmarcReportingAddress string = ''
 @description('When true, links the custom domain to the ACS account. ACS rejects linking an unverified domain, so this must stay false (the default) on the deploy that first creates a new acsCustomEmailDomain — that deploy only creates the domain and writes its DNS records. Once every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified, set this to true in the .bicepparam file and redeploy to perform the link. Once linked it must stay true — false unlinks the domain on the next deploy. (#579)')
 param acsCustomDomainVerified bool = false
 
+@description('E.164 toll-free number this environment\'s ACS resource owns, injected as AzureCommunicationServices__Sms__FromPhoneNumber (#661). Bought in the portal, not by Bicep, so it is a hand-entered string. Empty = no sending number; the API then cannot enable SMS.')
+param acsSmsFromPhoneNumber string = ''
+
+@description('Turns outbound SMS on, injected as AzureCommunicationServices__Sms__Enabled (#661). Leave false until acsSmsFromPhoneNumber has cleared toll-free verification: carriers reject an unverified number\'s traffic, and the API refuses to start with SMS enabled and no number. Only takes effect when deployAcs is true.')
+param acsSmsEnabled bool = false
+
 // ── Static Web App Parameters ─────────────────────────────────
 
 @description('When true, deploys Azure Static Web App resources for Blazor.Intake and Blazor.Manager.')
@@ -398,6 +404,8 @@ module appServiceConfig 'modules/app-service-config.bicep' = if (deployAppServic
     #disable-next-line BCP318
     keyVaultUri: (deployAppService && deployKeyVault) ? keyVault.outputs.vaultUri : ''
     acsEmailFromAddress: (deployAppService && deployAcs) ? acsEmailFromAddress : ''
+    acsSmsEnabled: deployAcs && acsSmsEnabled
+    acsSmsFromPhoneNumber: deployAcs ? acsSmsFromPhoneNumber : ''
     configureStagingSlot: deployStagingSlot
   }
 }

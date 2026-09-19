@@ -104,6 +104,11 @@ param acsCustomEmailDomain = 'mail.rvintake.com'
 param dmarcReportingAddress = 'dmarc-reports@rvintake.com'
 // Verified and linked. Must stay true: false unlinks the domain on redeploy.
 param acsCustomDomainVerified = true
+// SMS (#661). Prod's ACS resource owns no number yet. Buying one and submitting
+// its toll-free verification is #659; fill the number in here when it exists,
+// and flip acsSmsEnabled only once it is verified.
+param acsSmsFromPhoneNumber = ''
+param acsSmsEnabled = false
 
 // Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
 param deploySwa = true

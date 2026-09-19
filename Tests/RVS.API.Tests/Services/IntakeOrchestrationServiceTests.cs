@@ -824,6 +824,39 @@ public class IntakeOrchestrationServiceTests
         result.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ShouldNotifyWithTheTenantLocationAndE164Phone()
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        // BuildValidRequest submits "801-555-1234"; ACS only accepts E.164 (issue #661).
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            "ten_test", "loc_test",
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(),
+            "+18015551234",
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenThePhoneCannotBeNormalised_ShouldNotifyWithoutAPhone()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest();
+        request = request with { Customer = request.Customer with { Phone = "555-1234" } };
+
+        await _sut.ExecuteAsync("test-slug", request);
+
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(),
+            null,
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ── Step 8: Enqueue packet generation (non-blocking) ─────────────────────
 
     [Fact]

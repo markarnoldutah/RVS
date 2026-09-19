@@ -28,6 +28,12 @@ param keyVaultUri string = ''
 @description('Packet-email sender address, sourced from the deployed ACS domain — the custom verified subdomain when one is configured (DoNotReply@mail.rvintake.com, #532), otherwise the Azure-managed domain (DoNotReply@<guid>.azurecomm.net). Leave empty to skip — the API then falls back to its built-in default.')
 param acsEmailFromAddress string = ''
 
+@description('Outbound SMS switch (#661). Always written, so the environment\'s state is explicit in its app settings rather than inherited from appsettings.json.')
+param acsSmsEnabled bool = false
+
+@description('E.164 number the environment\'s ACS resource owns (#661). Leave empty to skip.')
+param acsSmsFromPhoneNumber string = ''
+
 @description('When true, also applies settings to the staging deployment slot with ASPNETCORE_ENVIRONMENT=Staging.')
 param configureStagingSlot bool = false
 
@@ -62,6 +68,14 @@ resource appSettings 'Microsoft.Web/sites/config@2024-11-01' = {
       ? {
           AzureCommunicationServices__Email__FromAddress: acsEmailFromAddress
         }
+      : {},
+    {
+      AzureCommunicationServices__Sms__Enabled: string(acsSmsEnabled)
+    },
+    !empty(acsSmsFromPhoneNumber)
+      ? {
+          AzureCommunicationServices__Sms__FromPhoneNumber: acsSmsFromPhoneNumber
+        }
       : {}
   )
 }
@@ -93,6 +107,14 @@ resource stagingSlotAppSettings 'Microsoft.Web/sites/slots/config@2024-11-01' = 
     !empty(acsEmailFromAddress)
       ? {
           AzureCommunicationServices__Email__FromAddress: acsEmailFromAddress
+        }
+      : {},
+    {
+      AzureCommunicationServices__Sms__Enabled: string(acsSmsEnabled)
+    },
+    !empty(acsSmsFromPhoneNumber)
+      ? {
+          AzureCommunicationServices__Sms__FromPhoneNumber: acsSmsFromPhoneNumber
         }
       : {}
   )

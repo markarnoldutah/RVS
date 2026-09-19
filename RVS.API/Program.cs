@@ -623,36 +623,30 @@ else
 }
 
 // Notifications (Email via ACS, SMS via ACS, Orchestrator)
-if (useMockIntegrations)
+// Development sends through staging's ACS resource as the az-login identity. Use
+// AzureCliCredential directly, as Blob does, to skip DefaultAzureCredential's
+// ManagedIdentityCredential probe timeout.
+TokenCredential CreateAcsCredential() => builder.Environment.IsDevelopment()
+    ? new AzureCliCredential()
+    : new DefaultAzureCredential();
+
+var acsEndpoint = builder.Configuration["AzureCommunicationServices:Endpoint"];
+if (!useMockIntegrations && !string.IsNullOrWhiteSpace(acsEndpoint))
 {
-    builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
-    builder.Services.AddSingleton<ISmsNotificationService, NoOpSmsNotificationService>();
+    builder.Services.AddSingleton(new Azure.Communication.Email.EmailClient(new Uri(acsEndpoint), CreateAcsCredential()));
+    builder.Services.AddScoped<INotificationService, AcsEmailNotificationService>();
 }
 else
 {
-    var acsEndpoint = builder.Configuration["AzureCommunicationServices:Endpoint"];
-    if (!string.IsNullOrWhiteSpace(acsEndpoint))
-    {
-        // Development sends through staging's ACS resource as the az-login identity. Use
-        // AzureCliCredential directly, as Blob does, to skip DefaultAzureCredential's
-        // ManagedIdentityCredential probe timeout.
-        TokenCredential credential = builder.Environment.IsDevelopment()
-            ? new AzureCliCredential()
-            : new DefaultAzureCredential();
-        var acsUri = new Uri(acsEndpoint);
-
-        builder.Services.AddSingleton(new Azure.Communication.Email.EmailClient(acsUri, credential));
-        builder.Services.AddScoped<INotificationService, AcsEmailNotificationService>();
-
-        builder.Services.AddSingleton(new Azure.Communication.Sms.SmsClient(acsUri, credential));
-        builder.Services.AddScoped<ISmsNotificationService, AcsSmsNotificationService>();
-    }
-    else
-    {
-        builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
-        builder.Services.AddSingleton<ISmsNotificationService, NoOpSmsNotificationService>();
-    }
+    builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
 }
+
+// SMS (issue #661): off unless AzureCommunicationServices:Sms:Enabled is true, checked before
+// the endpoint — the endpoint is in every vault for email.
+builder.Services.AddSmsNotifications(
+    builder.Configuration,
+    useMockIntegrations,
+    acsUri => new Azure.Communication.Sms.SmsClient(acsUri, CreateAcsCredential()));
 builder.Services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
 
 // Blob Storage

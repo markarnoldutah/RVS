@@ -327,11 +327,15 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         var location = await _locationRepository.GetByIdAsync(tenantId, locationId, cancellationToken);
         var statusUrl = $"{_intakeUrlOptions.BaseUrl.TrimEnd('/')}/status/{globalAcct.MagicLinkToken}";
 
+        // ACS only accepts E.164 (issue #661). A number that doesn't normalise is dropped from the
+        // notification rather than sent raw; the profile keeps it as entered.
         _ = FireAndForgetNotificationAsync(
+            tenantId,
+            locationId,
             request.SmsOptOut,
             request.EmailOptOut,
             request.Customer.Email.Trim(),
-            request.Customer.Phone?.Trim(),
+            PhoneNumberNormalizer.Normalize(request.Customer.Phone),
             serviceRequest.Id,
             slugLookup.DealershipName,
             statusUrl,
@@ -379,6 +383,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     /// Exceptions are caught and logged as warnings.
     /// </summary>
     private async Task FireAndForgetNotificationAsync(
+        string tenantId, string locationId,
         bool smsOptOut, bool emailOptOut,
         string email, string? phone, string serviceRequestId, string dealershipName,
         string statusUrl, string? dealerPhone)
@@ -386,6 +391,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         try
         {
             await _notificationOrchestrator.SendServiceRequestConfirmationAsync(
+                tenantId,
+                locationId,
                 smsOptOut,
                 emailOptOut,
                 email,

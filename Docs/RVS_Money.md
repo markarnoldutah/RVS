@@ -27,6 +27,8 @@ The two size figures differ on purpose. Blob keeps every original upload — `A-
 included (`Spec B-4`). Storage cost tracks what the customer uploaded; email cost tracks what
 actually ships. Neither number moves the total, which rounds to $0.03 either way.
 
+SMS is not in the total. It is off in every environment until the sending number clears toll-free verification. Once on, each text costs about **$0.01 per segment, carrier surcharge included**. A confirmation text is one or two segments, so it adds at most $0.02 to a request that is sent one, and the per-location figures below move by at most $2 per 100 requests.
+
 A location submitting 100 requests a month costs **$3.21** to serve against $79 of revenue. Gross margin 96%.
 
 | Requests/location/month | Cost | Gross margin on $79 |
@@ -53,7 +55,8 @@ A location submitting 100 requests a month costs **$3.21** to serve against $79 
 | Cosmos DB serverless, low volume | $15 |
 | Blob Storage, Standard LRS Hot | $10 |
 | Key Vault × 2, DNS zones × 2, ACS base | $5 |
-| **Azure total** | **~$117** |
+| ACS toll-free SMS numbers × 2 (staging + prod), $2 each (A-14) | $4 |
+| **Azure total** | **~$121** |
 
 Azure OpenAI S0 carries no standing charge — both accounts are pay-per-token, so all AI cost is variable and sits in §1.
 
