@@ -153,6 +153,16 @@ public class AcsSmsNotificationServiceTests
         _acs.Bodies.Should().NotBeEmpty();
     }
 
+    // ── IsEnabled (issue #662) ───────────────────────────────────────────
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void IsEnabled_ShouldReflectSmsEnabledOption(bool enabled)
+    {
+        CreateService(enabled).IsEnabled.Should().Be(enabled);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private AcsSmsNotificationService CreateService(bool enabled = true)

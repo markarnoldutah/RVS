@@ -151,6 +151,34 @@ public class IntakeControllerTests
         dto.MagicLinkToken.Should().Be("test-magic-token");
     }
 
+    [Theory]
+    [InlineData("Text", true, false)]
+    [InlineData("Email", false, true)]
+    public async Task SubmitServiceRequest_WhenPreferredContactIsOptedOut_ShouldReturn422AndNotSubmit(
+        string preferredContact, bool smsOptOut, bool emailOptOut)
+    {
+        var request = new ServiceRequestCreateRequestDto
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "Jane", LastName = "Doe", Email = "jane@example.com",
+                Phone = "8015551234", PreferredContact = preferredContact,
+            },
+            Asset = new AssetInfoDto { AssetId = "1FTFW1ET5EKE12345" },
+            IssueCategory = "Electrical",
+            IssueDescription = "Battery not charging",
+            SmsOptOut = smsOptOut,
+            EmailOptOut = emailOptOut,
+        };
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+        _intakeServiceMock.Verify(
+            s => s.ExecuteAsync(It.IsAny<string>(), It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static ServiceRequest BuildServiceRequest() => new()
     {
         Id = "sr_test_1",

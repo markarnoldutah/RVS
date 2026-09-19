@@ -45,7 +45,7 @@ The central document. Field groups:
 | Workflow | `status`, `priority`, `boardSequence` | `boardSequence` is Kanban-only — **archived** |
 | Issue | issue text, `issueCategory`, `technicianSummary` | Core. `technicianSummary` is the closest thing to a paste block today |
 | Customer status note | `customerStatusNote` — `text`, `updatedAtUtc`, `updatedByUserId`; nullable, one per request, overwritten on edit | Core (issue #500, `Spec C-9`). Manager-authored, one-directional; rendered on the customer status page next to the status. `CustomerStatusNoteValidator` caps `text` at 280 chars and rejects `< > ` plus control characters (ordinary punctuation is allowed — it is a human sentence); the text is never written to application logs (same rule as issue text, `Spec X-7`) |
-| Customer | embedded `customerSnapshot` — name, email, phone, `preferredContact` (`Phone`/`Text`/`Email`, captured at intake per `#472`; null for pre-existing requests) | Core |
+| Customer | embedded `customerSnapshot` — name, email, phone, `preferredContact` (`Phone`/`Text`/`Email`, captured at intake per `#472`; null for pre-existing requests) | Core. `preferredContact` chooses the confirmation channel, and the profile's opt-outs veto it (see *Notification opt-outs* below, `#662`) |
 | Asset | `assetInfo` — VIN, make, model, year | Core |
 | Attachments | `attachments[]` | Core |
 | Diagnostics | `diagnosticResponses[]` | Core — this is the packet's most valuable block |
@@ -65,6 +65,13 @@ Per-tenant customer record. Contact fields, email/SMS opt-out flags, `assetsOwne
 ### GlobalCustomerAcct — `global-customer-accounts`
 
 Cross-tenant, partitioned by email. Contact, opt-outs, `linkedProfiles[]`, `allKnownAssetIds[]`, `auth0UserId`, and `magicLinkToken` / expiry.
+
+### Notification opt-outs
+
+`smsOptOut` / `emailOptOut` (each with an `…AtUtc` stamp, set on first opt-out and cleared on opt-in) live on `CustomerProfile` and `GlobalCustomerAcct`, **not** on `ServiceRequest`. Intake writes both from the submission. They are a **hard veto** over `customerSnapshot.preferredContact` (`Spec A-2`, `#577` / `#662`): RVS never sends on an opted-out channel, whatever the preference says.
+
+- **An opted-out channel is never the preference.** `NotificationPreferenceValidator` (Domain) rejects `Text` + `smsOptOut` and `Email` + `emailOptOut`. The intake wizard disables the vetoed radio and clears a conflicting selection; `POST api/intake/{slug}/service-requests` returns **422** for a hand-built request that pairs them. `Phone` is always allowed.
+- **Routing.** `NotificationOrchestrator` sends exactly one confirmation: SMS when the preference is `Text` and SMS is permitted (enabled, phone present, not opted out); otherwise email when permitted, with a Warning logged when a `Text` preference fell back; otherwise SMS when permitted; otherwise nothing, logged at Warning. `Phone` and a null preference confirm by email.
 
 This document is what powers both the customer status page and returning-customer prefill. Under the reduced scope its cross-tenant graph (`linkedProfiles`, `allKnownAssetIds`) exists to serve a multi-dealer customer history that the product no longer promises. The token fields are load-bearing. Per the X-5 decision (issue #427, closes Q7), `magicLinkToken` becomes `magicLinkTokenHash` (SHA-256, raw token never stored), TTL drops to ≤ 30 days with sliding renewal, and the status token stays per-customer while C-7 action links are per-request/per-action; see `RVS_Architecture.md` and `RVS_Identity.md`.
 

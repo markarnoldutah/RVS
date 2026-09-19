@@ -72,26 +72,13 @@
             </MudPaper>
 
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-                <MudStack Spacing="1">
-                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Preferred contact method</MudText>
-                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                        How should the service team reach you first?
-                    </MudText>
-                    <MudRadioGroup T="string"
-                                   @bind-Value="State.PreferredContact"
-                                   Validation="@(new Func<string?, string?>(ValidatePreferredContact))">
-                        <MudRadio T="string" Value="@("Phone")" Color="Color.Primary">Phone call</MudRadio>
-                        <MudRadio T="string" Value="@("Text")" Color="Color.Primary">Text message</MudRadio>
-                        <MudRadio T="string" Value="@("Email")" Color="Color.Primary">Email</MudRadio>
-                    </MudRadioGroup>
-                </MudStack>
-            </MudPaper>
-
-            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="2">
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Notification Preferences</MudText>
                     <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                        We send updates via both email and text by default.  Message frequency varies. Message and data rates may apply.
+                        We'll confirm your request by text if you prefer text, otherwise by email.
+                        Texts are only about your service request; message frequency varies.
+                        Message and data rates may apply. Reply STOP to opt out, HELP for help.
+                        <MudLink Href="/sms-terms" Target="_blank" Typo="Typo.body1">Texting terms</MudLink>
                     </MudText>
                     <MudCheckBox @bind-Value="State.SmsOptOut"
                                  T="bool"
@@ -101,6 +88,24 @@
                                  T="bool"
                                  Label="Do not send email"
                                  Color="Color.Primary" />
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Preferred contact method</MudText>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                        How should the service team reach you first?
+                    </MudText>
+                    <MudRadioGroup T="string"
+                                   @bind-Value="State.PreferredContact"
+                                   Validation="@(new Func<string?, string?>(ValidatePreferredContact))">
+                        <MudRadio T="string" Value="@("Phone")" Color="Color.Primary">Phone call</MudRadio>
+                        <MudRadio T="string" Value="@("Text")" Color="Color.Primary"
+                                  Disabled="@(!State.IsContactMethodAvailable("Text"))">Text message</MudRadio>
+                        <MudRadio T="string" Value="@("Email")" Color="Color.Primary"
+                                  Disabled="@(!State.IsContactMethodAvailable("Email"))">Email</MudRadio>
+                    </MudRadioGroup>
                 </MudStack>
             </MudPaper>
 
@@ -149,6 +154,10 @@
     {
         if (!_submitted) return null;
         if (string.IsNullOrWhiteSpace(value)) return "Preferred contact method is required";
+        if (!State.IsContactMethodAvailable(value))
+        {
+            return "You've opted out of that channel. Choose another preferred contact method.";
+        }
         if (value is "Phone" or "Text" && string.IsNullOrWhiteSpace(State.Phone))
         {
             return value == "Phone"

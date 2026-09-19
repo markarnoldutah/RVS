@@ -8,6 +8,7 @@ using RVS.API.Mappers;
 using RVS.Domain.DTOs;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Controllers;
 
@@ -537,6 +538,15 @@ public class IntakeController : ControllerBase
     public async Task<ActionResult<IntakeSubmissionResponseDto>> SubmitServiceRequest(
         string locationSlug, [FromBody] ServiceRequestCreateRequestDto request, CancellationToken ct = default)
     {
+        // An opted-out channel can never be the preference (Spec A-2, issue #662).
+        var preferenceValidation = NotificationPreferenceValidator.Validate(
+            request.Customer.PreferredContact, request.SmsOptOut, request.EmailOptOut);
+        if (!preferenceValidation.IsValid)
+        {
+            ModelState.AddModelError("Customer.PreferredContact", preferenceValidation.ErrorMessage!);
+            return UnprocessableEntity(ModelState);
+        }
+
         var (serviceRequest, magicLinkToken) = await _intakeService.ExecuteAsync(locationSlug, request, ct);
 
         var response = new IntakeSubmissionResponseDto

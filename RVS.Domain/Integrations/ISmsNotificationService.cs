@@ -7,6 +7,13 @@ namespace RVS.Domain.Integrations;
 public interface ISmsNotificationService
 {
     /// <summary>
+    /// Whether this service actually sends. <c>false</c> for the no-op implementation and while
+    /// <c>AzureCommunicationServices:Sms:Enabled</c> is off; <see cref="INotificationOrchestrator"/>
+    /// then routes a <c>Text</c> customer's confirmation to email (<c>Spec A-2</c>, issue #662).
+    /// </summary>
+    bool IsEnabled { get; }
+
+    /// <summary>
     /// Sends an SMS on behalf of a location. The sending number is resolved per location
     /// (<see cref="ISmsSenderNumberResolver"/>), the send counts against the tenant's hourly
     /// limit (<see cref="ITenantSmsRateLimiter"/>), and the recipient is normalised to E.164
