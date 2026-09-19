@@ -54,7 +54,15 @@ param deployKeyVault = true
 
 // Observability (Log Analytics + Application Insights + /health availability test)
 param deployObservability = true
-param deployAvailabilityTest = true
+// Off permanently: billed per run (3 locations × every 5 min ≈ 26K runs/month)
+// and no alert rule reads its results, so nobody would learn it had failed.
+param deployAvailabilityTest = false
+// 30 is the lowest the workspace accepts; the first 31 days cost nothing extra.
+param logAnalyticsRetentionInDays = 30
+// 0.08 GB/day per environment keeps staging + prod together inside the 5 GB/month
+// Log Analytics free grant (per billing account), so a lower cap saves nothing.
+// Past the cap, ingestion stops until the daily reset and the #494 alerts go blind.
+param logAnalyticsDailyCapGb = '0.08'
 
 // Ops alert receivers for the packet-pipeline critical alerts (#494). Committed
 // here rather than left empty — the Action Groups resource provider does a
@@ -121,11 +129,12 @@ param acsCustomDomainVerified = true
 param acsSmsFromPhoneNumber = '+18662319618'
 param acsSmsEnabled = false
 
-// Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
+// Static Web Apps — Free tier. Staging stays on Free permanently; it needs no SLA,
+// and Free's two custom domains per app cover the one each app binds.
 param deploySwa = true
 param swaLocation = 'westus2'
 param swaResourceGroupName = 'rg-rvs-staging-westus2'
-param swaSkuName = 'Standard'
+param swaSkuName = 'Free'
 
 // DNS — Manager: CNAME manager-staging.rvintake.com (#632). Intake: CNAME staging.rvintake.com.
 //       Both now in the rvintake.com zone; rvserviceflow.com is corporate-only.

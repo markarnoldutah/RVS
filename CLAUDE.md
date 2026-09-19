@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | [Docs/RVS_Spec.md](Docs/RVS_Spec.md) | You're writing code. **If a requirement isn't here, it isn't in scope** |
 | [Docs/RVS_Plan.md](Docs/RVS_Plan.md) | You're deciding what to do next, or need an open question |
 | [Docs/RVS_Money.md](Docs/RVS_Money.md) | You need unit economics, cost structure, a revenue scenario, or the break-even |
+| [Docs/RVS_GoLive_Activities.md](Docs/RVS_GoLive_Activities.md) | You're about to take production live and need the agreed actions parked for that moment |
 | [Docs/RVS_Archive_Index.md](Docs/RVS_Archive_Index.md) | You need something from the prior document set, or why it was cut |
 
 There is no target number of these. One authoritative home per fact; a document earns its place by answering a question someone actually asks; register a new one here, in `RVS_Overview.md` and in `.github/copilot-instructions.md` on the same commit. See "Document set" in the Overview.

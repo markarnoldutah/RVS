@@ -115,7 +115,7 @@ param swaLocation string = 'westus2'
 @description('Name of the dedicated resource group for Static Web App resources.')
 param swaResourceGroupName string = 'rg-rvs-${environmentName}-westus2'
 
-@description('SWA SKU tier. Free for test; Standard for staging/production (required for custom auth and custom domains).')
+@description('SWA SKU tier, set per environment in parameters/*.bicepparam. Free supports two custom domains per app, which covers both apps. Standard adds the SLA, SWA-managed custom auth (unused: the Manager signs in with Auth0 from WASM) and a larger app size limit.')
 @allowed([
   'Free'
   'Standard'
@@ -162,7 +162,7 @@ param dnsZoneContributorPrincipalIds string[] = []
 @description('When true, deploys an App Service Plan and Web App for the RVS API with Managed Identity.')
 param deployAppService bool = false
 
-@description('App Service Plan SKU. F1 = Free (staging, 60 CPU-min/day). B1 = Basic (MVP prod). S1 = Standard (upgrade: Always On, slots).')
+@description('App Service Plan SKU, set per environment in parameters/*.bicepparam. F1 = Free (60 CPU-min/day, no custom hostnames or certificates). B1 = Basic. S1 = Standard (adds Always On and slots).')
 @allowed([
   'F1'
   'B1'
@@ -237,6 +237,14 @@ param deployObservability bool = false
 
 @description('When true and deployObservability + deployAppService are both true, creates a standard availability test on the API /health endpoint.')
 param deployAvailabilityTest bool = false
+
+@description('Log Analytics workspace retention in days. 30 is the floor the PerGB2018 SKU accepts, and the first 31 days are included in the ingestion price, so values below 31 do not lower the bill. Ingestion volume is what drives cost.')
+@minValue(30)
+@maxValue(730)
+param logAnalyticsRetentionInDays int = 30
+
+@description('Log Analytics daily ingestion cap in GB, as a decimal string (Bicep has no float type). \'-1\' = no cap. Workspace-based App Insights ingests into this workspace, so this caps API telemetry too. When the cap is hit, ingestion stops until the daily reset, and the packet-pipeline alerts (#494) go blind with it.')
+param logAnalyticsDailyCapGb string = '-1'
 
 @description('Email receivers for the ops action group that packet-pipeline critical alerts route to (#494). Each item: { name: string, email: string }. Committed as a real default in both param files (#639) — the Action Groups resource provider does a full-replace PUT, so an empty array here deletes any receiver added by hand in the portal on the next deploy; leaving it empty is not a safe way to defer setting a receiver. Only used when deployObservability = true.')
 param opsAlertEmailReceivers array = []
@@ -339,6 +347,8 @@ module logAnalytics 'modules/log-analytics.bicep' = if (deployObservability) {
   params: {
     location: location
     workspaceName: logAnalyticsName
+    retentionInDays: logAnalyticsRetentionInDays
+    dailyQuotaGb: logAnalyticsDailyCapGb
     tags: sharedTags
   }
 }
@@ -366,6 +376,8 @@ module monitorAlerts 'modules/monitor-alerts.bicep' = if (deployObservability) {
     location: location
     #disable-next-line BCP318
     appInsightsResourceId: deployObservability ? appInsights.outputs.resourceId : ''
+    #disable-next-line BCP318
+    logAnalyticsWorkspaceResourceId: deployObservability ? logAnalytics.outputs.resourceId : ''
     environmentName: environmentName
     tags: sharedTags
     opsEmailReceivers: opsAlertEmailReceivers
