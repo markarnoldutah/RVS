@@ -1,0 +1,201 @@
+
+az deployment sub what-if \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam
+
+az deployment sub create \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
+  --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"markarnoldutah@gmail.com"}]'
+
+az staticwebapp hostname delete \
+  -n stapp-rvs-manager-prod -g rg-rvs-prod-westus2 \
+  --hostname manager.rvintake.com --yes
+
+# confirm it's gone (only manager.rvserviceflow.com should remain)
+az staticwebapp hostname list -n stapp-rvs-manager-prod -g rg-rvs-prod-westus2 \
+  --query "[].{host:name,status:status}" -o table
+
+  az staticwebapp hostname set \
+  -n stapp-rvs-manager-prod -g rg-rvs-prod-westus2 \
+  --hostname manager.rvintake.com --validation-method cname-delegation
+
+  az staticwebapp hostname list -n stapp-rvs-manager-prod -g rg-rvs-prod-westus2 \
+  --query "[?name=='manager.rvintake.com'].{host:name,status:status,err:errorMessage}" -o table
+
+
+
+
+
+APP=app-rvs-api-prod-wus3
+RG=rg-rvs-prod-westus3
+API_HOST=api.rvserviceflow.com
+# NOT "HOST" — zsh built-in
+
+dig +short CNAME "$API_HOST"
+dig +short TXT "asuid.api.rvserviceflow.com"
+
+az webapp config hostname add --webapp-name "$APP" -g "$RG" --hostname "$API_HOST"
+az webapp config ssl create   --name "$APP" -g "$RG" --hostname "$API_HOST"
+
+# confirm cert exists before moving on
+az resource list --resource-type Microsoft.Web/certificates -g "$RG" -o table
+
+az webapp config hostname delete --webapp-name "$APP" -g "$RG" --hostname "$API_HOST"
+sleep 30
+az webapp config hostname add    --webapp-name "$APP" -g "$RG" --hostname "$API_HOST"
+az webapp config ssl create      --name "$APP" -g "$RG" --hostname "$API_HOST"
+
+
+
+THUMB=$(az resource show --resource-type Microsoft.Web/certificates -n "$API_HOST" -g "$RG" --query properties.thumbprint -o tsv)
+echo "$THUMB"   # must be non-empty
+
+az webapp config ssl bind --name "$APP" -g "$RG" \
+  --certificate-thumbprint "$THUMB" --ssl-type SNI
+
+echo | openssl s_client -connect "$API_HOST:443" -servername "$API_HOST" 2>/dev/null \
+  | openssl x509 -noout -subject          # must print CN=api-staging.rvserviceflow.com
+curl -sS "https://$API_HOST/health"
+
+# gh run rerun 35239832161
+# gh run watch 35239832161
+
+# cd Docs/ASOT/Infra/Auth0
+# ./auth0-apply.sh shared              # plan; exits 2 when there are differences
+# ./auth0-apply.sh shared --apply      # prompts for the tenant domain
+
+gh workflow run "Deploy to Production"
+
+# On https://manager-staging.rvintake.com: sign in (Auth0 origins + CSP), 
+# open a service request (API CORS against the new API host), 
+# upload a photo (storage CORS). Then submit an intake 
+# on https://staging.rvintake.com and confirm the packet email's manager 
+# deep links point at manager-staging.rvintake.com.
+
+
+###
+
+
+az deployment sub what-if  \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam \
+  --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"markarnoldutah@gmail.com"}]'
+
+az deployment sub create  \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam \
+  --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"markarnoldutah@gmail.com"}]'
+
+az network dns record-set list -g rg-rvs-prod-westus3 -z rvintake.com \
+  --query "[?contains(name,'mail-staging')].{name:name,type:type}" -o table
+# Expect five: mail-staging (TXT), _dmarc.mail-staging (TXT), 
+# and two DKIM CNAMEs, plus whatever selector naming ACS returns.
+
+SVC=acs-rvs-notify-staging-wus3-s01-001-email
+RG=rg-rvs-staging-westus3
+DOM=mail-staging.rvintake.com
+
+az communication email domain show \
+  --domain-name "$DOM" --email-service-name "$SVC" -g "$RG" \
+  --query verificationRecords -o json
+
+
+for t in Domain SPF DKIM DKIM2; do
+  az communication email domain initiate-verification \
+    --domain-name "$DOM" \
+    --email-service-name "$SVC" -g "$RG" \
+    --verification-type $t
+done
+
+az communication show -n acs-rvs-notify-staging-wus3-s01-001 -g rg-rvs-staging-westus3 \
+  --query linkedDomains -o tsv
+
+###
+
+### NEXST 3 and 4
+az deployment sub create \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam \
+  --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"markarnoldutah@gmail.com"}]'
+
+az communication show -n acs-rvs-notify-staging-wus3-s01-001 -g rg-rvs-staging-westus3 \
+  --query linkedDomains -o tsv
+
+  az cosmosdb sql container query \
+  --account-name cosmos-rvs-data-staging-wus3 -g rg-rvs-staging-westus3 \
+  --database-name rvs-db --container-name locations \
+  --query-text "SELECT c.id, c.name, c.packetConfig.enabled, c.packetConfig.recipients FROM c"
+
+###
+
+# staging, then prod (swap the param file)
+az deployment sub create \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam \
+  --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"markarnoldutah@gmail.com"}]'
+
+az deployment sub create \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod.bicepparam \
+  --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"markarnoldutah@gmail.com"}]'
+
+dig +short TXT _dmarc.mail.rvintake.com
+# → should show rua=mailto:dmarc-reports@rvintake.com.
+
+cd ~/repos/RVS && git checkout main && git pull
+
+###
+
+az deployment sub create \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam \
+  --parameters opsAlertEmailReceivers='[{"name":"oncall","email":"markarnoldutah@gmail.com"}]'
+
+dig @ns1-09.azure-dns.com +short MX  rvserviceflow.com          # → 0 .
+dig @ns1-09.azure-dns.com +short TXT rvserviceflow.com          # → "v=spf1 -all"
+dig @ns1-09.azure-dns.com +short TXT _dmarc.rvserviceflow.com   # → "v=DMARC1; p=reject; ..."
+
+az monitor action-group show -n ag-rvs-ops-staging-wus3 -g rg-rvs-staging-westus3 \
+  --query "emailReceivers[].{n:name,e:emailAddress}" -o tsv
+
+### 9.18
+
+# ./auth0-apply.sh shared
+# ./auth0-apply.sh --apply
+
+cd /Users/markarnold/repos/RVS
+
+az deployment sub create \
+  --location westus3 \
+  --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep \
+  --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam
+
+dig +short CNAME login.rvintake.com
+# expect: dev-2jhzz8xmjggh26pm-cd-mdl9vngn46azp32y.edge.tenants.us.auth0.com.
+
+
+###
+az keyvault secret set --vault-name kv-rvs-prod-wus3 --name Auth0--Domain \
+  --value https://login.rvintake.com
+az keyvault secret set --vault-name kv-rvs-prod-wus3 --name Auth0--AuthorizationUrl \
+  --value https://login.rvintake.com/authorize
+az keyvault secret set --vault-name kv-rvs-prod-wus3 --name Auth0--TokenUrl \
+  --value https://login.rvintake.com/oauth/token
+
+az webapp restart -n app-rvs-api-prod-wus3 -g rg-rvs-prod-westus3
+
+gh workflow run "Deploy to Production"
+
+###
+az keyvault secret show --vault-name kv-rvs-prod-wus3 \
+  --name AzureCommunicationServices--ConnectionString --query value -o tsv | pbcopy
+
