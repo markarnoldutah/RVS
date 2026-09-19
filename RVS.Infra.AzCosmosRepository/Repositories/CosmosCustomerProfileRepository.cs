@@ -147,4 +147,31 @@ public sealed class CosmosCustomerProfileRepository : CosmosRepositoryBase, ICus
         _logger.LogDebug("GetByActiveAssetIdAsync [tenant={TenantId}, asset={AssetId}] not found — RequestCharge: {Charge} RU", tenantId, assetId, totalCharge);
         return null;
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> ListSmsOptedOutPhonesAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        // Phones are stored as entered, so the match on the normalised number happens in the caller.
+        var query = new QueryDefinition(
+            "SELECT VALUE c.phone FROM c WHERE c.tenantId = @tenantId AND c.type = 'customerProfile' AND c.smsOptOut = true AND IS_STRING(c.phone)")
+            .WithParameter("@tenantId", tenantId);
+
+        var options = new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) };
+        var iterator = _container.GetItemQueryIterator<string>(query, requestOptions: options);
+
+        var phones = new List<string>();
+        double totalCharge = 0;
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(cancellationToken);
+            totalCharge += page.RequestCharge;
+            phones.AddRange(page);
+        }
+
+        _logger.LogDebug("ListSmsOptedOutPhonesAsync [tenant={TenantId}] count={Count} — RequestCharge: {Charge} RU", tenantId, phones.Count, totalCharge);
+        return phones;
+    }
 }

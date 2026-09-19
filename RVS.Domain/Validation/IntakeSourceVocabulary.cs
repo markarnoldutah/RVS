@@ -30,6 +30,13 @@ public static class IntakeSourceVocabulary
     public const string Print = "print";
 
     /// <summary>
+    /// An advisor-sent intake invite (<c>Spec A-14</c>, issue #663): the single-use link an
+    /// advisor texts to a caller from the manager app, or opens for themselves with
+    /// <i>Fill it in myself</i>.
+    /// </summary>
+    public const string Advisor = "advisor";
+
+    /// <summary>
     /// Bucket for a supplied <c>src</c> that is not a usable token — too long, or carrying
     /// characters that have no business in a channel tag. Never fails the redirect; the hit is
     /// simply recorded here.
@@ -39,8 +46,8 @@ public static class IntakeSourceVocabulary
     /// <summary>Maximum length of a stored source value.</summary>
     public const int MaxLength = 32;
 
-    /// <summary>The tabled channels, in <c>Spec A-13</c> order.</summary>
-    public static readonly IReadOnlyList<string> KnownValues = [TextReplacement, QuickReply, Qr, Print];
+    /// <summary>The tabled channels, in <c>Spec A-13</c> order, then A-14's advisor invite.</summary>
+    public static readonly IReadOnlyList<string> KnownValues = [TextReplacement, QuickReply, Qr, Print, Advisor];
 
     /// <summary>
     /// Canonicalises a raw <c>src</c> query value into a storable channel tag: trimmed and

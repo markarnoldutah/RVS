@@ -51,6 +51,7 @@ public sealed class IntakeRedirectService : IIntakeRedirectService
         string slug,
         string? src,
         string? userAgent,
+        string? invite = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
@@ -73,7 +74,8 @@ public sealed class IntakeRedirectService : IIntakeRedirectService
 
         await RecordHitAsync(normalizedSlug, source, userAgent, slugLookup, cancellationToken);
 
-        var targetUrl = IntakeLinkBuilder.IntakeUrl(_intakeUrlOptions.BaseUrl, normalizedSlug, source);
+        // The invite token rides along untouched and unlogged; the builder drops a malformed one.
+        var targetUrl = IntakeLinkBuilder.IntakeUrl(_intakeUrlOptions.BaseUrl, normalizedSlug, source, invite);
 
         _logger.LogInformation(
             "Intake redirect: slug={Slug} src={Source} resolved={Resolved} locationId={LocationId}",

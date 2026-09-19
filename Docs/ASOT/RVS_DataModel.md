@@ -9,7 +9,7 @@ Database `rvs-db`, SQL API, serverless in every environment today. Provisioned m
 
 ## Containers
 
-**Ten containers, kebab-case.** Bicep and the seeder agree. Older documentation claimed nine camelCase containers; that was never true of the deployed resource.
+**Eleven containers, kebab-case.** Bicep and the seeder agree. Older documentation claimed nine camelCase containers; that was never true of the deployed resource. `intake-invites` is the eleventh (issue #663).
 
 | Container | Partition key | Unique key | Repository |
 |---|---|---|---|
@@ -23,8 +23,11 @@ Database `rvs-db`, SQL API, serverless in every environment today. Provisioned m
 | `tenant-configs` | `/tenantId` | — | Yes |
 | `lookup-sets` | `/category` | — | Yes |
 | `rv-warranty-rules` | `/manufacturer` | — | **None — seeded, never read** |
+| `intake-invites` | `/tenantId` | — | Yes (`CosmosIntakeInviteRepository`, #663). **No TTL** |
 
-`service-requests` carries two composite indexes. Everything else uses default indexing.
+`service-requests` carries two composite indexes.
+
+Indexing is an explicit include-list on every container, so a new filter needs its path added in both Bicep and the seeder. The seeder only creates containers that don't exist, so an index added to an existing container reaches a deployed environment through Bicep alone. `customer-profiles` indexes `/smsOptOut` for the A-14 opt-out check (#663).
 
 Two containers are partitioned by something other than `tenantId` — `global-customer-accounts` by `/email` and `asset-ledger` by `/assetId`. Both are deliberately cross-tenant, and both are read through repositories that scope explicitly.
 
@@ -74,6 +77,26 @@ Cross-tenant, partitioned by email. Contact, opt-outs, `linkedProfiles[]`, `allK
 - **Routing.** `NotificationOrchestrator` sends exactly one confirmation: SMS when the preference is `Text` and SMS is permitted (enabled, phone present, not opted out); otherwise email when permitted, with a Warning logged when a `Text` preference fell back; otherwise SMS when permitted; otherwise nothing, logged at Warning. `Phone` and a null preference confirm by email.
 
 This document is what powers both the customer status page and returning-customer prefill. Under the reduced scope its cross-tenant graph (`linkedProfiles`, `allKnownAssetIds`) exists to serve a multi-dealer customer history that the product no longer promises. The token fields are load-bearing. Per the X-5 decision (issue #427, closes Q7), `magicLinkToken` becomes `magicLinkTokenHash` (SHA-256, raw token never stored), TTL drops to ≤ 30 days with sliding renewal, and the status token stays per-customer while C-7 action links are per-request/per-action; see `RVS_Architecture.md` and `RVS_Identity.md`.
+
+### IntakeInvite — `intake-invites`
+
+An advisor-initiated intake invite (`Spec A-14`, issue #663). `id` is `InviteToken.Hash(token)`: lowercase hex SHA-256 of a 32-byte, base64url token (`RVS.Domain/Security/InviteToken.cs`). The raw token is never stored; it exists only in the texted link (or the self-entry URL returned once, on create). Making the hash the id is what makes redemption a point read once `slug-lookups` has given the tenant.
+
+| Field | Meaning |
+|---|---|
+| `locationId`, `advisorUserId` | Where the invite opens, and who sent it. The resulting request is attributed to the advisor (#664) |
+| `firstName`, `phone` | Prefill for the intake form. `phone` is E.164; optional only for self-entry |
+| `isSelfEntry` | *Fill it in myself*: minted for the advisor, never texted |
+| `consentCapturedAtUtc` | When the advisor confirmed the caller's verbal consent. Separate from `sentAtUtc` and from delivery, never cleared; `null` only for self-entry |
+| `sentAtUtc` | When ACS accepted the text; `null` for self-entry or a send that never reached ACS |
+| `expiresAtUtc` | `createdAtUtc` + `IntakeInvites:ExpiryHours` (72) |
+| `redeemedAtUtc`, `serviceRequestId` | Set on intake **submission**, not on open (#664) |
+| `acsMessageId` | The ACS message id; delivery reports are matched back by it (#665) |
+| `deliveryStatus` | `pending` → `queued` / `failed`; then `delivered` / `failed` from delivery reports. `notSent` for self-entry |
+
+**No TTL, and never deleted.** The consent fields are the opt-in evidence for toll-free verification and for any complaint, so the document outlives the invite. `expiresAtUtc` retires the token, not the record.
+
+The opt-out check before a send reads `customer-profiles` in the tenant's partition for `smsOptOut = true` and compares each stored phone after E.164 normalisation, because stored phones are as the customer typed them. It does not read `global-customer-accounts` (partitioned by email, so that would be cross-partition).
 
 ### AssetLedgerEntry — `asset-ledger`
 

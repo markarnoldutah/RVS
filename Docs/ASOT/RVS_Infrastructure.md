@@ -28,7 +28,7 @@
 | App Insights + availability webtest | `app-insights.bicep` | `deployObservability`; webtest also needs `deployAvailabilityTest && deployAppService` |
 | Ops action group + 5 packet-pipeline alert rules | `monitor-alerts.bicep` | `deployObservability` |
 | Key Vault + role assignments | `key-vault.bicep` | `deployKeyVault` |
-| Cosmos account, database, 10 containers | `cosmos-db.bicep` | `deployCosmosDb` |
+| Cosmos account, database, 11 containers | `cosmos-db.bicep` | `deployCosmosDb` |
 | Storage account, CORS, `rvs-attachments`, `intakeRedirectHits` table, 7 role assignments | `storage-account.bicep` | `deployStorageAccount` |
 | ACS + Email Service + managed domain + 2 role assignments (+ a `CustomerManaged` sending domain when `acsCustomEmailDomain` is set) | `communication-services.bicep` | `deployAcs`; role assignments only when an App Service principal is supplied; custom domain in staging and prod (`#532`) |
 | Two Static Web Apps + custom domains | `static-web-app.bicep` | `deploySwa` |

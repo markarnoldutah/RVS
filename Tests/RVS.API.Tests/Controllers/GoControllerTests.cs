@@ -23,7 +23,7 @@ public class GoControllerTests
     public GoControllerTests()
     {
         _serviceMock.Setup(s => s.ResolveAsync(
-                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IntakeRedirectResultDto(TargetUrl, "qr", true));
 
         _sut = new GoController(_serviceMock.Object)
@@ -35,7 +35,7 @@ public class GoControllerTests
     [Fact]
     public async Task RedirectToIntake_ShouldReturnATemporaryRedirectToTheResolvedTarget()
     {
-        var result = await _sut.RedirectToIntake(Slug, "qr", CancellationToken.None);
+        var result = await _sut.RedirectToIntake(Slug, "qr", null, CancellationToken.None);
 
         var redirect = result.Should().BeOfType<RedirectResult>().Subject;
         redirect.Url.Should().Be(TargetUrl);
@@ -47,7 +47,7 @@ public class GoControllerTests
     [Fact]
     public async Task RedirectToIntake_ShouldTellCachesNotToStoreTheResponse()
     {
-        await _sut.RedirectToIntake(Slug, "qr", CancellationToken.None);
+        await _sut.RedirectToIntake(Slug, "qr", null, CancellationToken.None);
 
         _sut.Response.Headers.CacheControl.ToString().Should().Contain("no-store");
     }
@@ -57,28 +57,28 @@ public class GoControllerTests
     {
         _sut.Request.Headers.UserAgent = "facebookexternalhit/1.1";
 
-        await _sut.RedirectToIntake(Slug, "textrepl", CancellationToken.None);
+        await _sut.RedirectToIntake(Slug, "textrepl", null, CancellationToken.None);
 
         _serviceMock.Verify(s => s.ResolveAsync(
-            Slug, "textrepl", "facebookexternalhit/1.1", It.IsAny<CancellationToken>()), Times.Once);
+            Slug, "textrepl", "facebookexternalhit/1.1", null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task RedirectToIntake_WhenNoSourceSupplied_ShouldPassNullAndLetTheServiceDefaultIt()
     {
-        await _sut.RedirectToIntake(Slug, null, CancellationToken.None);
+        await _sut.RedirectToIntake(Slug, null, null, CancellationToken.None);
 
         _serviceMock.Verify(s => s.ResolveAsync(
-            Slug, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+            Slug, null, It.IsAny<string?>(), null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task RedirectToIntake_WhenSourceUnknown_ShouldStillRedirect()
     {
-        _serviceMock.Setup(s => s.ResolveAsync(Slug, "nfc", It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        _serviceMock.Setup(s => s.ResolveAsync(Slug, "nfc", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IntakeRedirectResultDto("https://rvintake.com/nova-hurricane?src=nfc", "nfc", true));
 
-        var result = await _sut.RedirectToIntake(Slug, "nfc", CancellationToken.None);
+        var result = await _sut.RedirectToIntake(Slug, "nfc", null, CancellationToken.None);
 
         result.Should().BeOfType<RedirectResult>()
             .Which.Url.Should().Be("https://rvintake.com/nova-hurricane?src=nfc");
@@ -89,12 +89,24 @@ public class GoControllerTests
     {
         // The intake app owns the "no such location" page; a 404 here would turn a typo on a
         // printed sticker into a dead link.
-        _serviceMock.Setup(s => s.ResolveAsync("gone", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        _serviceMock.Setup(s => s.ResolveAsync("gone", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IntakeRedirectResultDto("https://rvintake.com/gone?src=print", "print", false));
 
-        var result = await _sut.RedirectToIntake("gone", null, CancellationToken.None);
+        var result = await _sut.RedirectToIntake("gone", null, null, CancellationToken.None);
 
         result.Should().BeOfType<RedirectResult>()
             .Which.Url.Should().Be("https://rvintake.com/gone?src=print");
+    }
+
+    [Fact]
+    public async Task RedirectToIntake_ShouldPassTheInviteTokenThrough()
+    {
+        // Spec A-14 (issue #663): the advisor's texted link carries inv; the redirect hands it on.
+        const string token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+        await _sut.RedirectToIntake(Slug, "advisor", token, CancellationToken.None);
+
+        _serviceMock.Verify(s => s.ResolveAsync(
+            Slug, "advisor", It.IsAny<string?>(), token, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

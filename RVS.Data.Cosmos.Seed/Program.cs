@@ -1,4 +1,4 @@
-// RVS.Data.Cosmos.Seed — Creates 9 Cosmos containers with partition keys,
+// RVS.Data.Cosmos.Seed — Creates 11 Cosmos containers with partition keys,
 // unique key policies, and indexing policies, then seeds realistic test data.
 // Idempotent: safe to re-run (uses UpsertItemAsync and CreateContainerIfNotExistsAsync).
 //
@@ -180,7 +180,7 @@ static async Task SeedItemsAsync<T>(Container container, List<T> items, Func<T, 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Container definitions — 9 containers
+// Container definitions — 11 containers
 // ═══════════════════════════════════════════════════════════════════════════
 
 static List<ContainerProperties> BuildContainerDefinitions()
@@ -247,6 +247,7 @@ static List<ContainerProperties> BuildContainerDefinitions()
                     new IncludedPath { Path = "/email/?" },
                     new IncludedPath { Path = "/globalCustomerAcctId/?" },
                     new IncludedPath { Path = "/type/?" },
+                    new IncludedPath { Path = "/smsOptOut/?" },
                 },
                 ExcludedPaths =
                 {
@@ -458,6 +459,33 @@ static List<ContainerProperties> BuildContainerDefinitions()
                     new IncludedPath { Path = "/manufacturer/?" },
                     new IncludedPath { Path = "/brandDivision/?" },
                     new IncludedPath { Path = "/type/?" },
+                },
+                ExcludedPaths =
+                {
+                    new ExcludedPath { Path = "/*" },
+                    new ExcludedPath { Path = "/_etag/?" },
+                },
+            },
+        },
+
+        // 11. intake-invites — PK=/tenantId, id = SHA-256 of the invite token (Spec A-14, issue #663).
+        // No TTL, on purpose: the consent record is opt-in evidence and outlives the invite.
+        new ContainerProperties
+        {
+            Id = "intake-invites",
+            PartitionKeyPath = "/tenantId",
+            IndexingPolicy = new IndexingPolicy
+            {
+                IndexingMode = IndexingMode.Consistent,
+                Automatic = true,
+                IncludedPaths =
+                {
+                    new IncludedPath { Path = "/tenantId/?" },
+                    new IncludedPath { Path = "/type/?" },
+                    new IncludedPath { Path = "/locationId/?" },
+                    new IncludedPath { Path = "/advisorUserId/?" },
+                    new IncludedPath { Path = "/createdAtUtc/?" },
+                    new IncludedPath { Path = "/acsMessageId/?" },
                 },
                 ExcludedPaths =
                 {

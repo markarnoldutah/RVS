@@ -153,6 +153,47 @@ public class AcsSmsNotificationServiceTests
         _acs.Bodies.Should().NotBeEmpty();
     }
 
+    // ── Message id (issue #663) ──────────────────────────────────────────
+
+    [Fact]
+    public async Task SendSmsAsync_WhenAcsAcceptsTheMessage_ShouldReturnItsMessageId()
+    {
+        // The invite stores it so an ACS delivery report can be matched back (Spec A-14).
+        var messageId = await CreateService().SendSmsAsync(TenantId, LocationId, "+18015551234", "Test message");
+
+        messageId.Should().Be("Outgoing_test");
+    }
+
+    [Fact]
+    public async Task SendSmsAsync_ShouldAskAcsForADeliveryReport()
+    {
+        await CreateService().SendSmsAsync(TenantId, LocationId, "+18015551234", "Test message");
+
+        JsonDocument.Parse(_acs.Bodies.Single()).RootElement
+            .GetProperty("smsSendOptions").GetProperty("enableDeliveryReport").GetBoolean()
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SendSmsAsync_WhenAcsFails_ShouldReturnNull()
+    {
+        _acs.Status = HttpStatusCode.InternalServerError;
+
+        var messageId = await CreateService().SendSmsAsync(TenantId, LocationId, "+18015551234", "Test message");
+
+        messageId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SendSmsAsync_WhenNotSent_ShouldReturnNull()
+    {
+        _rateLimiterMock.Setup(l => l.TryAcquire(It.IsAny<string>())).Returns(false);
+
+        var messageId = await CreateService().SendSmsAsync(TenantId, LocationId, "+18015551234", "Test message");
+
+        messageId.Should().BeNull();
+    }
+
     // ── IsEnabled (issue #662) ───────────────────────────────────────────
 
     [Theory]

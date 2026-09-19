@@ -52,6 +52,7 @@ public class GoController : ControllerBase
     /// </summary>
     /// <param name="locationSlug">Location slug from the short link path.</param>
     /// <param name="src">Channel tag — <c>qr</c>, <c>textrepl</c>, <c>quickreply</c>, or any other. Optional; absent means print.</param>
+    /// <param name="inv">A-14 advisor invite token, passed through to the intake app (issue #663). Optional.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <example>
     /// GET https://go.rvintake.com/nova-hurricane?src=qr
@@ -59,11 +60,11 @@ public class GoController : ControllerBase
     [HttpGet("/" + SlugRoute)]
     [HttpGet("/go/" + SlugRoute)]
     public async Task<IActionResult> RedirectToIntake(
-        string locationSlug, [FromQuery] string? src = null, CancellationToken ct = default)
+        string locationSlug, [FromQuery] string? src = null, [FromQuery] string? inv = null, CancellationToken ct = default)
     {
         var userAgent = Request.Headers.UserAgent.ToString();
 
-        var result = await _redirectService.ResolveAsync(locationSlug, src, userAgent, ct);
+        var result = await _redirectService.ResolveAsync(locationSlug, src, userAgent, inv, ct);
 
         // 302, never 301, and never cached: a permanent or cached redirect is followed by the
         // client without touching this endpoint again, so every later tap would go unlogged.

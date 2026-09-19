@@ -48,4 +48,13 @@ public interface ICustomerProfileRepository
     /// <param name="assetId">Asset identifier (e.g. <c>1FTFW1ET5EKE12345</c>).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<CustomerProfile?> GetByActiveAssetIdAsync(string tenantId, string assetId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the phone numbers, as stored, of every profile in the tenant that has opted out of
+    /// SMS. Stored numbers are not normalised, so callers compare after normalising each one.
+    /// Used to refuse an advisor intake invite to an opted-out number (<c>Spec A-14</c>, issue #663).
+    /// </summary>
+    /// <param name="tenantId">Tenant partition key.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyList<string>> ListSmsOptedOutPhonesAsync(string tenantId, CancellationToken cancellationToken = default);
 }

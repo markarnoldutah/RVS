@@ -51,6 +51,7 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found", "not-found"),
             ConflictException => (StatusCodes.Status409Conflict, "Conflict", "conflict"),
             MagicLinkExpiredException => (StatusCodes.Status410Gone, "Gone", "token-expired"),
+            RateLimitExceededException => (StatusCodes.Status429TooManyRequests, "Too Many Requests", "rate-limited"),
             _ => (StatusCodes.Status500InternalServerError, "Internal Server Error", "internal-server-error")
         };
 

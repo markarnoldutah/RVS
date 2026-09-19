@@ -55,6 +55,8 @@ public sealed class AuthorizationPolicyTests
                 policy.RequireClaim("permissions", "tenants:config:read", "tenants:config:create", "tenants:config:update"));
             options.AddPolicy("CanReadLookups", policy =>
                 policy.RequireClaim("permissions", "lookups:read"));
+            options.AddPolicy("CanSendIntakeInvites", policy =>
+                policy.RequireClaim("permissions", "intake-invites:send"));
             // Mirrors Program.cs: permission AND allowlisted caller (Spec P-7, issue #563).
             options.AddPolicy("PlatformAdmin", policy =>
                 policy.RequireClaim("permissions", "platform:tenants:manage")
@@ -99,6 +101,7 @@ public sealed class AuthorizationPolicyTests
     [InlineData("CanUpdateLocations", "locations:update")]
     [InlineData("CanReadAnalytics", "analytics:read")]
     [InlineData("CanReadLookups", "lookups:read")]
+    [InlineData("CanSendIntakeInvites", "intake-invites:send")]
     public async Task Policy_WithCorrectPermission_ShouldSucceed(string policyName, string permission)
     {
         var user = CreateUserWithPermissions(permission);
@@ -126,6 +129,7 @@ public sealed class AuthorizationPolicyTests
     [InlineData("CanReadAnalytics")]
     [InlineData("CanManageTenantConfig")]
     [InlineData("CanReadLookups")]
+    [InlineData("CanSendIntakeInvites")]
     [InlineData("PlatformAdmin")]
     public async Task Policy_WithMissingPermission_ShouldFail(string policyName)
     {
@@ -154,6 +158,7 @@ public sealed class AuthorizationPolicyTests
     [InlineData("CanReadAnalytics")]
     [InlineData("CanManageTenantConfig")]
     [InlineData("CanReadLookups")]
+    [InlineData("CanSendIntakeInvites")]
     [InlineData("PlatformAdmin")]
     public async Task Policy_WithUnauthenticatedUser_ShouldFail(string policyName)
     {
