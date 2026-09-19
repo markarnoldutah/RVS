@@ -50,6 +50,13 @@ public sealed class IntakeWizardState
     /// </summary>
     public string? IntakeSource { get; set; }
 
+    /// <summary>
+    /// The A-14 advisor invite token (<c>Spec A-14</c>, issue #664): the <c>inv</c> query parameter
+    /// an advisor's texted link put on the intake URL. It prefills the form on open and is sent
+    /// with the submission, which is where the API spends it. <c>null</c> for every other visit.
+    /// </summary>
+    public string? InviteToken { get; set; }
+
     /// <summary>Location configuration fetched from the API.</summary>
     public IntakeConfigResponseDto? Config { get; set; }
 
@@ -117,6 +124,12 @@ public sealed class IntakeWizardState
 
     /// <summary>Whether the customer info was prefilled from a magic-link token.</summary>
     public bool IsPrefilled { get; set; }
+
+    /// <summary>
+    /// Whether the invite prefill has been applied (<c>Spec A-14</c>). Separate from
+    /// <see cref="IsPrefilled"/>, which marks A-7's returning-customer match.
+    /// </summary>
+    public bool IsInvitePrefilled { get; set; }
 
     /// <summary>All known vehicles for the returning customer, enabling one-tap VIN selection in Step 3.</summary>
     public List<AssetInfoDto> KnownAssets { get; set; } = [];
@@ -304,6 +317,30 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
+    /// Applies an A-14 advisor invite's prefill (<c>Spec A-14</c>, issue #664): the first name and
+    /// phone the advisor entered. Separate from <see cref="ApplyPrefill"/>, A-7's returning-customer
+    /// path, and it does not set <see cref="IsPrefilled"/>. Fills only blank fields, because the
+    /// invite is re-fetched after a reload and must not undo what the customer typed since.
+    /// </summary>
+    public void ApplyInvitePrefill(IntakeInvitePrefillResponseDto prefill)
+    {
+        ArgumentNullException.ThrowIfNull(prefill);
+
+        if (string.IsNullOrWhiteSpace(FirstName))
+        {
+            FirstName = prefill.FirstName;
+        }
+
+        if (string.IsNullOrWhiteSpace(Phone))
+        {
+            Phone = prefill.Phone;
+        }
+
+        IsInvitePrefilled = true;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
     /// Applies asset prefill data from the intake config (magic-link token).
     /// Sets the most recently used vehicle information so the customer doesn't re-enter it.
     /// </summary>
@@ -374,6 +411,7 @@ public sealed class IntakeWizardState
             DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null,
             CapabilityMismatchNote = BuildCapabilityMismatchNote(),
             IntakeSource = IntakeSource,
+            InviteToken = string.IsNullOrWhiteSpace(InviteToken) ? null : InviteToken,
             ExpectedAttachmentCount = PendingUploadCount
         };
     }
@@ -408,6 +446,7 @@ public sealed class IntakeWizardState
             CurrentStep = CurrentStep,
             Slug = Slug,
             IntakeSource = IntakeSource,
+            InviteToken = InviteToken,
             FirstName = FirstName,
             LastName = LastName,
             Email = Email,
@@ -416,6 +455,7 @@ public sealed class IntakeWizardState
             SmsOptOut = SmsOptOut,
             EmailOptOut = EmailOptOut,
             IsPrefilled = IsPrefilled,
+            IsInvitePrefilled = IsInvitePrefilled,
             KnownAssets = KnownAssets,
             Vin = Vin,
             Manufacturer = Manufacturer,
@@ -457,6 +497,7 @@ public sealed class IntakeWizardState
             CurrentStep = data.CurrentStep;
             Slug = data.Slug;
             IntakeSource = data.IntakeSource;
+            InviteToken = data.InviteToken;
             FirstName = data.FirstName;
             LastName = data.LastName;
             Email = data.Email;
@@ -465,6 +506,7 @@ public sealed class IntakeWizardState
             SmsOptOut = data.SmsOptOut;
             EmailOptOut = data.EmailOptOut;
             IsPrefilled = data.IsPrefilled;
+            IsInvitePrefilled = data.IsInvitePrefilled;
             KnownAssets = data.KnownAssets;
             Vin = data.Vin;
             Manufacturer = data.Manufacturer;
@@ -502,6 +544,7 @@ public sealed class IntakeWizardState
         CurrentStep = 1;
         Slug = string.Empty;
         IntakeSource = null;
+        InviteToken = null;
         Config = null;
         FirstName = string.Empty;
         LastName = string.Empty;
@@ -511,6 +554,7 @@ public sealed class IntakeWizardState
         SmsOptOut = false;
         EmailOptOut = false;
         IsPrefilled = false;
+        IsInvitePrefilled = false;
         KnownAssets = [];
         Vin = string.Empty;
         Manufacturer = null;
@@ -771,6 +815,9 @@ internal sealed class IntakeWizardStateData
     /// <summary>Distribution channel the intake URL carried (<c>Spec A-13</c>).</summary>
     public string? IntakeSource { get; set; }
 
+    /// <summary>A-14 advisor invite token from the intake URL (<c>Spec A-14</c>).</summary>
+    public string? InviteToken { get; set; }
+
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
@@ -779,6 +826,7 @@ internal sealed class IntakeWizardStateData
     public bool SmsOptOut { get; set; }
     public bool EmailOptOut { get; set; }
     public bool IsPrefilled { get; set; }
+    public bool IsInvitePrefilled { get; set; }
     public List<AssetInfoDto> KnownAssets { get; set; } = [];
     public string Vin { get; set; } = string.Empty;
     public string? Manufacturer { get; set; }

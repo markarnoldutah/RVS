@@ -9,6 +9,7 @@ using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Packets;
+using RVS.Domain.Security;
 using RVS.Domain.Validation;
 
 namespace RVS.API.Tests.Services;
@@ -25,6 +26,7 @@ public class IntakeOrchestrationServiceTests
     private readonly Mock<ICategorizationService> _categorizationMock = new();
     private readonly Mock<INotificationOrchestrator> _notificationOrchestratorMock = new();
     private readonly Mock<IPacketGenerationQueue> _packetQueueMock = new();
+    private readonly Mock<IIntakeInviteRepository> _inviteRepoMock = new();
     private readonly IntakeOrchestrationService _sut;
 
     public IntakeOrchestrationServiceTests()
@@ -44,6 +46,7 @@ public class IntakeOrchestrationServiceTests
             _categorizationMock.Object,
             _notificationOrchestratorMock.Object,
             _packetQueueMock.Object,
+            _inviteRepoMock.Object,
             intakeUrlOptions,
             Mock.Of<ILogger<IntakeOrchestrationService>>());
     }
@@ -1052,11 +1055,331 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Other);
     }
 
+    // ── Spec A-14: invite prefill (open) ─────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetInvitePrefillAsync_WhenSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var act = () => _sut.GetInvitePrefillAsync(slug!, InviteTokenValue);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenSlugNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("unknown-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+
+        var act = () => _sut.GetInvitePrefillAsync("unknown-slug", InviteTokenValue);
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenInviteIsUsable_ShouldReturnFirstNameAndPhone()
+    {
+        SetupInvite(BuildInvite());
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().NotBeNull();
+        result!.FirstName.Should().Be("Jane");
+        result.Phone.Should().Be("+18015551234");
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_ShouldPointReadByTheTokenHashInTheSlugsTenant()
+    {
+        SetupInvite(BuildInvite());
+
+        await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        _inviteRepoMock.Verify(r => r.GetByIdAsync("ten_test", InviteToken.Hash(InviteTokenValue), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_ShouldNotRedeemTheInvite()
+    {
+        // Messaging clients fetch the link to build a preview; opening must never spend the token.
+        SetupInvite(BuildInvite());
+
+        await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        _inviteRepoMock.Verify(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenExpired_ShouldReturnNull()
+    {
+        SetupInvite(BuildInvite(expiresAtUtc: DateTime.UtcNow.AddMinutes(-1)));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenAlreadyRedeemed_ShouldReturnNull()
+    {
+        SetupInvite(BuildInvite(redeemedAtUtc: DateTime.UtcNow.AddHours(-1)));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenUnknown_ShouldReturnNull()
+    {
+        SetupInvite(null);
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenInviteBelongsToAnotherLocation_ShouldReturnNull()
+    {
+        SetupInvite(BuildInvite(locationId: "loc_other"));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-token")]
+    public async Task GetInvitePrefillAsync_WhenTokenIsMalformed_ShouldReturnNullWithoutAStorageRead(string? token)
+    {
+        SetupInvite(BuildInvite());
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", token!);
+
+        result.Should().BeNull();
+        _inviteRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenLookupFails_ShouldReturnNullSoTheFormStillLoads()
+    {
+        // A-13's "the redirect never fails" extends to invites: a storage fault costs the
+        // customer the prefill, never the form.
+        _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("test-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildSlugLookup());
+        _inviteRepoMock.Setup(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Cosmos unavailable"));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    // ── Spec A-14: invite redemption (submit) ────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_WithUsableInvite_ShouldAttributeTheRequestToTheAdvisorAndInvite()
+    {
+        SetupFullHappyPath();
+        var invite = BuildInvite();
+        SetupInvite(invite);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Advisor);
+        result.ServiceRequest.IntakeInviteId.Should().Be(invite.Id);
+        result.ServiceRequest.AdvisorUserId.Should().Be("auth0|advisor");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithUsableInvite_ShouldTagAdvisorEvenWhenTheSubmittedSourceDiffers()
+    {
+        // The invite is the proof of the channel; a src lost or rewritten on the way wins nothing.
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite());
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: null, inviteToken: InviteTokenValue));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Advisor);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithUsableInvite_ShouldMarkTheInviteRedeemedWithTheServiceRequestId()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite());
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(inviteToken: InviteTokenValue));
+
+        _inviteRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<IntakeInvite>(i =>
+                i.RedeemedAtUtc.HasValue &&
+                i.ServiceRequestId == result.ServiceRequest.Id &&
+                i.UpdatedByUserId == "intake"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithUsableInvite_ShouldRedeemOnlyAfterTheServiceRequestIsCreated()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite());
+        var order = new List<string>();
+        _srRepoMock.Setup(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("sr"))
+            .ReturnsAsync((ServiceRequest sr, CancellationToken _) => sr);
+        _inviteRepoMock.Setup(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("invite"))
+            .ReturnsAsync((IntakeInvite i, CancellationToken _) => i);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(inviteToken: InviteTokenValue));
+
+        order.Should().Equal("sr", "invite");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithExpiredInvite_ShouldSubmitWithoutInviteAttribution()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite(expiresAtUtc: DateTime.UtcNow.AddMinutes(-1)));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithRedeemedInvite_ShouldSubmitWithoutInviteAttribution()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite(redeemedAtUtc: DateTime.UtcNow.AddHours(-1)));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithUnknownInvite_ShouldSubmitWithoutInviteAttribution()
+    {
+        SetupFullHappyPath();
+        SetupInvite(null);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithInviteForAnotherLocation_ShouldSubmitWithoutInviteAttribution()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite(locationId: "loc_other"));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithMalformedInviteToken_ShouldSubmitWithoutAStorageRead()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(inviteToken: "not-a-token"));
+
+        result.ServiceRequest.IntakeInviteId.Should().BeNull();
+        _inviteRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenInviteLookupFails_ShouldStillSubmit()
+    {
+        SetupFullHappyPath();
+        _inviteRepoMock.Setup(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Cosmos unavailable"));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenMarkingTheInviteRedeemedFails_ShouldStillSubmitWithAttribution()
+    {
+        SetupFullHappyPath();
+        var invite = BuildInvite();
+        SetupInvite(invite);
+        _inviteRepoMock.Setup(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Cosmos unavailable"));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(inviteToken: InviteTokenValue));
+
+        result.ServiceRequest.IntakeInviteId.Should().Be(invite.Id);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithoutInviteToken_ShouldNotTouchInvites()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.IntakeInviteId.Should().BeNull();
+        result.ServiceRequest.AdvisorUserId.Should().BeNull();
+        _inviteRepoMock.VerifyNoOtherCalls();
+    }
+
+    private const string InviteTokenValue = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    private static IntakeInvite BuildInvite(
+        string locationId = "loc_test", DateTime? expiresAtUtc = null, DateTime? redeemedAtUtc = null) => new()
+    {
+        Id = InviteToken.Hash(InviteTokenValue),
+        TenantId = "ten_test",
+        LocationId = locationId,
+        AdvisorUserId = "auth0|advisor",
+        FirstName = "Jane",
+        Phone = "+18015551234",
+        ConsentCapturedAtUtc = DateTime.UtcNow.AddMinutes(-5),
+        ExpiresAtUtc = expiresAtUtc ?? DateTime.UtcNow.AddHours(72),
+        RedeemedAtUtc = redeemedAtUtc,
+        CreatedByUserId = "auth0|advisor",
+    };
+
+    private void SetupInvite(IntakeInvite? invite)
+    {
+        _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("test-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildSlugLookup());
+        _inviteRepoMock.Setup(r => r.GetByIdAsync("ten_test", InviteToken.Hash(InviteTokenValue), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(invite);
+        _inviteRepoMock.Setup(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IntakeInvite i, CancellationToken _) => i);
+    }
+
+    private void AssertSubmittedWithoutInvite(ServiceRequest serviceRequest)
+    {
+        // The link still says where the customer came from; only the invite's own attribution
+        // (and the single use it would spend) is withheld.
+        serviceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Advisor);
+        serviceRequest.IntakeInviteId.Should().BeNull();
+        serviceRequest.AdvisorUserId.Should().BeNull();
+        _inviteRepoMock.Verify(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static ServiceRequestCreateRequestDto BuildValidRequest(
         bool includeDiagnostics = false,
         bool smsOptOut = false,
         bool emailOptOut = false,
-        string? intakeSource = null)
+        string? intakeSource = null,
+        string? inviteToken = null)
     {
         return new ServiceRequestCreateRequestDto
         {
@@ -1082,6 +1405,7 @@ public class IntakeOrchestrationServiceTests
             SmsOptOut = smsOptOut,
             EmailOptOut = emailOptOut,
             IntakeSource = intakeSource,
+            InviteToken = inviteToken,
             DiagnosticResponses = includeDiagnostics
                 ?
                 [

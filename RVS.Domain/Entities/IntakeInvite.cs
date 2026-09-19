@@ -86,6 +86,36 @@ public class IntakeInvite : EntityBase
     /// <summary>One of the <see cref="IntakeInviteDeliveryStatus"/> values.</summary>
     [JsonProperty("deliveryStatus")]
     public string DeliveryStatus { get; set; } = IntakeInviteDeliveryStatus.Pending;
+
+    /// <summary>
+    /// Whether the token still works at <paramref name="nowUtc"/>: not yet redeemed and not yet
+    /// expired (issue #664). Gates both the prefill on open and the attribution on submission.
+    /// </summary>
+    /// <param name="nowUtc">The current UTC time.</param>
+    public bool IsRedeemableAt(DateTime nowUtc) => RedeemedAtUtc is null && ExpiresAtUtc > nowUtc;
+
+    /// <summary>
+    /// Spends the token on the intake submission it produced (issue #664). Called on submission,
+    /// never on open: messaging clients fetch the link to build a preview, and that fetch must
+    /// not burn the invite before the customer taps it.
+    /// </summary>
+    /// <param name="serviceRequestId">The service request the submission created.</param>
+    /// <param name="nowUtc">The redemption time.</param>
+    /// <param name="userId">Audit identity for the update.</param>
+    /// <exception cref="InvalidOperationException">The invite was already redeemed.</exception>
+    public void MarkRedeemed(string serviceRequestId, DateTime nowUtc, string userId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+
+        if (RedeemedAtUtc is not null)
+        {
+            throw new InvalidOperationException($"Intake invite '{Id}' was already redeemed.");
+        }
+
+        RedeemedAtUtc = nowUtc;
+        ServiceRequestId = serviceRequestId;
+        MarkAsUpdated(userId);
+    }
 }
 
 /// <summary>

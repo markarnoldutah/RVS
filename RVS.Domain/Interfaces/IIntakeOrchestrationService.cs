@@ -16,7 +16,9 @@ public interface IIntakeOrchestrationService
     ///   <item>Resolve slug → tenantId + locationId</item>
     ///   <item>Resolve GlobalCustomerAcct by email (create if absent)</item>
     ///   <item>Resolve CustomerProfile within tenant (create if absent) + asset ownership</item>
-    ///   <item>Create ServiceRequest with customer snapshot, AI categorization, and technician summary</item>
+    ///   <item>Create ServiceRequest with customer snapshot, AI categorization, and technician summary;
+    ///   when the request carries a still-good A-14 invite token, tag it <c>advisor</c> with the
+    ///   invite and advisor ids, then mark the invite redeemed (<c>Spec A-14</c>)</item>
     ///   <item>Append AssetLedgerEntry (non-blocking on failure)</item>
     ///   <item>Update linkages (increment requestCount, rotate magic-link token)</item>
     ///   <item>Fire-and-forget notification</item>
@@ -44,6 +46,23 @@ public interface IIntakeOrchestrationService
     /// <returns>The intake configuration for rendering the customer form.</returns>
     /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
     Task<IntakeConfigResponseDto> GetIntakeConfigAsync(string slug, string? magicLinkToken = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves an A-14 advisor invite for the intake form's prefill (<c>Spec A-14</c>, issue #664):
+    /// the slug gives the tenant, and the invite is a point read by <c>InviteToken.Hash(token)</c>.
+    /// Returns the caller's first name and phone only while the invite is unexpired, unredeemed
+    /// and belongs to this location.
+    /// <para>
+    /// Opening never redeems: link previews fetch the URL too. Every unusable case, including a
+    /// malformed token and a failed lookup, returns <c>null</c> so the customer still gets a
+    /// working blank form.
+    /// </para>
+    /// </summary>
+    /// <param name="slug">Location slug from the intake URL.</param>
+    /// <param name="token">The raw invite token from the intake URL's <c>inv</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
+    Task<IntakeInvitePrefillResponseDto?> GetInvitePrefillAsync(string slug, string token, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Assesses whether the location identified by <paramref name="slug"/> has the service

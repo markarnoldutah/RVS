@@ -76,6 +76,28 @@ public class IntakeController : ControllerBase
     }
 
     /// <summary>
+    /// Returns the first name and phone an A-14 advisor invite prefills (<c>Spec A-14</c>, issue #664),
+    /// while the invite is unexpired and unredeemed. Opening does not redeem the invite: link
+    /// previews fetch the URL too, so it is spent on submission instead.
+    /// Returns 404 for every unusable invite (unknown, expired, redeemed, another location, or a
+    /// failed lookup) alike, and the intake app treats any non-200 as a blank form.
+    /// </summary>
+    /// <param name="locationSlug">Location slug for resolving the tenant.</param>
+    /// <param name="token">The raw invite token from the intake URL's <c>inv</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <example>
+    /// GET /api/intake/camping-world-slc/invites/{token}
+    /// </example>
+    [HttpGet("invites/{token}")]
+    public async Task<ActionResult<IntakeInvitePrefillResponseDto>> GetInvitePrefill(
+        string locationSlug, string token, CancellationToken ct = default)
+    {
+        var prefill = await _intakeService.GetInvitePrefillAsync(locationSlug, token, ct);
+
+        return prefill is null ? NotFound() : Ok(prefill);
+    }
+
+    /// <summary>
     /// Returns AI-generated diagnostic follow-up questions based on the selected issue category.
     /// Accepts optional context (description, asset info) for more targeted questions.
     /// </summary>

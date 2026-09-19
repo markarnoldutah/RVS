@@ -95,6 +95,11 @@ else
     // records that as print.
     [SupplyParameterFromQuery(Name = "src")] public string? Src { get; set; }
 
+    // Spec A-14 (issue #664): the advisor invite token. Step 1 uses it to prefill first name and
+    // phone; the submission carries it, and that is where the API spends it. An unusable token
+    // just means a blank form.
+    [SupplyParameterFromQuery(Name = "inv")] public string? Inv { get; set; }
+
     [Inject] private IntakeWizardState _state { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
@@ -107,6 +112,7 @@ else
        _state.Slug = Slug;
        _state.Token = Token;
        _state.IntakeSource = Src;
+       _state.InviteToken = Inv;
 
         await _state.RestoreAsync();
 
@@ -117,6 +123,7 @@ else
             _state.Slug = Slug;
            _state.Token = Token;
            _state.IntakeSource = Src;
+           _state.InviteToken = Inv;
         }
         else if (!string.IsNullOrWhiteSpace(Src))
         {
@@ -125,6 +132,14 @@ else
             // something: a bare reload must not erase the channel of the link that started
             // the session.
             _state.IntakeSource = Src;
+        }
+
+        // Same rule for the invite: a new one in the URL replaces the session's, and its
+        // prefill has not been applied yet; a bare reload keeps the session's.
+        if (!string.IsNullOrWhiteSpace(Inv) && Inv != _state.InviteToken)
+        {
+            _state.InviteToken = Inv;
+            _state.IsInvitePrefilled = false;
         }
 
         _initializing = false;
@@ -137,6 +152,10 @@ else
         if (!string.IsNullOrWhiteSpace(Src))
         {
             _state.IntakeSource = Src;
+        }
+        if (!string.IsNullOrWhiteSpace(Inv))
+        {
+            _state.InviteToken = Inv;
         }
     }
 

@@ -105,6 +105,8 @@
             {
                 State.KnownAssets = State.Config.KnownAssets;
             }
+
+            await ApplyInvitePrefillAsync();
         }
         catch (HttpRequestException)
         {
@@ -117,6 +119,33 @@
         finally
         {
             _isLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Spec A-14 (issue #664): prefills first name and phone from an advisor invite. Opening the
+    /// invite does not spend it. Any failure (expired, used, unknown, network) is swallowed:
+    /// the customer gets the blank form, never an error.
+    /// </summary>
+    private async Task ApplyInvitePrefillAsync()
+    {
+        if (string.IsNullOrWhiteSpace(State.InviteToken) || State.IsInvitePrefilled)
+        {
+            return;
+        }
+
+        try
+        {
+            var prefill = await IntakeApi.GetInvitePrefillAsync(State.Slug, State.InviteToken);
+            if (prefill is not null)
+            {
+                State.ApplyInvitePrefill(prefill);
+                await State.PersistAsync();
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or NotSupportedException)
+        {
+            // Blank form.
         }
     }
 

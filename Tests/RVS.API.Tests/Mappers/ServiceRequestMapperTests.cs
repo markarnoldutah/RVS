@@ -70,6 +70,24 @@ public class ServiceRequestMapperTests
     }
 
     [Fact]
+    public void ToDetailDto_ShouldMapAdvisorInviteAttribution()
+    {
+        var entity = new ServiceRequest
+        {
+            TenantId = "ten_1",
+            IntakeSource = "advisor",
+            IntakeInviteId = "inv_hash",
+            AdvisorUserId = "auth0|advisor",
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.IntakeSource.Should().Be("advisor");
+        dto.IntakeInviteId.Should().Be("inv_hash");
+        dto.AdvisorUserId.Should().Be("auth0|advisor");
+    }
+
+    [Fact]
     public void ToDetailDto_ShouldMapCustomerSnapshotToCustomerInfoDto()
     {
         var entity = new ServiceRequest

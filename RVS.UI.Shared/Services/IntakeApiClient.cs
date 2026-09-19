@@ -45,6 +45,34 @@ public sealed class IntakeApiClient
     }
 
     /// <summary>
+    /// Gets what an A-14 advisor invite prefills (<c>Spec A-14</c>, issue #664): the caller's first
+    /// name and phone. Returns <c>null</c> for any non-success response, since an expired, used
+    /// or unknown invite still gets a working blank form. Opening does not spend the invite.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="inviteToken">The raw invite token from the intake URL's <c>inv</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task<IntakeInvitePrefillResponseDto?> GetInvitePrefillAsync(
+        string locationSlug,
+        string inviteToken,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
+        ArgumentException.ThrowIfNullOrWhiteSpace(inviteToken);
+
+        using var response = await _httpClient.GetAsync(
+            $"api/intake/{Uri.EscapeDataString(locationSlug)}/invites/{Uri.EscapeDataString(inviteToken)}",
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        return await response.Content.ReadFromJsonAsync<IntakeInvitePrefillResponseDto>(cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
     /// Decodes a VIN using the NHTSA vPIC API via the backend.
     /// Returns the decoded manufacturer, model, and year, or <c>null</c> if the VIN could not be decoded.
     /// </summary>

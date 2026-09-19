@@ -142,6 +142,142 @@ public class IntakeWizardStateTests
         act.Should().Throw<ArgumentNullException>();
     }
 
+    // ── Spec A-14: invite prefill ────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyInvitePrefill_ShouldSetFirstNameAndPhone()
+    {
+        var state = CreateState();
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
+
+        state.FirstName.Should().Be("Jane");
+        state.Phone.Should().Be("+18015551234");
+        state.IsInvitePrefilled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_ShouldLeaveEverythingElseForTheCustomer()
+    {
+        var state = CreateState();
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
+
+        state.LastName.Should().BeEmpty();
+        state.Email.Should().BeEmpty();
+        state.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_ShouldNotLookLikeAReturningCustomerMatch()
+    {
+        // A-7's magic-link prefill (IsPrefilled) greets a known customer; an invite knows only
+        // what the advisor typed, and is a separate path.
+        var state = CreateState();
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
+
+        state.IsPrefilled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_ShouldNotOverwriteWhatTheCustomerAlreadyEntered()
+    {
+        // Config is not persisted, so a reload re-fetches the invite; what the customer typed
+        // (or corrected) since must survive it.
+        var state = CreateState();
+        state.FirstName = "Janet";
+        state.Phone = "801-555-9999";
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
+
+        state.FirstName.Should().Be("Janet");
+        state.Phone.Should().Be("801-555-9999");
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_WhenInviteHasNoPhone_ShouldLeavePhoneBlank()
+    {
+        var state = CreateState();
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = null });
+
+        state.FirstName.Should().Be("Jane");
+        state.Phone.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_NullPrefill_ShouldThrow()
+    {
+        var state = CreateState();
+
+        var act = () => state.ApplyInvitePrefill(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_ShouldNotifySubscribers()
+    {
+        var state = CreateState();
+        var fired = false;
+        state.OnChange += () => fired = true;
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane" });
+
+        fired.Should().BeTrue();
+    }
+
+    [Fact]
+    public void BuildCreateRequest_ShouldCarryTheInviteToken()
+    {
+        var state = CreateState();
+        state.InviteToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+        var request = state.BuildCreateRequest();
+
+        request.InviteToken.Should().Be("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WithoutAnInvite_ShouldSendNoToken()
+    {
+        var request = CreateState().BuildCreateRequest();
+
+        request.InviteToken.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepTheInviteAcrossAReload()
+    {
+        // The invite is spent on submission, so losing the token on a reload mid-wizard would
+        // cost the request its advisor attribution.
+        var jsRuntime = new InMemorySessionStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug", InviteToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" };
+        before.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+
+        after.InviteToken.Should().Be("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        after.IsInvitePrefilled.Should().BeTrue();
+        after.FirstName.Should().Be("Jane");
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldDropTheInvite()
+    {
+        var state = CreateState();
+        state.InviteToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane" });
+
+        await state.ClearAsync();
+
+        state.InviteToken.Should().BeNull();
+        state.IsInvitePrefilled.Should().BeFalse();
+    }
+
     [Fact]
     public void ApplyAssetPrefill_ShouldSetAssetFields()
     {

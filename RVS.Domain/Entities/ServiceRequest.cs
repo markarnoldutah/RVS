@@ -171,6 +171,21 @@ public class ServiceRequest : EntityBase
     public string? IntakeSource { get; init; }
 
     /// <summary>
+    /// The A-14 advisor invite this request redeemed (<c>Spec A-14</c>, issue #664): the invite's
+    /// id, which is the token hash. Set only when the submission carried an unexpired, unredeemed
+    /// invite for this location; <see cref="IntakeSource"/> is then <c>advisor</c>.
+    /// </summary>
+    [JsonProperty("intakeInviteId")]
+    public string? IntakeInviteId { get; init; }
+
+    /// <summary>
+    /// The advisor whose invite produced this request (<c>Spec A-14</c>, issue #664). Set
+    /// together with <see cref="IntakeInviteId"/>; <c>null</c> for every other channel.
+    /// </summary>
+    [JsonProperty("advisorUserId")]
+    public string? AdvisorUserId { get; init; }
+
+    /// <summary>
     /// Board display order within a status column. Lower values appear first.
     /// Defaults to 0; updated when cards are reordered on the Service Board.
     /// </summary>

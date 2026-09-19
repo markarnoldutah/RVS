@@ -53,6 +53,14 @@ public sealed record ServiceRequestCreateRequestDto
     public string? IntakeSource { get; init; }
 
     /// <summary>
+    /// The A-14 advisor invite token the intake app was opened with (<c>inv</c>, issue #664).
+    /// When it names an unexpired, unredeemed invite for this location, the request is
+    /// attributed to that invite and advisor and the invite is spent. Anything else (absent,
+    /// malformed, unknown, expired, already used) is ignored and the submission goes through.
+    /// </summary>
+    public string? InviteToken { get; init; }
+
+    /// <summary>
     /// How many attachments the client is about to upload (issue #516). Attachments are
     /// confirmed after this submission returns, so packet generation waits for this many to
     /// arrive before rendering — otherwise the packet ships with no photos. Leave at <c>0</c>
