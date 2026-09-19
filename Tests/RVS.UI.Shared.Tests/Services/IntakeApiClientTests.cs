@@ -21,6 +21,52 @@ public class IntakeApiClientTests
         act.Should().Throw<ArgumentNullException>();
     }
 
+    // ── GetInvitePrefillAsync (Spec A-14) ────────────────────────────────
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenApiReturns200_ShouldReturnPrefill()
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.OK, new { firstName = "Jane", phone = "+18015551234" });
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var result = await sut.GetInvitePrefillAsync("my-slug", "the_token-1");
+
+        result.Should().NotBeNull();
+        result!.FirstName.Should().Be("Jane");
+        result.Phone.Should().Be("+18015551234");
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Get);
+        handler.LastRequest.RequestUri!.AbsolutePath.Should().Be("/api/intake/my-slug/invites/the_token-1");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task GetInvitePrefillAsync_WhenApiDoesNotReturn200_ShouldReturnNull(HttpStatusCode statusCode)
+    {
+        // Any failure means a blank form, never an error page.
+        var handler = new FakeHttpHandler(statusCode, new { message = "nope" });
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var result = await sut.GetInvitePrefillAsync("my-slug", "the_token-1");
+
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null, "token")]
+    [InlineData("", "token")]
+    [InlineData("slug", null)]
+    [InlineData("slug", " ")]
+    public async Task GetInvitePrefillAsync_WhenArgumentIsBlank_ShouldThrowArgumentException(string? slug, string? token)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.GetInvitePrefillAsync(slug!, token!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
     // ── GetUploadSasAsync ────────────────────────────────────────────────
 
     [Theory]

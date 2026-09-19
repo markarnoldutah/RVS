@@ -44,6 +44,15 @@ public sealed record ServiceRequestDetailResponseDto
     public string? IntakeSource { get; init; }
 
     /// <summary>
+    /// The A-14 advisor invite this request redeemed (<c>Spec A-14</c>); <c>null</c> unless
+    /// <see cref="IntakeSource"/> is <c>advisor</c> and the invite was still valid on submission.
+    /// </summary>
+    public string? IntakeInviteId { get; init; }
+
+    /// <summary>The advisor whose invite produced this request; set together with <see cref="IntakeInviteId"/>.</summary>
+    public string? AdvisorUserId { get; init; }
+
+    /// <summary>
     /// The current manager-authored customer status note (<c>Spec C-9</c>), or <c>null</c> when
     /// none is set. Shown to the customer on the status page; editable only from the manager app.
     /// </summary>

@@ -94,6 +94,34 @@ public class IntakeControllerTests
         dto.PrefillCustomer!.FirstName.Should().Be("Jane");
     }
 
+    // ── Spec A-14: invite prefill ────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetInvitePrefill_WhenInviteIsUsable_ShouldReturnOkWithPrefill()
+    {
+        var prefill = new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" };
+        _intakeServiceMock.Setup(s => s.GetInvitePrefillAsync("test-slug", "the-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(prefill);
+
+        var result = await _sut.GetInvitePrefill("test-slug", "the-token");
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(prefill);
+    }
+
+    [Fact]
+    public async Task GetInvitePrefill_WhenInviteIsNotUsable_ShouldReturnNotFound()
+    {
+        // Expired, redeemed, unknown and failed lookups all come back as null, and all look the
+        // same to an anonymous caller.
+        _intakeServiceMock.Setup(s => s.GetInvitePrefillAsync("test-slug", "the-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IntakeInvitePrefillResponseDto?)null);
+
+        var result = await _sut.GetInvitePrefill("test-slug", "the-token");
+
+        result.Result.Should().BeOfType<NotFoundResult>();
+    }
+
     [Fact]
     public async Task GetDiagnosticQuestions_ShouldReturnOkWithStructuredQuestions()
     {

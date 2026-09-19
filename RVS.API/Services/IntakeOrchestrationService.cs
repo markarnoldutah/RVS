@@ -5,6 +5,7 @@ using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Packets;
+using RVS.Domain.Security;
 using RVS.Domain.Validation;
 
 namespace RVS.API.Services;
@@ -27,6 +28,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     private readonly ICategorizationService _categorizationService;
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly IPacketGenerationQueue _packetGenerationQueue;
+    private readonly IIntakeInviteRepository _intakeInviteRepository;
     private readonly IntakeUrlOptions _intakeUrlOptions;
     private readonly ILogger<IntakeOrchestrationService> _logger;
 
@@ -44,6 +46,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         ICategorizationService categorizationService,
         INotificationOrchestrator notificationOrchestrator,
         IPacketGenerationQueue packetGenerationQueue,
+        IIntakeInviteRepository intakeInviteRepository,
         IOptions<IntakeUrlOptions> intakeUrlOptions,
         ILogger<IntakeOrchestrationService> logger)
     {
@@ -57,6 +60,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _categorizationService = categorizationService;
         _notificationOrchestrator = notificationOrchestrator;
         _packetGenerationQueue = packetGenerationQueue;
+        _intakeInviteRepository = intakeInviteRepository;
         _intakeUrlOptions = intakeUrlOptions.Value;
         _logger = logger;
     }
@@ -76,6 +80,11 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         _logger.LogInformation("Intake Step 1 complete: slug={Slug} → tenantId={TenantId}, locationId={LocationId}",
             slug, tenantId, locationId);
+
+        // A-14 (issue #664): an advisor invite that is still good attributes the request to that
+        // advisor and invite. Anything else is ignored rather than refused — a spent, expired or
+        // unreadable invite costs the customer the attribution, never the submission.
+        var invite = await FindRedeemableInviteAsync(tenantId, locationId, request.InviteToken, cancellationToken);
 
         // ── Step 2: Resolve GlobalCustomerAcct by email (create if absent) ───
         var normalizedEmail = request.Customer.Email.Trim().ToLowerInvariant();
@@ -185,6 +194,12 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         // malformed tag costs the request its channel, never the submission.
         var intakeSource = IntakeSourceVocabulary.Normalize(request.IntakeSource);
 
+        // A redeemed invite is the proof of the channel, whatever src survived the trip.
+        if (invite is not null)
+        {
+            intakeSource = IntakeSourceVocabulary.Advisor;
+        }
+
         var technicianSummary = BuildTechnicianSummary(request);
 
         var priorRequestCount = profile.TotalRequestCount;
@@ -204,6 +219,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             HasExtendedWarranty = request.HasExtendedWarranty?.Trim(),
             ApproxPurchaseDate = request.ApproxPurchaseDate?.Trim(),
             IntakeSource = intakeSource,
+            IntakeInviteId = invite?.Id,
+            AdvisorUserId = invite?.AdvisorUserId,
             CustomerSnapshot = new CustomerSnapshotEmbedded
             {
                 FirstName = request.Customer.FirstName.Trim(),
@@ -242,6 +259,12 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         serviceRequest = await _serviceRequestRepository.CreateAsync(serviceRequest, cancellationToken);
         _logger.LogInformation("Intake Step 4: Created ServiceRequest {ServiceRequestId} in tenant {TenantId}",
             serviceRequest.Id, tenantId);
+
+        // Spend the invite only now that the request it produced exists (Spec A-14).
+        if (invite is not null)
+        {
+            await RedeemInviteAsync(invite, serviceRequest.Id, cancellationToken);
+        }
 
         // ── Step 5: Append AssetLedgerEntry (non-blocking on failure) ────────
         try
@@ -381,6 +404,67 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             : request.CapabilityMismatchNote.Trim();
 
     /// <summary>
+    /// Point-reads the invite named by <paramref name="token"/> and returns it only when it can
+    /// still be redeemed at this location (issue #664). A malformed token never reaches storage,
+    /// and a failed read is logged and treated as no invite: the invite path must never break
+    /// the intake form or its submission.
+    /// </summary>
+    private async Task<IntakeInvite?> FindRedeemableInviteAsync(
+        string tenantId, string locationId, string? token, CancellationToken cancellationToken)
+    {
+        if (!InviteToken.IsWellFormed(token))
+        {
+            return null;
+        }
+
+        IntakeInvite? invite;
+        try
+        {
+            invite = await _intakeInviteRepository.GetByIdAsync(tenantId, InviteToken.Hash(token!), cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Intake invite lookup failed in tenant {TenantId}; continuing without the invite", tenantId);
+            return null;
+        }
+
+        var now = DateTime.UtcNow;
+        if (invite is null || invite.LocationId != locationId || !invite.IsRedeemableAt(now))
+        {
+            _logger.LogInformation(
+                "Intake invite not usable in tenant {TenantId}: found={Found}, redeemed={Redeemed}, expired={Expired}, otherLocation={OtherLocation}",
+                tenantId,
+                invite is not null,
+                invite?.RedeemedAtUtc is not null,
+                invite is not null && invite.ExpiresAtUtc <= now,
+                invite is not null && invite.LocationId != locationId);
+            return null;
+        }
+
+        return invite;
+    }
+
+    /// <summary>
+    /// Marks <paramref name="invite"/> redeemed by <paramref name="serviceRequestId"/>. The request
+    /// already exists and already carries the attribution, so a failure here is logged, not thrown.
+    /// </summary>
+    private async Task RedeemInviteAsync(IntakeInvite invite, string serviceRequestId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            invite.MarkRedeemed(serviceRequestId, DateTime.UtcNow, "intake");
+            await _intakeInviteRepository.UpdateAsync(invite, cancellationToken);
+            _logger.LogInformation("Intake Step 4: Redeemed intake invite {InviteId} with SR {ServiceRequestId}",
+                invite.Id, serviceRequestId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Intake Step 4: Failed to mark intake invite {InviteId} redeemed for SR {ServiceRequestId}",
+                invite.Id, serviceRequestId);
+        }
+    }
+
+    /// <summary>
     /// Sends a confirmation notification via the orchestrator without blocking the caller.
     /// Exceptions are caught and logged as warnings.
     /// </summary>
@@ -506,6 +590,22 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             KnownAssets = knownAssets,
             TokenExpired = tokenExpired,
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<IntakeInvitePrefillResponseDto?> GetInvitePrefillAsync(string slug, string token, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slug);
+
+        var slugLookup = await _slugLookupRepository.GetBySlugAsync(slug.Trim().ToLowerInvariant(), cancellationToken)
+            ?? throw new KeyNotFoundException($"Location slug '{slug}' not found.");
+
+        // Read-only on purpose: link previews fetch this URL too, so opening never redeems.
+        var invite = await FindRedeemableInviteAsync(slugLookup.TenantId, slugLookup.LocationId, token, cancellationToken);
+
+        return invite is null
+            ? null
+            : new IntakeInvitePrefillResponseDto { FirstName = invite.FirstName, Phone = invite.Phone };
     }
 
     /// <inheritdoc />

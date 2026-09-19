@@ -46,6 +46,8 @@ public static class ServiceRequestMapper
             Attachments = entity.Attachments.Select(a => a.ToDto()).ToList(),
             AiEnrichment = entity.AiEnrichment?.ToDto(),
             IntakeSource = entity.IntakeSource,
+            IntakeInviteId = entity.IntakeInviteId,
+            AdvisorUserId = entity.AdvisorUserId,
             CustomerStatusNote = entity.CustomerStatusNote is { } note
                 ? new CustomerStatusNoteDto { Text = note.Text, UpdatedAtUtc = note.UpdatedAtUtc }
                 : null,
