@@ -10,10 +10,18 @@ namespace RVS.Domain.Tests.Validation;
 public class IntakeSourceVocabularyTests
 {
     [Fact]
-    public void KnownValues_ShouldBeTheFourChannelsInTableOrder()
+    public void KnownValues_ShouldBeTheA13ChannelsInTableOrderThenAdvisor()
     {
         IntakeSourceVocabulary.KnownValues
-            .Should().Equal("textrepl", "quickreply", "qr", "print");
+            .Should().Equal("textrepl", "quickreply", "qr", "print", "advisor");
+    }
+
+    [Fact]
+    public void Advisor_ShouldBeTheA14InviteChannel()
+    {
+        // Spec A-14 (issue #663): an advisor-sent invite link is tagged src=advisor.
+        IntakeSourceVocabulary.Advisor.Should().Be("advisor");
+        IntakeSourceVocabulary.IsKnown("advisor").Should().BeTrue();
     }
 
     [Theory]
@@ -21,6 +29,7 @@ public class IntakeSourceVocabularyTests
     [InlineData("quickreply")]
     [InlineData("qr")]
     [InlineData("print")]
+    [InlineData("advisor")]
     public void Normalize_WhenKnownValue_ShouldReturnItUnchanged(string value)
     {
         IntakeSourceVocabulary.Normalize(value).Should().Be(value);

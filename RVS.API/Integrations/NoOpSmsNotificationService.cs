@@ -19,13 +19,13 @@ public sealed class NoOpSmsNotificationService : ISmsNotificationService
     public bool IsEnabled => false;
 
     /// <inheritdoc />
-    public Task SendSmsAsync(
+    public Task<string?> SendSmsAsync(
         string tenantId, string locationId, string toPhoneNumber, string message,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "NoOpSmsNotificationService: Would send SMS for tenant {TenantId}, location {LocationId} to {Recipient}: {Message}",
             tenantId, locationId, toPhoneNumber, message);
-        return Task.CompletedTask;
+        return Task.FromResult<string?>(null);
     }
 }

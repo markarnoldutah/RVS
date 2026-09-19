@@ -111,6 +111,22 @@ public sealed class ExceptionHandlingMiddlewareTests
     }
 
     [Fact]
+    public async Task RateLimitExceededException_Returns429_WithProblemDetails()
+    {
+        var context = CreateHttpContext();
+        RequestDelegate next = _ => throw new RateLimitExceededException("You've sent the most invites allowed in an hour.");
+
+        await _middleware.InvokeAsync(context, next);
+
+        var problem = await DeserializeProblemDetails(context);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        problem.Type.Should().Be("https://api.rvserviceflow.com/errors/rate-limited");
+        problem.Title.Should().Be("Too Many Requests");
+        problem.Status.Should().Be(429);
+        problem.Detail.Should().Be("You've sent the most invites allowed in an hour.");
+    }
+
+    [Fact]
     public async Task UnhandledException_Returns500_WithProblemDetails()
     {
         var context = CreateHttpContext();

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using RVS.Domain.Links;
+using RVS.Domain.Security;
 
 namespace RVS.Domain.Tests.Links;
 
@@ -92,5 +93,55 @@ public class IntakeLinkBuilderTests
     {
         IntakeLinkBuilder.IntakeUrl(IntakeBase, Slug, "nfc")
             .Should().Be($"{IntakeBase}/{Slug}?src=nfc");
+    }
+
+    // ── Invite token pass-through (Spec A-14, issue #663) ─────────────────
+
+    [Fact]
+    public void ShortLink_WithInvite_ShouldCarryTheTokenAfterTheChannel()
+    {
+        var token = InviteToken.Generate();
+
+        IntakeLinkBuilder.ShortLink(RedirectBase, Slug, "advisor", token)
+            .Should().Be($"{RedirectBase}/{Slug}?src=advisor&inv={token}");
+    }
+
+    [Fact]
+    public void ShortLink_WithInviteButNoQueryChannel_ShouldStartTheQueryStringWithTheToken()
+    {
+        var token = InviteToken.Generate();
+
+        IntakeLinkBuilder.ShortLink(RedirectBase, Slug, null, token)
+            .Should().Be($"{RedirectBase}/{Slug}?inv={token}");
+    }
+
+    [Fact]
+    public void ShortLink_WithMalformedInvite_ShouldThrowArgumentException()
+    {
+        // Composition is ours: a malformed token here is a bug, not customer input.
+        var act = () => IntakeLinkBuilder.ShortLink(RedirectBase, Slug, "advisor", "not a token");
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void IntakeUrl_WithInvite_ShouldCarryTheTokenThrough()
+    {
+        var token = InviteToken.Generate();
+
+        IntakeLinkBuilder.IntakeUrl(IntakeBase, Slug, "advisor", token)
+            .Should().Be($"{IntakeBase}/{Slug}?src=advisor&inv={token}");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("<script>")]
+    [InlineData("tooshort")]
+    public void IntakeUrl_WithMissingOrMalformedInvite_ShouldDropItAndStillBuildTheUrl(string? invite)
+    {
+        // The redirect never fails (Spec A-13, A-14): a mangled inv lands on a blank form.
+        IntakeLinkBuilder.IntakeUrl(IntakeBase, Slug, "advisor", invite)
+            .Should().Be($"{IntakeBase}/{Slug}?src=advisor");
     }
 }

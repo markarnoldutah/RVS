@@ -142,6 +142,10 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("CanReadLookups", policy =>
         policy.RequireClaim("permissions", "lookups:read"));
 
+    // Advisor intake invites (Spec A-14, issue #663) — send, list and read back in the send dialog
+    options.AddPolicy("CanSendIntakeInvites", policy =>
+        policy.RequireClaim("permissions", "intake-invites:send"));
+
     // Platform Admin — the permission AND a caller on Admin:AllowedUserIds (Spec P-7, issue #563)
     options.AddPolicy("PlatformAdmin", policy =>
         policy.RequireClaim("permissions", "platform:tenants:manage")
@@ -344,6 +348,13 @@ builder.Services.AddScoped<ITenantRepository>(sp =>
     return new CosmosTenantRepository(client, cosmosDbId, logger);
 });
 
+builder.Services.AddScoped<IIntakeInviteRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosIntakeInviteRepository>>();
+    return new CosmosIntakeInviteRepository(client, cosmosDbId, logger);
+});
+
 // go.rvintake.com redirect hits (Spec A-13, issue #599) — Azure Table Storage, not Cosmos.
 // High-volume writes read occasionally, most of which never convert; Cosmos would charge
 // request units on every machine-made link-preview fetch. Degrades to the no-op when no
@@ -380,6 +391,15 @@ builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IIntakeOrchestrationService, IntakeOrchestrationService>();
 builder.Services.AddScoped<IIntakeRedirectService, IntakeRedirectService>();
 builder.Services.AddScoped<IIntakeSourceReportService, IntakeSourceReportService>();
+builder.Services.AddScoped<IIntakeInviteService, IntakeInviteService>();
+
+// Advisor intake invites (Spec A-14, issue #663): expiry, the recent-sends window and the
+// per-advisor/location/tenant caps. Configuration, not constants; bad values stop the app at startup.
+builder.Services.AddOptions<RVS.API.Options.IntakeInviteOptions>()
+    .Bind(builder.Configuration.GetSection(RVS.API.Options.IntakeInviteOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<IIntakeInviteRateLimiter, InMemoryIntakeInviteRateLimiter>();
 builder.Services.AddScoped<IPacketPhotoUrlResolver, PacketPhotoUrlResolver>();
 
 // Packet generation (issue #434): non-blocking in-process queue + background worker.

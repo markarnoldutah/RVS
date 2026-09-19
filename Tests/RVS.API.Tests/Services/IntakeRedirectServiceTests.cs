@@ -220,4 +220,24 @@ public class IntakeRedirectServiceTests
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
+
+    // ── Invite pass-through (Spec A-14, issue #663) ──────────────────────
+
+    [Fact]
+    public async Task ResolveAsync_WithAnInviteToken_ShouldCarryItToTheIntakeUrl()
+    {
+        const string token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+        var result = await _sut.ResolveAsync(Slug, "advisor", BrowserUserAgent, token);
+
+        result.TargetUrl.Should().Be($"{IntakeBaseUrl}/{Slug}?src=advisor&inv={token}");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WithAMalformedInviteToken_ShouldDropItAndStillRedirect()
+    {
+        var result = await _sut.ResolveAsync(Slug, "advisor", BrowserUserAgent, "<script>");
+
+        result.TargetUrl.Should().Be($"{IntakeBaseUrl}/{Slug}?src=advisor");
+    }
 }

@@ -2,7 +2,7 @@
 // Module: Azure Cosmos DB (NoSQL) — Serverless
 // ──────────────────────────────────────────────────────────────
 // Creates a Cosmos DB account in Serverless capacity mode with
-// all 10 RVS application containers and their index policies.
+// all 11 RVS application containers and their index policies.
 //
 // Upgrade path: switch capacityMode to 'Provisioned' and set
 // autoscaleMaxThroughput via parameter changes (requires account
@@ -171,6 +171,7 @@ resource customerProfiles 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/co
           { path: '/email/?' }
           { path: '/globalCustomerAcctId/?' }
           { path: '/type/?' }
+          { path: '/smsOptOut/?' }
         ]
         excludedPaths: [
           { path: '/*' }
@@ -420,6 +421,38 @@ resource rvWarrantyRules 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
           { path: '/manufacturer/?' }
           { path: '/brandDivision/?' }
           { path: '/type/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+          { path: '/_etag/?' }
+        ]
+      }
+    }
+  }
+}
+
+// 11. intake-invites — PK=/tenantId, id = SHA-256 of the invite token (Spec A-14, issue #663).
+// No defaultTtl, on purpose: the consent record is opt-in evidence and outlives the invite.
+resource intakeInvites 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: database
+  name: 'intake-invites'
+  properties: {
+    resource: {
+      id: 'intake-invites'
+      partitionKey: {
+        paths: ['/tenantId']
+        kind: 'Hash'
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          { path: '/tenantId/?' }
+          { path: '/type/?' }
+          { path: '/locationId/?' }
+          { path: '/advisorUserId/?' }
+          { path: '/createdAtUtc/?' }
+          { path: '/acsMessageId/?' }
         ]
         excludedPaths: [
           { path: '/*' }

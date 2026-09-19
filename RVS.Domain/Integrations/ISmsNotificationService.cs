@@ -24,7 +24,12 @@ public interface ISmsNotificationService
     /// <param name="toPhoneNumber">Recipient phone number, ideally already E.164 (e.g., +18015551234).</param>
     /// <param name="message">SMS message body (max 160 characters per segment).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task SendSmsAsync(
+    /// <returns>
+    /// The ACS message id when ACS accepted the message, which is what a delivery report is
+    /// matched back by (issue #663); <c>null</c> when nothing was sent or ACS rejected it.
+    /// Never throws for a failed send.
+    /// </returns>
+    Task<string?> SendSmsAsync(
         string tenantId, string locationId, string toPhoneNumber, string message,
         CancellationToken cancellationToken = default);
 }

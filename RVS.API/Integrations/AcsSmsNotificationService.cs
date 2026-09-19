@@ -8,7 +8,8 @@ namespace RVS.API.Integrations;
 
 /// <summary>
 /// Sends transactional SMS messages via Azure Communication Services.
-/// Uses fire-and-forget semantics — errors are logged but never thrown to the caller.
+/// Uses fire-and-forget semantics — errors are logged but never thrown to the caller, who learns
+/// the outcome only from whether a message id comes back.
 ///
 /// Every send passes four gates before ACS is called (issue #661): SMS is enabled, the recipient
 /// normalises to E.164, the location resolves a sending number, and the tenant has hourly
@@ -41,7 +42,7 @@ public sealed class AcsSmsNotificationService : ISmsNotificationService
     public bool IsEnabled => _options.Enabled;
 
     /// <inheritdoc />
-    public async Task SendSmsAsync(
+    public async Task<string?> SendSmsAsync(
         string tenantId, string locationId, string toPhoneNumber, string message,
         CancellationToken cancellationToken = default)
     {
@@ -53,14 +54,14 @@ public sealed class AcsSmsNotificationService : ISmsNotificationService
         if (!_options.Enabled)
         {
             _logger.LogDebug("SMS is disabled; not sending for tenant {TenantId}", tenantId);
-            return;
+            return null;
         }
 
         if (!PhoneNumberNormalizer.TryNormalize(toPhoneNumber, out var to))
         {
             _logger.LogWarning(
                 "Not sending SMS for tenant {TenantId}: recipient is not a valid US/CA number", tenantId);
-            return;
+            return null;
         }
 
         try
@@ -71,7 +72,7 @@ public sealed class AcsSmsNotificationService : ISmsNotificationService
                 _logger.LogWarning(
                     "Not sending SMS for tenant {TenantId}: no sending number for location {LocationId}",
                     tenantId, locationId);
-                return;
+                return null;
             }
 
             if (!_rateLimiter.TryAcquire(tenantId))
@@ -79,13 +80,15 @@ public sealed class AcsSmsNotificationService : ISmsNotificationService
                 _logger.LogWarning(
                     "Not sending SMS for tenant {TenantId}: over the limit of {Limit} messages per hour",
                     tenantId, _options.MaxMessagesPerTenantPerHour);
-                return;
+                return null;
             }
 
+            // Delivery reports update an invite's status by message id (Spec A-14, issue #665).
             var response = await _smsClient.SendAsync(
                 from: from,
                 to: to,
                 message: message,
+                options: new SmsSendOptions(enableDeliveryReport: true),
                 cancellationToken: cancellationToken);
 
             if (response.Value.Successful)
@@ -93,6 +96,7 @@ public sealed class AcsSmsNotificationService : ISmsNotificationService
                 _logger.LogInformation(
                     "ACS SMS sent to {Recipient}, MessageId: {MessageId}",
                     to, response.Value.MessageId);
+                return response.Value.MessageId;
             }
             else
             {
@@ -105,5 +109,7 @@ public sealed class AcsSmsNotificationService : ISmsNotificationService
         {
             _logger.LogError(ex, "Failed to send SMS via ACS to {Recipient}", to);
         }
+
+        return null;
     }
 }

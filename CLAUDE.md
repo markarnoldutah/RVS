@@ -53,7 +53,7 @@ Solution file is [RVS.slnx](RVS.slnx) (new SLNX format — `dotnet` CLI handles 
 | [RVS.Blazor.Intake](RVS.Blazor.Intake/) | Blazor **WASM** — anonymous 8-step customer intake wizard. |
 | [RVS.Blazor.Manager](RVS.Blazor.Manager/) | Blazor **WASM** — authenticated dealer manager desktop (OIDC/Auth0, PKCE). |
 | [RVS.UI.Shared](RVS.UI.Shared/) | Shared typed API clients (`IntakeApiClient`, `ServiceRequestApiClient`, `LookupApiClient`, `AttachmentApiClient`, and `AnalyticsApiClient` — archived scope), client-side validators, badge components. **`ThemeService` is not here** — each Blazor app has its own copy. |
-| [RVS.Data.Cosmos.Seed](RVS.Data.Cosmos.Seed/) | Idempotent seeder — creates 10 containers with partition keys/unique keys/indexing, seeds test data. |
+| [RVS.Data.Cosmos.Seed](RVS.Data.Cosmos.Seed/) | Idempotent seeder — creates 11 containers with partition keys/unique keys/indexing, seeds test data. |
 | [RVS.PacketDump](RVS.PacketDump/) | Dev utility — renders sample `ServicePacket`s to standalone `.html` (`PacketHtmlRenderer`) and `.pdf` (`PacketPdfRenderer`) files for print-testing at Letter/A4. `--format html\|pdf\|both`, `--variant full\|minimal\|both`. Not deployable. |
 | [Tests/RVS.Domain.Tests](Tests/RVS.Domain.Tests/) | Pure logic: mappers, validators, entities. |
 | [Tests/RVS.API.Tests](Tests/RVS.API.Tests/) | Services, middleware, controllers (with Moq). |
@@ -143,9 +143,9 @@ The `RVS` acronym is unaffected: resource names, project names and document name
 
 Every customer-facing link routes through `go.rvintake.com/{locationSlug}` — `GoController` (anonymous, `/{slug}` and `/go/{slug}`) → `IntakeRedirectService` → 302 to the intake app with a normalised `src`. `IntakeLinkBuilder` (Domain) is the **only** place a customer-facing link is composed; the QR endpoint, `GET api/locations/{id}/intake-links` and the provisioning `intakeUrl` all go through it. `src` lands on `ServiceRequest.intakeSource`; raw hits go to Table Storage, never Cosmos. The redirect must never fail — unknown slug, unknown `src`, storage outage all still redirect.
 
-### Cosmos DB (10 containers, kebab-case)
+### Cosmos DB (11 containers, kebab-case)
 
-`service-requests`, `customer-profiles`, `global-customer-accounts`, `asset-ledger`, `dealerships`, `locations`, `slug-lookups`, `tenant-configs`, `lookup-sets`, `rv-warranty-rules`. `ConnectionMode.Gateway`, set explicitly in [RVS.API/Program.cs](RVS.API/Program.cs) and the seeder (the .NET SDK default is Direct). No integrated cache: that needs a provisioned dedicated gateway (`SqlDedicatedGateway`), which `modules/cosmos-db.bicep` does not declare. Container creation + seeding lives in [RVS.Data.Cosmos.Seed/Program.cs](RVS.Data.Cosmos.Seed/Program.cs); the same set is declared in `modules/cosmos-db.bicep`. Partition keys and entity shapes are in [Docs/ASOT/RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md).
+`service-requests`, `customer-profiles`, `global-customer-accounts`, `asset-ledger`, `dealerships`, `locations`, `slug-lookups`, `tenant-configs`, `lookup-sets`, `rv-warranty-rules`, `intake-invites`. `ConnectionMode.Gateway`, set explicitly in [RVS.API/Program.cs](RVS.API/Program.cs) and the seeder (the .NET SDK default is Direct). No integrated cache: that needs a provisioned dedicated gateway (`SqlDedicatedGateway`), which `modules/cosmos-db.bicep` does not declare. Container creation + seeding lives in [RVS.Data.Cosmos.Seed/Program.cs](RVS.Data.Cosmos.Seed/Program.cs); the same set is declared in `modules/cosmos-db.bicep`. Partition keys and entity shapes are in [Docs/ASOT/RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md).
 
 Most containers partition on `/tenantId`. The exceptions are deliberate: `global-customer-accounts` on `/email`, `asset-ledger` on `/assetId`, `slug-lookups` on `/slug`, `lookup-sets` on `/category`, `rv-warranty-rules` on `/manufacturer`. `rv-warranty-rules` is seeded but has no repository and is never read.
 

@@ -1,3 +1,4 @@
+using RVS.Domain.Security;
 using RVS.Domain.Validation;
 
 namespace RVS.Domain.Links;
@@ -24,17 +25,35 @@ public static class IntakeLinkBuilder
     /// <param name="redirectBaseUrl">Origin of the redirect host, e.g. <c>https://go.rvintake.com</c>.</param>
     /// <param name="slug">The location's intake slug.</param>
     /// <param name="source">Channel tag, or <c>null</c> for print.</param>
-    public static string ShortLink(string redirectBaseUrl, string slug, string? source = null)
+    /// <param name="invite">
+    /// An A-14 invite token (<c>Spec A-14</c>, issue #663), appended as <c>inv</c>. Must be
+    /// well-formed: this link is RVS's own composition, so a malformed token is a bug.
+    /// </param>
+    public static string ShortLink(string redirectBaseUrl, string slug, string? source = null, string? invite = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(redirectBaseUrl);
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
 
+        if (invite is not null && !InviteToken.IsWellFormed(invite))
+        {
+            throw new ArgumentException("Not a well-formed invite token.", nameof(invite));
+        }
+
         var normalized = IntakeSourceVocabulary.Normalize(source);
         var bare = $"{redirectBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(slug.Trim().ToLowerInvariant())}";
 
-        return normalized == IntakeSourceVocabulary.Print
-            ? bare
-            : $"{bare}?src={Uri.EscapeDataString(normalized)}";
+        var query = new List<string>(2);
+        if (normalized != IntakeSourceVocabulary.Print)
+        {
+            query.Add($"src={Uri.EscapeDataString(normalized)}");
+        }
+
+        if (invite is not null)
+        {
+            query.Add($"inv={invite}");
+        }
+
+        return query.Count == 0 ? bare : $"{bare}?{string.Join('&', query)}";
     }
 
     /// <summary>
@@ -46,13 +65,19 @@ public static class IntakeLinkBuilder
     /// <param name="intakeBaseUrl">Origin of the Intake app, e.g. <c>https://rvintake.com</c>.</param>
     /// <param name="slug">The location's intake slug.</param>
     /// <param name="source">Channel tag; normalised, so <c>null</c> becomes print.</param>
-    public static string IntakeUrl(string intakeBaseUrl, string slug, string? source)
+    /// <param name="invite">
+    /// An A-14 invite token from the short link's <c>inv</c> (<c>Spec A-14</c>, issue #663),
+    /// passed through as <c>inv</c>. A missing or malformed value is dropped, never an error:
+    /// the redirect never fails, and a mangled invite lands on a blank intake form.
+    /// </param>
+    public static string IntakeUrl(string intakeBaseUrl, string slug, string? source, string? invite = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(intakeBaseUrl);
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
 
         var normalized = IntakeSourceVocabulary.Normalize(source);
+        var url = $"{intakeBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(slug.Trim().ToLowerInvariant())}?src={Uri.EscapeDataString(normalized)}";
 
-        return $"{intakeBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(slug.Trim().ToLowerInvariant())}?src={Uri.EscapeDataString(normalized)}";
+        return InviteToken.IsWellFormed(invite) ? $"{url}&inv={invite}" : url;
     }
 }
