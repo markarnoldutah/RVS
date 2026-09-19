@@ -32,6 +32,9 @@ param location string
 @description('Resource ID of the workspace-based Application Insights component the packet pipeline logs to.')
 param appInsightsResourceId string
 
+@description('Resource ID of the Log Analytics workspace backing that component. Scope of the daily-cap-reached alert.')
+param logAnalyticsWorkspaceResourceId string
+
 @description('Target environment (staging or prod). Drives the action-group short name and the alert display names.')
 @allowed([
   'staging'
@@ -213,6 +216,50 @@ resource recipientBounceWarning 'Microsoft.Insights/scheduledQueryRules@2026-03-
   }
 }
 
+// Daily ingestion cap reached (logAnalyticsDailyCapGb). Once the cap is hit the
+// workspace stops ingesting until its daily reset, so every rule above goes
+// silent with it — this is the one signal that says they are blind. The
+// OverQuota operation event is not itself subject to the cap. Evaluated every
+// 15 minutes over a 1-hour window: the event is written once, the cheaper
+// frequency is enough for a warning, and the wider window absorbs ingestion lag.
+resource dailyCapReached 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
+  name: 'sqr-rvs-law-daily-cap-reached-${environmentName}-wus3'
+  location: location
+  tags: tags
+  kind: 'LogAlert'
+  properties: {
+    displayName: '[RVS ${environmentName}] Log Analytics daily cap reached — telemetry and alerts paused'
+    description: 'The Log Analytics workspace hit its daily ingestion cap (logAnalyticsDailyCapGb). Ingestion, and with it every packet-pipeline alert, is paused until the workspace\'s daily reset hour. Raise the cap in parameters/<env>.bicepparam, or find what spiked ingestion.'
+    severity: 2
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspaceResourceId
+    ]
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT1H'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: '_LogOperation | where Category =~ "Ingestion" | where Detail contains "OverQuota"'
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        opsActionGroup.id
+      ]
+    }
+  }
+}
+
 // ── Outputs ───────────────────────────────────────────────────
 
 @description('Resource ID of the ops action group.')
@@ -226,3 +273,6 @@ output criticalRuleNames array = [for (e, i) in criticalEvents: criticalRules[i]
 
 @description('Name of the warning-tier (digest) scheduled-query alert rule.')
 output warningRuleName string = recipientBounceWarning.name
+
+@description('Name of the Log Analytics daily-cap-reached alert rule.')
+output dailyCapRuleName string = dailyCapReached.name

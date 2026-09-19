@@ -54,7 +54,16 @@ param deployKeyVault = true
 
 // Observability (Log Analytics + Application Insights + /health availability test)
 param deployObservability = true
-param deployAvailabilityTest = true
+// Off until go-live: billed per run and no alert rule reads its results yet.
+// Turn back on at go-live together with an availability alert — Docs/RVS_GoLive_Activities.md (G-3).
+param deployAvailabilityTest = false
+// 30 is the lowest the workspace accepts; the first 31 days cost nothing extra.
+param logAnalyticsRetentionInDays = 30
+// Pre-go-live cap. 0.08 GB/day per environment keeps staging + prod together
+// inside the 5 GB/month Log Analytics free grant (per billing account). Past the
+// cap, ingestion stops until the daily reset and the #494 alerts go blind — raise
+// it (or set '-1') at go-live: Docs/RVS_GoLive_Activities.md (G-2).
+param logAnalyticsDailyCapGb = '0.08'
 
 // Ops alert receivers for the packet-pipeline critical alerts (#494). Committed
 // here rather than left empty — the Action Groups resource provider does a
@@ -110,11 +119,13 @@ param acsCustomDomainVerified = true
 param acsSmsFromPhoneNumber = ''
 param acsSmsEnabled = false
 
-// Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
+// Static Web Apps — Free until go-live, to cut cost while prod carries no
+// traffic. Set back to 'Standard' at go-live for the SLA:
+// Docs/RVS_GoLive_Activities.md (G-1).
 param deploySwa = true
 param swaLocation = 'westus2'
 param swaResourceGroupName = 'rg-rvs-prod-westus2'
-param swaSkuName = 'Standard'
+param swaSkuName = 'Free'
 
 // DNS — Manager: CNAME manager.rvintake.com, bound by Bicep (#632).
 //       Intake:  ALIAS A record at the rvintake.com apex → Intake SWA, written by

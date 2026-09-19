@@ -63,6 +63,7 @@ Everything downstream of the ledger — the anonymization pipeline, k-anonymity,
 | `RVS_Spec.md` | You're writing code |
 | `RVS_Plan.md` | You're deciding what to do next, or need to find an open question |
 | `RVS_Money.md` | You need unit economics, cost structure, a revenue scenario, or the break-even |
+| `RVS_GoLive_Activities.md` | You're about to take production live and need the agreed actions parked for that moment |
 | `RVS_Archive_Index.md` | You need something from the old document set, or want to know why something was cut |
 
 **There is no target number of documents.** The rule is placement, not count:
