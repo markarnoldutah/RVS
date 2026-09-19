@@ -1,5 +1,5 @@
 {
-  "name": "RVS Blazor Manager",
+  "name": "RV Intake Manager",
   "app_type": "spa",
   "token_endpoint_auth_method": "none",
   "oidc_conformant": true,

@@ -8,7 +8,9 @@
 #
 #   <tenant>  a tenants/<tenant>.env file — today "shared"; later dev, staging, prod
 #
-# Exit codes: 0 no differences (or applied), 2 differences found in plan mode, 1 error.
+# Exit codes: 0 the tenant matches; 1 error; 2 it does not match — there are baseline
+# differences to apply (plan mode), or a checked setting below differs, which no
+# --apply fixes. The summary line says which.
 #
 # What it manages, from baseline/:
 #   resource-server.json   the RVS API (audience from AUTH0_API_IDENTIFIER) and its permissions
@@ -18,14 +20,23 @@
 #                          grant to the RVS API (_grant) and its connections (_connections)
 #   actions/<name>.json    Actions, deployed from the matching <name>.js, and their bindings
 #
+# What it checks but never changes (marked "!" when they differ):
+#   Manager appsettings    AUTH0_MANAGER_APPSETTINGS point at AUTH0_APP_AUTHORITY and this client
+#   tenant-wide settings   the ones RVS sets by hand (Auth0 checklist §6-§8): the tenant
+#                          Friendly Name, the custom domain (ready and the tenant default),
+#                          and the email provider and its From address. Expected values
+#                          come from the tenant file; an unset value skips its check.
+#
 # What it leaves alone: everything else in the tenant (other products' APIs and apps,
-# Postman / API Explorer apps, tenant-wide settings, attack protection, users). It never
-# deletes a resource. Inside the resources it manages it is authoritative: permissions
+# Postman / API Explorer apps, other tenant-wide settings, attack protection, users). It
+# never deletes a resource. Inside the resources it manages it is authoritative: permissions
 # missing from the baseline are removed from RVS roles, grants and the RVS API.
 #
 # Management API scopes:
 #   plan   read:resource_servers read:roles read:clients read:client_grants
 #          read:connections read:actions read:triggers
+#          and, for the tenant-wide checks, read:tenant_settings read:custom_domains
+#          read:email_provider — a check whose scope is missing is skipped with a warning
 #   apply  plan scopes + create:resource_servers update:resource_servers create:roles
 #          update:roles create:clients update:clients create:client_grants
 #          update:client_grants update:connections create:actions update:actions
@@ -71,6 +82,9 @@ PROJECT_JQ='def project($d):
 
 APPLY=false
 CHANGES=0
+# Checked settings that differ from the tenant file. Counted apart from CHANGES because
+# --apply cannot fix them; they still make the run exit 2.
+REPORTED=0
 CLIENT_IDS='{}'
 
 change() { CHANGES=$((CHANGES + 1)); }
@@ -430,8 +444,120 @@ check_appsettings() {
     else
       echo "  ! $f: Authority=$authority ClientId=$client Audience=$audience"
       echo "      expected Authority=$want_authority ClientId=${cid:-<client_id of the new application>} Audience=$AUTH0_API_IDENTIFIER"
+      REPORTED=$((REPORTED + 1))
     fi
   done
+}
+
+# ── Tenant-wide settings RVS sets by hand (checked, never applied) ──────────────
+#
+# Auth0 checklist §6-§8. These are tenant-wide and set in the dashboard on purpose, and
+# the tenant is shared with other products, so anyone with dashboard access can change
+# them. Each one breaks something quietly if it drifts: without the default custom domain,
+# /admin set-password links fall back to the canonical host; without the email provider,
+# reset mail comes from no-reply@auth0user.net.
+
+# tenant_get PATH SCOPE WHAT — prints the response body. On 403 warns that the check was
+# skipped and returns SKIPPED; on 404 prints nothing and succeeds. Any other failure
+# returns its own code, which the caller turns into the end of the run. (It runs inside
+# $(...), so exiting here would only leave the subshell — hence the distinct code.)
+SKIPPED=10
+tenant_get() {
+  local rc=0 body err
+  err="$(mktemp "$AUTH0_WORK_DIR/err.XXXXXX")"
+  body="$(api GET "$1" 2>"$err")" || rc=$?
+  if [[ $rc -eq 3 ]]; then
+    rm -f "$err"
+    warn "$3 not checked: the Management API app lacks $2"
+    return $SKIPPED
+  fi
+  [[ $rc -eq 4 ]] || cat "$err" >&2
+  rm -f "$err"
+  [[ $rc -eq 0 || $rc -eq 4 ]] || return $rc
+  printf '%s\n' "$body"
+}
+
+# fetch VAR PATH SCOPE WHAT — runs tenant_get into VAR. Returns 0 when there is something
+# to compare, 1 when the check was skipped; ends the run on any other failure.
+fetch() {
+  local rc=0 out
+  out="$(tenant_get "$2" "$3" "$4")" || rc=$?
+  [[ $rc -eq $SKIPPED ]] && return 1
+  [[ $rc -eq 0 ]] || die "cannot check $4 (Management API error $rc)"
+  printf -v "$1" '%s' "$out"
+}
+
+# mismatch WHAT FOUND EXPECTED
+mismatch() {
+  echo "  ! $1: $2"
+  echo "      expected $3"
+  REPORTED=$((REPORTED + 1))
+}
+
+lower() { tr '[:upper:]' '[:lower:]' <<<"$1"; }
+
+check_tenant_settings() {
+  log "Tenant-wide settings (checked, never applied)"
+  local body got host domain status is_default name enabled from
+
+  if [[ -n "${AUTH0_EXPECT_FRIENDLY_NAME:-}" ]] \
+      && fetch body "/tenants/settings" read:tenant_settings "friendly name"; then
+    got="$(jq -r '.friendly_name // ""' <<<"$body")"
+    if [[ "$got" == "$AUTH0_EXPECT_FRIENDLY_NAME" ]]; then
+      echo "  = friendly name: $got"
+    else
+      mismatch "friendly name" "${got:-<unset>}" "$AUTH0_EXPECT_FRIENDLY_NAME"
+    fi
+  fi
+
+  # The custom domain is whatever host AUTH0_APP_AUTHORITY names, so the tenant file keeps
+  # one source for it. No check while the apps still use the canonical domain.
+  host="${AUTH0_APP_AUTHORITY:-}"
+  host="${host#https://}"
+  host="${host%%/*}"
+  if [[ -n "$host" && "$host" != "$AUTH0_DOMAIN" ]] \
+      && fetch body "/custom-domains" read:custom_domains "custom domain $host"; then
+    domain="$(jq -c --arg h "$host" '[.[]? | select(.domain == $h)] | .[0] // empty' <<<"$body")"
+    if [[ -z "$domain" ]]; then
+      mismatch "custom domain $host" "not defined in the tenant" "defined, ready, and the tenant default (checklist §6.2)"
+    else
+      status="$(jq -r '.status // ""' <<<"$domain")"
+      is_default="$(jq -r 'if has("is_default") then (.is_default | tostring) else "unknown" end' <<<"$domain")"
+      if [[ "$status" != "ready" ]]; then
+        mismatch "custom domain $host" "status $status" "ready (checklist §6.4)"
+      elif [[ "$is_default" == "unknown" ]]; then
+        echo "  = custom domain $host: ready"
+        warn "Auth0 did not report whether $host is the tenant default; confirm it under Branding -> Custom Domains"
+      elif [[ "$is_default" != "true" ]]; then
+        mismatch "custom domain $host" "ready, but not the tenant default — Management API tickets such as /admin set-password links fall back to $AUTH0_DOMAIN" \
+          "the tenant default (checklist §6.4)"
+      else
+        echo "  = custom domain $host: ready, tenant default"
+      fi
+    fi
+  fi
+
+  # fields= keeps the provider's credentials (an ACS connection string) out of the response.
+  if [[ -n "${AUTH0_EXPECT_EMAIL_PROVIDER:-}${AUTH0_EXPECT_EMAIL_FROM:-}" ]] \
+      && fetch body "/emails/provider?fields=name,enabled,default_from_address&include_fields=true" \
+          read:email_provider "email provider"; then
+    if [[ -z "$body" ]]; then
+      mismatch "email provider" "none — Auth0's built-in sender, no-reply@auth0user.net" \
+        "${AUTH0_EXPECT_EMAIL_PROVIDER:-a provider} sending as ${AUTH0_EXPECT_EMAIL_FROM:-<any>} (checklist §8)"
+    else
+      name="$(jq -r '.name // ""' <<<"$body")"
+      enabled="$(jq -r '.enabled // false | tostring' <<<"$body")"
+      from="$(jq -r '.default_from_address // ""' <<<"$body")"
+      if [[ ( -z "${AUTH0_EXPECT_EMAIL_PROVIDER:-}" || "$name" == "$AUTH0_EXPECT_EMAIL_PROVIDER" ) \
+            && "$enabled" == "true" \
+            && ( -z "${AUTH0_EXPECT_EMAIL_FROM:-}" || "$(lower "$from")" == "$(lower "$AUTH0_EXPECT_EMAIL_FROM")" ) ]]; then
+        echo "  = email provider: $name, enabled, from $from"
+      else
+        mismatch "email provider" "$name, enabled=$enabled, from ${from:-<unset>}" \
+          "${AUTH0_EXPECT_EMAIL_PROVIDER:-$name}, enabled=true, from ${AUTH0_EXPECT_EMAIL_FROM:-$from}"
+      fi
+    fi
+  fi
 }
 
 report_unmanaged() {
@@ -464,20 +590,40 @@ run() {
 
 mgmt_login
 
+# check — the settings this script reports but never changes. Resets the count so an
+# --apply run reports what is still wrong afterwards, not twice.
+check() {
+  REPORTED=0
+  check_appsettings
+  check_tenant_settings
+}
+
+# summarise_reported — prints the by-hand reminder and returns the exit code.
+summarise_reported() {
+  [[ $REPORTED -gt 0 ]] || return 0
+  echo "$REPORTED checked setting(s) differ (marked ! above). --apply does not change them; fix them by hand."
+  return 2
+}
+
 echo "Tenant '$TENANT' ($AUTH0_DOMAIN) compared with baseline/"
 run
-check_appsettings
+check
 report_unmanaged
 
 if [[ $CHANGES -eq 0 ]]; then
   echo
-  echo "No differences: the tenant matches the baseline."
-  exit 0
+  if [[ $REPORTED -eq 0 ]]; then
+    echo "No differences: the tenant matches the baseline."
+    exit 0
+  fi
+  echo "The baseline matches; nothing to apply."
+  summarise_reported || exit $?
 fi
 
 if ! $WANT_APPLY; then
   echo
   echo "$CHANGES difference(s). Re-run with --apply to make them."
+  summarise_reported || true
   exit 2
 fi
 
@@ -492,6 +638,7 @@ echo
 echo "Applying to $AUTH0_DOMAIN"
 APPLY=true
 run
-check_appsettings
+check
 echo
 echo "Done. Run without --apply to confirm the tenant now matches the baseline."
+summarise_reported || exit $?
