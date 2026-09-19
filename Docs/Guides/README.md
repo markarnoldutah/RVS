@@ -20,3 +20,13 @@ is what records where each request came from.
 > before any of this goes to a customer — the checklist at the end of each guide says
 > exactly what to confirm. Phone-maker menus move between OS versions, and a guide that
 > sends a service advisor to a menu that no longer exists is worse than no guide.
+
+## On a live call
+
+| Guide | For |
+|---|---|
+| [Advisor_Text_Consent_Script.md](Advisor_Text_Consent_Script.md) | Any advisor using **Send intake link** in the manager app (`Spec A-14`) |
+
+The consent script is not about a phone's settings. It's the words an advisor reads on a
+live call before RVS texts the customer a link, and it is also the opt-in evidence for the
+toll-free texting number's verification.

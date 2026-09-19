@@ -16,7 +16,7 @@ Anonymous Blazor web form at `rvintake.com/{locationSlug}`. No login, ever. Cust
 | # | Requirement |
 |---|---|
 | **A-1** | Anonymous access. No authentication on the intake endpoint. Per-IP rate limiting. |
-| **A-2** | Collects: customer name, phone, email, preferred contact method; VIN or make/model/year; free-text description of the problem; photos and short video. |
+| **A-2** | Collects: customer name, phone, email, preferred contact method, and two notification opt-outs (*Do not send text messages*, *Do not send email*); VIN or make/model/year; free-text description of the problem; photos and short video. The preferred contact method and the opt-outs together route the customer's confirmation, and an opted-out channel cannot be the preferred one. See "Contact preference and confirmation routing" below. |
 | **A-3** | VIN decode via NHTSA vPIC for make, model year, type. Failure degrades gracefully — submission still succeeds with customer-supplied values. |
 | **A-4** | AI generates 2–4 follow-up questions based on the description. Hardcoded per-category fallbacks when the AI call fails. Answers are stored with the request. |
 | **A-5** | AI suggests one issue category from a controlled list. Customer can override. Advisory only. |
@@ -28,6 +28,7 @@ Anonymous Blazor web form at `rvintake.com/{locationSlug}`. No login, ever. Cust
 | **A-11** | **Issue insights.** From the description, AI infers urgency and RV-usage context (`ai/suggest-insights`), shown to the customer as advisory "Suggested" chips. Advisory only, never blocks submission; accepted values are stored on the request with their provider and confidence. |
 | **A-12** | **Capability pre-check.** On leaving the description step, the issue is checked against the location's enabled service capabilities (`assess-capabilities`). If the location is unlikely to be able to help, intake shows a non-blocking alert; the customer may still submit. |
 | **A-13** | **Channel-tagged intake links.** Every distribution path routes through `go.rvintake.com/{locationSlug}`, which redirects to the location's intake URL and logs the hit. A `src` query parameter names the channel: `textrepl` (Text Replacement snippet sent from a Recents entry), `quickreply` (iOS Respond with Text / Android Quick Response, sent from an incoming call), `qr` (QR sticker or NFC tag), and no `src` at all for `print` — printed material cannot carry a query string, so its absence *is* the print channel. The redirect never fails: an unknown `src`, an unknown slug, or a hit-log outage all still send the customer to the form. `src` is persisted on the resulting `ServiceRequest` and reported per location. |
+| **A-14** | **Advisor-initiated intake invite.** During a live call, a service advisor or mobile tech sends the caller a prefilled, single-use intake link by text from the manager app, with the caller's verbal consent. The resulting request is tagged `src=advisor` and attributed to the advisor and the invite. Detail below. |
 
 All four AI capabilities in A-9–A-12 are in scope — decision Q8 / issue #429. Each has a rule-based or no-op fallback behind the same interface; none is a hard dependency for a successful submission.
 
@@ -38,6 +39,41 @@ All four AI capabilities in A-9–A-12 are in scope — decision Q8 / issue #429
 **Redirect hits are not opens, and are never reported as such.** iMessage and most messaging clients fetch a URL to build a link preview the moment it is composed — before anybody taps anything, possibly once per send, at a rate that varies by client. Obvious bot user agents are flagged and excluded from reported counts, but the filter is coarse by design and the residue is still not a count of people. **Submissions by source** is the metric a dealer is shown. Raw open counts are not.
 
 This means the packet's structured content is: decoded unit, one category, the customer's own words, the diagnostic Q&A, and photos. That is the honest scope, and it is enough. The diagnostic Q&A block is the part that reads as expert on paper — *"Does the slide move at all? — Motor hums, no movement"* is worth more to a service manager than any taxonomy label. Invest the effort there.
+
+### Contact preference and confirmation routing (A-2)
+
+**Decided (issue #577, via #600).** The preferred contact method chooses the channel for the customer's submission confirmation. The two opt-outs act as a **hard veto**: RVS never sends on an opted-out channel, whatever the preference says. Both fields are kept.
+
+| Preferred contact | Confirmation goes by |
+|---|---|
+| `Text`, with texting enabled (see below), a phone number, and no SMS opt-out | Text |
+| `Text`, but texting is unavailable | Email. The fallback is logged at Warning |
+| `Email`, `Phone`, or none recorded (requests from before the preference was captured) | Email |
+| Any preference, but email is opted out or there is no address | Text if it is permitted. Otherwise nothing is sent, and that is logged |
+
+`Phone` means *call me*. RVS does not place calls, so the confirmation goes by email.
+
+**Step 2 rule.** Notification preferences sit **above** the preferred contact method on the form. *Do not send text messages* disables the **Text** option and *Do not send email* disables the **Email** option. Ticking an opt-out that conflicts with the current selection clears the selection. **Phone** is always available. The intake app and the API both enforce the rule, so a hand-built request that pairs `Text` with an SMS opt-out, or `Email` with an email opt-out, is rejected as a validation error (422).
+
+**Disclosure.** Wherever intake offers texting, the copy states how often RVS texts, that message and data rates may apply, *Reply STOP to opt out, HELP for help*, and links to the terms.
+
+**Texting is off until the number is verified.** Each environment's toll-free sending number needs carrier verification before it can text. Until that clears, texting is disabled for that environment by a flag that defaults to off. While it is off, RVS makes no SMS call anywhere, and a `Text` customer's confirmation goes by email.
+
+### A-14: Advisor-initiated intake invite
+
+**Decided (issue #600).** A-13's links are for customers who haven't been spoken to yet. A-14 covers the customer already on the phone. The advisor types the caller's first name and phone number, confirms that the caller agreed to receive the text, and RVS sends a prefilled, single-use link. The send action lives in the manager app. It is the only manager surface A-14 adds, and a shop that never opens the manager app loses nothing: A-13's links still work.
+
+- **Consent first.** The advisor reads the published verbal consent script (`Docs/Guides/Advisor_Text_Consent_Script.md`) and ticks a consent box whose label references it. Send stays disabled until the box is ticked. The invite records when consent was captured and by which advisor, separately from when it was sent and whether it was delivered. **The consent record never expires**, because it is the evidence of opt-in for the toll-free verification and for any complaint. It outlives the invite.
+- **Sender.** Every invite goes out through Azure Communication Services from the shared toll-free number, never from the advisor's own phone. The sending number is found by a resolver keyed on the location, never hardcoded. Today every location resolves to the same number, which leaves room for local numbers later without a schema change.
+- **Refusals.** RVS refuses a send to a number that has opted out of texts. While texting is disabled for the environment, the send is refused with a clear message (409), and the manager app says texting is not yet enabled instead of showing a dead button. Every phone number is normalised to E.164 (US/Canada) before it is stored or sent.
+- **Rate limits.** Sends are capped per advisor, per location and per tenant. The caps are configuration, not constants.
+- **Token.** Each invite carries a random token of at least 128 bits. Only its SHA-256 hash is stored (X-5's rules). The token expires about **72 hours** after the send and is **single use**. The link is `go.rvintake.com/{locationSlug}?src=advisor&inv={token}`. The A-13 redirect passes `inv` through to the intake app.
+- **Redeemed on submission, not on open.** Opening a valid invite prefills the caller's first name and phone. The intake app gets them from an anonymous, rate-limited lookup that returns **only** those two fields, and **only** while the invite is unexpired and unredeemed. The invite is marked redeemed when the intake is **submitted**, because messaging clients fetch links to build previews (the same caveat as A-13), and burning the token on open would kill it before the customer tapped it. This prefill is separate from A-7's returning-customer match.
+- **Never a dead end.** An expired, unknown, already-used or failed invite lands on a working, blank intake form, which extends A-13's "the redirect never fails" rule to invites.
+- **Attribution.** The resulting `ServiceRequest` carries `src=advisor`, the invite ID and the advisor's user ID. `advisor` joins the known `src` values.
+- **Delivery status.** Delivery reports from ACS update the invite as queued, delivered or failed, and the send dialog shows that status inline, along with the current shift's recent sends. **Resend** mints a new invite, because tokens are single use.
+- **Self-entry.** A *Fill it in myself* action mints an invite **without** texting it and opens the same prefilled form for the advisor, who fills it in during the call. It works even while texting is disabled.
+- **Permission.** Sending requires a dedicated permission. Being signed in to the manager app is not enough.
 
 ---
 
@@ -54,7 +90,7 @@ Enqueued on intake submission; must not block the `201`. The customer's attachme
 One page, in this order:
 
 1. Unit header — year, make, model, VIN (degrades if VIN absent)
-2. Customer — name, phone, email, preferred contact. Preferred contact is one of `Phone` / `Text` / `Email`, required at intake; it is omitted from the packet only for requests created before it was captured
+2. Customer — name, phone, email, preferred contact. Preferred contact is one of `Phone` / `Text` / `Email`, required at intake; it is omitted from the packet only for requests created before it was captured. The same field routes the customer's confirmation, with the opt-outs as a hard veto, and an opted-out channel can never be the preference (A-2). So the packet never tells the shop to text a customer who has opted out of texts
 3. Location, submission timestamp, short reference code. The reference code is the first hyphen-delimited segment of the service request id, upper-cased (e.g. `A1B2C3D4`) — deterministic, stable across regenerations, no stored field or counter
 4. Issue category
 5. AI summary, labeled as AI-generated — placed here so the service manager reads the concise recreation of the problem first. Headed **Preliminary assessment**, it also carries, when the model will offer one, a probable cause, a confidence (high / medium / low), **possible fixes** — plural and ordered most plausible first, never a single "recommended" fix, because the unit has not been inspected — and likely parts as generic names (never part numbers or prices). Advisory only, and says so. When the information is too thin the model abstains and only the summary renders. Generated once in the packet pipeline, not on the intake path, and reused on regeneration; a rule-based per-category fallback (low confidence) covers an unavailable model
@@ -164,7 +200,7 @@ The entry surface is the manager app detail view (C-2). It also fits a C-7 deep 
 | **X-2** | **Ledger write.** Append-only entry on intake submission: asset ID, tenant, location, category, timestamp, taxonomy version. Write-once; corrections are new entries referencing the original. Invisible to users. Persistent write failure raises an alert. *This exists solely so the record is there later. Nothing reads it today.* |
 | **X-3** | **Anonymization license.** Terms of service and any design-partner agreement must grant a perpetual, irrevocable license to use service data in anonymized, aggregated form. **Get this into the first customer's paperwork.** It cannot be added retroactively without renegotiating with every existing customer. Drafted at `Docs/Legal/RVS_Pilot_Agreement.md` — one page, phone-signable, single variant. |
 | **X-4** | **Tenancy.** Every query is tenant-scoped through the existing claims and gate middleware. Cross-tenant data never appears in any response. |
-| **X-5** | **Tokens.** The anonymous status-page token (X-1): ≥128 bits entropy, stored **hashed** (SHA-256; the raw token is never persisted), TTL ≤ 30 days with sliding renewal on use, rate-limited per IP, access audit-logged, **read-only** — resolves to the customer identity on `GlobalCustomerAcct`. One generation/hash/TTL/audit helper. Decision Q7 / issue #427. **C-7 status changes are not on this token model** — they run through an authenticated manager-app session (issue #498); there is no anonymous status-write surface. |
+| **X-5** | **Tokens.** The anonymous status-page token (X-1): ≥128 bits entropy, stored **hashed** (SHA-256; the raw token is never persisted), TTL ≤ 30 days with sliding renewal on use, rate-limited per IP, access audit-logged, **read-only** — resolves to the customer identity on `GlobalCustomerAcct`. One generation/hash/TTL/audit helper. Decision Q7 / issue #427. **C-7 status changes are not on this token model** — they run through an authenticated manager-app session (issue #498); there is no anonymous status-write surface. The **A-14 invite token** is the one other anonymous token scope. It follows the same entropy and hashing rules, but it expires about 72 hours after the send, is single use, and its lookup returns only the invitee's first name and phone. |
 | **X-6** | **Attachment access.** Time-limited read SAS, generated per request, never persisted. |
 
 ### Non-functional
@@ -195,5 +231,7 @@ Out of scope for v1: self-serve signup, bulk import, editing or deleting users, 
 ## Explicitly out of scope
 
 Two-way SMS or messaging (one-directional manager → customer status notes are C-9) · DMS API integration of any kind · offline mobile app · scheduling or calendars · quoting, invoicing, payments · parts and inventory · benchmarking or analytics dashboards · cross-location reporting · technician assignment and workload · SSO/SAML/SCIM · warranty claim workflows.
+
+**The STOP/HELP handler does not reopen two-way SMS.** Outbound texting (A-2 confirmations, A-14 invites) receives exactly one kind of inbound traffic: carrier keywords on the sending number. `STOP` and its standard synonyms set the SMS opt-out on that number's customer records, so later sends to it are refused. `HELP` gets a fixed reply. No other inbound text is read, stored, routed to anyone or answered. There is no inbox and no conversation.
 
 Some of these are specced in detail in the archive. Retrieval triggers are in `RVS_Archive_Index.md`. Adding any of them back is a decision that gets logged in `RVS_Plan.md`, not a thing that happens because a prospect asked.

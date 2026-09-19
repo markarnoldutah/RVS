@@ -406,6 +406,12 @@ Full inventory is in the Descope backlog sections of `Docs/ASOT/RVS_Architecture
    - [ ] **The ledger entry itself stays** — Spec X-2. Only the `Section10A` block goes
 
 4. **Remove the SMS stack** — `type:descope` `area:api`
+   > **Superseded. Do not file or execute this sub-issue as written.** Outbound SMS is kept
+   > as a customer-notification channel (`RVS_Plan.md` decision log, Sep 11 2026), and the
+   > opt-out fields now route confirmations (Spec A-2, Sep 18 2026) and gate A-14 invites.
+   > #458 is narrowed to the dead `NotificationOrchestrator.SendStatusChangeAsync` /
+   > `SendMagicLinkAsync` and the unused `ISmsNotificationService` methods. See #600.
+
    `AcsSmsNotificationService`, `NoOpSmsNotificationService`, `ISmsNotificationService`, SMS opt-out plumbing, and the never-called `NotificationOrchestrator.SendStatusChangeAsync` and `SendMagicLinkAsync`.
    - [ ] No SMS code path remains
    - [ ] **The ACS resource stays** — email now rides on it
