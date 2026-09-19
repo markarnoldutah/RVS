@@ -1,14 +1,62 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Azure.Communication.Sms;
+using Azure.Core.Pipeline;
 using FluentAssertions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Integrations;
+using RVS.API.Options;
+using RVS.Domain.Integrations;
 
 namespace RVS.API.Tests.Integrations;
 
+/// <summary>
+/// Drives a real <see cref="SmsClient"/> over a recording HTTP transport, so the assertions are
+/// about what would actually reach ACS: whether a request is made, and its from/to numbers.
+/// </summary>
 public class AcsSmsNotificationServiceTests
 {
-    // ── SendSmsAsync Guard Clauses ───────────────────────────────────────
+    private const string TenantId = "ten_test";
+    private const string LocationId = "loc_slc";
+    private const string FromNumber = "+18662319618";
+
+    private readonly RecordingHandler _acs = new();
+    private readonly Mock<ISmsSenderNumberResolver> _resolverMock = new();
+    private readonly Mock<ITenantSmsRateLimiter> _rateLimiterMock = new();
+
+    public AcsSmsNotificationServiceTests()
+    {
+        _resolverMock
+            .Setup(r => r.ResolveAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FromNumber);
+        _rateLimiterMock.Setup(l => l.TryAcquire(It.IsAny<string>())).Returns(true);
+    }
+
+    // ── Guard clauses ────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SendSmsAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => CreateService().SendSmsAsync(tenantId!, LocationId, "+18015551234", "Test message");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SendSmsAsync_WhenLocationIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? locationId)
+    {
+        var act = () => CreateService().SendSmsAsync(TenantId, locationId!, "+18015551234", "Test message");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
 
     [Theory]
     [InlineData(null)]
@@ -16,8 +64,8 @@ public class AcsSmsNotificationServiceTests
     [InlineData("  ")]
     public async Task SendSmsAsync_WhenToPhoneNumberIsNullOrWhiteSpace_ShouldThrowArgumentException(string? phone)
     {
-        var sut = CreateService();
-        var act = () => sut.SendSmsAsync(phone!, "Test message");
+        var act = () => CreateService().SendSmsAsync(TenantId, LocationId, phone!, "Test message");
+
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
@@ -27,162 +75,138 @@ public class AcsSmsNotificationServiceTests
     [InlineData("  ")]
     public async Task SendSmsAsync_WhenMessageIsNullOrWhiteSpace_ShouldThrowArgumentException(string? message)
     {
-        var sut = CreateService();
-        var act = () => sut.SendSmsAsync("+18015551234", message!);
+        var act = () => CreateService().SendSmsAsync(TenantId, LocationId, "+18015551234", message!);
+
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    // ── Sending ──────────────────────────────────────────────────────────
+
     [Fact]
-    public async Task SendSmsAsync_WithValidInputs_ShouldNotThrow()
+    public async Task SendSmsAsync_WhenEnabled_ShouldSendFromTheResolvedNumber()
     {
-        var sut = CreateService();
-        var act = () => sut.SendSmsAsync("+18015551234", "Test message");
+        await CreateService().SendSmsAsync(TenantId, LocationId, "+18015551234", "Test message");
+
+        _acs.Bodies.Should().ContainSingle();
+        FromOf(_acs.Bodies[0]).Should().Be(FromNumber);
+        _resolverMock.Verify(r => r.ResolveAsync(TenantId, LocationId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendSmsAsync_ShouldNormaliseTheRecipientToE164BeforeItReachesAcs()
+    {
+        await CreateService().SendSmsAsync(TenantId, LocationId, "(801) 555-1234", "Test message");
+
+        _acs.Bodies.Should().ContainSingle();
+        ToOf(_acs.Bodies[0]).Should().Be("+18015551234");
+    }
+
+    [Fact]
+    public async Task SendSmsAsync_WhenTheRecipientCannotBeNormalised_ShouldNotCallAcs()
+    {
+        await CreateService().SendSmsAsync(TenantId, LocationId, "555-1234", "Test message");
+
+        _acs.Bodies.Should().BeEmpty();
+        _rateLimiterMock.Verify(l => l.TryAcquire(It.IsAny<string>()), Times.Never,
+            "an unsendable number must not spend the tenant's allowance");
+    }
+
+    [Fact]
+    public async Task SendSmsAsync_WhenSmsIsDisabled_ShouldNotCallAcsOrConsumeTheLimit()
+    {
+        await CreateService(enabled: false).SendSmsAsync(TenantId, LocationId, "+18015551234", "Test message");
+
+        _acs.Bodies.Should().BeEmpty();
+        _rateLimiterMock.Verify(l => l.TryAcquire(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendSmsAsync_WhenNoSenderNumberResolves_ShouldNotCallAcs()
+    {
+        _resolverMock
+            .Setup(r => r.ResolveAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+
+        await CreateService().SendSmsAsync(TenantId, LocationId, "+18015551234", "Test message");
+
+        _acs.Bodies.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SendSmsAsync_WhenTheTenantIsOverItsHourlyLimit_ShouldNotCallAcs()
+    {
+        _rateLimiterMock.Setup(l => l.TryAcquire(TenantId)).Returns(false);
+
+        await CreateService().SendSmsAsync(TenantId, LocationId, "+18015551234", "Test message");
+
+        _acs.Bodies.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SendSmsAsync_WhenAcsFails_ShouldNotThrow()
+    {
+        _acs.Status = HttpStatusCode.InternalServerError;
+
+        var act = () => CreateService().SendSmsAsync(TenantId, LocationId, "+18015551234", "Test message");
+
         await act.Should().NotThrowAsync();
+        _acs.Bodies.Should().NotBeEmpty();
     }
 
-    // ── SendMagicLinkSmsAsync Guard Clauses ──────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendMagicLinkSmsAsync_WhenPhoneIsNullOrWhiteSpace_ShouldThrowArgumentException(string? phone)
+    private AcsSmsNotificationService CreateService(bool enabled = true)
     {
-        var sut = CreateService();
-        var act = () => sut.SendMagicLinkSmsAsync(phone!, "https://rvintake.com/status/abc123");
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
+        var clientOptions = new SmsClientOptions
+        {
+            Transport = new HttpClientTransport(new HttpClient(_acs)),
+        };
+        clientOptions.Retry.MaxRetries = 0;
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendMagicLinkSmsAsync_WhenUrlIsNullOrWhiteSpace_ShouldThrowArgumentException(string? url)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendMagicLinkSmsAsync("+18015551234", url!);
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Fact]
-    public async Task SendMagicLinkSmsAsync_WithValidInputs_ShouldNotThrow()
-    {
-        var sut = CreateService();
-        var act = () => sut.SendMagicLinkSmsAsync("+18015551234", "https://rvintake.com/status/abc123");
-        await act.Should().NotThrowAsync();
-    }
-
-    // ── SendStatusChangeSmsAsync Guard Clauses ───────────────────────────
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendStatusChangeSmsAsync_WhenPhoneIsNullOrWhiteSpace_ShouldThrowArgumentException(string? phone)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendStatusChangeSmsAsync(phone!, "sr_001", "InProgress");
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendStatusChangeSmsAsync_WhenSrIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? srId)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendStatusChangeSmsAsync("+18015551234", srId!, "InProgress");
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendStatusChangeSmsAsync_WhenStatusIsNullOrWhiteSpace_ShouldThrowArgumentException(string? status)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendStatusChangeSmsAsync("+18015551234", "sr_001", status!);
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Fact]
-    public async Task SendStatusChangeSmsAsync_WithValidInputs_ShouldNotThrow()
-    {
-        var sut = CreateService();
-        var act = () => sut.SendStatusChangeSmsAsync("+18015551234", "sr_001", "InProgress");
-        await act.Should().NotThrowAsync();
-    }
-
-    // ── SendDealerMessageSmsAsync Guard Clauses ──────────────────────────
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendDealerMessageSmsAsync_WhenPhoneIsNullOrWhiteSpace_ShouldThrowArgumentException(string? phone)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendDealerMessageSmsAsync(phone!, "sr_001", "Blue Compass RV", "Your part arrived.");
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task SendDealerMessageSmsAsync_WhenMessageTextIsNullOrWhiteSpace_ShouldThrowArgumentException(string? msg)
-    {
-        var sut = CreateService();
-        var act = () => sut.SendDealerMessageSmsAsync("+18015551234", "sr_001", "Blue Compass RV", msg!);
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Fact]
-    public async Task SendDealerMessageSmsAsync_WithValidInputs_ShouldNotThrow()
-    {
-        var sut = CreateService();
-        var act = () => sut.SendDealerMessageSmsAsync("+18015551234", "sr_001", "Blue Compass RV", "Your part arrived.");
-        await act.Should().NotThrowAsync();
-    }
-
-    // ── Constructor ──────────────────────────────────────────────────────
-
-    [Fact]
-    public void Constructor_WhenFromPhoneNumberIsMissing_ShouldThrowInvalidOperationException()
-    {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>())
-            .Build();
-
-        var smsClient = new Azure.Communication.Sms.SmsClient("endpoint=https://dummy.communication.azure.com;accesskey=dGVzdA==");
-
-        var act = () => new AcsSmsNotificationService(
-            smsClient,
-            Mock.Of<ILogger<AcsSmsNotificationService>>(),
-            config);
-
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*FromPhoneNumber*");
-    }
-
-    // ── Helper ───────────────────────────────────────────────────────────
-
-    private static AcsSmsNotificationService CreateService()
-    {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["AzureCommunicationServices:Sms:FromPhoneNumber"] = "+18005551234"
-            })
-            .Build();
-
-        var smsClient = new Azure.Communication.Sms.SmsClient("endpoint=https://dummy.communication.azure.com;accesskey=dGVzdA==");
+        var smsClient = new SmsClient(
+            "endpoint=https://dummy.communication.azure.com;accesskey=dGVzdA==", clientOptions);
 
         return new AcsSmsNotificationService(
             smsClient,
-            Mock.Of<ILogger<AcsSmsNotificationService>>(),
-            config);
+            _resolverMock.Object,
+            _rateLimiterMock.Object,
+            Microsoft.Extensions.Options.Options.Create(new SmsOptions { Enabled = enabled, FromPhoneNumber = FromNumber }),
+            Mock.Of<ILogger<AcsSmsNotificationService>>());
+    }
+
+    private static string? FromOf(string body) =>
+        JsonDocument.Parse(body).RootElement.GetProperty("from").GetString();
+
+    private static string? ToOf(string body) =>
+        JsonDocument.Parse(body).RootElement.GetProperty("smsRecipients")[0].GetProperty("to").GetString();
+
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public List<string> Bodies { get; } = [];
+
+        public HttpStatusCode Status { get; set; } = HttpStatusCode.Accepted;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
+            Bodies.Add(body);
+
+            if (Status != HttpStatusCode.Accepted)
+            {
+                return new HttpResponseMessage(Status)
+                {
+                    Content = new StringContent("""{"error":{"code":"InternalError","message":"boom"}}""", Encoding.UTF8, "application/json"),
+                };
+            }
+
+            var to = ToOf(body);
+            return new HttpResponseMessage(HttpStatusCode.Accepted)
+            {
+                Content = new StringContent(
+                    $$"""{"value":[{"to":"{{to}}","messageId":"Outgoing_test","httpStatusCode":202,"successful":true}]}""",
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        }
     }
 }

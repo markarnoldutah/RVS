@@ -115,6 +115,11 @@ param dmarcReportingAddress = 'dmarc-reports@rvintake.com'
 // Bicep authors that record itself rather than taking it from ACS, so it is not
 // part of ACS's verification set.
 param acsCustomDomainVerified = true
+// SMS (#661). Staging's ACS resource owns toll-free +18662319618 (bought
+// 2026-04-12). Off until that number clears toll-free verification (#659);
+// flip acsSmsEnabled to true and redeploy once the portal shows it verified.
+param acsSmsFromPhoneNumber = '+18662319618'
+param acsSmsEnabled = false
 
 // Static Web Apps (Standard tier required for Auth0 custom auth + custom domains)
 param deploySwa = true

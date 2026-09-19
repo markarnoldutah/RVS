@@ -100,7 +100,7 @@ One flag, `Integrations:UseMocks`, read once at startup. **It is `false` in ever
 | Packet preliminary assessment — probable cause, possible fixes, likely parts (`#507`) | Azure OpenAI gpt-4o (text deployment), called from the packet pipeline once per request | `RuleBasedPreliminaryAssessmentService` (per-category table, low confidence) |
 | Email | Azure Communication Services | NoOp |
 | Packet email size fitting (`#521`) | `PacketEmailSizeFitter` (pure, Domain) — trims attachments to ACS's 10 MB request ceiling, base64 accounted for | none needed; a pure transform with no I/O |
-| SMS | Azure Communication Services | NoOp — **archived scope** |
+| SMS (`#661`) — gated by `AzureCommunicationServices:Sms:Enabled`, default off; from-number per location via `ISmsSenderNumberResolver`; recipient normalised to E.164 by `PhoneNumberNormalizer`; capped per tenant per hour by `InMemoryTenantSmsRateLimiter` | Azure Communication Services, only when enabled **and** an endpoint is set | `NoOpSmsNotificationService` — whenever SMS is disabled, mocks are on, or no endpoint |
 | Image normalisation on upload — downscale + re-encode every raster (`#508` HEIC/HEIF → JPEG; `#562` widened to JPEG/PNG/WebP, `MaxEdgePixels` 4096 → 1600, PNG kept as PNG, never grows an already-web-safe file) | `MagickImageTranscoder` (Magick.NET + libheif, in-process) | `NoOpImageTranscoder` — keeps the original; HEIC then shows the packet placeholder |
 
 All external clients use `AddStandardResilienceHandler` with per-client timeouts.
@@ -164,8 +164,6 @@ Built for capability the Overview archives. Deleting this is real work and is no
 - **Technician outcome workflow** — `ServiceEventEmbedded`, `PATCH batch-outcome`, `BatchOutcome*Dto`, `AssetLedgerEntry.Section10A`
 - **Scheduling / assignment fields** on `ServiceRequest` — `assignedTechnicianId`, `assignedBayId`, `scheduledDateUtc`, `requiredSkills`, `boardSequence`
 - **Messaging** — `MessageEmbedded` is defined and referenced nowhere
-- **SMS** — `AcsSmsNotificationService`, `ISmsNotificationService`, `NoOpSmsNotificationService`, opt-out plumbing
-- **Never-called** — `NotificationOrchestrator.SendStatusChangeAsync`, `SendMagicLinkAsync`
 - **Scaffolding** — `WeatherForecastController`, `WeatherForecast.cs`
 - **`rv-warranty-rules`** — seeded, no repository, never read
 

@@ -12,28 +12,7 @@ public class NoOpSmsNotificationServiceTests
     [Fact]
     public async Task SendSmsAsync_ShouldCompleteWithoutThrowing()
     {
-        var act = () => _sut.SendSmsAsync("+18015551234", "Test message");
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
-    public async Task SendMagicLinkSmsAsync_ShouldCompleteWithoutThrowing()
-    {
-        var act = () => _sut.SendMagicLinkSmsAsync("+18015551234", "https://rvintake.com/status/abc123");
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
-    public async Task SendStatusChangeSmsAsync_ShouldCompleteWithoutThrowing()
-    {
-        var act = () => _sut.SendStatusChangeSmsAsync("+18015551234", "sr_001", "InProgress");
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
-    public async Task SendDealerMessageSmsAsync_ShouldCompleteWithoutThrowing()
-    {
-        var act = () => _sut.SendDealerMessageSmsAsync("+18015551234", "sr_001", "Blue Compass RV", "Your part arrived.");
+        var act = () => _sut.SendSmsAsync("ten_test", "loc_slc", "+18015551234", "Test message");
         await act.Should().NotThrowAsync();
     }
 }
