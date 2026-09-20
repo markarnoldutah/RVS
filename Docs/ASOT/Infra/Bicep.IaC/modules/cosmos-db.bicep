@@ -172,6 +172,9 @@ resource customerProfiles 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/co
           { path: '/globalCustomerAcctId/?' }
           { path: '/type/?' }
           { path: '/smsOptOut/?' }
+          // Cross-partition lookup for an inbound carrier keyword, which arrives with a phone
+          // number and no tenant (issue #665).
+          { path: '/phoneE164/?' }
         ]
         excludedPaths: [
           { path: '/*' }

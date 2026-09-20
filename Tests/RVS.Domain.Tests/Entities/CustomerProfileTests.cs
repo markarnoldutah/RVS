@@ -1,5 +1,6 @@
 using FluentAssertions;
 using RVS.Domain.Entities;
+using RVS.Domain.Validation;
 
 namespace RVS.Domain.Tests.Entities;
 
@@ -264,5 +265,130 @@ public class CustomerProfileTests
         profile.AssetsOwned.Should().HaveCount(2);
         profile.AssetsOwned.Should().ContainSingle(a => a.Status == AssetOwnershipStatus.Active);
         profile.AssetsOwned.First(a => a.Status == AssetOwnershipStatus.Active).RequestCount.Should().Be(1);
+    }
+
+    // ---- Spec A-2 inbound keywords (issue #665) --------------------------------------------
+
+    private static CustomerProfile ProfileForKeywords() => new()
+    {
+        Id = "cp-1",
+        TenantId = "ten_acme_rv",
+        Email = "kim@example.com",
+        Phone = "(801) 555-1234",
+        PhoneE164 = "+18015551234",
+    };
+
+    [Fact]
+    public void ApplySmsKeyword_WhenOptOut_ShouldSetFlagAndStampBothTimes()
+    {
+        var profile = ProfileForKeywords();
+        var at = new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc);
+
+        var changed = profile.ApplySmsKeyword(SmsKeyword.OptOut, at);
+
+        changed.Should().BeTrue();
+        profile.SmsOptOut.Should().BeTrue();
+        profile.SmsOptOutAtUtc.Should().Be(at);
+        profile.SmsKeywordAtUtc.Should().Be(at);
+    }
+
+    [Fact]
+    public void ApplySmsKeyword_WhenOptIn_ShouldClearOptOutAndStampOptIn()
+    {
+        var profile = ProfileForKeywords();
+        profile.SmsOptOut = true;
+        profile.SmsOptOutAtUtc = new DateTime(2026, 9, 18, 10, 0, 0, DateTimeKind.Utc);
+        var at = new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc);
+
+        var changed = profile.ApplySmsKeyword(SmsKeyword.OptIn, at);
+
+        changed.Should().BeTrue();
+        profile.SmsOptOut.Should().BeFalse();
+        profile.SmsOptOutAtUtc.Should().BeNull();
+        profile.SmsOptInAtUtc.Should().Be(at);
+        profile.SmsKeywordAtUtc.Should().Be(at);
+    }
+
+    [Fact]
+    public void ApplySmsKeyword_WhenAlreadyOptedOut_ShouldKeepTheOriginalOptOutTime()
+    {
+        // The first opt-out is the one that matters for evidence; a repeat does not reset it.
+        var first = new DateTime(2026, 9, 18, 10, 0, 0, DateTimeKind.Utc);
+        var profile = ProfileForKeywords();
+        profile.ApplySmsKeyword(SmsKeyword.OptOut, first);
+
+        profile.ApplySmsKeyword(SmsKeyword.OptOut, first.AddHours(1));
+
+        profile.SmsOptOutAtUtc.Should().Be(first);
+        profile.SmsKeywordAtUtc.Should().Be(first.AddHours(1));
+    }
+
+    [Fact]
+    public void ApplySmsKeyword_WhenHelp_ShouldChangeNothing()
+    {
+        // HELP is answered with a fixed reply; it is not consent and not a revocation.
+        var profile = ProfileForKeywords();
+        profile.SmsOptOut = true;
+        profile.SmsOptOutAtUtc = new DateTime(2026, 9, 18, 10, 0, 0, DateTimeKind.Utc);
+
+        var changed = profile.ApplySmsKeyword(SmsKeyword.Help, new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc));
+
+        changed.Should().BeFalse();
+        profile.SmsOptOut.Should().BeTrue();
+        profile.SmsKeywordAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplySmsKeyword_WhenNone_ShouldChangeNothing()
+    {
+        var profile = ProfileForKeywords();
+
+        var changed = profile.ApplySmsKeyword(SmsKeyword.None, DateTime.UtcNow);
+
+        changed.Should().BeFalse();
+        profile.SmsOptOut.Should().BeFalse();
+        profile.SmsKeywordAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplySmsKeyword_WhenEventIsOlderThanTheLastKeyword_ShouldBeIgnored()
+    {
+        // Event Grid is unordered: a STOP then START pair can arrive reversed.
+        var profile = ProfileForKeywords();
+        var newer = new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc);
+        profile.ApplySmsKeyword(SmsKeyword.OptIn, newer);
+
+        var changed = profile.ApplySmsKeyword(SmsKeyword.OptOut, newer.AddMinutes(-5));
+
+        changed.Should().BeFalse();
+        profile.SmsOptOut.Should().BeFalse();
+        profile.SmsKeywordAtUtc.Should().Be(newer);
+    }
+
+    [Fact]
+    public void ApplySmsKeyword_WhenTheSameEventArrivesTwice_ShouldBeANoOpTheSecondTime()
+    {
+        // Event Grid delivers at least once, so a duplicate must not count as a change.
+        var profile = ProfileForKeywords();
+        var at = new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc);
+        profile.ApplySmsKeyword(SmsKeyword.OptOut, at);
+
+        var changed = profile.ApplySmsKeyword(SmsKeyword.OptOut, at);
+
+        changed.Should().BeFalse();
+        profile.SmsOptOut.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApplySmsKeyword_WhenOptInFollowsOptOut_ShouldWinOnTheLaterEvent()
+    {
+        var profile = ProfileForKeywords();
+        var at = new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc);
+        profile.ApplySmsKeyword(SmsKeyword.OptOut, at);
+
+        var changed = profile.ApplySmsKeyword(SmsKeyword.OptIn, at.AddSeconds(30));
+
+        changed.Should().BeTrue();
+        profile.SmsOptOut.Should().BeFalse();
     }
 }

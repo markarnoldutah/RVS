@@ -32,4 +32,19 @@ public interface ISmsNotificationService
     Task<string?> SendSmsAsync(
         string tenantId, string locationId, string toPhoneNumber, string message,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends a system reply that belongs to no tenant and no location — today only the fixed
+    /// HELP reply (issue #665). It goes from the environment's shared number
+    /// (<see cref="ISmsSenderNumberResolver.ResolveDefaultAsync"/>) and is exempt from the
+    /// per-tenant hourly cap, which is keyed on a tenant an inbound text does not carry. It is
+    /// still gated by <see cref="IsEnabled"/>, so it is silent while an environment's number is
+    /// unverified. Consent is implied: the recipient texted us first.
+    /// </summary>
+    /// <param name="toPhoneNumber">Recipient phone number, ideally already E.164.</param>
+    /// <param name="message">The message body.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The ACS message id when ACS accepted it; <c>null</c> when nothing was sent. Never throws.</returns>
+    Task<string?> SendSystemSmsAsync(
+        string toPhoneNumber, string message, CancellationToken cancellationToken = default);
 }

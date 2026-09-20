@@ -137,6 +137,9 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 FirstName = request.Customer.FirstName.Trim(),
                 LastName = request.Customer.LastName.Trim(),
                 Phone = request.Customer.Phone?.Trim(),
+                // The matchable form of the number: an inbound STOP arrives with a phone and no
+                // tenant, so a lookup needs E.164 rather than what the customer typed (#665).
+                PhoneE164 = PhoneNumberNormalizer.Normalize(request.Customer.Phone),
                 Name = $"{request.Customer.FirstName.Trim()} {request.Customer.LastName.Trim()}",
                 GlobalCustomerAcctId = globalAcct.Id,
                 SmsOptOut = request.SmsOptOut,
@@ -152,6 +155,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         else
         {
             profile.Phone = request.Customer.Phone?.Trim();
+            profile.PhoneE164 = PhoneNumberNormalizer.Normalize(request.Customer.Phone);
             profile.SmsOptOut = request.SmsOptOut;
             if (request.SmsOptOut && profile.SmsOptOutAtUtc is null)
                 profile.SmsOptOutAtUtc = DateTime.UtcNow;

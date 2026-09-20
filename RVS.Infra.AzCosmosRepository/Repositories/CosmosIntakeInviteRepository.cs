@@ -126,4 +126,35 @@ public sealed class CosmosIntakeInviteRepository : CosmosRepositoryBase, IIntake
         _logger.LogDebug("UpdateAsync [tenant={TenantId}] — RequestCharge: {Charge} RU", entity.TenantId, response.RequestCharge);
         return response.Resource;
     }
+
+    /// <inheritdoc />
+    public async Task<IntakeInvite?> GetByAcsMessageIdAcrossTenantsAsync(
+        string acsMessageId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(acsMessageId);
+
+        // Cross-partition on purpose (issue #665): a delivery report carries the ACS message id
+        // and no tenant. One message id belongs to one invite, so this reads at most one page.
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.acsMessageId = @acsMessageId OFFSET 0 LIMIT 1")
+            .WithParameter("@acsMessageId", acsMessageId);
+
+        var iterator = _container.GetItemQueryIterator<IntakeInvite>(query);
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(cancellationToken);
+            _logger.LogDebug(
+                "GetByAcsMessageIdAcrossTenantsAsync [messageId={MessageId}] — RequestCharge: {Charge} RU",
+                acsMessageId, page.RequestCharge);
+
+            var invite = page.FirstOrDefault();
+            if (invite is not null)
+            {
+                return invite;
+            }
+        }
+
+        return null;
+    }
 }

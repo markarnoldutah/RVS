@@ -400,6 +400,16 @@ builder.Services.AddOptions<RVS.API.Options.IntakeInviteOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddSingleton<IIntakeInviteRateLimiter, InMemoryIntakeInviteRateLimiter>();
+// Inbound ACS SMS events over Event Grid (issue #665): carrier keywords and delivery reports.
+// The webhook is anonymous, so the subscription's URL carries a shared secret; with no secret
+// configured the endpoint refuses everything rather than accepting unauthenticated writes.
+builder.Services.AddSingleton<IInboundSmsDeduplicator, InMemoryInboundSmsDeduplicator>();
+builder.Services.AddScoped<IInboundSmsEventService, InboundSmsEventService>();
+builder.Services.AddOptions<RVS.API.Options.EventGridInboundOptions>()
+    .Bind(builder.Configuration.GetSection(RVS.API.Options.EventGridInboundOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 builder.Services.AddScoped<IPacketPhotoUrlResolver, PacketPhotoUrlResolver>();
 
 // Packet generation (issue #434): non-blocking in-process queue + background worker.

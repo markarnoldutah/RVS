@@ -104,6 +104,10 @@ param acsSmsFromPhoneNumber string = ''
 @description('Turns outbound SMS on, injected as AzureCommunicationServices__Sms__Enabled (#661). Leave false until acsSmsFromPhoneNumber has cleared toll-free verification: carriers reject an unverified number\'s traffic, and the API refuses to start with SMS enabled and no number. Only takes effect when deployAcs is true.')
 param acsSmsEnabled bool = false
 
+@description('Shared secret for the inbound Event Grid webhook that carries ACS SMS keywords and delivery reports to the API (issue #665). Event Grid cannot present a bearer token, so the subscription URL carries this and the API checks it. Stored in Key Vault as EventGrid--Inbound--Key so both sides move together. EMPTY means no system topic or subscription is deployed and the endpoint refuses everything — that is the safe default, not a broken state. Generate with: openssl rand -base64 48 | tr -d /+= | cut -c1-48')
+@secure()
+param eventGridWebhookKey string = ''
+
 // ── Static Web App Parameters ─────────────────────────────────
 
 @description('When true, deploys Azure Static Web App resources for Blazor.Intake and Blazor.Manager.')
@@ -764,6 +768,28 @@ module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs &
     keyVaultName: deployKeyVault ? keyVault.outputs.name : 'unused'
     #disable-next-line BCP318
     acsName: deployAcs ? communicationServices.outputs.name : 'unused'
+    eventGridWebhookKey: eventGridWebhookKey
+  }
+}
+
+// ── Event Grid: inbound ACS SMS events (issue #665) ───────────
+
+// Needs the API host to deliver to, and a secret the API can check. With no
+// key there is no subscription: an anonymous webhook that writes opt-outs is
+// worse switched on than off. See the module header for the two-pass ordering
+// a first bring-up needs — Event Grid validates the endpoint as it creates the
+// subscription, so the API has to be running with the secret already.
+module eventGridAcsSms 'modules/eventgrid-acs-sms.bicep' = if (deployAcs && deployAppService && !empty(eventGridWebhookKey)) {
+  name: 'deploy-eventgrid-acs-sms-${environmentName}'
+  scope: rgPrimary
+  params: {
+    #disable-next-line BCP318
+    acsName: deployAcs ? communicationServices.outputs.name : 'unused'
+    systemTopicName: 'evgt-rvs-acs-${environmentName}'
+    #disable-next-line BCP318
+    tags: deployAcs ? acsNaming.outputs.tags : {}
+    apiHostName: '${apiDnsPrefix}.${apiZoneName}'
+    eventGridWebhookKey: eventGridWebhookKey
   }
 }
 

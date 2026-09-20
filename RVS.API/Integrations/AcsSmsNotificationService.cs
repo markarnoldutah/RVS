@@ -112,4 +112,62 @@ public sealed class AcsSmsNotificationService : ISmsNotificationService
 
         return null;
     }
+
+    /// <inheritdoc />
+    public async Task<string?> SendSystemSmsAsync(
+        string toPhoneNumber, string message, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(toPhoneNumber);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+        if (!_options.Enabled)
+        {
+            // Silent while the environment's number is unverified, like every other send.
+            _logger.LogDebug("SMS is disabled; not sending the system reply");
+            return null;
+        }
+
+        if (!PhoneNumberNormalizer.TryNormalize(toPhoneNumber, out var to))
+        {
+            _logger.LogWarning("Not sending the system reply: recipient is not a valid US/CA number");
+            return null;
+        }
+
+        try
+        {
+            var from = await _senderNumberResolver.ResolveDefaultAsync(cancellationToken);
+            if (from is null)
+            {
+                _logger.LogWarning("Not sending the system reply: no sending number is configured");
+                return null;
+            }
+
+            // No tenant, so no per-tenant cap to check: an inbound text carries a phone number
+            // and nothing else. The deduplicator is what stops a redelivery texting twice.
+            var response = await _smsClient.SendAsync(
+                from: from,
+                to: to,
+                message: message,
+                options: new SmsSendOptions(enableDeliveryReport: true),
+                cancellationToken: cancellationToken);
+
+            if (response.Value.Successful)
+            {
+                _logger.LogInformation(
+                    "ACS system SMS sent to {Recipient}, MessageId: {MessageId}",
+                    to, response.Value.MessageId);
+                return response.Value.MessageId;
+            }
+
+            _logger.LogWarning(
+                "ACS system SMS send failed to {Recipient}: {ErrorMessage} (HttpStatus: {HttpStatus})",
+                to, response.Value.ErrorMessage, response.Value.HttpStatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send the system SMS via ACS to {Recipient}", to);
+        }
+
+        return null;
+    }
 }

@@ -28,4 +28,14 @@ public sealed class NoOpSmsNotificationService : ISmsNotificationService
             tenantId, locationId, toPhoneNumber, message);
         return Task.FromResult<string?>(null);
     }
+
+    /// <inheritdoc />
+    public Task<string?> SendSystemSmsAsync(
+        string toPhoneNumber, string message, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug(
+            "NoOpSmsNotificationService: Would send system SMS to {Recipient}: {Message}",
+            toPhoneNumber, message);
+        return Task.FromResult<string?>(null);
+    }
 }

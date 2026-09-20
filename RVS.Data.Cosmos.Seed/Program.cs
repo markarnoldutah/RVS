@@ -248,6 +248,8 @@ static List<ContainerProperties> BuildContainerDefinitions()
                     new IncludedPath { Path = "/globalCustomerAcctId/?" },
                     new IncludedPath { Path = "/type/?" },
                     new IncludedPath { Path = "/smsOptOut/?" },
+                    // Cross-partition lookup for an inbound carrier keyword (issue #665).
+                    new IncludedPath { Path = "/phoneE164/?" },
                 },
                 ExcludedPaths =
                 {
