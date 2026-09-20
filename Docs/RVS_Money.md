@@ -27,7 +27,9 @@ The two size figures differ on purpose. Blob keeps every original upload — `A-
 included (`Spec B-4`). Storage cost tracks what the customer uploaded; email cost tracks what
 actually ships. Neither number moves the total, which rounds to $0.03 either way.
 
-SMS is not in the total. It is off in every environment until the sending number clears toll-free verification. Once on, each text costs about **$0.01 per segment, carrier surcharge included**. A confirmation text is one or two segments, so it adds at most $0.02 to a request that is sent one, and the per-location figures below move by at most $2 per 100 requests.
+SMS is not in the total. It is off in every environment until the sending number clears toll-free verification. Once on, each text costs about **$0.01 per segment, carrier surcharge included**. Both message types are **two segments**, so budget **$0.02 each**: the confirmation (`A-2`) and the advisor invite (`A-14`). Neither is one segment any more, because both carry the compliance tail — *Msg & data rates may apply. Reply STOP to opt out, HELP for help.* — which the toll-free verification application submits as sample wording (`#659`), and which does not fit a single 153-character GSM-7 segment. Dropping it to save a segment would break what the application promises.
+
+A request that gets a confirmation and no invite adds $0.02; one that gets both adds $0.04. So the per-location figures below move by at most **$4 per 100 requests**, and only once a number is verified. Invites are advisor-initiated and optional, so most requests will pay the $0.02, not the $0.04.
 
 A location submitting 100 requests a month costs **$3.21** to serve against $79 of revenue. Gross margin 96%.
 
