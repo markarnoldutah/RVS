@@ -117,6 +117,22 @@ Prod's warmed custom domain is what carries the local cluster (`#527`).
 
 **How the number reaches the API (#661).** The number is bought in the portal, so Bicep cannot derive it. Each `.bicepparam` carries it as `acsSmsFromPhoneNumber`, and `app-service-config.bicep` injects it as `AzureCommunicationServices__Sms__FromPhoneNumber`, beside email's `FromAddress`. `acsSmsEnabled` is injected as `AzureCommunicationServices__Sms__Enabled` in every environment, including when it is `false`. Until #661, `appsettings.json` hardcoded `+18662331894`, a number neither resource owns. Both vaults hold the ACS endpoint, so every confirmation text failed silently. Flip `acsSmsEnabled` only after that environment's number shows verified. The API refuses to start with SMS enabled and no valid E.164 number.
 
+**Inbound ACS events reach the API through Event Grid (#665).** `modules/eventgrid-acs-sms.bicep` creates a system topic on the ACS resource (global, like ACS itself) and one subscription for `Microsoft.Communication.SMSReceived` and `Microsoft.Communication.SMSDeliveryReportReceived`, delivering to `POST https://{api host}/api/events/acs-sms`. Event Grid cannot present a bearer token to an anonymous endpoint, so the subscription URL carries `?key=`, whose value is the `eventGridWebhookKey` parameter: Bicep writes the same value to Key Vault as `EventGrid--Inbound--Key`, which the API's Key Vault configuration provider binds to `EventGrid:Inbound:Key`, so the two sides cannot drift. Generate one with `openssl rand -base64 48 | tr -d /+= | cut -c1-48`.
+
+**The HELP reply is an outbound send, so it obeys `acsSmsEnabled`.** While an environment's number is unverified the handler still runs and still ignores non-keywords; the reply is simply silent. That is the same gate every other send passes, and it means HELP costs nothing until the number is live.
+
+**Empty key = no subscription, and the endpoint refuses everything (503).** That is the safe default, not a broken state: an anonymous webhook that writes opt-outs is worse switched on than off.
+
+**First bring-up is secret-first, not deploy-twice.** Event Grid validates the endpoint while creating the subscription, so the API must already be running with the secret in its configuration. The template writes the vault secret too, but in parallel with the subscription, so it cannot be what makes the API ready. Order:
+
+1. Merge to `main`, so `deploy-staging.yml` ships the API with `POST api/events/acs-sms`.
+2. Generate a key: `openssl rand -base64 48 | tr -d /+= | cut -c1-48`.
+3. `az keyvault secret set --vault-name kv-rvs-{env}-wus3 --name EventGrid--Inbound--Key --value "$KEY"`.
+4. `az webapp restart -n app-rvs-api-{env}-wus3 -g rg-rvs-{env}-westus3`. The API reads Key Vault at startup only. Before the restart the endpoint answers 503, after it 401 to a request with no key.
+5. Deploy `main.bicep` with `--parameters eventGridWebhookKey="$KEY"`, as `what-if` first.
+
+**Pass the key on every later deploy.** Omitting it removes the subscription and silently ends inbound handling. Retries are 10 attempts over 24 hours, so a brief API outage loses nothing. There is no dead-letter destination: a keyword that exhausts its retries is still enforced by the carrier, and the next send simply fails rather than reaching an opted-out customer.
+
 **Key Vault** — standard SKU, RBAC authorization, 90-day soft delete, purge protection on, public access enabled.
 
 **Static Web Apps** — Standard, staging environments enabled, config file updates allowed, enterprise CDN off.

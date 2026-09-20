@@ -174,4 +174,36 @@ public sealed class CosmosCustomerProfileRepository : CosmosRepositoryBase, ICus
         _logger.LogDebug("ListSmsOptedOutPhonesAsync [tenant={TenantId}] count={Count} — RequestCharge: {Charge} RU", tenantId, phones.Count, totalCharge);
         return phones;
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<CustomerProfile>> ListByPhoneE164AcrossTenantsAsync(
+        string phoneE164, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(phoneE164);
+
+        // Deliberately cross-partition (issue #665). An inbound carrier keyword arrives with a
+        // phone number and no tenant, and the shared toll-free number is blocked for every
+        // dealer at once, so the opt-out has to reach all of their records. Keyword traffic is
+        // rare and the result is bounded by how many dealers know one customer.
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.type = 'customerProfile' AND c.phoneE164 = @phoneE164")
+            .WithParameter("@phoneE164", phoneE164);
+
+        var iterator = _container.GetItemQueryIterator<CustomerProfile>(query);
+
+        var profiles = new List<CustomerProfile>();
+        double totalCharge = 0;
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(cancellationToken);
+            totalCharge += page.RequestCharge;
+            profiles.AddRange(page);
+        }
+
+        _logger.LogDebug(
+            "ListByPhoneE164AcrossTenantsAsync count={Count} — RequestCharge: {Charge} RU",
+            profiles.Count, totalCharge);
+        return profiles;
+    }
 }

@@ -19,3 +19,13 @@ All values are in [`parameters/prod.bicepparam`](ASOT/Infra/Bicep.IaC/parameters
 | G-3 | Turn the `/health` availability test back on **and** alert on it | `deployAvailabilityTest = true`, plus a new alert rule in `monitor-alerts.bicep` | Standard availability tests are billed per run, and today no alert rule reads their results, so a failing test notifies nobody. Re-enabling the test is only worth the cost once a failure pages the ops action group. That alert rule does not exist yet and is Bicep work to do before go-live. Reducing the test to one location every 15 minutes cuts runs by about 9× if cost matters. |
 
 App Service stays on B1 through go-live; it was considered for F1 and rejected, because F1 cannot hold the `api.*` and `go.*` custom hostnames or their certificates.
+
+---
+
+## Messaging
+
+Unlike the infrastructure items above, these apply to **staging as well as prod**: each environment's outbound SMS stays dark until its own toll-free number is verified. Verification is per number, and the official turnaround is 5–8 weeks (#659).
+
+| # | Action | Setting | Why it is parked until go-live |
+|---|---|---|---|
+| G-4 | Turn outbound SMS on for an environment once its toll-free number is verified | `acsSmsEnabled = true` in that environment's `.bicepparam`, alongside a real `acsSmsFromPhoneNumber` | Carriers block an unverified toll-free number's traffic, so sending before verification just fails, and the API refuses to start with SMS enabled and no number. While it is off, a `Text` customer's confirmation falls back to email and the A-14 send action refuses with a clear message (`Spec A-2`, `A-14`). Staging today has `+18662319618` with its status unrecorded; prod owns no number at all (#659). Flip each environment on its own, not both together. |

@@ -57,4 +57,16 @@ public interface ICustomerProfileRepository
     /// <param name="tenantId">Tenant partition key.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<IReadOnlyList<string>> ListSmsOptedOutPhonesAsync(string tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns every profile, in every tenant, whose <see cref="CustomerProfile.PhoneE164"/>
+    /// matches. This is the one deliberately cross-partition read on this container: an inbound
+    /// carrier keyword (issue #665) arrives with a phone number and no tenant, and the shared
+    /// toll-free number is blocked for every dealer at once, so the opt-out has to reach all of
+    /// their records. Rare traffic, and bounded by how many dealers know one customer.
+    /// </summary>
+    /// <param name="phoneE164">The number in E.164, e.g. <c>+18015551234</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyList<CustomerProfile>> ListByPhoneE164AcrossTenantsAsync(
+        string phoneE164, CancellationToken cancellationToken = default);
 }

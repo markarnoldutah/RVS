@@ -66,6 +66,8 @@ The central document. Field groups:
 
 Per-tenant customer record. Contact fields, email/SMS opt-out flags, `assetsOwned[]`, `serviceRequestIds[]`, aggregate counts.
 
+`phone` keeps what the customer typed; `phoneE164` is the same number normalised, or null when it does not normalise, and it is the only form a lookup can match (#665). It is indexed in both `cosmos-db.bicep` and the seeder. `smsKeywordAtUtc` records when the last inbound keyword RVS acted on was *sent*, and an event at or before it is ignored — Event Grid delivers at least once and in no fixed order, so without it a stale `STOP` could undo a later `START`.
+
 ### GlobalCustomerAcct — `global-customer-accounts`
 
 Cross-tenant, partitioned by email. Contact, opt-outs, `linkedProfiles[]`, `allKnownAssetIds[]`, `auth0UserId`, and `magicLinkToken` / expiry.
@@ -98,6 +100,8 @@ An advisor-initiated intake invite (`Spec A-14`, issue #663). `id` is `InviteTok
 **No TTL, and never deleted.** The consent fields are the opt-in evidence for toll-free verification and for any complaint, so the document outlives the invite. `expiresAtUtc` retires the token, not the record.
 
 The opt-out check before a send reads `customer-profiles` in the tenant's partition for `smsOptOut = true` and compares each stored phone after E.164 normalisation, because stored phones are as the customer typed them. It does not read `global-customer-accounts` (partitioned by email, so that would be cross-partition).
+
+**Inbound keywords write across tenants (#665).** `STOP` and its synonyms set `smsOptOut`; `START` and `UNSTOP` clear it, and a keyword is the only thing that clears it, since intake sets an opt-out but never clears one (#673). The keyword arrives with a phone number and no tenant, and the toll-free sending number is shared, so `ListByPhoneE164AcrossTenantsAsync` matches `phoneE164` in **every** tenant's partition and each matching profile is updated. Scoping it to one tenant would leave the other dealers texting into a carrier block. Keyword traffic is rare and the result is bounded by how many dealers know one customer. A number matching no profile is a no-op: the carrier still enforces its own block. `HELP` writes nothing at all — it is answered with a fixed reply and is neither consent nor a revocation, so it needs no profile and does not move `smsKeywordAtUtc`. Delivery reports match an invite through `GetByAcsMessageIdAcrossTenantsAsync` on the already-indexed `acsMessageId`, for the same reason — a report carries no tenant.
 
 ### AssetLedgerEntry — `asset-ledger`
 

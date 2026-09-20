@@ -281,6 +281,47 @@ public class IntakeOrchestrationServiceTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileIsCreated_ShouldStoreThePhoneInE164()
+    {
+        // An inbound STOP arrives with a phone number and no tenant (issue #665), so the number
+        // has to be stored in a form a lookup can match. The typed form is kept as well.
+        SetupFullHappyPath(profileExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _profileRepoMock.Verify(r => r.CreateAsync(
+            It.Is<CustomerProfile>(p => p.PhoneE164 == "+18015551234" && p.Phone == "801-555-1234"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileExists_ShouldRefreshThePhoneInE164()
+    {
+        SetupFullHappyPath(profileExists: true);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.PhoneE164 == "+18015551234"),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenPhoneCannotNormalise_ShouldLeaveE164Null()
+    {
+        // The profile still keeps what the customer typed; only the matchable form is absent.
+        SetupFullHappyPath(profileExists: false);
+        var request = BuildValidRequest();
+        request = request with { Customer = request.Customer with { Phone = "555-1234" } };
+
+        await _sut.ExecuteAsync("test-slug", request);
+
+        _profileRepoMock.Verify(r => r.CreateAsync(
+            It.Is<CustomerProfile>(p => p.PhoneE164 == null && p.Phone == "555-1234"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ── Step 3: Opt-out Timestamp Stamping (CustomerProfile) ─────────────────
 
     [Fact]

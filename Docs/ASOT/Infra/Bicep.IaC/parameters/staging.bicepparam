@@ -129,6 +129,17 @@ param acsCustomDomainVerified = true
 param acsSmsFromPhoneNumber = '+18662319618'
 param acsSmsEnabled = false
 
+// Inbound Event Grid webhook (#665). SECRET — never committed here. Supply it at
+// deploy time, e.g.
+//   az deployment sub create ... --parameters eventGridWebhookKey="$EVENTGRID_KEY"
+// Bicep writes it to Key Vault as EventGrid--Inbound--Key and puts the same value
+// in the subscription URL. Empty (the default) deploys no system topic and no
+// subscription, and the API's /api/events/acs-sms answers 503 to everything.
+// Generate: openssl rand -base64 48 | tr -d /+= | cut -c1-48
+// First bring-up: seed EventGrid--Inbound--Key in Key Vault and restart the API
+// BEFORE deploying, so it can answer Event Grid's endpoint validation. See the
+// runbook in RVS_Infrastructure.md.
+
 // Static Web Apps — Free tier. Staging stays on Free permanently; it needs no SLA,
 // and Free's two custom domains per app cover the one each app binds.
 param deploySwa = true

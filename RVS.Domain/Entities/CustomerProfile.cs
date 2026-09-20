@@ -1,5 +1,7 @@
 using Newtonsoft.Json;
 
+using RVS.Domain.Validation;
+
 namespace RVS.Domain.Entities;
 
 /// <summary>
@@ -29,6 +31,15 @@ public class CustomerProfile : EntityBase
     public string? Phone { get; set; }
 
     /// <summary>
+    /// <see cref="Phone"/> in E.164 (<c>+18015551234</c>), or <c>null</c> when it does not
+    /// normalise. <see cref="Phone"/> keeps what the customer typed; this is the form a lookup
+    /// can match on, which is what lets an inbound STOP find every dealer's record of a number
+    /// (issue #665). Set by <c>PhoneNumberNormalizer</c> wherever the phone is written.
+    /// </summary>
+    [JsonProperty("phoneE164")]
+    public string? PhoneE164 { get; set; }
+
+    /// <summary>
     /// When <c>true</c>, the customer has opted out of SMS notifications.
     /// Default is <c>false</c> (both email and SMS are sent).
     /// </summary>
@@ -55,6 +66,15 @@ public class CustomerProfile : EntityBase
     /// </summary>
     [JsonProperty("smsOptOutAtUtc")]
     public DateTime? SmsOptOutAtUtc { get; set; }
+
+    /// <summary>
+    /// When the last inbound keyword (<c>STOP</c> / <c>START</c> / <c>UNSTOP</c>) that RVS acted
+    /// on was sent. Event Grid delivers at least once and in no fixed order, so an event older
+    /// than this is ignored rather than allowed to undo a later one (issue #665).
+    /// Null when no keyword has ever arrived for this number.
+    /// </summary>
+    [JsonProperty("smsKeywordAtUtc")]
+    public DateTime? SmsKeywordAtUtc { get; set; }
 
     /// <summary>
     /// UTC timestamp when the customer opted out of email notifications.
@@ -89,6 +109,49 @@ public class CustomerProfile : EntityBase
     /// </summary>
     [JsonProperty("totalRequestCount")]
     public int TotalRequestCount { get; set; }
+
+    /// <summary>
+    /// Applies an inbound carrier keyword (<c>Spec A-2</c>'s out-of-scope note, issue #665).
+    /// <see cref="SmsKeyword.OptOut"/> sets <see cref="SmsOptOut"/>, <see cref="SmsKeyword.OptIn"/>
+    /// clears it — and a keyword is the only thing that clears it, because intake can set an
+    /// opt-out but never clears one (issue #673). <see cref="SmsKeyword.Help"/> changes nothing:
+    /// it is answered with a fixed reply, and is neither consent nor a revocation.
+    ///
+    /// An event at or before <see cref="SmsKeywordAtUtc"/> is ignored, which covers both the
+    /// duplicate deliveries and the out-of-order pairs Event Grid is allowed to produce.
+    /// <see cref="SmsOptOutAtUtc"/> keeps the *first* opt-out's time, since that is the evidence
+    /// of when the customer asked; a repeat only advances <see cref="SmsKeywordAtUtc"/>.
+    /// </summary>
+    /// <param name="keyword">What the inbound text meant.</param>
+    /// <param name="eventAtUtc">When the customer sent it, per the ACS event.</param>
+    /// <returns><c>true</c> when the record changed and needs persisting.</returns>
+    public bool ApplySmsKeyword(SmsKeyword keyword, DateTime eventAtUtc)
+    {
+        // HELP is answered, not recorded: it is neither consent nor a revocation.
+        if (keyword is SmsKeyword.None or SmsKeyword.Help)
+        {
+            return false;
+        }
+
+        if (SmsKeywordAtUtc is { } last && eventAtUtc <= last)
+        {
+            return false;
+        }
+
+        SmsKeywordAtUtc = eventAtUtc;
+
+        if (keyword == SmsKeyword.OptOut)
+        {
+            SmsOptOutAtUtc ??= eventAtUtc;
+            SmsOptOut = true;
+            return true;
+        }
+
+        SmsOptOut = false;
+        SmsOptOutAtUtc = null;
+        SmsOptInAtUtc = eventAtUtc;
+        return true;
+    }
 
     // ── Convenience helpers (not persisted) ──
 
