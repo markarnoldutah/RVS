@@ -12,36 +12,51 @@ public class IntakeInviteContentTests
 {
     private const string Link = "https://go.rvintake.com/nova-hurricane?src=advisor&inv=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
+    /// <summary>
+    /// The compliance tail, spelled out rather than read from the production constant: this
+    /// wording is submitted verbatim in the toll-free verification application (#659), so the
+    /// test is what pins it. Changing it here means changing it on the application too.
+    /// </summary>
+    private const string Compliance = "Msg & data rates may apply. Reply STOP to opt out, HELP for help.";
+
     [Fact]
-    public void BuildSmsBody_ShouldGreetByNameNameTheLocationAndCarryTheLinkAndStop()
+    public void BuildSmsBody_ShouldGreetByNameNameTheLocationAndCarryTheLinkAndCompliance()
     {
         var body = IntakeInviteContent.BuildSmsBody("Nova RV", "Jane", Link);
 
         body.Should().StartWith("Nova RV: Hi Jane,");
         body.Should().Contain(Link);
-        body.Should().EndWith("Reply STOP to opt out.");
+        body.Should().EndWith(Compliance);
         body.Length.Should().BeLessThanOrEqualTo(IntakeInviteContent.SmsMaxLength);
+    }
+
+    [Fact]
+    public void BuildSmsBody_ShouldOfferBothStopAndHelp()
+    {
+        var body = IntakeInviteContent.BuildSmsBody("Nova RV", "Jane", Link);
+
+        body.Should().Contain("Reply STOP to opt out").And.Contain("HELP for help");
     }
 
     [Fact]
     public void BuildSmsBody_WhenTheGreetingDoesNotFit_ShouldDropTheNameFirst()
     {
-        var location = new string('N', 120);
+        var location = new string('N', 90);
 
         var body = IntakeInviteContent.BuildSmsBody(location, "Maximiliana Josephine", Link);
 
         body.Should().NotContain("Maximiliana");
         body.Should().StartWith($"{location}:");
-        body.Should().Contain(Link).And.EndWith("Reply STOP to opt out.");
+        body.Should().Contain(Link).And.EndWith(Compliance);
         body.Length.Should().BeLessThanOrEqualTo(IntakeInviteContent.SmsMaxLength);
     }
 
     [Fact]
-    public void BuildSmsBody_WhenTheLocationNameDoesNotFit_ShouldKeepTheLinkAndStop()
+    public void BuildSmsBody_WhenTheLocationNameDoesNotFit_ShouldKeepTheLinkAndCompliance()
     {
         var body = IntakeInviteContent.BuildSmsBody(new string('N', 150), "Jane", Link);
 
-        body.Should().Be($"{Link} Reply STOP to opt out.");
+        body.Should().Be($"{Link} {Compliance}");
     }
 
     [Fact]

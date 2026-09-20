@@ -109,9 +109,11 @@ Prod's warmed custom domain is what carries the local cluster (`#527`).
 | Environment | Number | Verification | `acsSmsEnabled` |
 | --- | --- | --- | --- |
 | Staging | `+18662319618`, toll-free, bought 2026-04-12 | Status not yet checked (#659) | `false` |
-| Prod | none — the prod ACS resource owns no number (#659) | not submitted | `false` |
+| Prod | `+18332398230`, toll-free, bought 2026-09-19 | Not submitted (#659) | `false` |
 
 **Verification is per number**, not per resource or account: each toll-free number needs its own approved verification application before carriers deliver its traffic. Official turnaround is 5–8 weeks; reports run to about 4 months. No API exposes the status; check it in the portal.
+
+**Both numbers go on one application (#659, planned).** The wizard takes several numbers for one program and asks why, and Microsoft's guidelines name multiple environments as an accepted reason. Staging is the non-production environment for the same campaign, so one application covers both and starts both clocks together. Unverified: whether the wizard lists numbers held by a *second* ACS resource — each environment keeps its own (above). If it does not, staging needs its own application, and prod's goes first.
 
 **How the number reaches the API (#661).** The number is bought in the portal, so Bicep cannot derive it. Each `.bicepparam` carries it as `acsSmsFromPhoneNumber`, and `app-service-config.bicep` injects it as `AzureCommunicationServices__Sms__FromPhoneNumber`, beside email's `FromAddress`. `acsSmsEnabled` is injected as `AzureCommunicationServices__Sms__Enabled` in every environment, including when it is `false`. Until #661, `appsettings.json` hardcoded `+18662331894`, a number neither resource owns. Both vaults hold the ACS endpoint, so every confirmation text failed silently. Flip `acsSmsEnabled` only after that environment's number shows verified. The API refuses to start with SMS enabled and no valid E.164 number.
 

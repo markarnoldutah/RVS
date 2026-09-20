@@ -80,6 +80,10 @@
       "value": "lookups:read"
     },
     {
+      "description": "Send advisor intake invites by text (consent-gated)",
+      "value": "intake-invites:send"
+    },
+    {
       "description": "Create / disable / enable tenants",
       "value": "platform:tenants:manage"
     },
