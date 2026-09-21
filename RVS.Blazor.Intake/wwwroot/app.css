@@ -144,3 +144,9 @@ h1:focus {
 .mud-main-content {
     padding-top: 64px !important;
 }
+
+/* The step container takes focus on entry (issue #645) only so keyboard and screen-reader
+   users start on the new step; it is not an interactive control, so no focus ring. */
+.wizard-step:focus {
+    outline: none;
+}

@@ -44,7 +44,7 @@ else
     }
 
     @* Wizard step content *@
-    <div style="width: 100%;" @key="_state.CurrentStep" class="wizard-step">
+    <div style="width: 100%;" @key="_state.CurrentStep" @ref="_stepElement" tabindex="-1" class="wizard-step">
         @switch (_state.CurrentStep)
         {
             case 1:
@@ -102,9 +102,17 @@ else
 
     [Inject] private IntakeWizardState _state { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private List<string> _validationErrors = [];
     private bool _initializing = true;
+    private ElementReference _stepElement;
+    private WizardStepEntry _stepEntry = default!;
+
+    protected override void OnInitialized()
+    {
+        _stepEntry = new WizardStepEntry(JS);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -143,6 +151,15 @@ else
         }
 
         _initializing = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Issue #645: every step starts at the top of the page, on its first empty field.
+        if (!_initializing)
+        {
+            await _stepEntry.OnRenderedAsync(_state.CurrentStep, _stepElement);
+        }
     }
 
     protected override void OnParametersSet()

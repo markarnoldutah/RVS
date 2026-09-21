@@ -36,6 +36,11 @@ The component receives two parameters from the wizard host:
 - `Elevation="2"` — standard card depth for step pages
 - `pa-6` — inner padding; reduce to `pa-4` only on very compact steps
 - `rounded-lg` — consistent rounded corners across all steps
+- `data-rvs-autofocus="true"` — add it when the step opens on something to type (Steps 2–5). The
+  wizard host scrolls to the top on every step change. It then focuses the first empty, editable
+  text field inside this element, and falls back to the step container when there is none
+  (`WizardStepEntry`, issue #645). Leave it off steps that open on a choice, an upload or a
+  review (Steps 1, 6, 7, 8).
 
 ---
 
@@ -220,6 +225,7 @@ Trigger themes via the three-way toggle in the app bar (`ThemeSwitcher.razor`).
 - [ ] All labels: `Typo.body1` + `font-weight: 700`
 - [ ] All helper text: `Typo.body1` + `color: var(--mud-palette-text-secondary)`
 - [ ] All inputs: `Variant.Outlined` + `Margin.Dense` + no `Label` parameter
+- [ ] `data-rvs-autofocus="true"` on the card if the step opens on a text field (see §2)
 - [ ] Primary button: `Variant.Filled` + `Color.Primary` + `FullWidth="true"`
 - [ ] No `Color.Secondary` used on any text element
 - [ ] No hardcoded hex colors in `Style=` attributes
