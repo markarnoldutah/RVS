@@ -126,6 +126,18 @@ try
     var lookupSets = BuildLookupSets();
     var warrantyRules = BuildRvWarrantyRules();
 
+    // Profiles carry the phone as a customer would type it, and the E.164 form beside it.
+    // Derived rather than written out per profile so the two can never drift: the API does the
+    // same thing wherever it writes a profile (IntakeOrchestrationService). Without it, an
+    // inbound STOP from a seeded customer's number matches no record, because the opt-out
+    // lookup is by phoneE164 (issue #665).
+    foreach (var profile in customerProfiles)
+    {
+        profile.PhoneE164 = PhoneNumberNormalizer.Normalize(profile.Phone)
+            ?? throw new InvalidOperationException(
+                $"Seed profile '{profile.Id}' has a phone that is not a valid US/CA number: '{profile.Phone}'.");
+    }
+
     // ── 3. Seed each container (idempotent via upsert) ──────────────────
     await SeedItemsAsync(containers["dealerships"], dealerships, d => new PartitionKey(d.TenantId), "dealerships");
     await SeedItemsAsync(containers["locations"], locations, l => new PartitionKey(l.TenantId), "locations");
@@ -985,7 +997,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
     },
 ];
 
-// ── Customer Profiles (5) ───────────────────────────────────────────────
+// ── Customer Profiles (6) ───────────────────────────────────────────────
 
 static List<CustomerProfile> BuildCustomerProfiles() =>
 [
