@@ -157,7 +157,7 @@ The manager app exists so a status update can happen. It is not a workspace and 
 
 | # | Requirement |
 |---|---|
-| **C-1** | Authenticated (Auth0). List of service requests for the location, newest first. Filter by status. That's the whole list view. |
+| **C-1** | Authenticated (Auth0). List of service requests for the location, newest first. Filter by status. That's the whole list view. The same requests are also presented as a status board at `/board` — the app's landing page, where dragging a card between columns sets its status (C-3). Kept as built (#456); no swimlanes, extra filters or scheduling semantics. |
 | **C-2** | Detail view: renders the packet, plus the status control and a resend button. Nothing else. |
 | **C-3** | Set status. One fixed set, the same for every location: `New`, `In Progress`, `Waiting on Parts`, `Waiting on Customer`, `Completed`, `Cancelled` (stored as `New` / `InProgress` / `WaitingOnParts` / `WaitingOnCustomer` / `Completed` / `Cancelled`). The path is `New → In Progress → Completed`; the two `Waiting on` values are holds off that path; `Cancelled` is a manual stop. Any status may move to any other. Changing status updates what the customer sees on their status page. Per-location configurable vocabularies are rejected — see C-8. |
 | **C-4** | Disposition: close a request without work (duplicate, spam, wrong location, customer withdrew), with a reason code. |

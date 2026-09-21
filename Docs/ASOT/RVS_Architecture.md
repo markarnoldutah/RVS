@@ -180,7 +180,7 @@ Built for capability the Overview archives. Deleting this is real work and is no
 
 - **Analytics** — `AnalyticsController`, `AnalyticsService`, `IAnalyticsService`, `GetForAnalyticsAsync`, `ServiceRequestAnalyticsResponseDto`
 - **Technician outcome workflow** — `ServiceEventEmbedded`, `PATCH batch-outcome`, `BatchOutcome*Dto`, `AssetLedgerEntry.Section10A`
-- **Scheduling / assignment fields** on `ServiceRequest` — `assignedTechnicianId`, `assignedBayId`, `scheduledDateUtc`, `requiredSkills`, `boardSequence`
+- **Scheduling / assignment fields** on `ServiceRequest` — `assignedTechnicianId`, `assignedBayId`, `scheduledDateUtc`, `requiredSkills`. (`boardSequence` is **not** on this list: it orders the Kanban board's columns, and the board is kept — #456 closed `not_planned`, Plan decision log Sep 21 2026)
 - **Messaging** — `MessageEmbedded` is defined and referenced nowhere
 - **Scaffolding** — `WeatherForecastController`, `WeatherForecast.cs`
 - **`rv-warranty-rules`** — seeded, no repository, never read

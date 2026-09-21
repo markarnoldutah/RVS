@@ -45,7 +45,7 @@ The central document. Field groups:
 
 | Group | Fields | Scope |
 |---|---|---|
-| Workflow | `status`, `priority`, `boardSequence` | `boardSequence` is Kanban-only — **archived** |
+| Workflow | `status`, `priority`, `boardSequence` | `boardSequence` orders cards within a column on the Kanban board, which is kept (#456 closed `not_planned`, Plan decision log Sep 21 2026) — core, not archived |
 | Issue | issue text, `issueCategory`, `technicianSummary` | Core. `technicianSummary` is the closest thing to a paste block today |
 | Customer status note | `customerStatusNote` — `text`, `updatedAtUtc`, `updatedByUserId`; nullable, one per request, overwritten on edit | Core (issue #500, `Spec C-9`). Manager-authored, one-directional; rendered on the customer status page next to the status. `CustomerStatusNoteValidator` caps `text` at 280 chars and rejects `< > ` plus control characters (ordinary punctuation is allowed — it is a human sentence); the text is never written to application logs (same rule as issue text, `Spec X-7`) |
 | Customer | embedded `customerSnapshot` — name, email, phone, `preferredContact` (`Phone`/`Text`/`Email`, captured at intake per `#472`; null for pre-existing requests) | Core. `preferredContact` chooses the confirmation channel, and the profile's opt-outs veto it (see *Notification opt-outs* below, `#662`) |
