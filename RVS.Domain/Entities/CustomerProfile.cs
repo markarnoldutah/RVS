@@ -153,6 +153,31 @@ public class CustomerProfile : EntityBase
         return true;
     }
 
+    /// <summary>
+    /// Applies the opt-out boxes from an intake submission (Spec A-2, issue #673). A ticked box
+    /// sets the opt-out and stamps its time if unset; an unticked box changes nothing. The form
+    /// never shows a stored opt-out — A-7 prefill is deferred — so an unticked box is not a
+    /// choice to opt back in. Only <see cref="ApplySmsKeyword"/> clears <see cref="SmsOptOut"/>;
+    /// nothing clears <see cref="EmailOptOut"/> yet.
+    /// </summary>
+    /// <param name="smsOptOut">The submission's SMS opt-out box.</param>
+    /// <param name="emailOptOut">The submission's email opt-out box.</param>
+    /// <param name="atUtc">When the submission was received.</param>
+    public void ApplyIntakeOptOuts(bool smsOptOut, bool emailOptOut, DateTime atUtc)
+    {
+        if (smsOptOut)
+        {
+            SmsOptOut = true;
+            SmsOptOutAtUtc ??= atUtc;
+        }
+
+        if (emailOptOut)
+        {
+            EmailOptOut = true;
+            EmailOptOutAtUtc ??= atUtc;
+        }
+    }
+
     // ── Convenience helpers (not persisted) ──
 
     /// <summary>
