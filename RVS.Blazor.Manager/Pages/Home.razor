@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject RVS.UI.Shared.Services.LookupApiClient LookupClient
 @inject RVS.Blazor.Manager.State.ManagerAppState AppState
+@implements IDisposable
 
 <PageTitle>RVS Service Flow — Home</PageTitle>
 
@@ -13,7 +14,23 @@
                 Welcome, @GetDisplayName(context)!
             </MudText>
 
-            <LocationSelector />
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                <LocationSelector />
+                @if (AppState.SelectedLocation is not null)
+                {
+                    @* Spec A-14: the advisor is on a call — one click from the landing page. *@
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Sms"
+                               OnClick="OpenSendIntakeLinkAsync"
+                               Style="text-transform: none;">
+                        Send intake link
+                    </MudButton>
+                }
+            </MudStack>
+
+            <SendIntakeLinkDialog @bind-Visible="_sendLinkOpen"
+                                  LocationId="@AppState.SelectedLocation"
+                                  LocationName="@_selectedLocationName" />
 
             @if (AppState.SelectedLocation is null)
             {
@@ -46,12 +63,17 @@
 @code {
     private OutcomeComplianceWidget? _complianceWidget;
     private string? _dealershipId;
+    private bool _sendLinkOpen;
+    private string? _selectedLocationName;
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthStateTask { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
+        // The Send intake link button appears once LocationSelector auto-selects or restores a location.
+        AppState.OnLocationChanged += OnLocationChangedAsync;
+
         if (AuthStateTask is null) return;
         var authState = await AuthStateTask;
         if (authState.User.Identity?.IsAuthenticated != true) return;
@@ -66,6 +88,42 @@
             ex.Redirect();
         }
     }
+
+    private Task OnLocationChangedAsync(string? _)
+    {
+        _selectedLocationName = null;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenSendIntakeLinkAsync()
+    {
+        // Open first: the advisor is on a call. The store name only fills in the consent
+        // script, which has a placeholder, so it arrives behind the dialog, best effort.
+        _sendLinkOpen = true;
+        StateHasChanged();
+
+        if (_selectedLocationName is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            var locations = await LookupClient.GetLocationsAsync();
+            _selectedLocationName = locations
+                .FirstOrDefault(l => l.LocationId == AppState.SelectedLocation)?.Name;
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (HttpRequestException)
+        {
+            // Placeholder stays.
+        }
+    }
+
+    public void Dispose() => AppState.OnLocationChanged -= OnLocationChangedAsync;
 
     private static string GetDisplayName(AuthenticationState context)
     {

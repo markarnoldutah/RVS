@@ -57,6 +57,8 @@ builder.Services.AddScoped<RVS.UI.Shared.Services.LookupApiClient>(sp =>
     new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
 builder.Services.AddScoped<RVS.UI.Shared.Services.AttachmentApiClient>(sp =>
     new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+builder.Services.AddScoped<RVS.UI.Shared.Services.IntakeInviteApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
 
 // Platform-admin provisioning (issue #563) — the hidden /admin pages. The API is the only gate.
 builder.Services.AddScoped<AdminApiClient>(sp =>

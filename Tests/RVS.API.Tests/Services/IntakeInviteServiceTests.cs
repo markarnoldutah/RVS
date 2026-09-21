@@ -471,6 +471,26 @@ public class IntakeInviteServiceTests
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
     }
 
+    // ── GetCapability ────────────────────────────────────────────────────
+
+    [Fact]
+    public void GetCapability_WhenTextingIsEnabled_ShouldReportItEnabled()
+    {
+        _smsMock.Setup(s => s.IsEnabled).Returns(true);
+
+        CreateService().GetCapability().SmsEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GetCapability_WhenTextingIsDisabled_ShouldReportItDisabled()
+    {
+        // The send dialog reads this to show "texting not yet enabled" instead of a dead Send
+        // button, rather than discovering it from a 409 after the advisor has typed a number.
+        _smsMock.Setup(s => s.IsEnabled).Returns(false);
+
+        CreateService().GetCapability().SmsEnabled.Should().BeFalse();
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;

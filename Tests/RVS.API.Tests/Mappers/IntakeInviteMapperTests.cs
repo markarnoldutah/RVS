@@ -1,6 +1,7 @@
 using FluentAssertions;
 using RVS.API.Mappers;
 using RVS.Domain.Entities;
+using RVS.Domain.Interfaces;
 
 namespace RVS.API.Tests.Mappers;
 
@@ -60,6 +61,13 @@ public class IntakeInviteMapperTests
     public void ToDetailDto_WithoutAUrl_ShouldLeaveItNull()
     {
         BuildInvite().ToDetailDto().IntakeUrl.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToDto_ShouldCarryTheSmsEnabledFlag()
+    {
+        new IntakeInviteCapability(SmsEnabled: true).ToDto().SmsEnabled.Should().BeTrue();
+        new IntakeInviteCapability(SmsEnabled: false).ToDto().SmsEnabled.Should().BeFalse();
     }
 
     [Fact]

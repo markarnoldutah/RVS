@@ -81,6 +81,13 @@
                 </MudTd>
                 <MudTd Style="text-align: right;">
                     <div @onclick:stopPropagation="true">
+                        <MudTooltip Text="Send intake link">
+                            <MudIconButton Icon="@Icons.Material.Filled.Sms"
+                                           Size="Size.Small"
+                                           Color="Color.Primary"
+                                           aria-label="@($"Send intake link for {context.Name}")"
+                                           OnClick="@(() => OpenSendIntakeLink(context))" />
+                        </MudTooltip>
                         <MudIconButton Icon="@Icons.Material.Filled.QrCode2"
                                        Size="Size.Small"
                                        aria-label="Download QR code"
@@ -93,6 +100,10 @@
             </NoRecordsContent>
         </MudTable>
     }
+
+    <SendIntakeLinkDialog @bind-Visible="_sendLinkOpen"
+                          LocationId="@_sendLinkLocationId"
+                          LocationName="@_sendLinkLocationName" />
 
     @* Create / Edit Drawer *@
     <MudDrawer @bind-Open="_dialogOpen"
@@ -260,6 +271,9 @@
     private string? _editingLocationSlug; // preserved on update; we do not change slugs from the UI
     private LocationForm _form = new();
     private MudForm? _form2;
+    private bool _sendLinkOpen;
+    private string? _sendLinkLocationId;
+    private string? _sendLinkLocationName;
 
     private string? ValidateName(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a location name" : null;
@@ -441,6 +455,13 @@
         {
             _saving = false;
         }
+    }
+
+    private void OpenSendIntakeLink(LocationSummaryResponseDto location)
+    {
+        _sendLinkLocationId = location.LocationId;
+        _sendLinkLocationName = location.Name;
+        _sendLinkOpen = true;
     }
 
     private async Task DownloadQrCodeAsync(string locationId, string slug)

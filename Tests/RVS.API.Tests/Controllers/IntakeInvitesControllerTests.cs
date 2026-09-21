@@ -115,6 +115,18 @@ public class IntakeInvitesControllerTests
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
     }
 
+    [Fact]
+    public void GetCapability_ShouldReturnWhetherTextingIsEnabled()
+    {
+        _serviceMock.Setup(s => s.GetCapability()).Returns(new IntakeInviteCapability(SmsEnabled: false));
+
+        var result = _sut.GetCapability();
+
+        var dto = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<IntakeInviteCapabilityResponseDto>().Subject;
+        dto.SmsEnabled.Should().BeFalse();
+    }
+
     private static IntakeInvite BuildInvite() => new()
     {
         Id = Guid.NewGuid().ToString("N"),

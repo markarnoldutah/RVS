@@ -69,6 +69,7 @@ Authorization is **per-permission, never per-role**. Policies are declared in `R
 | `CanReadAnalytics` | `analytics:read` | **Archived** — analytics is out of scope |
 | `CanManageTenantConfig` | `tenants:config:read` / `create` / `update` | Any one of the three satisfies it |
 | `CanReadLookups` | `lookups:read` | |
+| `CanSendIntakeInvites` | `intake-invites:send` | Advisor intake invites (Spec A-14, #663). Held by every role that can create service requests — `dealer:advisor`, `dealer:manager`, `dealer:owner`, `dealer:corporate-admin`, `dealer:regional-manager`, `platform:admin` (#666). The manager app cannot read `permissions` (Auth0 RBAC writes them to the access token only, never the id token), so the Send intake link button is always shown and a 403 is explained in the dialog |
 | `PlatformAdmin` | `platform:tenants:manage` | **Plus** the caller's `sub` on `Admin:AllowedUserIds` (`PlatformAdminAllowlistHandler`). Guards `api/admin/tenants` (#563) |
 
 `PlatformAdmin` is the one policy with a second requirement. The permission alone is not enough because the Auth0 tenant is shared across environments and products: a stray `platform:admin` assignment must not open the provisioning tool.

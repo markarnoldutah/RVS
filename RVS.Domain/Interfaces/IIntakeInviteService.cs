@@ -49,7 +49,21 @@ public interface IIntakeInviteService
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<IReadOnlyList<IntakeInvite>> ListRecentForCurrentAdvisorAsync(
         string tenantId, string locationId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What the send dialog can offer right now. Texting is an environment-level switch
+    /// (<c>AzureCommunicationServices:Sms:Enabled</c>), not a tenant setting, so this takes no
+    /// identifiers and reads the same for everyone in the environment.
+    /// </summary>
+    IntakeInviteCapability GetCapability();
 }
+
+/// <summary>
+/// Whether the API can text an invite right now (<c>Spec A-14</c>, issue #666). While
+/// <paramref name="SmsEnabled" /> is <c>false</c> the dialog offers only <i>Fill it in myself</i>.
+/// </summary>
+/// <param name="SmsEnabled">Whether an invite will actually be handed to ACS.</param>
+public sealed record IntakeInviteCapability(bool SmsEnabled);
 
 /// <summary>
 /// A newly created invite, plus the prefilled intake URL when the advisor is to open it
