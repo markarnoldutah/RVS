@@ -98,10 +98,6 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 FirstName = request.Customer.FirstName.Trim(),
                 LastName = request.Customer.LastName.Trim(),
                 Phone = request.Customer.Phone?.Trim(),
-                SmsOptOut = request.SmsOptOut,
-                SmsOptOutAtUtc = request.SmsOptOut ? DateTime.UtcNow : null,
-                EmailOptOut = request.EmailOptOut,
-                EmailOptOutAtUtc = request.EmailOptOut ? DateTime.UtcNow : null,
                 CreatedByUserId = "intake",
             };
             globalAcct = await _globalCustomerAcctRepository.CreateAsync(globalAcct, cancellationToken);
@@ -111,16 +107,6 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         else
         {
             globalAcct.Phone = request.Customer.Phone?.Trim();
-            globalAcct.SmsOptOut = request.SmsOptOut;
-            if (request.SmsOptOut && globalAcct.SmsOptOutAtUtc is null)
-                globalAcct.SmsOptOutAtUtc = DateTime.UtcNow;
-            else if (!request.SmsOptOut)
-                globalAcct.SmsOptOutAtUtc = null;
-            globalAcct.EmailOptOut = request.EmailOptOut;
-            if (request.EmailOptOut && globalAcct.EmailOptOutAtUtc is null)
-                globalAcct.EmailOptOutAtUtc = DateTime.UtcNow;
-            else if (!request.EmailOptOut)
-                globalAcct.EmailOptOutAtUtc = null;
             _logger.LogInformation("Intake Step 2: Resolved existing GlobalCustomerAcct {AcctId} for {Email}",
                 globalAcct.Id, normalizedEmail);
         }
@@ -142,12 +128,9 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 PhoneE164 = PhoneNumberNormalizer.Normalize(request.Customer.Phone),
                 Name = $"{request.Customer.FirstName.Trim()} {request.Customer.LastName.Trim()}",
                 GlobalCustomerAcctId = globalAcct.Id,
-                SmsOptOut = request.SmsOptOut,
-                SmsOptOutAtUtc = request.SmsOptOut ? DateTime.UtcNow : null,
-                EmailOptOut = request.EmailOptOut,
-                EmailOptOutAtUtc = request.EmailOptOut ? DateTime.UtcNow : null,
                 CreatedByUserId = "intake",
             };
+            profile.ApplyIntakeOptOuts(request.SmsOptOut, request.EmailOptOut, DateTime.UtcNow);
             profile = await _customerProfileRepository.CreateAsync(profile, cancellationToken);
             _logger.LogInformation("Intake Step 3: Created new CustomerProfile {ProfileId} in tenant {TenantId}",
                 profile.Id, tenantId);
@@ -156,16 +139,9 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         {
             profile.Phone = request.Customer.Phone?.Trim();
             profile.PhoneE164 = PhoneNumberNormalizer.Normalize(request.Customer.Phone);
-            profile.SmsOptOut = request.SmsOptOut;
-            if (request.SmsOptOut && profile.SmsOptOutAtUtc is null)
-                profile.SmsOptOutAtUtc = DateTime.UtcNow;
-            else if (!request.SmsOptOut)
-                profile.SmsOptOutAtUtc = null;
-            profile.EmailOptOut = request.EmailOptOut;
-            if (request.EmailOptOut && profile.EmailOptOutAtUtc is null)
-                profile.EmailOptOutAtUtc = DateTime.UtcNow;
-            else if (!request.EmailOptOut)
-                profile.EmailOptOutAtUtc = null;
+            // Intake sets an opt-out, never clears one: the form never shows the stored value, so
+            // an unticked box is not a choice to opt back in (Spec A-2, issue #673).
+            profile.ApplyIntakeOptOuts(request.SmsOptOut, request.EmailOptOut, DateTime.UtcNow);
             _logger.LogInformation("Intake Step 3: Resolved existing CustomerProfile {ProfileId} in tenant {TenantId}",
                 profile.Id, tenantId);
         }
@@ -356,13 +332,15 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         // ACS only accepts E.164 (issue #661). A number that doesn't normalise is dropped from the
         // notification rather than sent raw; the profile keeps it as entered.
-        // The preference chooses the channel; the opt-outs veto it (Spec A-2, issue #662).
+        // The preference chooses the channel; the opt-outs veto it (Spec A-2, issue #662). They are
+        // the profile's stored opt-outs, not this submission's boxes (issue #673): a Text preference
+        // against a stored SMS opt-out is accepted, and the orchestrator confirms by email instead.
         _ = FireAndForgetNotificationAsync(
             tenantId,
             locationId,
             serviceRequest.CustomerSnapshot.PreferredContact,
-            request.SmsOptOut,
-            request.EmailOptOut,
+            profile.SmsOptOut,
+            profile.EmailOptOut,
             request.Customer.Email.Trim(),
             PhoneNumberNormalizer.Normalize(request.Customer.Phone),
             serviceRequest.Id,
@@ -527,6 +505,9 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         AssetInfoDto? prefillAsset = null;
         var knownAssets = new List<AssetInfoDto>();
         var tokenExpired = false;
+
+        // A-7 returning-customer prefill is deferred (Spec A-7, #673). Nothing RVS sends puts ?token=
+        // on the intake URL, so this branch is unreachable; it stays for when A-7 returns.
         if (!string.IsNullOrWhiteSpace(magicLinkToken))
         {
             var acct = await _globalCustomerAcctRepository.GetByMagicLinkTokenAsync(magicLinkToken, cancellationToken);

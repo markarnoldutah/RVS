@@ -70,16 +70,16 @@ Per-tenant customer record. Contact fields, email/SMS opt-out flags, `assetsOwne
 
 ### GlobalCustomerAcct — `global-customer-accounts`
 
-Cross-tenant, partitioned by email. Contact, opt-outs, `linkedProfiles[]`, `allKnownAssetIds[]`, `auth0UserId`, and `magicLinkToken` / expiry.
+Cross-tenant, partitioned by email. Contact, opt-outs (no longer written — see below), `linkedProfiles[]`, `allKnownAssetIds[]`, `auth0UserId`, and `magicLinkToken` / expiry.
 
 ### Notification opt-outs
 
-`smsOptOut` / `emailOptOut` (each with an `…AtUtc` stamp, set on first opt-out and cleared on opt-in) live on `CustomerProfile` and `GlobalCustomerAcct`, **not** on `ServiceRequest`. Intake writes both from the submission. They are a **hard veto** over `customerSnapshot.preferredContact` (`Spec A-2`, `#577` / `#662`): RVS never sends on an opted-out channel, whatever the preference says.
+`smsOptOut` / `emailOptOut` (each with an `…AtUtc` stamp, set on first opt-out and cleared on opt-in) live on `CustomerProfile`, **not** on `ServiceRequest`. **Intake only sets them (#673):** a ticked box sets the flag and stamps `…AtUtc` if unset (`CustomerProfile.ApplyIntakeOptOuts`); an unticked box leaves the stored value alone, because with A-7 deferred the form never shows it. Only an inbound `START` / `UNSTOP` clears `smsOptOut`; nothing clears `emailOptOut` yet. `GlobalCustomerAcct` still has the fields, but they are no longer written — nothing read them. Older accounts may still carry values. They are a **hard veto** over `customerSnapshot.preferredContact` (`Spec A-2`, `#577` / `#662`): RVS never sends on an opted-out channel, whatever the preference says.
 
-- **An opted-out channel is never the preference.** `NotificationPreferenceValidator` (Domain) rejects `Text` + `smsOptOut` and `Email` + `emailOptOut`. The intake wizard disables the vetoed radio and clears a conflicting selection; `POST api/intake/{slug}/service-requests` returns **422** for a hand-built request that pairs them. `Phone` is always allowed.
-- **Routing.** `NotificationOrchestrator` sends exactly one confirmation: SMS when the preference is `Text` and SMS is permitted (enabled, phone present, not opted out); otherwise email when permitted, with a Warning logged when a `Text` preference fell back; otherwise SMS when permitted; otherwise nothing, logged at Warning. `Phone` and a null preference confirm by email.
+- **An opted-out channel is never the preference — within one submission.** `NotificationPreferenceValidator` (Domain) rejects `Text` + `smsOptOut` and `Email` + `emailOptOut` as ticked in that request. A stored opt-out is not checked: the customer can't see it, so the submission is accepted and routing falls back. The intake wizard disables the vetoed radio and clears a conflicting selection; `POST api/intake/{slug}/service-requests` returns **422** for a hand-built request that pairs them. `Phone` is always allowed.
+- **Routing.** Intake passes the profile's opt-outs *after* the write, not the submission's boxes. `NotificationOrchestrator` sends exactly one confirmation: SMS when the preference is `Text` and SMS is permitted (enabled, phone present, not opted out); otherwise email when permitted, with a Warning logged when a `Text` preference fell back; otherwise SMS when permitted; otherwise nothing, logged at Warning. `Phone` and a null preference confirm by email.
 
-This document is what powers both the customer status page and returning-customer prefill. Under the reduced scope its cross-tenant graph (`linkedProfiles`, `allKnownAssetIds`) exists to serve a multi-dealer customer history that the product no longer promises. The token fields are load-bearing. Per the X-5 decision (issue #427, closes Q7), `magicLinkToken` becomes `magicLinkTokenHash` (SHA-256, raw token never stored), TTL drops to ≤ 30 days with sliding renewal, and the status token stays per-customer while C-7 action links are per-request/per-action; see `RVS_Architecture.md` and `RVS_Identity.md`.
+This document is what powers the customer status page and, once A-7 returns, returning-customer prefill. Under the reduced scope its cross-tenant graph (`linkedProfiles`, `allKnownAssetIds`) exists to serve a multi-dealer customer history that the product no longer promises. The token fields are load-bearing. Per the X-5 decision (issue #427, closes Q7), `magicLinkToken` becomes `magicLinkTokenHash` (SHA-256, raw token never stored), TTL drops to ≤ 30 days with sliding renewal, and the status token stays per-customer while C-7 action links are per-request/per-action; see `RVS_Architecture.md` and `RVS_Identity.md`.
 
 ### IntakeInvite — `intake-invites`
 
@@ -107,7 +107,7 @@ The opt-out check before a send reads `customer-profiles` in the tenant's partit
 
 Append-only. `assetId`, `tenantId`, `serviceRequestId`, `globalCustomerAcctId`, make/model/year, issue, status, `submittedAt`, and an optional `Section10A` outcome block.
 
-Written once per intake submission by `IntakeOrchestrationService`, best-effort — a failure is swallowed and does not roll back the request. Also read back for vehicle prefill.
+Written once per intake submission by `IntakeOrchestrationService`, best-effort — a failure is swallowed and does not roll back the request. Written but not read while A-7 is deferred (#673): vehicle prefill is its only reader, and it is unreachable.
 
 This is Spec X-2. Nothing else reads it, and that is correct. It exists so the record is there later. The `Section10A` block on it is archived scope; the entry itself is not.
 

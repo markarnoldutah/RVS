@@ -91,6 +91,8 @@
         {
             State.Config = await IntakeApi.GetConfigAsync(State.Slug, State.Token);
 
+            // A-7 returning-customer prefill is deferred (Spec A-7, #673): nothing RVS sends puts
+            // ?token= on the intake URL, so this path is unreachable today. Kept for when A-7 returns.
             if (State.Config.PrefillCustomer is not null)
             {
                 State.ApplyPrefill(State.Config.PrefillCustomer);

@@ -3,6 +3,7 @@
     <MudStack Spacing="4">
         <MudText Typo="Typo.h5" Class="mb-1" Style="color: var(--mud-palette-text-primary);">RV Lookup</MudText>
 
+        @* Known-vehicle picker: A-7, deferred and unreachable (Spec A-7, #673). Kept for when A-7 returns. *@
         @if (State.KnownAssets is { Count: > 0 })
         {
             <MudStack Spacing="1">

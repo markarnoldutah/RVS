@@ -61,7 +61,8 @@ public class IntakeController : ControllerBase
     /// Includes dealership name, accepted file types, issue categories, and optional customer prefill.
     /// </summary>
     /// <param name="locationSlug">Location slug for resolving the intake context.</param>
-    /// <param name="token">Optional magic-link token to prefill customer data.</param>
+    /// <param name="token">Optional magic-link token to prefill customer data (A-7 — deferred and
+    /// unreachable, since nothing RVS sends carries it; Spec A-7, #673).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <example>
     /// GET /api/intake/camping-world-slc/config?token=abc123

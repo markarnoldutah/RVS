@@ -391,4 +391,96 @@ public class CustomerProfileTests
         changed.Should().BeTrue();
         profile.SmsOptOut.Should().BeFalse();
     }
+
+    // ---- Spec A-2 intake opt-outs: set, never clear (issue #673) ----------------------------
+
+    [Fact]
+    public void ApplyIntakeOptOuts_WhenSmsBoxTickedAndNotOptedOut_ShouldSetFlagAndStampTime()
+    {
+        var profile = ProfileForKeywords();
+        var at = new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc);
+
+        profile.ApplyIntakeOptOuts(smsOptOut: true, emailOptOut: false, at);
+
+        profile.SmsOptOut.Should().BeTrue();
+        profile.SmsOptOutAtUtc.Should().Be(at);
+    }
+
+    [Fact]
+    public void ApplyIntakeOptOuts_WhenSmsBoxUntickedAndStoredOptOut_ShouldLeaveItSet()
+    {
+        // The form never shows a stored opt-out, so an unticked box is not a request to clear it.
+        var stored = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc);
+        var profile = ProfileForKeywords();
+        profile.SmsOptOut = true;
+        profile.SmsOptOutAtUtc = stored;
+
+        profile.ApplyIntakeOptOuts(smsOptOut: false, emailOptOut: false, stored.AddDays(18));
+
+        profile.SmsOptOut.Should().BeTrue();
+        profile.SmsOptOutAtUtc.Should().Be(stored);
+    }
+
+    [Fact]
+    public void ApplyIntakeOptOuts_WhenSmsBoxTickedAndAlreadyOptedOut_ShouldKeepTheOriginalTime()
+    {
+        var stored = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc);
+        var profile = ProfileForKeywords();
+        profile.SmsOptOut = true;
+        profile.SmsOptOutAtUtc = stored;
+
+        profile.ApplyIntakeOptOuts(smsOptOut: true, emailOptOut: false, stored.AddDays(18));
+
+        profile.SmsOptOutAtUtc.Should().Be(stored);
+    }
+
+    [Fact]
+    public void ApplyIntakeOptOuts_WhenEmailBoxTickedAndNotOptedOut_ShouldSetFlagAndStampTime()
+    {
+        var profile = ProfileForKeywords();
+        var at = new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc);
+
+        profile.ApplyIntakeOptOuts(smsOptOut: false, emailOptOut: true, at);
+
+        profile.EmailOptOut.Should().BeTrue();
+        profile.EmailOptOutAtUtc.Should().Be(at);
+    }
+
+    [Fact]
+    public void ApplyIntakeOptOuts_WhenEmailBoxUntickedAndStoredOptOut_ShouldLeaveItSet()
+    {
+        var stored = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc);
+        var profile = ProfileForKeywords();
+        profile.EmailOptOut = true;
+        profile.EmailOptOutAtUtc = stored;
+
+        profile.ApplyIntakeOptOuts(smsOptOut: false, emailOptOut: false, stored.AddDays(18));
+
+        profile.EmailOptOut.Should().BeTrue();
+        profile.EmailOptOutAtUtc.Should().Be(stored);
+    }
+
+    [Fact]
+    public void ApplyIntakeOptOuts_WhenBothBoxesUnticked_ShouldChangeNothing()
+    {
+        var profile = ProfileForKeywords();
+
+        profile.ApplyIntakeOptOuts(smsOptOut: false, emailOptOut: false, DateTime.UtcNow);
+
+        profile.SmsOptOut.Should().BeFalse();
+        profile.SmsOptOutAtUtc.Should().BeNull();
+        profile.EmailOptOut.Should().BeFalse();
+        profile.EmailOptOutAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyIntakeOptOuts_ShouldNotTouchTheKeywordClock()
+    {
+        // Only an inbound keyword advances SmsKeywordAtUtc; a later START must still be able to clear.
+        var profile = ProfileForKeywords();
+
+        profile.ApplyIntakeOptOuts(smsOptOut: true, emailOptOut: false, DateTime.UtcNow);
+
+        profile.SmsKeywordAtUtc.Should().BeNull();
+    }
 }
