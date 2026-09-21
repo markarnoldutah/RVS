@@ -31,4 +31,51 @@ public class GlobalCustomerAcctTests
 
         acct.AllKnownAssetIds.Should().NotBeNull().And.BeEmpty();
     }
+
+    // ── IdForEmail (issue #679) ──────────────────────────────────────────────
+    // The container has no unique key, so the id is what makes a second create for the same
+    // email collide instead of adding a duplicate account.
+
+    [Fact]
+    public void IdForEmail_WhenCalledTwiceWithTheSameEmail_ShouldReturnTheSameId()
+    {
+        GlobalCustomerAcct.IdForEmail("jane@example.com")
+            .Should().Be(GlobalCustomerAcct.IdForEmail("jane@example.com"));
+    }
+
+    [Fact]
+    public void IdForEmail_WhenEmailDiffersOnlyInCaseOrWhitespace_ShouldReturnTheSameId()
+    {
+        GlobalCustomerAcct.IdForEmail("  Jane@Example.COM ")
+            .Should().Be(GlobalCustomerAcct.IdForEmail("jane@example.com"));
+    }
+
+    [Fact]
+    public void IdForEmail_WhenEmailsDiffer_ShouldReturnDifferentIds()
+    {
+        GlobalCustomerAcct.IdForEmail("jane@example.com")
+            .Should().NotBe(GlobalCustomerAcct.IdForEmail("john@example.com"));
+    }
+
+    [Theory]
+    [InlineData("jane@example.com")]
+    [InlineData("a/b?c#d\\e@example.com")]
+    public void IdForEmail_ShouldBeAValidCosmosIdThatDoesNotContainTheEmail(string email)
+    {
+        var id = GlobalCustomerAcct.IdForEmail(email);
+
+        id.Should().MatchRegex("^gca_[0-9a-f]{64}$");
+        id.Should().NotContain("@");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void IdForEmail_WhenEmailIsNullOrWhiteSpace_ShouldThrowArgumentException(string? email)
+    {
+        var act = () => GlobalCustomerAcct.IdForEmail(email!);
+
+        act.Should().Throw<ArgumentException>();
+    }
 }

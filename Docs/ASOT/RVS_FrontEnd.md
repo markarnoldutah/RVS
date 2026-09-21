@@ -77,7 +77,7 @@ Typed clients in `Services/`:
 | `IntakeInviteApiClient` | `api/locations/{locationId}/intake-invites` — send, recent sends, one invite, `capability` (A-14, #666). Refusals surface as `IntakeInviteApiException` carrying the API's ProblemDetails `detail`, or a fixed sentence for a body-less 403 |
 | `AnalyticsApiClient` | The analytics summary endpoint — **archived**, its only consumer is `Analytics.razor` |
 
-Also `Validation/` (`ClientVinValidator`, `EmailValidator`, `VinTranscriptCleaner`, `ClientSearchInputSanitizer`) and `Components/` — `StatusBadge`, `PriorityBadge` and `IntakeInviteStatusFormatting` (a MudBlazor-free label/tone helper for the send dialog) are used; `AssetDisplay`, `AttachmentThumbnail` and `DiagnosticResponseView` are referenced nowhere.
+Also `Validation/` (`ClientVinValidator`, `VinTranscriptCleaner`, `ClientSearchInputSanitizer`; the intake contact rules, `EmailValidator` and `PhoneValidator`, live in `RVS.Domain/Validation` so the API applies the same ones, #679) and `Components/` — `StatusBadge`, `PriorityBadge` and `IntakeInviteStatusFormatting` (a MudBlazor-free label/tone helper for the send dialog) are used; `AssetDisplay`, `AttachmentThumbnail` and `DiagnosticResponseView` are referenced nowhere.
 
 **`ThemeService` is not in `RVS.UI.Shared`.** Each app has its own copy at `RVS.Blazor.{Intake,Manager}/Services/ThemeService.cs`. Documentation claiming otherwise is wrong.
 

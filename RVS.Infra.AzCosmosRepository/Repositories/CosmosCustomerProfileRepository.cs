@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Interfaces;
 using System.Net;
 
@@ -89,13 +90,21 @@ public sealed class CosmosCustomerProfileRepository : CosmosRepositoryBase, ICus
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentException.ThrowIfNullOrWhiteSpace(entity.TenantId, nameof(entity.TenantId));
 
-        var response = await _container.CreateItemAsync(
-            entity,
-            new PartitionKey(entity.TenantId),
-            cancellationToken: cancellationToken);
+        try
+        {
+            var response = await _container.CreateItemAsync(
+                entity,
+                new PartitionKey(entity.TenantId),
+                cancellationToken: cancellationToken);
 
-        _logger.LogDebug("CreateAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
-        return response.Resource;
+            _logger.LogDebug("CreateAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            // The [/tenantId, /email] unique key: this tenant already has a profile for the email.
+            throw new ConflictException($"A customer profile for this email already exists in tenant '{entity.TenantId}'.", ex);
+        }
     }
 
     /// <inheritdoc />

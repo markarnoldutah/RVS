@@ -364,6 +364,7 @@ public class IntakeWizardStateTests
         state.FirstName = "Jane";
         state.LastName = "Doe";
         state.Email = "not-an-email";
+        state.Phone = "801-555-1234";
         state.PreferredContact = "Email";
 
         var errors = state.ValidateCurrentStep();
@@ -384,11 +385,37 @@ public class IntakeWizardStateTests
         state.FirstName = "Jane";
         state.LastName = "Doe";
         state.Email = "jane@example.com";
+        state.Phone = "801-555-1234";
         state.PreferredContact = "Email";
 
         var errors = state.ValidateCurrentStep();
 
         errors.Should().BeEmpty();
+    }
+
+    // The API holds the same line (issue #679): phone is required whatever the preference.
+    [Theory]
+    [InlineData(null, "Phone number is required")]
+    [InlineData("555-1234", "Phone number must have at least 10 digits")]
+    public async Task ValidateCurrentStep_Step2_PreferredContactEmail_WithoutAValidPhone_ShouldReturnError(
+        string? phone, string expected)
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Phone = phone;
+        state.PreferredContact = "Email";
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().ContainSingle().Which.Should().Be(expected);
+        state.FieldErrors.Should().ContainKey("Phone");
     }
 
     [Fact]

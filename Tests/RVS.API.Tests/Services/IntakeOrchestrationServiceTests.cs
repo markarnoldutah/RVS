@@ -6,6 +6,7 @@ using RVS.API.Options;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Packets;
@@ -202,6 +203,105 @@ public class IntakeOrchestrationServiceTests
         _profileRepoMock.Verify(r => r.CreateAsync(
             It.IsAny<CustomerProfile>(),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── Steps 2–3: Email uniqueness under concurrent first submissions (issue #679) ──
+    // Two submissions for a new email (a double-tapped Submit, two tabs) both miss the read.
+    // The second create collides; intake must carry on with the record that won, not fail
+    // with a 500 or leave a duplicate account behind.
+
+    [Fact]
+    public async Task ExecuteAsync_WhenGlobalAcctDoesNotExist_ShouldCreateItWithTheIdDerivedFromTheEmail()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _globalAcctRepoMock.Verify(r => r.CreateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.Id == GlobalCustomerAcct.IdForEmail("jane@example.com")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenGlobalAcctCreateConflicts_ShouldContinueWithTheAccountThatWon()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+        var winner = BuildGlobalAcct();
+        _globalAcctRepoMock.SetupSequence(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GlobalCustomerAcct?)null)
+            .ReturnsAsync(winner);
+        _globalAcctRepoMock.Setup(r => r.CreateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        var (serviceRequest, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        serviceRequest.Should().NotBeNull();
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.Id == "gca_test" && a.Phone == "801-555-1234"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenGlobalAcctCreateConflictsButCannotBeReRead_ShouldThrowTheConflict()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+        _globalAcctRepoMock.Setup(r => r.CreateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        await act.Should().ThrowAsync<ConflictException>();
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileCreateConflicts_ShouldAttachTheRequestToTheProfileThatWon()
+    {
+        SetupFullHappyPath(profileExists: false);
+        var winner = BuildProfile("cp_winner");
+        _profileRepoMock.SetupSequence(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CustomerProfile?)null)
+            .ReturnsAsync(winner);
+        _profileRepoMock.Setup(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        var (serviceRequest, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        serviceRequest.CustomerProfileId.Should().Be("cp_winner");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileCreateConflicts_ShouldApplyThisSubmissionsPhoneAndOptOutsToTheProfileThatWon()
+    {
+        SetupFullHappyPath(profileExists: false);
+        var winner = BuildProfile("cp_winner");
+        _profileRepoMock.SetupSequence(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CustomerProfile?)null)
+            .ReturnsAsync(winner);
+        _profileRepoMock.Setup(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.Id == "cp_winner"
+                && p.PhoneE164 == "+18015551234"
+                && p.SmsOptOut
+                && p.SmsOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileCreateConflictsButCannotBeReRead_ShouldThrowTheConflict()
+    {
+        SetupFullHappyPath(profileExists: false);
+        _profileRepoMock.Setup(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        await act.Should().ThrowAsync<ConflictException>();
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

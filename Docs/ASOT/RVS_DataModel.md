@@ -15,7 +15,7 @@ Database `rvs-db`, SQL API, serverless in every environment today. Provisioned m
 |---|---|---|---|
 | `service-requests` | `/tenantId` | — | Yes |
 | `customer-profiles` | `/tenantId` | `/tenantId`, `/email` | Yes |
-| `global-customer-accounts` | `/email` | — | Yes |
+| `global-customer-accounts` | `/email` | — (id derived from the email instead, #679) | Yes |
 | `asset-ledger` | `/assetId` | `/assetId`, `/serviceRequestId` | Yes |
 | `dealerships` | `/tenantId` | — | Yes — also stores `Tenant` documents (`CosmosTenantRepository`, #563) |
 | `locations` | `/tenantId` | `/tenantId`, `/slug` | Yes |
@@ -71,6 +71,24 @@ Per-tenant customer record. Contact fields, email/SMS opt-out flags, `assetsOwne
 ### GlobalCustomerAcct — `global-customer-accounts`
 
 Cross-tenant, partitioned by email. Contact, opt-outs (no longer written — see below), `linkedProfiles[]`, `allKnownAssetIds[]`, `auth0UserId`, and `magicLinkToken` / expiry.
+
+### Customer identity: email is the key, phone is not
+
+A customer is identified by email alone, normalised by trimming and lowercasing (#679). There is one `GlobalCustomerAcct` per email and one `CustomerProfile` per email per tenant. Intake reads by email first and creates only on a miss, and each create is guarded because two first submissions can race (a double-tapped Submit, two tabs):
+
+- **`CustomerProfile`**: the `[/tenantId, /email]` unique key rejects the second create.
+- **`GlobalCustomerAcct`**: the container has no unique key, and one can't be added to an existing container. Instead a new account's id is `GlobalCustomerAcct.IdForEmail(email)` (`gca_` + SHA-256 hex of the normalised email), so the second create collides on id. Accounts created before #679 keep their GUID ids. Lookups always go by email, so both kinds resolve.
+
+Both repositories turn a Cosmos 409 into `ConflictException`. Intake then re-reads by email and continues with the record that won, applying this submission's phone and opt-outs to it. It fails with a 409 only if the winner can't be read back.
+
+**Phone is deliberately not unique.** Households share numbers, and one person can be a customer of several dealers. `phoneE164` is a lookup key for an inbound STOP, which reaches every profile with the number (#665). It is never an identity. Phone is overwritten on each submission.
+
+**Contact checks at submission (#679).** `POST api/intake/{slug}/service-requests` applies the same rules as the intake wizard and returns **422** with a field error for each failure (`Customer.Email`, `Customer.Phone`, `Customer.PreferredContact`):
+
+- **Email:** `EmailValidator`, a structural check with one `@`, a dotted domain and no blocked characters.
+- **Phone:** `PhoneValidator`: required whatever the preference, at least 10 digits, at most 40 characters.
+
+Both validators live in `RVS.Domain/Validation`, and the wizard calls the same ones, so the two sides can't drift. The phone rule is deliberately looser than `PhoneNumberNormalizer`: a number that doesn't normalise is still one the shop can call. It is kept as typed, with `phoneE164` left null, and it only drops out of SMS.
 
 ### Notification opt-outs
 
