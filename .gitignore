@@ -366,4 +366,7 @@ MigrationBackup/
 FodyWeavers.xsd
 # MCP server config — may contain access tokens; keep local, commit .mcp.json.example instead
 .mcp.json
+# Personal az CLI scratchpad — deploy/what-if commands with real environment values and shell variables.
+# Kept local; the deployment runbook belongs in Docs/ASOT/RVS_Infrastructure.md.
+scratch.azcli
 .DS_Store
