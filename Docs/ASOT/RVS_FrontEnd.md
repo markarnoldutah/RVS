@@ -47,7 +47,7 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 | dialog | `SendIntakeLinkDialog` | Yes — A-14 (#666), see below |
 | `/settings` | `Settings` | Partly — tenant-level config and access gate, not the per-location packet settings B-6 needs |
 | `/service-requests/{id}/edit` | `ServiceRequestEdit` | Partly — largely duplicates the detail drawer and carries technician, bay and scheduled-date fields |
-| `/board` | `ServiceBoard` + `BoardLayout` | **No** — Kanban with drag-drop status change. Lands on an **Actionable today** view (`ActionableRequestFilter`: open requests plus anything closed today, toggleable) and opens the detail drawer from `?sr={id}` (#498) |
+| `/board` | `ServiceBoard` + `BoardLayout` | Yes — kept, not a descope target (#456 closed `not_planned`; Plan decision log Sep 21 2026). Kanban with drag-drop status change (C-3), ordered within a column by `boardSequence`. It is the manager app's landing page: lands on an **Actionable today** view (`ActionableRequestFilter`: open requests plus anything closed today, toggleable), opens the detail drawer from `?sr={id}` (#498), and is the PWA start URL. Not to be extended |
 | `/sr/{id}` | `ServiceRequestDeepLink` | Yes — C-7 (#498). Packet-email landing: without `action` it forwards to `/board?sr={id}`; with `?action=in-progress\|waiting-on-parts\|completed` (`ManagerDeepLinks`) it shows a one-tap confirm and writes through the authenticated update endpoint. Nothing is written on page load |
 | `/analytics` | `Analytics` | **No** — dashboard with summary cards and top-category tables |
 | `/service-requests/batch-outcome` | `BatchOutcome` | **No** — bulk repair-outcome entry |
@@ -89,7 +89,7 @@ Also `Validation/` (`ClientVinValidator`, `EmailValidator`, `VinTranscriptCleane
 
 Deleting these is the front-end half of aligning the code to the Overview.
 
-**Manager** — `Analytics.razor`, `ServiceBoard.razor` + `BoardLayout.razor`, `BatchOutcome.razor`, `ClaimsDebug.razor`, `OutcomeComplianceWidget.razor`, and the matching `NavMenu` links. `ServiceRequestEdit.razor` should either absorb the detail drawer or go. The technician, bay and priority search filters lose meaning once the fields behind them are archived.
+**Manager** — `Analytics.razor`, `BatchOutcome.razor`, `ClaimsDebug.razor`, `OutcomeComplianceWidget.razor`, and the matching `NavMenu` links. `ServiceRequestEdit.razor` should either absorb the detail drawer or go. The technician, bay and priority search filters lose meaning once the fields behind them are archived.
 
 **Shared** — `AnalyticsApiClient`, `ServiceRequestApiClient.BatchOutcomeAsync`, and the three unreferenced components.
 
