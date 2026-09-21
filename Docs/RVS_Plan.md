@@ -17,7 +17,7 @@
 | **5** | Persistent manager-app session + deep links from the packet email (C-7, issue #498) | Folds into item 4 as a sub-issue of #420 — a session/PWA build, not the original days-long token-reuse estimate |
 | **6** | Issue-category vocabulary + per-category fallback diagnostic questions | Domain time, parallel, not engineering-blocked |
 | **7** | Stripe billing + trial | 2 sprints — **do not start until three shops are running.** The first five customers get a hand-sent invoice and a Stripe payment link. Two sprints off the critical path, and you learn what to build |
-| **8** | Descope: delete archived-scope code — analytics, batch-outcome, the dead SMS orchestrator and client methods (#458), technician/scheduling fields, `build-mobile.yml`. **Outbound SMS itself is kept**, not descoped (decision log Sep 11 and Sep 18 2026). **The Kanban board is kept**, not descoped (#456 closed `not_planned`, decision log Sep 21 2026) | ~1 sprint, can run in parallel |
+| **8** | Descope: delete archived-scope code — analytics, batch-outcome, the dead SMS orchestrator and client methods (#458), technician/scheduling fields. **Outbound SMS itself is kept**, not descoped (decision log Sep 11 and Sep 18 2026). **The Kanban board is kept**, not descoped (#456 closed `not_planned`, decision log Sep 21 2026) | ~1 sprint, can run in parallel |
 
 ### Sequenced for the first mobile technician (operative plan)
 
@@ -42,7 +42,7 @@ Non-code blockers: the one-page, phone-signable design-partner agreement carryin
 
 **Runs fully in parallel — not gated by the critical path, does not gate go-live:**
 
-- Descope (epic #423 → #455–#461): analytics, batch-outcome, the dead SMS methods (#458, narrowed; outbound SMS stays), scheduling/assignment fields, `build-mobile.yml`. The Kanban board (#456) came off the list — kept. ~1 sprint, start any time.
+- Descope (epic #423 → #455–#461): analytics, batch-outcome, the dead SMS methods (#458, narrowed; outbound SMS stays), scheduling/assignment fields. The Kanban board (#456) came off the list — kept. ~1 sprint, start any time.
 - Cosmos client-config reconcile (#477).
 
 **Deferred until the first mobile tech is live:**

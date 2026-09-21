@@ -201,7 +201,6 @@ Auth: the API uses Azure OIDC federated credentials, no long-lived secrets. Stat
 
 | Defect | Detail |
 |---|---|
-| `build-mobile.yml` | Builds `RVS.MAUI.Tech` on `mobile-v*` tags. That project is not in the repo and the offline mobile app is archived. Delete the workflow |
 | `deployment-cmds.azcli` | References a `parameters/dev.bicepparam` that does not exist. It also carries a manual `Stripe--WebhookSecret` vault write — harmless, but premature: billing is build item 7 and nothing reads that secret yet |
 | ACS send quota on the managed domain caps delivery at 10 packets/hour (`#521`) | An Azure-managed Email domain is limited to 5 emails/min and 10/hour **with no support path to raise it**. Neither environment sends from it any more: staging deploys its own verified `mail-staging.rvintake.com` (verification only, no quota request). Prod sends from `mail.rvintake.com` (`#532`, in Bicep; verified and linked 2026-09-12). Its default 30/min, 100/hour covers the pilot; an increase can be requested when volume warrants it (`#603`). Not a code defect; `#521`'s size handling is built. Still gates the local-cluster launch (`#527`) until the prod domain has had its 2–3 weeks of warming |
 
@@ -210,8 +209,6 @@ Auth: the API uses Azure OIDC federated credentials, no long-lived secrets. Stat
 ## Descope candidates
 
 Conservative — flagged, not assumed.
-
-**Safe to remove now:** `build-mobile.yml`. It builds a project that does not exist, for a capability that is archived.
 
 **Deferred, not archived:** the Stripe pieces. Billing is build item 7, so leave the `Stripe--WebhookSecret` guidance in place — just don't run it yet.
 
