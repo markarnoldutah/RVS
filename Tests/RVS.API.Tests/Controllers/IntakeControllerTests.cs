@@ -165,7 +165,7 @@ public class IntakeControllerTests
 
         var request = new ServiceRequestCreateRequestDto
         {
-            Customer = new CustomerInfoDto { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
+            Customer = new CustomerInfoDto { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com", Phone = "8015551234" },
             Asset = new AssetInfoDto { AssetId = "1FTFW1ET5EKE12345" },
             IssueCategory = "Electrical",
             IssueDescription = "Battery not charging"
@@ -206,6 +206,72 @@ public class IntakeControllerTests
             s => s.ExecuteAsync(It.IsAny<string>(), It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    // ── Contact checks (issue #679) ──────────────────────────────────────────
+    // The email is the customer's identity key and the phone is required by the form; a
+    // hand-built request is held to the same rules as the intake wizard.
+
+    [Theory]
+    [InlineData("not-an-email")]
+    [InlineData("jane@localhost")]
+    [InlineData("jane@@example.com")]
+    [InlineData("   ")]
+    public async Task SubmitServiceRequest_WhenEmailIsMalformed_ShouldReturn422AndNotSubmit(string email)
+    {
+        var request = BuildSubmitRequest(email: email);
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        var unprocessable = result.Result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        unprocessable.Value.Should().BeOfType<SerializableError>()
+            .Which.Should().ContainKey("Customer.Email");
+        VerifyNotSubmitted();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("555-1234")]
+    public async Task SubmitServiceRequest_WhenPhoneIsMissingOrTooShort_ShouldReturn422AndNotSubmit(string? phone)
+    {
+        var request = BuildSubmitRequest(phone: phone);
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        var unprocessable = result.Result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        unprocessable.Value.Should().BeOfType<SerializableError>()
+            .Which.Should().ContainKey("Customer.Phone");
+        VerifyNotSubmitted();
+    }
+
+    [Fact]
+    public async Task SubmitServiceRequest_WhenEmailAndPhoneAreBothInvalid_ShouldReportBoth()
+    {
+        var request = BuildSubmitRequest(email: "nope", phone: null);
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        var unprocessable = result.Result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        unprocessable.Value.Should().BeOfType<SerializableError>()
+            .Which.Keys.Should().Contain(["Customer.Email", "Customer.Phone"]);
+    }
+
+    private static ServiceRequestCreateRequestDto BuildSubmitRequest(
+        string email = "jane@example.com", string? phone = "8015551234") => new()
+    {
+        Customer = new CustomerInfoDto
+        {
+            FirstName = "Jane", LastName = "Doe", Email = email, Phone = phone, PreferredContact = "Email",
+        },
+        Asset = new AssetInfoDto { AssetId = "1FTFW1ET5EKE12345" },
+        IssueCategory = "Electrical",
+        IssueDescription = "Battery not charging",
+    };
+
+    private void VerifyNotSubmitted() =>
+        _intakeServiceMock.Verify(
+            s => s.ExecuteAsync(It.IsAny<string>(), It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
     private static ServiceRequest BuildServiceRequest() => new()
     {

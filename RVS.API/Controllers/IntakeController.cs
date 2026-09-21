@@ -561,12 +561,30 @@ public class IntakeController : ControllerBase
     public async Task<ActionResult<IntakeSubmissionResponseDto>> SubmitServiceRequest(
         string locationSlug, [FromBody] ServiceRequestCreateRequestDto request, CancellationToken ct = default)
     {
+        // The same contact rules as the intake wizard, so a hand-built request can't store a
+        // malformed email as the customer's identity key or leave the phone out (issue #679).
+        var emailValidation = EmailValidator.Validate(request.Customer.Email);
+        if (!emailValidation.IsValid)
+        {
+            ModelState.AddModelError("Customer.Email", emailValidation.ErrorMessage!);
+        }
+
+        var phoneValidation = PhoneValidator.Validate(request.Customer.Phone);
+        if (!phoneValidation.IsValid)
+        {
+            ModelState.AddModelError("Customer.Phone", phoneValidation.ErrorMessage!);
+        }
+
         // An opted-out channel can never be the preference (Spec A-2, issue #662).
         var preferenceValidation = NotificationPreferenceValidator.Validate(
             request.Customer.PreferredContact, request.SmsOptOut, request.EmailOptOut);
         if (!preferenceValidation.IsValid)
         {
             ModelState.AddModelError("Customer.PreferredContact", preferenceValidation.ErrorMessage!);
+        }
+
+        if (ModelState.ErrorCount > 0)
+        {
             return UnprocessableEntity(ModelState);
         }
 

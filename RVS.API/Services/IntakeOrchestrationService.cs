@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using RVS.API.Options;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Packets;
@@ -89,22 +90,37 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         // ── Step 2: Resolve GlobalCustomerAcct by email (create if absent) ───
         var normalizedEmail = request.Customer.Email.Trim().ToLowerInvariant();
         var globalAcct = await _globalCustomerAcctRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
+        var globalAcctCreated = false;
 
         if (globalAcct is null)
         {
-            globalAcct = new GlobalCustomerAcct
+            // The id is derived from the email, so a concurrent first submission for the same
+            // address collides here instead of leaving a second account behind (issue #679).
+            try
             {
-                Email = normalizedEmail,
-                FirstName = request.Customer.FirstName.Trim(),
-                LastName = request.Customer.LastName.Trim(),
-                Phone = request.Customer.Phone?.Trim(),
-                CreatedByUserId = "intake",
-            };
-            globalAcct = await _globalCustomerAcctRepository.CreateAsync(globalAcct, cancellationToken);
-            _logger.LogInformation("Intake Step 2: Created new GlobalCustomerAcct {AcctId} for {Email}",
-                globalAcct.Id, normalizedEmail);
+                globalAcct = await _globalCustomerAcctRepository.CreateAsync(new GlobalCustomerAcct
+                {
+                    Id = GlobalCustomerAcct.IdForEmail(normalizedEmail),
+                    Email = normalizedEmail,
+                    FirstName = request.Customer.FirstName.Trim(),
+                    LastName = request.Customer.LastName.Trim(),
+                    Phone = request.Customer.Phone?.Trim(),
+                    CreatedByUserId = "intake",
+                }, cancellationToken);
+                globalAcctCreated = true;
+                _logger.LogInformation("Intake Step 2: Created new GlobalCustomerAcct {AcctId} for {Email}",
+                    globalAcct.Id, normalizedEmail);
+            }
+            catch (ConflictException ex)
+            {
+                globalAcct = await _globalCustomerAcctRepository.GetByEmailAsync(normalizedEmail, cancellationToken)
+                    ?? throw new ConflictException("The customer account was created concurrently and could not be read back.", ex);
+                _logger.LogInformation("Intake Step 2: GlobalCustomerAcct {AcctId} was created concurrently; using it",
+                    globalAcct.Id);
+            }
         }
-        else
+
+        if (!globalAcctCreated)
         {
             globalAcct.Phone = request.Customer.Phone?.Trim();
             _logger.LogInformation("Intake Step 2: Resolved existing GlobalCustomerAcct {AcctId} for {Email}",
@@ -113,10 +129,11 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         // ── Step 3: Resolve CustomerProfile + asset ownership ────────────────
         var profile = await _customerProfileRepository.GetByEmailAsync(tenantId, normalizedEmail, cancellationToken);
+        var profileCreated = false;
 
         if (profile is null)
         {
-            profile = new CustomerProfile
+            var newProfile = new CustomerProfile
             {
                 TenantId = tenantId,
                 Email = normalizedEmail,
@@ -130,12 +147,27 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 GlobalCustomerAcctId = globalAcct.Id,
                 CreatedByUserId = "intake",
             };
-            profile.ApplyIntakeOptOuts(request.SmsOptOut, request.EmailOptOut, DateTime.UtcNow);
-            profile = await _customerProfileRepository.CreateAsync(profile, cancellationToken);
-            _logger.LogInformation("Intake Step 3: Created new CustomerProfile {ProfileId} in tenant {TenantId}",
-                profile.Id, tenantId);
+            newProfile.ApplyIntakeOptOuts(request.SmsOptOut, request.EmailOptOut, DateTime.UtcNow);
+
+            // The [/tenantId, /email] unique key rejects a concurrent second create; carry on with
+            // the profile that won rather than fail the submission (issue #679).
+            try
+            {
+                profile = await _customerProfileRepository.CreateAsync(newProfile, cancellationToken);
+                profileCreated = true;
+                _logger.LogInformation("Intake Step 3: Created new CustomerProfile {ProfileId} in tenant {TenantId}",
+                    profile.Id, tenantId);
+            }
+            catch (ConflictException ex)
+            {
+                profile = await _customerProfileRepository.GetByEmailAsync(tenantId, normalizedEmail, cancellationToken)
+                    ?? throw new ConflictException("The customer profile was created concurrently and could not be read back.", ex);
+                _logger.LogInformation("Intake Step 3: CustomerProfile {ProfileId} in tenant {TenantId} was created concurrently; using it",
+                    profile.Id, tenantId);
+            }
         }
-        else
+
+        if (!profileCreated)
         {
             profile.Phone = request.Customer.Phone?.Trim();
             profile.PhoneE164 = PhoneNumberNormalizer.Normalize(request.Customer.Phone);

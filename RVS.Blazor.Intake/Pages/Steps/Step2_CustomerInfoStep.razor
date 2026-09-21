@@ -145,9 +145,8 @@
     private string? ValidatePhone(string? value)
     {
         if (!_submitted) return null;
-        if (string.IsNullOrWhiteSpace(value)) return "Phone number is required";
-        var digits = new string(value.Where(char.IsDigit).ToArray());
-        return digits.Length < 10 ? "Phone number must have at least 10 digits" : null;
+        var result = PhoneValidator.Validate(value);
+        return result.IsValid ? null : result.ErrorMessage;
     }
 
     private string? ValidatePreferredContact(string? value)
@@ -157,12 +156,6 @@
         if (!State.IsContactMethodAvailable(value))
         {
             return "You've opted out of that channel. Choose another preferred contact method.";
-        }
-        if (value is "Phone" or "Text" && string.IsNullOrWhiteSpace(State.Phone))
-        {
-            return value == "Phone"
-                ? "Enter a phone number to be contacted by phone"
-                : "Enter a phone number to be contacted by text";
         }
         return null;
     }

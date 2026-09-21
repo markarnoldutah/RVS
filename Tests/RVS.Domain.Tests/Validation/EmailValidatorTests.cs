@@ -1,7 +1,7 @@
 using FluentAssertions;
-using RVS.UI.Shared.Validation;
+using RVS.Domain.Validation;
 
-namespace RVS.UI.Shared.Tests.Validation;
+namespace RVS.Domain.Tests.Validation;
 
 public class EmailValidatorTests
 {

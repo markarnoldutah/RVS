@@ -31,6 +31,9 @@ public interface ICustomerProfileRepository
     /// </summary>
     /// <param name="entity">The customer profile entity to persist.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="Exceptions.ConflictException">
+    /// The tenant already has a profile for the email (the <c>/tenantId, /email</c> unique key, issue #679).
+    /// </exception>
     Task<CustomerProfile> CreateAsync(CustomerProfile entity, CancellationToken cancellationToken = default);
 
     /// <summary>

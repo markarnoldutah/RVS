@@ -1,9 +1,10 @@
-using RVS.Domain.Validation;
 
-namespace RVS.UI.Shared.Validation;
+namespace RVS.Domain.Validation;
 
 /// <summary>
-/// Client-side email format validation helper.
+/// Email format validation for the customer's address at intake, applied by the intake wizard
+/// and by <c>POST api/intake/{slug}/service-requests</c> (422), so a hand-built request can't
+/// store a malformed address as a customer's identity key (issue #679).
 /// Performs basic structural validation without relying on external libraries.
 /// </summary>
 public static class EmailValidator

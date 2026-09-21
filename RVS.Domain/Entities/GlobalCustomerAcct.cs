@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Newtonsoft.Json;
 
 namespace RVS.Domain.Entities;
@@ -94,6 +96,23 @@ public class GlobalCustomerAcct : EntityBase
     /// </summary>
     [JsonProperty("auth0UserId")]
     public string? Auth0UserId { get; set; }
+
+    /// <summary>
+    /// The id a new account for <paramref name="email"/> is created with:
+    /// <c>gca_</c> + lowercase hex SHA-256 of the normalised (trimmed, lowercased) email.
+    /// The container has no unique key, so this is what makes a second create for the same
+    /// email collide in Cosmos rather than add a duplicate (issue #679). Hashed because an
+    /// email may contain characters a Cosmos id cannot (<c>/ \ ? #</c>). Accounts created
+    /// before #679 keep their GUID ids; lookups go by email, never by this value.
+    /// </summary>
+    /// <param name="email">The customer's email, in any case or padding.</param>
+    public static string IdForEmail(string email)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(email.Trim().ToLowerInvariant()));
+        return $"gca_{Convert.ToHexStringLower(hash)}";
+    }
 }
 
 // ---------------------------------------------------------------------------

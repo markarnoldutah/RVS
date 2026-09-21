@@ -660,11 +660,13 @@ public sealed class IntakeWizardState
             errors.Add("Preferred contact method is required.");
             FieldErrors["PreferredContact"] = "Preferred contact method is required.";
         }
-        else if (PreferredContact is "Phone" or "Text" && string.IsNullOrWhiteSpace(Phone))
+
+        // The same rule the API applies (issue #679): the phone is required whatever the preference.
+        var phoneResult = PhoneValidator.Validate(Phone);
+        if (!phoneResult.IsValid)
         {
-            var msg = $"A phone number is required when the preferred contact method is {PreferredContact}.";
-            errors.Add(msg);
-            FieldErrors["Phone"] = msg;
+            errors.Add(phoneResult.ErrorMessage!);
+            FieldErrors["Phone"] = phoneResult.ErrorMessage!;
         }
 
         var preferenceResult = NotificationPreferenceValidator.Validate(PreferredContact, SmsOptOut, EmailOptOut);
