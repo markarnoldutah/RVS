@@ -73,6 +73,24 @@ public class IntakeInvitesController : ControllerBase
     }
 
     /// <summary>
+    /// What the send dialog can offer right now. Read on open so the dialog can say texting is
+    /// not enabled yet, rather than present a Send button that can only 409.
+    ///
+    /// It hangs off the location route so the dialog's calls stay under one client and one
+    /// policy, but the answer is environment-wide: <c>locationId</c> does not narrow it, and so
+    /// is not bound.
+    /// </summary>
+    [HttpGet("capability")]
+    [Authorize(Policy = "CanSendIntakeInvites")]
+    public ActionResult<IntakeInviteCapabilityResponseDto> GetCapability()
+    {
+        // Route-matched ahead of GetById: a literal segment outranks "{id}".
+        _claimsService.GetTenantIdOrThrow();
+
+        return Ok(_service.GetCapability().ToDto());
+    }
+
+    /// <summary>
     /// One invite, for the send dialog's inline delivery status.
     /// </summary>
     /// <param name="locationId">Location the invite belongs to.</param>

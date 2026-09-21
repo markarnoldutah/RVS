@@ -131,6 +131,9 @@ public sealed class IntakeInviteService : IIntakeInviteService
             tenantId, locationId, advisorUserId, since, _options.RecentMaxItems, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public IntakeInviteCapability GetCapability() => new(SmsEnabled: _smsService.IsEnabled);
+
     private async Task<IntakeInviteCreateResult> CreateSelfEntryAsync(
         string tenantId, Location location, string advisorUserId, string firstName, string? phone,
         CancellationToken cancellationToken)

@@ -1,5 +1,6 @@
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
+using RVS.Domain.Interfaces;
 
 namespace RVS.API.Mappers;
 
@@ -30,6 +31,16 @@ public static class IntakeInviteMapper
             RedeemedAtUtc = entity.RedeemedAtUtc,
             DeliveryStatus = entity.DeliveryStatus
         };
+    }
+
+    /// <summary>
+    /// Maps an <see cref="IntakeInviteCapability"/> to its response DTO.
+    /// </summary>
+    public static IntakeInviteCapabilityResponseDto ToDto(this IntakeInviteCapability capability)
+    {
+        ArgumentNullException.ThrowIfNull(capability);
+
+        return new IntakeInviteCapabilityResponseDto { SmsEnabled = capability.SmsEnabled };
     }
 
     /// <summary>

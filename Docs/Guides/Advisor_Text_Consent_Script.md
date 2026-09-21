@@ -1,8 +1,8 @@
 # Before you text a customer the intake link: the consent script
 
-> **Draft.** The **Send intake link** button this goes with is not in the manager app yet.
-> The script is final wording unless the text-message wording below changes before launch.
-> Read it the same way on every call.
+> You'll find **Send intake link** on the manager app's home page, next to your location,
+> and beside each store on the **Locations** page. The same script is under **What to say**
+> in that window. Read it the same way on every call.
 
 You're on the phone with a customer. Instead of writing down everything they tell you,
 you can text them a link. They fill in the details, add photos of the problem, and it
@@ -54,8 +54,10 @@ looks like this:
 > go.rvintake.com/your-store-name?src=advisor&inv=…
 > Msg & data rates may apply. Reply STOP to opt out, HELP for help.
 
-The link works once and expires after about 3 days. If they lose it or it runs out, tap
-**Resend** to send a new one. You don't need to ask again if you're still on the same call.
+The link works once and expires after about 3 days. If they lose it or it runs out, find
+them under **Sent this shift** and tap **Resend**. Their name and number go back in the
+form. Tick the box and tap **Send** for a new link. You don't need to ask again if you're
+still on the same call. If it's a later call, ask again first.
 
 ## If they've opted out before
 
@@ -82,5 +84,7 @@ never expires.
 apply. Reply STOP to opt out, HELP for help.* — is pinned by a test in
 `IntakeInviteContentTests`, because the same wording is submitted as a sample message on
 the verification application. Three things move together or not at all: that constant,
-this page, and the application. The customer-facing terms are at `/sms-terms`
+this page, and the application. The script is also copied into the manager app's **What
+to say** panel (`SendIntakeLinkDialog.razor`), so a wording change to the script touches
+that file too. The customer-facing terms are at `/sms-terms`
 (`rvintake.com/sms-terms`), which the application cites as the opt-in proof URL.

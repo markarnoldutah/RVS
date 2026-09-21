@@ -42,8 +42,9 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 |---|---|---|
 | `/service-requests` | `ServiceRequestQueue` | Yes — but with a ten-field search panel (keyword, status, category, location, technician, bay, VIN, priority, two dates) against a specced "filter by status" |
 | drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, customer status note (C-9, #500), inline edit, comment thread, attachment viewing via read-SAS, diagnostic responses |
-| `/locations` | `Locations` | Yes — location CRUD, capability checkboxes, QR download |
-| `/` | `Home` | Partly — embeds `OutcomeComplianceWidget`, which is archived scope |
+| `/locations` | `Locations` | Yes — location CRUD, capability checkboxes, QR download, and a **Send intake link** row action (A-14, #666) |
+| `/` | `Home` | Partly — the **Send intake link** button beside `LocationSelector` is in scope (A-14, #666); the embedded `OutcomeComplianceWidget` is archived scope |
+| dialog | `SendIntakeLinkDialog` | Yes — A-14 (#666), see below |
 | `/settings` | `Settings` | Partly — tenant-level config and access gate, not the per-location packet settings B-6 needs |
 | `/service-requests/{id}/edit` | `ServiceRequestEdit` | Partly — largely duplicates the detail drawer and carries technician, bay and scheduled-date fields |
 | `/board` | `ServiceBoard` + `BoardLayout` | **No** — Kanban with drag-drop status change. Lands on an **Actionable today** view (`ActionableRequestFilter`: open requests plus anything closed today, toggleable) and opens the detail drawer from `?sr={id}` (#498) |
@@ -52,6 +53,8 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 | `/service-requests/batch-outcome` | `BatchOutcome` | **No** — bulk repair-outcome entry |
 | `/claims-debug` | `ClaimsDebug` | **No** — self-labelled "remove before production" |
 | `/authentication/{action}` | `Authentication` | Yes |
+
+**Send intake link (`Spec A-14`, `#666`).** `Shared/SendIntakeLinkDialog.razor`, opened from the button beside `LocationSelector` on `Home` (shown once a location is selected) and from the SMS icon in the `Locations` row actions. On open it reads `GET …/intake-invites/capability` and the advisor's recent sends; it reloads both on every open, since delivery reports land while it is closed. First name and mobile number, then a consent box labelled after the published script (`Docs/Guides/Advisor_Text_Consent_Script.md`), with the script itself — store name and typed number filled in — in a **What to say** panel under it. **Send** is disabled until the box is ticked and the number normalises through `PhoneNumberNormalizer`. While `Sms:Enabled` is off, the dialog shows a *Texting is not yet enabled* alert and no Send button, and hides the consent box. **Fill it in myself** mints a self-entry invite and opens the returned `intakeUrl` in a new tab through `rvs_openInNewTab` (`js/download.js`); if a popup blocker refuses it — the call lands after an await — the URL is shown in a `CopyField` instead. The **Sent this shift** list labels each invite through `IntakeInviteStatusFormatting` (*Sending… / Sent / Delivered / Not delivered / Not texted*, outranked by *Form submitted* and *Expired*) and re-reads every 4 s, up to 15 times, while any invite is still `pending` or `queued`. **Resend** does not send: it puts that invite's name and number back in the form, and the advisor ticks consent and taps Send, because a new token is a new invite with its own consent record and the list spans the shift, not one call. The manager app cannot see `permissions` (Auth0 RBAC writes them to the access token only, never the id token), so a user without `intake-invites:send` sees the button and gets a *your role doesn't have permission* alert from the first 403.
 
 Missing from Spec C: **no resend action anywhere** (C-5), and **no disposition flow with a reason code** (C-4) — closing is just setting status to Completed or Cancelled. Status vocabulary is `New / InProgress / WaitingOnCustomer / WaitingOnParts / Completed / Cancelled`; the Spec (C-3 / C-8) was aligned to this set in issue #428, closing Q5.
 
@@ -71,9 +74,10 @@ Typed clients in `Services/`:
 | `ServiceRequestApiClient` | Service request CRUD, `search`, `batch-outcome` |
 | `AttachmentApiClient` | Upload, read-SAS, delete |
 | `LookupApiClient` | Lookups, locations, QR code, dealerships, tenant config, access gate |
+| `IntakeInviteApiClient` | `api/locations/{locationId}/intake-invites` — send, recent sends, one invite, `capability` (A-14, #666). Refusals surface as `IntakeInviteApiException` carrying the API's ProblemDetails `detail`, or a fixed sentence for a body-less 403 |
 | `AnalyticsApiClient` | The analytics summary endpoint — **archived**, its only consumer is `Analytics.razor` |
 
-Also `Validation/` (`ClientVinValidator`, `EmailValidator`, `VinTranscriptCleaner`, `ClientSearchInputSanitizer`) and `Components/` — `StatusBadge` and `PriorityBadge` are used; `AssetDisplay`, `AttachmentThumbnail` and `DiagnosticResponseView` are referenced nowhere.
+Also `Validation/` (`ClientVinValidator`, `EmailValidator`, `VinTranscriptCleaner`, `ClientSearchInputSanitizer`) and `Components/` — `StatusBadge`, `PriorityBadge` and `IntakeInviteStatusFormatting` (a MudBlazor-free label/tone helper for the send dialog) are used; `AssetDisplay`, `AttachmentThumbnail` and `DiagnosticResponseView` are referenced nowhere.
 
 **`ThemeService` is not in `RVS.UI.Shared`.** Each app has its own copy at `RVS.Blazor.{Intake,Manager}/Services/ThemeService.cs`. Documentation claiming otherwise is wrong.
 
