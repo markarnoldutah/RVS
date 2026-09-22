@@ -11,7 +11,9 @@ using '../main.bicep'
 // ownership token at registration time, so it cannot be authored
 // here. That handshake is a portal (or CLI) step you run once,
 // after the first deploy — README.md "Deploy Production", step 2.
-// Redeploys never touch it.
+// Redeploys never touch the binding. The token itself is then copied
+// into intakeApexValidationToken below (#652), because it shares the
+// apex TXT record-set with SPF and each deploy re-writes that set.
 // ──────────────────────────────────────────────────────────────
 
 param environmentName = 'prod'
@@ -145,6 +147,21 @@ param swaSkuName = 'Free'
 //       rvserviceflow.com is kept as the corporate zone — no customer-facing host,
 //                but it holds the DMARC rua mailbox and the API origin (#633).
 param deployDns = true
+
+// The apex TXT record-set holds this token (from the one-time apex registration)
+// plus the apex SPF "v=spf1 -all" (#652). A deploy replaces that whole set, so
+// the token has to be written here or the deploy deletes it. It is public, not a
+// secret: `dig +short TXT rvintake.com` shows it. Check it against the zone,
+// not the SWA: `hostname show --query validationToken` reads blank once the
+// apex is Ready.
+//   az network dns record-set txt show -g rg-rvs-prod-westus3 -z rvintake.com \
+//     -n @ --query "TXTRecords[].value" -o json
+// Every value there other than "v=spf1 -all" must be carried here, or the deploy
+// deletes it. A what-if that shows only "+ v=spf1 -all" on TXT/@ confirms it.
+// If the apex is ever re-registered and Azure mints a new token, update this
+// before the next deploy. Blank it and the deploy stops managing the apex TXT
+// set: no SPF, and nothing is deleted.
+param intakeApexValidationToken = '_gd6d39rcb0u1byedjysur407jqdp2cy'
 
 // Grant DNS Zone Contributor (zone-scoped, NOT RG-wide) to the staging
 // GitHub Actions service principal so its `staging.bicepparam` deploys can

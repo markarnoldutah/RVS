@@ -294,9 +294,22 @@ repeats this. Commands are in `deployment-cmds.azcli` §4e (2)(c).
 See the standalone section below; it applies to staging too, where the label is
 `go-staging` instead of `go`.
 
+**Step 2b — hand the apex token to Bicep (once, `#652`).** The apex TXT
+record-set now also carries the apex SPF string, and a deploy replaces that
+whole set. Copy the token from step 2 into `intakeApexValidationToken` in
+`prod.bicepparam` **before the next deploy**, so the deploy re-writes the token
+alongside SPF instead of deleting it. Copy it from `$TOKEN` or from the zone
+(`az network dns record-set txt show -g rg-rvs-prod-westus3 -z rvintake.com -n @`).
+Don't re-query `hostname show` for it: its `validationToken` reads blank once
+the apex is `Ready`. A prod what-if that shows only `+ "v=spf1 -all"` on
+`TXT/@` confirms the parameter matches the zone. While the parameter is blank the deploy
+leaves the apex TXT set alone, and the apex has no SPF. See *Intake apex mail
+posture* below.
+
 **Redeploys** are step 1 again, with the Auth0 values optional. ARM
-incremental mode leaves the apex TXT record and binding alone (the template
-does not declare them), leaves the `go` hostname binding and its managed
+incremental mode leaves the apex binding alone (the template does not declare
+it) and re-asserts the apex TXT set, token included, from
+`intakeApexValidationToken`. It leaves the `go` hostname binding and its managed
 certificate alone for the same reason, and re-asserts the ACS domain, its link
 and its SPF/DKIM/DMARC records as no-ops while
 `acsCustomDomainVerified = true` — redeploys never re-trigger verification.
@@ -389,6 +402,31 @@ The corporate zone neither sends nor receives mail. The packet email goes out Fr
 **If corporate mailboxes are ever added here**, replace the null MX entry with real exchangers and relax SPF in the same change — a null MX with live mailboxes fails every inbound message.
 
 > **History.** This zone carried an MX pointing at `mail.yourmailprovider.com` — a placeholder registered to Domains By Proxy, not ours — until 2026-09-17. It survived indefinitely because `dns.bicep` had no MX support, so no deploy ever asserted otherwise. That is the argument for declaring record types you do not use: an undeclared record in an IaC-managed zone is invisible to the template forever.
+
+### Intake apex mail posture (`rvintake.com`, `#652`)
+
+The apex sends no mail. The packet email goes out From `mail.rvintake.com` (prod) and `mail-staging.rvintake.com` (staging), and each has its own `_dmarc` record. The prod deploy (`dnsIntake` module) publishes:
+
+| Record | Value | Why |
+| --- | --- | --- |
+| `TXT @` | `v=spf1 -all`, alongside the SWA apex validation token | no host is authorised to send as the apex |
+| `TXT _dmarc` | `v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s` | act on failures, at the apex and on every subdomain without its own record |
+
+**Before adding a sending subdomain, read this.** DMARC falls back to the organizational domain's policy for any subdomain that has no record of its own, and `sp=reject` means a new sender (a second ACS domain, a transactional or marketing provider) with no `_dmarc` record has all of its mail rejected from the first message. The sending side sees no useful error, and nobody changed a record. Give it its own `_dmarc` record in the same change that starts it sending. `sp=reject` was chosen over `sp=none` because `mail.rvintake.com` is expected to stay the only sender, and `sp=none` would leave every subdomain spoofable. The reasoning is also in `main.bicep`, next to the record.
+
+**The token has to be in the parameter file.** `intakeApexValidationToken` in `prod.bicepparam` carries the token Azure minted when the apex was registered (Deploy Production, step 2). If it is blank, the deploy does not declare the apex TXT set at all. That means no SPF, but it also means the deploy never deletes a token it cannot re-write. If the apex is re-registered, update the parameter before the next deploy. Staging never writes `@` or `_dmarc`.
+
+**No MX and no `rua`, for now.** `rvintake.com` accepts no mail, which is why `dmarc-reports@rvintake.com` bounces. A null MX (RFC 7505) and a real MX for DMARC reports would conflict, so both are decided in `#608`.
+
+Verify after a prod deploy:
+
+```bash
+NS=ns1-08.azure-dns.com        # rvintake.com's own NS set, NOT rvserviceflow.com's
+dig @$NS +short TXT rvintake.com                     # token AND "v=spf1 -all"
+dig @$NS +short TXT _dmarc.rvintake.com              # p=reject; sp=reject
+dig @$NS +short TXT _dmarc.mail.rvintake.com         # unchanged, p=none
+dig @$NS +short TXT _dmarc.mail-staging.rvintake.com # unchanged, p=none
+```
 
 ### Bind the `api.<zone>` host (`#633`)
 
