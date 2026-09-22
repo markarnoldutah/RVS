@@ -154,6 +154,24 @@ public static class TenantProvisioningMapper
         };
     }
 
+    /// <summary>Maps an identity-provider user to a row of the tenant's user list (Spec P-9).</summary>
+    public static TenantUserSummaryResponseDto ToSummaryDto(this IdentityUser user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+
+        return new TenantUserSummaryResponseDto
+        {
+            UserId = user.UserId,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            Roles = [.. user.Roles],
+            LocationIds = [.. user.LocationIds],
+            LoginsEnabled = !user.Blocked,
+            CreatedAtUtc = user.CreatedAtUtc,
+            LastLoginAtUtc = user.LastLoginAtUtc
+        };
+    }
+
     /// <summary>Maps a location added by the admin tool to its response.</summary>
     public static TenantLocationProvisioningResponseDto ToProvisioningResponseDto(this Location location, string intakeBaseUrl)
     {

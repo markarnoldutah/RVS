@@ -9,7 +9,7 @@ using RVS.Domain.Interfaces;
 namespace RVS.API.Controllers;
 
 /// <summary>
-/// Platform-admin tenant provisioning (Spec P-1 … P-8, issue #563), used from the hidden
+/// Platform-admin tenant provisioning (Spec P-1 … P-12, issues #563 and #647), used from the hidden
 /// <c>/admin</c> area of the Manager app.
 /// <para>
 /// The one controller that does <b>not</b> take the tenant from the caller's claims: the caller is
@@ -76,6 +76,44 @@ public sealed class AdminTenantsController : ControllerBase
         var result = await _service.AddUserAsync(tenantId, request, ct);
 
         return Ok(result.ToResponseDto());
+    }
+
+    /// <summary>Lists the tenant's Manager-app users with their roles (P-9).</summary>
+    [HttpGet("{tenantId}/users")]
+    public async Task<ActionResult<IReadOnlyList<TenantUserSummaryResponseDto>>> ListUsers(string tenantId, CancellationToken ct)
+    {
+        var users = await _service.ListUsersAsync(tenantId, ct);
+
+        return Ok(users.Select(u => u.ToSummaryDto()).ToList());
+    }
+
+    /// <summary>Replaces a user's name, role and locations (P-10).</summary>
+    [HttpPut("{tenantId}/users/{userId}")]
+    public async Task<ActionResult<TenantUserSummaryResponseDto>> UpdateUser(
+        string tenantId, string userId, [FromBody] TenantUserUpdateRequestDto request, CancellationToken ct)
+    {
+        var user = await _service.UpdateUserAsync(tenantId, userId, request, ct);
+
+        return Ok(user.ToSummaryDto());
+    }
+
+    /// <summary>Disables or re-enables one user's logins (P-11).</summary>
+    [HttpPut("{tenantId}/users/{userId}/access")]
+    public async Task<ActionResult<TenantUserSummaryResponseDto>> SetUserAccess(
+        string tenantId, string userId, [FromBody] TenantUserAccessUpdateRequestDto request, CancellationToken ct)
+    {
+        var user = await _service.SetUserLoginsEnabledAsync(tenantId, userId, request, ct);
+
+        return Ok(user.ToSummaryDto());
+    }
+
+    /// <summary>Permanently deletes a user (P-12).</summary>
+    [HttpDelete("{tenantId}/users/{userId}")]
+    public async Task<IActionResult> DeleteUser(string tenantId, string userId, CancellationToken ct)
+    {
+        await _service.DeleteUserAsync(tenantId, userId, ct);
+
+        return NoContent();
     }
 
     /// <summary>Issues a new set-password link for an existing user of the tenant (P-3).</summary>

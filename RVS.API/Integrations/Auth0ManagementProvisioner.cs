@@ -26,10 +26,11 @@ public sealed class Auth0ManagementTokenCache
 
 /// <summary>
 /// <see cref="IIdentityProvisioner"/> backed by the Auth0 Management API v2 (Spec P-2 / P-3 / P-7,
-/// issue #563) — a handful of REST calls on a typed <see cref="HttpClient"/>, no SDK.
+/// issue #563; P-9 … P-12, issue #647) — a handful of REST calls on a typed <see cref="HttpClient"/>, no SDK.
 /// <para>
 /// Needs only these scopes on the M2M application: <c>read:users create:users update:users
-/// update:users_app_metadata read:roles create:role_members create:user_tickets</c>.
+/// delete:users update:users_app_metadata read:roles read:role_members create:role_members
+/// delete:role_members create:user_tickets</c>.
 /// </para>
 /// <para>
 /// Never logs emails, passwords or ticket URLs. The generated password is sent once and
@@ -41,6 +42,16 @@ public sealed class Auth0ManagementProvisioner : IIdentityProvisioner
     private static readonly TimeSpan PasswordTicketLifetime = TimeSpan.FromDays(7);
     private static readonly TimeSpan TokenRefreshMargin = TimeSpan.FromSeconds(60);
     private const int MaxErrorDetailLength = 300;
+
+    /// <summary>User search returns at most 100 per page and 1,000 in total (search engine v3).</summary>
+    private const int SearchPageSize = 100;
+    private const int MaxSearchPages = 10;
+
+    /// <summary>
+    /// The RVS roles a user holds exactly one of. Anything else — another product's roles on the
+    /// shared Auth0 tenant — is never removed.
+    /// </summary>
+    private const string DealerRolePrefix = "dealer:";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -134,13 +145,13 @@ public sealed class Auth0ManagementProvisioner : IIdentityProvisioner
             created = true;
         }
 
-        using (await SendAsync(
-            HttpMethod.Post,
-            $"api/v2/roles/{Uri.EscapeDataString(roleId)}/users",
-            new { users = new[] { userId } },
-            "assign role",
-            cancellationToken))
+        if (created)
         {
+            await AssignRoleAsync(userId, roleId, cancellationToken);
+        }
+        else
+        {
+            await ReplaceDealerRolesAsync(userId, roleId, cancellationToken);
         }
 
         _logger.LogInformation(
@@ -169,9 +180,111 @@ public sealed class Auth0ManagementProvisioner : IIdentityProvisioner
         }
 
         var user = await response.Content.ReadFromJsonAsync<Auth0User>(JsonOptions, cancellationToken);
-        return user?.UserId is null
-            ? null
-            : new IdentityUser(user.UserId, user.Email ?? string.Empty, user.TenantId);
+        return user?.UserId is null ? null : ToIdentityUser(user, roles: []);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<IdentityUser>> ListUsersAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        // The id goes into a Lucene query: anything beyond these characters could widen the search
+        // to other tenants' users.
+        if (!tenantId.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-'))
+        {
+            throw new ArgumentException($"Tenant id '{tenantId}' contains characters not allowed in a user search.", nameof(tenantId));
+        }
+
+        var query = Uri.EscapeDataString($"app_metadata.tenantId:\"{tenantId}\"");
+        var found = new List<Auth0User>();
+        for (var page = 0; page < MaxSearchPages; page++)
+        {
+            using var response = await SendAsync(
+                HttpMethod.Get,
+                $"api/v2/users?q={query}&search_engine=v3&per_page={SearchPageSize}&page={page}",
+                body: null,
+                "search users",
+                cancellationToken);
+
+            var batch = await response.Content.ReadFromJsonAsync<List<Auth0User>>(JsonOptions, cancellationToken) ?? [];
+            found.AddRange(batch);
+            if (batch.Count < SearchPageSize)
+            {
+                break;
+            }
+        }
+
+        // One roles call per user. Tenants have a handful of users; the standard resilience
+        // handler absorbs a 429 from the Management API rate limit.
+        var users = new List<IdentityUser>(found.Count);
+        foreach (var user in found.Where(u => u.UserId is not null))
+        {
+            var roles = await GetUserRolesAsync(user.UserId!, cancellationToken);
+            users.Add(ToIdentityUser(user, roles));
+        }
+
+        return users;
+    }
+
+    /// <inheritdoc />
+    public async Task<IdentityUser> UpdateUserAsync(string userId, IdentityUserUpdate changes, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        ArgumentNullException.ThrowIfNull(changes);
+        ArgumentException.ThrowIfNullOrWhiteSpace(changes.Role);
+
+        // Resolve the role first, so an unknown role changes nothing.
+        var roleId = await FindRoleIdAsync(changes.Role, cancellationToken);
+
+        // app_metadata is merged key by key: only locationIds is sent, so tenantId and orgName
+        // stay as provisioned and an edit can never move a user to another tenant.
+        using var response = await SendAsync(
+            HttpMethod.Patch,
+            $"api/v2/users/{Uri.EscapeDataString(userId)}",
+            new { name = changes.DisplayName, app_metadata = new { locationIds = changes.LocationIds } },
+            "update user",
+            cancellationToken);
+        var user = await ReadUserAsync(response, cancellationToken);
+
+        var roles = await ReplaceDealerRolesAsync(userId, roleId, cancellationToken);
+
+        _logger.LogInformation("Auth0 user {UserId} updated with role {Role}", userId, changes.Role);
+
+        return ToIdentityUser(user, roles);
+    }
+
+    /// <inheritdoc />
+    public async Task<IdentityUser> SetBlockedAsync(string userId, bool blocked, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+
+        using var response = await SendAsync(
+            HttpMethod.Patch,
+            $"api/v2/users/{Uri.EscapeDataString(userId)}",
+            new { blocked },
+            blocked ? "block user" : "unblock user",
+            cancellationToken);
+        var user = await ReadUserAsync(response, cancellationToken);
+
+        _logger.LogInformation("Auth0 user {UserId} {Outcome}", userId, blocked ? "blocked" : "unblocked");
+
+        return ToIdentityUser(user, await GetUserRolesAsync(userId, cancellationToken));
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteUserAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+
+        using var _ = await SendAsync(
+            HttpMethod.Delete,
+            $"api/v2/users/{Uri.EscapeDataString(userId)}",
+            body: null,
+            "delete user",
+            cancellationToken,
+            allowNotFound: true);
+
+        _logger.LogInformation("Auth0 user {UserId} deleted", userId);
     }
 
     /// <inheritdoc />
@@ -224,6 +337,80 @@ public sealed class Auth0ManagementProvisioner : IIdentityProvisioner
             ?? throw new InvalidOperationException(
                 $"Auth0 role '{roleName}' was not found. Apply the Auth0 baseline (Infra/Auth0/auth0-apply.sh) first.");
     }
+
+    private async Task AssignRoleAsync(string userId, string roleId, CancellationToken cancellationToken)
+    {
+        using var _ = await SendAsync(
+            HttpMethod.Post,
+            $"api/v2/roles/{Uri.EscapeDataString(roleId)}/users",
+            new { users = new[] { userId } },
+            "assign role",
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Leaves <paramref name="roleId"/> as the user's only <c>dealer:*</c> role. Assigns first and
+    /// removes second, so a failure in between leaves an extra role rather than none — the
+    /// Post-Login Action denies login to a user with no role. Returns the roles the user now holds.
+    /// </summary>
+    private async Task<IReadOnlyList<Auth0Role>> ReplaceDealerRolesAsync(string userId, string roleId, CancellationToken cancellationToken)
+    {
+        await AssignRoleAsync(userId, roleId, cancellationToken);
+
+        var roles = await GetUserRolesAsync(userId, cancellationToken);
+        var stale = roles
+            .Where(r => r.Id is not null
+                && r.Id != roleId
+                && r.Name?.StartsWith(DealerRolePrefix, StringComparison.Ordinal) == true)
+            .ToList();
+
+        if (stale.Count == 0)
+        {
+            return roles;
+        }
+
+        using (await SendAsync(
+            HttpMethod.Delete,
+            $"api/v2/users/{Uri.EscapeDataString(userId)}/roles",
+            new { roles = stale.Select(r => r.Id).ToArray() },
+            "remove roles",
+            cancellationToken))
+        {
+        }
+
+        return [.. roles.Except(stale)];
+    }
+
+    private async Task<IReadOnlyList<Auth0Role>> GetUserRolesAsync(string userId, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            HttpMethod.Get,
+            $"api/v2/users/{Uri.EscapeDataString(userId)}/roles?per_page=100",
+            body: null,
+            "get user roles",
+            cancellationToken);
+
+        return await response.Content.ReadFromJsonAsync<List<Auth0Role>>(JsonOptions, cancellationToken) ?? [];
+    }
+
+    private static async Task<Auth0User> ReadUserAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var user = await response.Content.ReadFromJsonAsync<Auth0User>(JsonOptions, cancellationToken);
+        return user?.UserId is null
+            ? throw new InvalidOperationException("Auth0 returned a user without an id.")
+            : user;
+    }
+
+    private static IdentityUser ToIdentityUser(Auth0User user, IReadOnlyList<Auth0Role> roles) =>
+        new(user.UserId!, user.Email ?? string.Empty, user.TenantId)
+        {
+            DisplayName = user.Name,
+            LocationIds = user.LocationIds,
+            Roles = [.. roles.Select(r => r.Name).OfType<string>()],
+            Blocked = user.Blocked == true,
+            CreatedAtUtc = user.CreatedAt?.UtcDateTime,
+            LastLoginAtUtc = user.LastLogin?.UtcDateTime,
+        };
 
     private async Task<Auth0User?> FindDatabaseUserByEmailAsync(string email, CancellationToken cancellationToken)
     {
@@ -389,11 +576,32 @@ public sealed class Auth0ManagementProvisioner : IIdentityProvisioner
         [property: JsonPropertyName("identities")] List<Auth0Identity>? Identities,
         [property: JsonPropertyName("app_metadata")] Dictionary<string, JsonElement>? AppMetadata)
     {
+        [JsonPropertyName("name")]
+        public string? Name { get; init; }
+
+        [JsonPropertyName("blocked")]
+        public bool? Blocked { get; init; }
+
+        [JsonPropertyName("created_at")]
+        public DateTimeOffset? CreatedAt { get; init; }
+
+        [JsonPropertyName("last_login")]
+        public DateTimeOffset? LastLogin { get; init; }
+
         public string? TenantId =>
             AppMetadata is not null
             && AppMetadata.TryGetValue("tenantId", out var value)
             && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
                 : null;
+
+        public IReadOnlyList<string> LocationIds =>
+            AppMetadata is not null
+            && AppMetadata.TryGetValue("locationIds", out var value)
+            && value.ValueKind == JsonValueKind.Array
+                ? [.. value.EnumerateArray()
+                    .Where(e => e.ValueKind == JsonValueKind.String)
+                    .Select(e => e.GetString()!)]
+                : [];
     }
 }

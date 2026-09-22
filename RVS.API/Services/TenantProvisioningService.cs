@@ -10,9 +10,9 @@ using RVS.Domain.Validation;
 namespace RVS.API.Services;
 
 /// <summary>
-/// Orchestrates the platform-admin provisioning tool (Spec P-1 … P-7, issue #563): creates a
-/// tenant's Cosmos documents and first Auth0 user, adds users and locations, and flips the
-/// access gate.
+/// Orchestrates the platform-admin provisioning tool (Spec P-1 … P-12, issues #563 and #647):
+/// creates a tenant's Cosmos documents and first Auth0 user, adds, lists, edits, disables and
+/// deletes users, adds locations, and flips the access gate.
 /// <para>
 /// <b>Safe to retry (P-6).</b> Cosmos writes run first, with fixed ids; Auth0 runs last. Every
 /// step checks for what an earlier attempt left behind before writing, so re-submitting a
@@ -32,6 +32,9 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
     private static readonly EventId AccessGateChanged = new(563_005, nameof(AccessGateChanged));
     private static readonly EventId LocationProvisioned = new(563_006, nameof(LocationProvisioned));
     private static readonly EventId ProvisioningStepFailed = new(563_007, nameof(ProvisioningStepFailed));
+    private static readonly EventId UserUpdated = new(647_001, nameof(UserUpdated));
+    private static readonly EventId UserAccessChanged = new(647_002, nameof(UserAccessChanged));
+    private static readonly EventId UserDeleted = new(647_003, nameof(UserDeleted));
 
     private readonly ITenantRepository _tenantRepository;
     private readonly ITenantConfigService _tenantConfigService;
@@ -277,29 +280,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         ThrowIfInvalid(TenantProvisioningValidator.ValidateAddUser(request));
 
         var tenant = await GetTenantOrThrowAsync(tenantId, cancellationToken);
-
-        IReadOnlyList<string> locationIds = [];
-        if (TenantProvisioningValidator.IsLocationScopedRole(request.Role))
-        {
-            var requested = request.LocationIds
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Select(id => id.Trim())
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-
-            var known = (await _locationService.ListByTenantAsync(tenantId, cancellationToken))
-                .Select(l => l.Id)
-                .ToHashSet(StringComparer.Ordinal);
-
-            var unknown = requested.Where(id => !known.Contains(id)).ToList();
-            if (unknown.Count > 0)
-            {
-                throw new ArgumentException(
-                    $"Location(s) not found in tenant '{tenantId}': {string.Join(", ", unknown)}.");
-            }
-
-            locationIds = requested;
-        }
+        var locationIds = await ResolveLocationIdsAsync(tenantId, request.Role, request.LocationIds, cancellationToken);
 
         var email = request.Email.Trim();
         var user = await _identityProvisioner.EnsureUserAsync(new IdentityUserRequest(
@@ -328,14 +309,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
 
         await GetTenantOrThrowAsync(tenantId, cancellationToken);
-
-        // A user in another tenant is reported as not found rather than forbidden: the admin is
-        // acting on this tenant, and the answer should not depend on who else exists.
-        var user = await _identityProvisioner.GetUserAsync(userId, cancellationToken);
-        if (user is null || !string.Equals(user.TenantId, tenantId, StringComparison.Ordinal))
-        {
-            throw new KeyNotFoundException($"User '{userId}' not found in tenant '{tenantId}'.");
-        }
+        await GetTenantUserOrThrowAsync(tenantId, userId, cancellationToken);
 
         var ticket = await _identityProvisioner.CreatePasswordTicketAsync(userId, cancellationToken);
 
@@ -345,6 +319,87 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             _userContext.UserId, userId, tenantId);
 
         return ticket;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<IdentityUser>> ListUsersAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        await GetTenantOrThrowAsync(tenantId, cancellationToken);
+
+        // The provider filters by tenant already; filtering again keeps a loose search from ever
+        // showing one tenant another tenant's users.
+        var users = await _identityProvisioner.ListUsersAsync(tenantId, cancellationToken);
+        return users
+            .Where(u => string.Equals(u.TenantId, tenantId, StringComparison.Ordinal))
+            .OrderBy(u => u.DisplayName ?? u.Email, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(u => u.Email, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IdentityUser> UpdateUserAsync(
+        string tenantId, string userId, TenantUserUpdateRequestDto request, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        ArgumentNullException.ThrowIfNull(request);
+        ThrowIfInvalid(TenantProvisioningValidator.ValidateUpdateUser(request));
+
+        await GetTenantOrThrowAsync(tenantId, cancellationToken);
+        await GetTenantUserOrThrowAsync(tenantId, userId, cancellationToken);
+        var locationIds = await ResolveLocationIdsAsync(tenantId, request.Role, request.LocationIds, cancellationToken);
+
+        var user = await _identityProvisioner.UpdateUserAsync(
+            userId,
+            new IdentityUserUpdate(request.DisplayName.Trim(), locationIds, request.Role),
+            cancellationToken);
+
+        _logger.LogInformation(
+            UserUpdated,
+            "Platform admin {AdminUserId} updated user {UserId} to role {Role} with {LocationCount} location(s) in tenant {TenantId}",
+            _userContext.UserId, userId, request.Role, locationIds.Count, tenantId);
+
+        return user;
+    }
+
+    /// <inheritdoc />
+    public async Task<IdentityUser> SetUserLoginsEnabledAsync(
+        string tenantId, string userId, TenantUserAccessUpdateRequestDto request, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        ArgumentNullException.ThrowIfNull(request);
+
+        await GetTenantOrThrowAsync(tenantId, cancellationToken);
+        await GetTenantUserOrThrowAsync(tenantId, userId, cancellationToken);
+
+        var user = await _identityProvisioner.SetBlockedAsync(userId, blocked: !request.LoginsEnabled, cancellationToken);
+
+        _logger.LogInformation(
+            UserAccessChanged,
+            "Platform admin {AdminUserId} {Action} logins for user {UserId} in tenant {TenantId}",
+            _userContext.UserId, request.LoginsEnabled ? "enabled" : "disabled", userId, tenantId);
+
+        return user;
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteUserAsync(string tenantId, string userId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+
+        await GetTenantOrThrowAsync(tenantId, cancellationToken);
+        await GetTenantUserOrThrowAsync(tenantId, userId, cancellationToken);
+
+        await _identityProvisioner.DeleteUserAsync(userId, cancellationToken);
+
+        _logger.LogInformation(
+            UserDeleted,
+            "Platform admin {AdminUserId} deleted user {UserId} from tenant {TenantId}",
+            _userContext.UserId, userId, tenantId);
     }
 
     /// <inheritdoc />
@@ -405,6 +460,54 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
     private async Task<Tenant> GetTenantOrThrowAsync(string tenantId, CancellationToken cancellationToken) =>
         await _tenantRepository.GetAsync(tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Tenant '{tenantId}' not found.");
+
+    /// <summary>
+    /// Gets a user of the tenant. A user in another tenant is reported as not found rather than
+    /// forbidden: the admin is acting on this tenant, and the answer should not depend on who
+    /// else exists.
+    /// </summary>
+    private async Task<IdentityUser> GetTenantUserOrThrowAsync(string tenantId, string userId, CancellationToken cancellationToken)
+    {
+        var user = await _identityProvisioner.GetUserAsync(userId, cancellationToken);
+        if (user is null || !string.Equals(user.TenantId, tenantId, StringComparison.Ordinal))
+        {
+            throw new KeyNotFoundException($"User '{userId}' not found in tenant '{tenantId}'.");
+        }
+
+        return user;
+    }
+
+    /// <summary>
+    /// The trimmed, de-duplicated locations for a location-scoped role, each checked to belong to
+    /// the tenant; empty for <c>dealer:owner</c>, which is tenant-wide.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ResolveLocationIdsAsync(
+        string tenantId, string role, IEnumerable<string> locationIds, CancellationToken cancellationToken)
+    {
+        if (!TenantProvisioningValidator.IsLocationScopedRole(role))
+        {
+            return [];
+        }
+
+        var requested = locationIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var known = (await _locationService.ListByTenantAsync(tenantId, cancellationToken))
+            .Select(l => l.Id)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var unknown = requested.Where(id => !known.Contains(id)).ToList();
+        if (unknown.Count > 0)
+        {
+            throw new ArgumentException(
+                $"Location(s) not found in tenant '{tenantId}': {string.Join(", ", unknown)}.");
+        }
+
+        return requested;
+    }
 
     private async Task<bool> TenantConfigExistsAsync(string tenantId, CancellationToken cancellationToken)
     {

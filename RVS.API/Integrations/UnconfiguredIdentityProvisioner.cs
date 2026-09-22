@@ -25,4 +25,20 @@ public sealed class UnconfiguredIdentityProvisioner : IIdentityProvisioner
     /// <inheritdoc />
     public Task<PasswordTicket> CreatePasswordTicketAsync(string userId, CancellationToken cancellationToken = default) =>
         Task.FromException<PasswordTicket>(new InvalidOperationException(NotConfiguredMessage));
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<IdentityUser>> ListUsersAsync(string tenantId, CancellationToken cancellationToken = default) =>
+        Task.FromException<IReadOnlyList<IdentityUser>>(new InvalidOperationException(NotConfiguredMessage));
+
+    /// <inheritdoc />
+    public Task<IdentityUser> UpdateUserAsync(string userId, IdentityUserUpdate changes, CancellationToken cancellationToken = default) =>
+        Task.FromException<IdentityUser>(new InvalidOperationException(NotConfiguredMessage));
+
+    /// <inheritdoc />
+    public Task<IdentityUser> SetBlockedAsync(string userId, bool blocked, CancellationToken cancellationToken = default) =>
+        Task.FromException<IdentityUser>(new InvalidOperationException(NotConfiguredMessage));
+
+    /// <inheritdoc />
+    public Task DeleteUserAsync(string userId, CancellationToken cancellationToken = default) =>
+        Task.FromException(new InvalidOperationException(NotConfiguredMessage));
 }

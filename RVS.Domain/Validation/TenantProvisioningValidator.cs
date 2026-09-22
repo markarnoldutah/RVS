@@ -6,7 +6,7 @@ using RVS.Domain.Entities;
 namespace RVS.Domain.Validation;
 
 /// <summary>
-/// Input rules for the platform-admin provisioning tool (Spec P-1 … P-5, issue #563). Each
+/// Input rules for the platform-admin provisioning tool (Spec P-1 … P-5, P-10; issues #563, #647). Each
 /// method returns the first problem found, or <see cref="ValidationResult.Success"/>.
 /// </summary>
 public static partial class TenantProvisioningValidator
@@ -130,6 +130,17 @@ public static partial class TenantProvisioningValidator
 
         return FirstFailure(
             () => RequiredEmail(request.Email, "Email"),
+            () => RequiredText(request.DisplayName, "Name", MaxNameLength),
+            () => ProvisionableRole(request.Role),
+            () => IsLocationScopedRole(request.Role) ? LocationIds(request.LocationIds) : ValidationResult.Success);
+    }
+
+    /// <summary>Validates an edit to an existing user (Spec P-10). Location-scoped roles need at least one location.</summary>
+    public static ValidationResult ValidateUpdateUser(TenantUserUpdateRequestDto request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return FirstFailure(
             () => RequiredText(request.DisplayName, "Name", MaxNameLength),
             () => ProvisionableRole(request.Role),
             () => IsLocationScopedRole(request.Role) ? LocationIds(request.LocationIds) : ValidationResult.Success);
