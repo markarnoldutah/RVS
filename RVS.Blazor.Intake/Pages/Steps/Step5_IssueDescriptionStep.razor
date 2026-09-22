@@ -197,7 +197,10 @@
     {
         if (State.Config?.IssueCategories is { Count: > 0 } categories)
         {
-            _categories = categories.Where(c => c.IsSelectable).ToList();
+            _categories = categories
+                .Where(c => c.IsSelectable)
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
     }
 
