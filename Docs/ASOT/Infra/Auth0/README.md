@@ -67,5 +67,5 @@ Common edits:
 
 ## Known state worth knowing
 
-- The `dealer:technician` role and the `analytics:read` and `service-requests:update-service-event` permissions are archived scope. They stay in the baseline because they exist live; remove them as part of the descope.
+- The `dealer:technician` role and the `analytics:read` permission are archived scope. They stay in the baseline because they exist live; remove them as part of the descope. `service-requests:update-service-event` was removed from the baseline in #457; the next apply drops it from the RVS API and every RVS role.
 - The Swagger SPA Client's grant to the RVS API has no permissions, and the API only issues permissions an application is granted. Tokens from Swagger UI therefore carry none.

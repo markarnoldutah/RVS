@@ -56,7 +56,6 @@ Authorization is **per-permission, never per-role**. Policies are declared in `R
 | `CanSearchServiceRequests` | `service-requests:search` | |
 | `CanCreateServiceRequests` | `service-requests:create` | |
 | `CanUpdateServiceRequests` | `service-requests:update` | |
-| `CanUpdateServiceEvent` | `service-requests:update-service-event` | **Archived** — technician outcome capture |
 | `CanDeleteServiceRequests` | `service-requests:delete` | |
 | `CanUploadAttachments` | `attachments:upload` | |
 | `CanReadAttachments` | `attachments:read` | |

@@ -8,15 +8,13 @@ namespace RVS.API.Services;
 
 /// <summary>
 /// Service for managing <see cref="ServiceRequest"/> entities.
-/// Provides search, CRUD, status transitions, batch outcome, and delete operations.
+/// Provides search, CRUD, status transitions, and delete operations.
 /// </summary>
 public sealed class ServiceRequestService : IServiceRequestService
 {
     private readonly IServiceRequestRepository _repository;
     private readonly IUserContextAccessor _userContext;
     private readonly IPacketGenerationService _packetGenerationService;
-
-    private const int MaxBatchSize = 25;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ServiceRequestService"/>.
@@ -109,79 +107,6 @@ public sealed class ServiceRequestService : IServiceRequestService
         existing.MarkAsUpdated(_userContext.UserId);
 
         return await _repository.UpdateAsync(existing, cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public async Task<BatchOutcomeResponseDto> BatchOutcomeAsync(string tenantId, BatchOutcomeRequestDto request, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.ServiceRequestIds);
-
-        if (request.ServiceRequestIds.Count > MaxBatchSize)
-        {
-            throw new ArgumentException($"Batch size exceeds maximum of {MaxBatchSize}.");
-        }
-
-        if (request.ServiceRequestIds.Count == 0)
-        {
-            throw new ArgumentException("At least one service request ID is required.");
-        }
-
-        var succeeded = new List<string>();
-        var failed = new List<BatchOutcomeFailureDto>();
-
-        foreach (var srId in request.ServiceRequestIds)
-        {
-            try
-            {
-                var sr = await _repository.GetByIdAsync(tenantId, srId, cancellationToken);
-
-                if (sr is null)
-                {
-                    failed.Add(new BatchOutcomeFailureDto
-                    {
-                        ServiceRequestId = srId,
-                        Reason = $"Service request '{srId}' not found."
-                    });
-                    continue;
-                }
-
-                if (!string.Equals(sr.TenantId, tenantId, StringComparison.Ordinal))
-                {
-                    failed.Add(new BatchOutcomeFailureDto
-                    {
-                        ServiceRequestId = srId,
-                        Reason = $"Service request '{srId}' does not belong to tenant '{tenantId}'."
-                    });
-                    continue;
-                }
-
-                sr.ServiceEvent ??= new ServiceEventEmbedded();
-                sr.ServiceEvent.FailureMode = request.FailureMode ?? sr.ServiceEvent.FailureMode;
-                sr.ServiceEvent.RepairAction = request.RepairAction ?? sr.ServiceEvent.RepairAction;
-                sr.ServiceEvent.PartsUsed = request.PartsUsed ?? sr.ServiceEvent.PartsUsed;
-                sr.ServiceEvent.LaborHours = request.LaborHours ?? sr.ServiceEvent.LaborHours;
-                sr.MarkAsUpdated(_userContext.UserId);
-
-                await _repository.UpdateAsync(sr, cancellationToken);
-                succeeded.Add(srId);
-            }
-            catch (Exception ex)
-            {
-                failed.Add(new BatchOutcomeFailureDto
-                {
-                    ServiceRequestId = srId,
-                    Reason = ex.Message
-                });
-            }
-        }
-
-        return new BatchOutcomeResponseDto
-        {
-            Succeeded = succeeded,
-            Failed = failed
-        };
     }
 
     /// <inheritdoc />

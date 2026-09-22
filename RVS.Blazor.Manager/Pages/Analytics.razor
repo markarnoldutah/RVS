@@ -63,28 +63,21 @@
     {
         @* Summary Cards *@
         <MudGrid Spacing="3">
-            <MudItem xs="6" sm="3">
+            <MudItem xs="12" sm="4">
                 <MudPaper Elevation="2" Class="pa-4 text-center">
                     <MudIcon Icon="@Icons.Material.Filled.Inbox" Color="Color.Primary" Size="Size.Large" />
                     <MudText Typo="Typo.h4">@_analytics.TotalRequests</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Total Requests</MudText>
                 </MudPaper>
             </MudItem>
-            <MudItem xs="6" sm="3">
-                <MudPaper Elevation="2" Class="pa-4 text-center">
-                    <MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Secondary" Size="Size.Large" />
-                    <MudText Typo="Typo.h4">@(_analytics.AverageRepairTimeHours?.ToString("F1") ?? "—")</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Avg Repair Hours</MudText>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="6" sm="3">
+            <MudItem xs="12" sm="4">
                 <MudPaper Elevation="2" Class="pa-4 text-center">
                     <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Info" Size="Size.Large" />
                     <MudText Typo="Typo.h4">@(_analytics.AverageDaysToComplete?.ToString("F1") ?? "—")</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Avg Days to Complete</MudText>
                 </MudPaper>
             </MudItem>
-            <MudItem xs="6" sm="3">
+            <MudItem xs="12" sm="4">
                 <MudPaper Elevation="2" Class="pa-4 text-center">
                     <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Warning" Size="Size.Large" />
                     <MudText Typo="Typo.h4">@_analytics.RequestsByLocation.Count</MudText>
@@ -186,111 +179,6 @@
                                         <tr>
                                             <td>@kv.Key</td>
                                             <td style="text-align:right;">@kv.Value</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </MudSimpleTable>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.body2" Color="Color.Secondary">No data available.</MudText>
-                        }
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-
-            @* Top Failure Modes *@
-            <MudItem xs="12" md="6">
-                <MudCard Elevation="2">
-                    <MudCardHeader>
-                        <MudText Typo="Typo.h6">Top Failure Modes</MudText>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        @if (_analytics.TopFailureModes.Count > 0)
-                        {
-                            <MudSimpleTable Dense="true" Hover="true">
-                                <thead>
-                                    <tr>
-                                        <th>Failure Mode</th>
-                                        <th style="text-align:right;">Count</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var item in _analytics.TopFailureModes)
-                                    {
-                                        <tr>
-                                            <td>@item.Name</td>
-                                            <td style="text-align:right;">@item.Count</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </MudSimpleTable>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.body2" Color="Color.Secondary">No data available.</MudText>
-                        }
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-
-            @* Top Repair Actions *@
-            <MudItem xs="12" md="6">
-                <MudCard Elevation="2">
-                    <MudCardHeader>
-                        <MudText Typo="Typo.h6">Top Repair Actions</MudText>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        @if (_analytics.TopRepairActions.Count > 0)
-                        {
-                            <MudSimpleTable Dense="true" Hover="true">
-                                <thead>
-                                    <tr>
-                                        <th>Repair Action</th>
-                                        <th style="text-align:right;">Count</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var item in _analytics.TopRepairActions)
-                                    {
-                                        <tr>
-                                            <td>@item.Name</td>
-                                            <td style="text-align:right;">@item.Count</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </MudSimpleTable>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.body2" Color="Color.Secondary">No data available.</MudText>
-                        }
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-
-            @* Top Parts Used *@
-            <MudItem xs="12" md="6">
-                <MudCard Elevation="2">
-                    <MudCardHeader>
-                        <MudText Typo="Typo.h6">Top Parts Used</MudText>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        @if (_analytics.TopPartsUsed.Count > 0)
-                        {
-                            <MudSimpleTable Dense="true" Hover="true">
-                                <thead>
-                                    <tr>
-                                        <th>Part</th>
-                                        <th style="text-align:right;">Count</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var item in _analytics.TopPartsUsed)
-                                    {
-                                        <tr>
-                                            <td>@item.Name</td>
-                                            <td style="text-align:right;">@item.Count</td>
                                         </tr>
                                     }
                                 </tbody>

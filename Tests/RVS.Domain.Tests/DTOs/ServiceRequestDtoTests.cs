@@ -35,7 +35,6 @@ public class ServiceRequestDtoTests
         dto.Keyword.Should().BeNull();
         dto.Status.Should().BeNull();
         dto.LocationId.Should().BeNull();
-        dto.HasOutcome.Should().BeNull();
     }
 
     [Fact]
@@ -65,7 +64,6 @@ public class ServiceRequestDtoTests
             AssignedTechnicianId = "tech-1",
             Priority = "High",
             BoardSequence = 5,
-            HasOutcome = true,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
@@ -75,7 +73,6 @@ public class ServiceRequestDtoTests
         dto.AttachmentCount.Should().Be(3);
         dto.Priority.Should().Be("High");
         dto.BoardSequence.Should().Be(5);
-        dto.HasOutcome.Should().BeTrue();
     }
 
     [Fact]

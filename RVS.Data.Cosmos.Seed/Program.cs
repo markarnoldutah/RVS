@@ -1248,11 +1248,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Slide-Out Mechanism",
-            FailureMode = "Mechanical Obstruction",
-        },
     },
 
     // SR 3 — Completed (SLC)
@@ -1277,14 +1272,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = false, PriorRequestCount = 0,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Roof Assembly",
-            FailureMode = "Wear/Age",
-            RepairAction = "Sealant Reapplication",
-            LaborHours = 2.5m,
-            ServiceDateUtc = SeedDate(28),
-        },
     },
 
     // SR 4 — WaitingOnParts (Denver)
@@ -1310,12 +1297,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId2, Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Furnace",
-            FailureMode = "Ignition Failure",
-            PartsUsed = ["Ignitor Assembly P/N 12345"],
-        },
     },
 
     // SR 5 — Cancelled (Denver)
@@ -1364,11 +1345,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId3, Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "AC Compressor",
-            FailureMode = "Mechanical Noise",
-        },
     },
 
     // SR 7 — New (Phoenix)
@@ -1416,15 +1392,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId4, Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Tank Sensor",
-            FailureMode = "Sensor Malfunction",
-            RepairAction = "Sensor Replacement",
-            PartsUsed = ["Tank Sensor Kit P/N TS-2021"],
-            LaborHours = 1.5m,
-            ServiceDateUtc = SeedDate(12),
-        },
     },
 
     // SR 9 — WaitingOnParts (Boise — Happy Trails)
@@ -1449,11 +1416,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId4, Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Door Latch Assembly",
-            FailureMode = "Mechanical Breakage",
-        },
     },
 
     // SR 10 — New (Boise — Happy Trails)
@@ -1502,15 +1464,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = false, PriorRequestCount = 0,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId6, Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Inverter/Converter",
-            FailureMode = "Electrical Short",
-            RepairAction = "Component Replacement",
-            PartsUsed = ["Progressive Dynamics PD4655V Converter"],
-            LaborHours = 3.0m,
-            ServiceDateUtc = SeedDate(22),
-        },
     },
 
     // SR 12 — InProgress (Phoenix — Blue Compass) — Chen, Coachmen Catalina (currently active)
@@ -1536,11 +1489,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId6, Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Slide-Out Mechanism",
-            FailureMode = "Mechanical Noise",
-        },
     },
 ];
 
@@ -1550,18 +1498,18 @@ static List<AssetLedgerEntry> BuildAssetLedgerEntries() =>
 [
     new AssetLedgerEntry { Id = "ale_001", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr01, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Plumbing", IssueDescription = "Water heater not igniting on LP gas.", Status = "New", SubmittedAtUtc = SeedDate(2) },
     new AssetLedgerEntry { Id = "ale_002", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr02, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Slides", IssueDescription = "Slide-out not fully extending.", Status = "InProgress", SubmittedAtUtc = SeedDate(15) },
-    new AssetLedgerEntry { Id = "ale_003", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr03, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Roof", IssueDescription = "Annual roof inspection and sealant check.", Status = "Completed", SubmittedAtUtc = SeedDate(35), Section10A = new Section10AEmbedded { ComponentType = "Roof Assembly", FailureMode = "Wear/Age", RepairAction = "Sealant Reapplication", LaborHours = 2.5m, ServiceDateUtc = SeedDate(28) } },
+    new AssetLedgerEntry { Id = "ale_003", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr03, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Roof", IssueDescription = "Annual roof inspection and sealant check.", Status = "Completed", SubmittedAtUtc = SeedDate(35) },
     new AssetLedgerEntry { Id = "ale_004", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = Sr04, GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "HVAC", IssueDescription = "Furnace blowing cold air.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(10) },
     new AssetLedgerEntry { Id = "ale_005", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = Sr05, GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Rear camera image flickering.", Status = "Cancelled", SubmittedAtUtc = SeedDate(25) },
     new AssetLedgerEntry { Id = "ale_006", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = Sr06, GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "HVAC", IssueDescription = "AC compressor making loud clicking noise.", Status = "InProgress", SubmittedAtUtc = SeedDate(5) },
     new AssetLedgerEntry { Id = "ale_007", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = Sr07, GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "Awning", IssueDescription = "Awning fabric tearing along the seam.", Status = "New", SubmittedAtUtc = SeedDate(3) },
-    new AssetLedgerEntry { Id = "ale_008", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = Sr08, GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Plumbing", IssueDescription = "Fresh water tank sensor reading incorrectly.", Status = "Completed", SubmittedAtUtc = SeedDate(18), Section10A = new Section10AEmbedded { ComponentType = "Tank Sensor", FailureMode = "Sensor Malfunction", RepairAction = "Sensor Replacement", PartsUsed = ["Tank Sensor Kit P/N TS-2021"], LaborHours = 1.5m, ServiceDateUtc = SeedDate(12) } },
+    new AssetLedgerEntry { Id = "ale_008", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = Sr08, GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Plumbing", IssueDescription = "Fresh water tank sensor reading incorrectly.", Status = "Completed", SubmittedAtUtc = SeedDate(18) },
     new AssetLedgerEntry { Id = "ale_009", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = Sr09, GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Exterior", IssueDescription = "Entry door latch mechanism broken.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(7) },
     new AssetLedgerEntry { Id = "ale_010", AssetId = AssetId5, TenantId = TenantHappyTrails, ServiceRequestId = Sr10, GlobalCustomerAcctId = GcaThompson, DealershipName = "Happy Trails RV", Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023, IssueCategory = "Generator", IssueDescription = "Generator not starting.", Status = "New", SubmittedAtUtc = SeedDate(1) },
-    new AssetLedgerEntry { Id = "ale_011", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = Sr11, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Inverter/converter not switching to shore power.", Status = "Completed", SubmittedAtUtc = SeedDate(30), Section10A = new Section10AEmbedded { ComponentType = "Inverter/Converter", FailureMode = "Electrical Short", RepairAction = "Component Replacement", PartsUsed = ["Progressive Dynamics PD4655V Converter"], LaborHours = 3.0m, ServiceDateUtc = SeedDate(22) } },
+    new AssetLedgerEntry { Id = "ale_011", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = Sr11, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Inverter/converter not switching to shore power.", Status = "Completed", SubmittedAtUtc = SeedDate(30) },
     new AssetLedgerEntry { Id = "ale_012", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = Sr12, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Slides", IssueDescription = "Slide-out room makes grinding noise when retracting.", Status = "InProgress", SubmittedAtUtc = SeedDate(2) },
     new AssetLedgerEntry { Id = "ale_013", AssetId = AssetId7, TenantId = TenantBlueCompass, ServiceRequestId = Sr13, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Entegra Coach", Model = "Vision 29S", Year = 2025, IssueCategory = "HVAC", IssueDescription = "Roof AC unit leaking condensation inside coach.", Status = "New", SubmittedAtUtc = SeedDate(55) },
-    new AssetLedgerEntry { Id = "ale_014", AssetId = AssetId8, TenantId = TenantBlueCompass, ServiceRequestId = Sr14, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Newmar", Model = "Bay Star 3014", Year = 2023, IssueCategory = "Plumbing", IssueDescription = "Hot water tank pressure relief valve dripping.", Status = "Completed", SubmittedAtUtc = SeedDate(85), Section10A = new Section10AEmbedded { ComponentType = "Pressure Relief Valve", FailureMode = "Wear/Age", RepairAction = "Valve Replacement", PartsUsed = ["Suburban P/N 161135"], LaborHours = 1.0m, ServiceDateUtc = SeedDate(80) } },
+    new AssetLedgerEntry { Id = "ale_014", AssetId = AssetId8, TenantId = TenantBlueCompass, ServiceRequestId = Sr14, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Newmar", Model = "Bay Star 3014", Year = 2023, IssueCategory = "Plumbing", IssueDescription = "Hot water tank pressure relief valve dripping.", Status = "Completed", SubmittedAtUtc = SeedDate(85) },
 ];
 
 // ── Lookup Sets (1) ─────────────────────────────────────────────────────

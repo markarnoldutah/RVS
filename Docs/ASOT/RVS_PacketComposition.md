@@ -96,7 +96,7 @@ The service also downloads each resolved photo's bytes (`IBlobStorageService.Dow
 
 `PacketComposer.Compose(ServiceRequest request, PacketCompositionContext context)` in `RVS.Domain/Packets/` folds the two inputs into one `ServicePacket`.
 
-It is a **pure transform**: guard clauses, then read-only mapping. No repository or service calls, no SAS generation, no rendering, nothing persisted. It reads only the fields it needs, so pricing, quotes, labor rates, parts, and `ServiceEvent` data cannot appear in a packet — they are simply never referenced.
+It is a **pure transform**: guard clauses, then read-only mapping. No repository or service calls, no SAS generation, no rendering, nothing persisted. It reads only the fields it needs, so pricing, quotes, labor rates, and parts cannot appear in a packet — they are simply never referenced.
 
 `ServicePacket` is an immutable `record` tree with one nested record per `Spec B-2` section, declared in B-2 order:
 

@@ -17,7 +17,6 @@ public sealed record ServiceRequestSummaryResponseDto
     public string? AssignedTechnicianId { get; init; }
     public string? Priority { get; init; }
     public int BoardSequence { get; init; }
-    public bool HasOutcome { get; init; }
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
 }

@@ -44,10 +44,6 @@ public class AnalyticsServiceTests
         result.RequestsByStatus.Should().BeEmpty();
         result.RequestsByCategory.Should().BeEmpty();
         result.RequestsByLocation.Should().BeEmpty();
-        result.TopFailureModes.Should().BeEmpty();
-        result.TopRepairActions.Should().BeEmpty();
-        result.TopPartsUsed.Should().BeEmpty();
-        result.AverageRepairTimeHours.Should().BeNull();
         result.AverageDaysToComplete.Should().BeNull();
     }
 
@@ -149,104 +145,6 @@ public class AnalyticsServiceTests
         result.RequestsByLocation.Should().ContainKey("loc_den").WhoseValue.Should().Be(1);
     }
 
-    // ── TopFailureModes ──────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task GetServiceRequestSummaryAsync_ShouldReturnTopFailureModes()
-    {
-        var requests = new List<ServiceRequest>
-        {
-            BuildServiceRequest(failureMode: "Motor Failure"),
-            BuildServiceRequest(failureMode: "Motor Failure"),
-            BuildServiceRequest(failureMode: "Seal Leak"),
-            BuildServiceRequest(failureMode: null)
-        };
-        SetupRepository(requests);
-
-        var result = await _sut.GetServiceRequestSummaryAsync("ten_1");
-
-        result.TopFailureModes.Should().HaveCount(2);
-        result.TopFailureModes[0].Name.Should().Be("Motor Failure");
-        result.TopFailureModes[0].Count.Should().Be(2);
-        result.TopFailureModes[1].Name.Should().Be("Seal Leak");
-        result.TopFailureModes[1].Count.Should().Be(1);
-    }
-
-    // ── TopRepairActions ─────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task GetServiceRequestSummaryAsync_ShouldReturnTopRepairActions()
-    {
-        var requests = new List<ServiceRequest>
-        {
-            BuildServiceRequest(repairAction: "Replaced Motor"),
-            BuildServiceRequest(repairAction: "Replaced Motor"),
-            BuildServiceRequest(repairAction: "Sealed Joint")
-        };
-        SetupRepository(requests);
-
-        var result = await _sut.GetServiceRequestSummaryAsync("ten_1");
-
-        result.TopRepairActions.Should().HaveCount(2);
-        result.TopRepairActions[0].Name.Should().Be("Replaced Motor");
-        result.TopRepairActions[0].Count.Should().Be(2);
-    }
-
-    // ── TopPartsUsed ─────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task GetServiceRequestSummaryAsync_ShouldReturnTopPartsUsed()
-    {
-        var requests = new List<ServiceRequest>
-        {
-            BuildServiceRequest(partsUsed: ["Slide Motor", "Bolt Kit"]),
-            BuildServiceRequest(partsUsed: ["Slide Motor"]),
-            BuildServiceRequest(partsUsed: [])
-        };
-        SetupRepository(requests);
-
-        var result = await _sut.GetServiceRequestSummaryAsync("ten_1");
-
-        result.TopPartsUsed.Should().HaveCount(2);
-        result.TopPartsUsed[0].Name.Should().Be("Slide Motor");
-        result.TopPartsUsed[0].Count.Should().Be(2);
-        result.TopPartsUsed[1].Name.Should().Be("Bolt Kit");
-        result.TopPartsUsed[1].Count.Should().Be(1);
-    }
-
-    // ── AverageRepairTimeHours ───────────────────────────────────────────────
-
-    [Fact]
-    public async Task GetServiceRequestSummaryAsync_ShouldCalculateAverageRepairTimeHours()
-    {
-        var requests = new List<ServiceRequest>
-        {
-            BuildServiceRequest(laborHours: 2.0m),
-            BuildServiceRequest(laborHours: 4.0m),
-            BuildServiceRequest(laborHours: null)
-        };
-        SetupRepository(requests);
-
-        var result = await _sut.GetServiceRequestSummaryAsync("ten_1");
-
-        result.AverageRepairTimeHours.Should().Be(3.0m);
-    }
-
-    [Fact]
-    public async Task GetServiceRequestSummaryAsync_WhenNoLaborHours_ShouldReturnNullAverageRepairTime()
-    {
-        var requests = new List<ServiceRequest>
-        {
-            BuildServiceRequest(laborHours: null),
-            BuildServiceRequest(laborHours: null)
-        };
-        SetupRepository(requests);
-
-        var result = await _sut.GetServiceRequestSummaryAsync("ten_1");
-
-        result.AverageRepairTimeHours.Should().BeNull();
-    }
-
     // ── AverageDaysToComplete ────────────────────────────────────────────────
 
     [Fact]
@@ -294,10 +192,6 @@ public class AnalyticsServiceTests
         string status = "New",
         string? issueCategory = "General",
         string locationId = "loc_slc",
-        string? failureMode = null,
-        string? repairAction = null,
-        List<string>? partsUsed = null,
-        decimal? laborHours = null,
         DateTime? createdAtUtc = null,
         DateTime? updatedAtUtc = null)
     {
@@ -314,17 +208,6 @@ public class AnalyticsServiceTests
                 Email = "test@example.com"
             }
         };
-
-        if (failureMode is not null || repairAction is not null || partsUsed is not null || laborHours is not null)
-        {
-            sr.ServiceEvent = new ServiceEventEmbedded
-            {
-                FailureMode = failureMode,
-                RepairAction = repairAction,
-                PartsUsed = partsUsed ?? [],
-                LaborHours = laborHours
-            };
-        }
 
         // Use reflection to set init-only CreatedAtUtc when provided
         if (createdAtUtc.HasValue)

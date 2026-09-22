@@ -29,8 +29,6 @@ public sealed class AuthorizationPolicyTests
                 policy.RequireClaim("permissions", "service-requests:create"));
             options.AddPolicy("CanUpdateServiceRequests", policy =>
                 policy.RequireClaim("permissions", "service-requests:update"));
-            options.AddPolicy("CanUpdateServiceEvent", policy =>
-                policy.RequireClaim("permissions", "service-requests:update-service-event"));
             options.AddPolicy("CanDeleteServiceRequests", policy =>
                 policy.RequireClaim("permissions", "service-requests:delete"));
             options.AddPolicy("CanUploadAttachments", policy =>
@@ -89,7 +87,6 @@ public sealed class AuthorizationPolicyTests
     [InlineData("CanSearchServiceRequests", "service-requests:search")]
     [InlineData("CanCreateServiceRequests", "service-requests:create")]
     [InlineData("CanUpdateServiceRequests", "service-requests:update")]
-    [InlineData("CanUpdateServiceEvent", "service-requests:update-service-event")]
     [InlineData("CanDeleteServiceRequests", "service-requests:delete")]
     [InlineData("CanUploadAttachments", "attachments:upload")]
     [InlineData("CanReadAttachments", "attachments:read")]
@@ -116,7 +113,6 @@ public sealed class AuthorizationPolicyTests
     [InlineData("CanSearchServiceRequests")]
     [InlineData("CanCreateServiceRequests")]
     [InlineData("CanUpdateServiceRequests")]
-    [InlineData("CanUpdateServiceEvent")]
     [InlineData("CanDeleteServiceRequests")]
     [InlineData("CanUploadAttachments")]
     [InlineData("CanReadAttachments")]
@@ -145,7 +141,6 @@ public sealed class AuthorizationPolicyTests
     [InlineData("CanSearchServiceRequests")]
     [InlineData("CanCreateServiceRequests")]
     [InlineData("CanUpdateServiceRequests")]
-    [InlineData("CanUpdateServiceEvent")]
     [InlineData("CanDeleteServiceRequests")]
     [InlineData("CanUploadAttachments")]
     [InlineData("CanReadAttachments")]

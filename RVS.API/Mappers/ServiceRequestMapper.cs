@@ -63,10 +63,6 @@ public static class ServiceRequestMapper
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var hasOutcome = entity.ServiceEvent is not null
-            && (!string.IsNullOrWhiteSpace(entity.ServiceEvent.FailureMode)
-                || !string.IsNullOrWhiteSpace(entity.ServiceEvent.RepairAction));
-
         return new ServiceRequestSummaryResponseDto
         {
             Id = entity.Id,
@@ -80,7 +76,6 @@ public static class ServiceRequestMapper
             AssignedTechnicianId = entity.AssignedTechnicianId,
             Priority = entity.Priority,
             BoardSequence = entity.BoardSequence,
-            HasOutcome = hasOutcome,
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
@@ -203,7 +198,6 @@ public static class ServiceRequestMapper
         entity.ScheduledDateUtc = dto.ScheduledDateUtc;
         entity.RequiredSkills = dto.RequiredSkills;
         entity.BoardSequence = dto.BoardSequence ?? entity.BoardSequence;
-        entity.ServiceEvent = dto.ServiceEvent?.ToEmbedded();
 
         if (dto.Customer is not null)
         {
@@ -229,42 +223,6 @@ public static class ServiceRequestMapper
         }
 
         entity.MarkAsUpdated(updatedByUserId);
-    }
-
-    /// <summary>
-    /// Maps a <see cref="ServiceEventDto"/> to a <see cref="ServiceEventEmbedded"/>.
-    /// </summary>
-    public static ServiceEventEmbedded ToEmbedded(this ServiceEventDto dto)
-    {
-        ArgumentNullException.ThrowIfNull(dto);
-
-        return new ServiceEventEmbedded
-        {
-            ComponentType = dto.ComponentType?.Trim(),
-            FailureMode = dto.FailureMode?.Trim(),
-            RepairAction = dto.RepairAction?.Trim(),
-            PartsUsed = dto.PartsUsed,
-            LaborHours = dto.LaborHours,
-            ServiceDateUtc = dto.ServiceDateUtc
-        };
-    }
-
-    /// <summary>
-    /// Maps a <see cref="ServiceEventEmbedded"/> to a <see cref="ServiceEventDto"/>.
-    /// </summary>
-    public static ServiceEventDto ToDto(this ServiceEventEmbedded entity)
-    {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        return new ServiceEventDto
-        {
-            ComponentType = entity.ComponentType,
-            FailureMode = entity.FailureMode,
-            RepairAction = entity.RepairAction,
-            PartsUsed = entity.PartsUsed,
-            LaborHours = entity.LaborHours,
-            ServiceDateUtc = entity.ServiceDateUtc
-        };
     }
 
     /// <summary>

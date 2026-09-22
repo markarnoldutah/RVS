@@ -58,7 +58,6 @@ The central document. Field groups:
 | Preliminary assessment | `preliminaryAssessment` — `probableCause`, `possibleFixes[]`, `likelyParts[]`, `confidence` (`high` / `medium` / `low` / `abstain`), `provider`, `generatedAtUtc` | Core (issue #507). Null until the first packet generation, which fills it once; regenerations reuse it. Rendered in the packet's Preliminary assessment section; on `abstain` the other fields are empty and nothing structured renders. Not exposed on any API DTO |
 | Packet | `packetGeneration` — `status`, `attemptCount`, `lastAttemptAtUtc`, `lastError`, `generatedAtUtc`, `packetVersion`, `pdfBlobPath`, `alertRaised`, `expectedAttachmentCount` | Core (issue #434). Async packet-generation state; `lastError` never holds customer issue text (`Spec X-7`); `MaxAttempts` = 3 then a `LogCritical` alert. The packet's "short reference code" is **not stored** — it is derived at compose time as the first hyphen-delimited segment of `id`, upper-cased (`#472`). `expectedAttachmentCount` (issue #516) is how many attachments intake declared it was about to upload; generation defers while `attachments` is short of it and the 2-minute window from `createdAtUtc` is open, so a packet is never rendered before the customer's photos land. `0` for every non-intake origin. Preserved across `ResetForRegeneration` |
 | Packet delivery | `packetEmailDelivery` — `status`, `attemptCount`, `lastAttemptAtUtc`, `deliveredPacketVersion`, `deliveredAtUtc`, `lastError`, `alertRaised` | Core (issue #438). Idempotent, retried packet-email state; delivery is skipped when `deliveredPacketVersion` already equals the current `packetGeneration.packetVersion` (idempotency per `(serviceRequestId, packetVersion)`, `Spec B-4`); `MaxAttempts` = 3 with exponential backoff, then a `LogCritical` alert; `lastError` never holds customer issue text (`Spec X-7`) |
-| Outcome | `serviceEvent` — component, failure mode, repair action, parts, labor | **Archived** — technician workflow |
 | Scheduling | `scheduledDateUtc`, `assignedBayId`, `assignedTechnicianId`, `requiredSkills` | **Archived** |
 | Messaging | `messages[]` | **Archived** — defined, referenced nowhere in the codebase |
 
@@ -123,11 +122,11 @@ The opt-out check before a send reads `customer-profiles` in the tenant's partit
 
 ### AssetLedgerEntry — `asset-ledger`
 
-Append-only. `assetId`, `tenantId`, `serviceRequestId`, `globalCustomerAcctId`, make/model/year, issue, status, `submittedAt`, and an optional `Section10A` outcome block.
+Append-only. `assetId`, `tenantId`, `serviceRequestId`, `globalCustomerAcctId`, make/model/year, issue, status and `submittedAt`.
 
 Written once per intake submission by `IntakeOrchestrationService`, best-effort — a failure is swallowed and does not roll back the request. Written but not read while A-7 is deferred (#673): vehicle prefill is its only reader, and it is unreachable.
 
-This is Spec X-2. Nothing else reads it, and that is correct. It exists so the record is there later. The `Section10A` block on it is archived scope; the entry itself is not.
+This is Spec X-2. Nothing else reads it, and that is correct. It exists so the record is there later. The optional `section10A` outcome block it used to carry was archived scope and was removed in #457; the entry itself stays.
 
 ### Location — `locations`
 
@@ -192,5 +191,6 @@ Auth is the app's managed identity with **Storage Table Data Contributor**, gran
 ## Descope notes
 
 - `rv-warranty-rules` has no repository and no reader. It is OEM/warranty reference data for an archived capability.
-- `ServiceRequest.serviceEvent`, `.messages[]`, and the scheduling/assignment fields are dead weight in the document. They cost storage and read RUs on every fetch.
+- `ServiceRequest.messages[]` and the scheduling/assignment fields are dead weight in the document. They cost storage and read RUs on every fetch.
+- `ServiceRequest.serviceEvent` and `AssetLedgerEntry.section10A` (technician outcome capture) were removed from the entities in #457. A document written before then may still carry the property: the Newtonsoft serializer ignores unknown members on read, so it is harmless, and a service request drops it on its next write. Ledger entries are never rewritten, so theirs stays. Re-running the seeder upserts the seed documents without either. Production had no tenants when this shipped, so nothing there carries it.
 - Removing fields from Cosmos documents is a migration, not a code edit. Sequence it deliberately; nothing forces it before B ships.

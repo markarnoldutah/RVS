@@ -103,8 +103,6 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("permissions", "service-requests:create"));
     options.AddPolicy("CanUpdateServiceRequests", policy =>
         policy.RequireClaim("permissions", "service-requests:update"));
-    options.AddPolicy("CanUpdateServiceEvent", policy =>
-        policy.RequireClaim("permissions", "service-requests:update-service-event"));
     options.AddPolicy("CanDeleteServiceRequests", policy =>
         policy.RequireClaim("permissions", "service-requests:delete"));
 

@@ -132,28 +132,6 @@ public sealed class ServiceRequestApiClient
     }
 
     /// <summary>
-    /// Applies outcome fields to multiple service requests in a single batch.
-    /// </summary>
-    public async Task<BatchOutcomeResponseDto> BatchOutcomeAsync(
-        string dealershipId,
-        BatchOutcomeRequestDto request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
-        ArgumentNullException.ThrowIfNull(request);
-
-        var response = await _httpClient.PatchAsJsonAsync(
-            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/batch-outcome",
-            request,
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        return await response.Content.ReadFromJsonAsync<BatchOutcomeResponseDto>(
-            cancellationToken: cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize batch outcome response.");
-    }
-
-    /// <summary>
     /// Deletes a service request.
     /// </summary>
     public async Task DeleteAsync(
