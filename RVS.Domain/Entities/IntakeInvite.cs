@@ -4,8 +4,8 @@ namespace RVS.Domain.Entities;
 
 /// <summary>
 /// An advisor-initiated intake invite (<c>Spec A-14</c>, issue #663): the single-use, prefilled
-/// intake link an advisor texts to a caller who agreed to receive it, or opens for themselves
-/// with <i>Fill it in myself</i>.
+/// intake link an advisor texts or emails (issue #693) to a caller who agreed to receive it, or
+/// opens for themselves with <i>Fill it in myself</i>.
 ///
 /// <see cref="EntityBase.Id"/> is <c>InviteToken.Hash(token)</c>. The raw token is never stored,
 /// and making its hash the id is what turns redemption into a single-partition point read.
@@ -45,15 +45,31 @@ public class IntakeInvite : EntityBase
     public string? Phone { get; init; }
 
     /// <summary>
-    /// <c>true</c> for a <i>Fill it in myself</i> invite: minted for the advisor to open, never texted.
+    /// The caller's email address, trimmed and lower-cased like <c>CustomerProfile.Email</c>.
+    /// Always present for an emailed invite; optional otherwise. Prefills the intake form.
+    /// </summary>
+    [JsonProperty("email")]
+    public string? Email { get; init; }
+
+    /// <summary>
+    /// How the link went to the caller: one of the <see cref="IntakeInviteChannel"/> values
+    /// (issue #693). Invites written before email existed have no such field and read as
+    /// <see cref="IntakeInviteChannel.Sms"/>, which is what they were. A self-entry invite is
+    /// never sent, so its channel means nothing.
+    /// </summary>
+    [JsonProperty("channel")]
+    public string Channel { get; init; } = IntakeInviteChannel.Sms;
+
+    /// <summary>
+    /// <c>true</c> for a <i>Fill it in myself</i> invite: minted for the advisor to open, never sent.
     /// </summary>
     [JsonProperty("isSelfEntry")]
     public bool IsSelfEntry { get; init; }
 
     /// <summary>
-    /// When the advisor confirmed the caller's verbal consent to receive the text. Recorded
+    /// When the advisor confirmed the caller's verbal consent to receive the text or email. Recorded
     /// separately from <see cref="SentAtUtc"/> and from delivery, and never cleared. <c>null</c>
-    /// only for a self-entry invite, which texts nobody.
+    /// only for a self-entry invite, which sends nothing.
     /// </summary>
     [JsonProperty("consentCapturedAtUtc")]
     public DateTime? ConsentCapturedAtUtc { get; init; }
@@ -78,7 +94,8 @@ public class IntakeInvite : EntityBase
     public string? ServiceRequestId { get; set; }
 
     /// <summary>
-    /// The ACS message id of the texted link. ACS delivery reports are matched back to the invite by it.
+    /// The ACS message id of the texted link, or the ACS operation id of the emailed one. SMS
+    /// delivery reports are matched back to the invite by it; nothing reports email delivery yet.
     /// </summary>
     [JsonProperty("acsMessageId")]
     public string? AcsMessageId { get; set; }
@@ -138,4 +155,20 @@ public static class IntakeInviteDeliveryStatus
 
     /// <summary>A self-entry invite: nothing is ever sent.</summary>
     public const string NotSent = "notSent";
+}
+
+/// <summary>
+/// How an <see cref="IntakeInvite"/> reaches the caller (<c>Spec A-14</c>, issue #693).
+/// </summary>
+public static class IntakeInviteChannel
+{
+    /// <summary>A text from the shared toll-free number.</summary>
+    public const string Sms = "sms";
+
+    /// <summary>An email from the environment's ACS sending domain.</summary>
+    public const string Email = "email";
+
+    /// <summary>Whether <paramref name="channel"/> is one of the known values, compared exactly.</summary>
+    /// <param name="channel">The value to check.</param>
+    public static bool IsKnown(string? channel) => channel is Sms or Email;
 }

@@ -317,8 +317,8 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
-    /// Applies an A-14 advisor invite's prefill (<c>Spec A-14</c>, issue #664): the first name and
-    /// phone the advisor entered. Separate from <see cref="ApplyPrefill"/>, A-7's returning-customer
+    /// Applies an A-14 advisor invite's prefill (<c>Spec A-14</c>, issues #664, #693): the first
+    /// name, phone and email the advisor entered. Separate from <see cref="ApplyPrefill"/>, A-7's returning-customer
     /// path, and it does not set <see cref="IsPrefilled"/>. Fills only blank fields, because the
     /// invite is re-fetched after a reload and must not undo what the customer typed since.
     /// </summary>
@@ -334,6 +334,11 @@ public sealed class IntakeWizardState
         if (string.IsNullOrWhiteSpace(Phone))
         {
             Phone = prefill.Phone;
+        }
+
+        if (string.IsNullOrWhiteSpace(Email) && !string.IsNullOrWhiteSpace(prefill.Email))
+        {
+            Email = prefill.Email;
         }
 
         IsInvitePrefilled = true;

@@ -196,6 +196,27 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
+    public void ApplyInvitePrefill_WhenTheInviteWasEmailed_ShouldSetTheEmail()
+    {
+        var state = CreateState();
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Email = "jane@example.com" });
+
+        state.Email.Should().Be("jane@example.com");
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_ShouldNotOverwriteAnEmailTheCustomerAlreadyEntered()
+    {
+        var state = CreateState();
+        state.Email = "janet@example.com";
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Email = "jane@example.com" });
+
+        state.Email.Should().Be("janet@example.com");
+    }
+
+    [Fact]
     public void ApplyInvitePrefill_WhenInviteHasNoPhone_ShouldLeavePhoneBlank()
     {
         var state = CreateState();

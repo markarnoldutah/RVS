@@ -8,8 +8,8 @@ using RVS.Domain.Interfaces;
 namespace RVS.API.Controllers;
 
 /// <summary>
-/// Advisor intake invites for a location (<c>Spec A-14</c>, issue #663): text a caller a
-/// prefilled, single-use intake link, or mint one to fill in during the call. Backs the manager
+/// Advisor intake invites for a location (<c>Spec A-14</c>, issues #663, #693): text or email a
+/// caller a prefilled, single-use intake link, or mint one to fill in during the call. Backs the manager
 /// app's Send intake link dialog.
 ///
 /// Every action requires <c>intake-invites:send</c>. Being signed in to the manager app is not enough.
@@ -32,10 +32,11 @@ public class IntakeInvitesController : ControllerBase
     }
 
     /// <summary>
-    /// Creates an invite. A texted invite requires the caller's consent and is refused with 409
-    /// while texting is disabled or when the number has opted out, and with 429 past a rate
-    /// limit. A self-entry invite (<c>selfEntry: true</c>) texts nobody, works while texting is
-    /// disabled, and returns <c>intakeUrl</c> for the advisor to open.
+    /// Creates an invite. <c>channel</c> is <c>sms</c> (the default) or <c>email</c>. A sent invite
+    /// requires the caller's consent and is refused with 409 while its channel is disabled or when
+    /// the address has opted out of it, and with 429 past a rate limit. A self-entry invite
+    /// (<c>selfEntry: true</c>) sends nothing, works while both channels are disabled, and returns
+    /// <c>intakeUrl</c> for the advisor to open.
     /// </summary>
     /// <param name="locationId">Location whose intake form the invite opens.</param>
     /// <param name="request">The invite to create.</param>
@@ -73,8 +74,8 @@ public class IntakeInvitesController : ControllerBase
     }
 
     /// <summary>
-    /// What the send dialog can offer right now. Read on open so the dialog can say texting is
-    /// not enabled yet, rather than present a Send button that can only 409.
+    /// What the send dialog can offer right now: whether texting and email work. Read on open so
+    /// the dialog offers only a channel that works, rather than a Send button that can only 409.
     ///
     /// It hangs off the location route so the dialog's calls stay under one client and one
     /// policy, but the answer is environment-wide: <c>locationId</c> does not narrow it, and so

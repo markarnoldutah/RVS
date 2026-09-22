@@ -14,13 +14,14 @@ namespace RVS.API.Services;
 
 /// <summary>
 /// Creates advisor intake invites (<c>Spec A-14</c>, issue #663): a prefilled, single-use intake
-/// link texted to a caller who agreed to receive it, or opened by the advisor with
-/// <i>Fill it in myself</i>.
+/// link texted or emailed (issue #693) to a caller who agreed to receive it, or opened by the
+/// advisor with <i>Fill it in myself</i>.
 ///
-/// A texted invite passes its refusals in order (consent, a valid number, texting enabled, the
-/// number not opted out, rate limits) before anything is written. It is then persisted
-/// <b>before</b> the text is sent, so the consent record exists even if the send fails, and
-/// updated with the ACS message id afterwards.
+/// A sent invite passes its refusals in order (consent, a valid address for its channel, that
+/// channel enabled, the address not opted out of it, rate limits) before anything is written.
+/// It is then persisted <b>before</b> the message is sent, so the consent record exists even if
+/// the send fails, and updated with the ACS message id afterwards. Both channels draw on one rate
+/// budget.
 /// </summary>
 public sealed class IntakeInviteService : IIntakeInviteService
 {
@@ -28,6 +29,7 @@ public sealed class IntakeInviteService : IIntakeInviteService
     private readonly ILocationRepository _locationRepository;
     private readonly ICustomerProfileRepository _customerProfileRepository;
     private readonly ISmsNotificationService _smsService;
+    private readonly INotificationService _emailService;
     private readonly IIntakeInviteRateLimiter _rateLimiter;
     private readonly IUserContextAccessor _userContext;
     private readonly IntakeInviteOptions _options;
@@ -43,6 +45,7 @@ public sealed class IntakeInviteService : IIntakeInviteService
         ILocationRepository locationRepository,
         ICustomerProfileRepository customerProfileRepository,
         ISmsNotificationService smsService,
+        INotificationService emailService,
         IIntakeInviteRateLimiter rateLimiter,
         IUserContextAccessor userContext,
         IOptions<IntakeInviteOptions> options,
@@ -54,6 +57,7 @@ public sealed class IntakeInviteService : IIntakeInviteService
         _locationRepository = locationRepository;
         _customerProfileRepository = customerProfileRepository;
         _smsService = smsService;
+        _emailService = emailService;
         _rateLimiter = rateLimiter;
         _userContext = userContext;
         _options = options.Value;
@@ -73,29 +77,46 @@ public sealed class IntakeInviteService : IIntakeInviteService
 
         var advisorUserId = CurrentUserIdOrThrow();
         var firstName = ValidateFirstName(request.FirstName);
+        var channel = request.Channel ?? IntakeInviteChannel.Sms;
 
-        string? phone;
-        if (request.SelfEntry)
+        if (!request.SelfEntry)
         {
-            phone = string.IsNullOrWhiteSpace(request.Phone) ? null : NormalizePhoneOrThrow(request.Phone);
-        }
-        else
-        {
+            if (!IntakeInviteChannel.IsKnown(channel))
+            {
+                throw new ArgumentException("Choose to send the link by text or by email.", nameof(request));
+            }
+
             if (!request.ConsentCaptured)
             {
                 throw new ArgumentException(
-                    "Confirm that the caller gave consent to receive the text before sending it.", nameof(request));
+                    channel == IntakeInviteChannel.Email
+                        ? "Confirm that the caller asked for the link by email before sending it."
+                        : "Confirm that the caller gave consent to receive the text before sending it.",
+                    nameof(request));
             }
-
-            phone = NormalizePhoneOrThrow(request.Phone);
         }
+
+        // The sending channel's own field is required; any other one given is still validated,
+        // because it prefills the form either way.
+        var contact = new InviteContact(
+            Phone: (!request.SelfEntry && channel == IntakeInviteChannel.Sms) || !string.IsNullOrWhiteSpace(request.Phone)
+                ? NormalizePhoneOrThrow(request.Phone)
+                : null,
+            Email: (!request.SelfEntry && channel == IntakeInviteChannel.Email) || !string.IsNullOrWhiteSpace(request.Email)
+                ? NormalizeEmailOrThrow(request.Email)
+                : null);
 
         var location = await _locationRepository.GetByIdAsync(tenantId, locationId, cancellationToken)
             ?? throw new KeyNotFoundException($"Location '{locationId}' was not found.");
 
-        return request.SelfEntry
-            ? await CreateSelfEntryAsync(tenantId, location, advisorUserId, firstName, phone, cancellationToken)
-            : await CreateAndTextAsync(tenantId, location, advisorUserId, firstName, phone!, cancellationToken);
+        if (request.SelfEntry)
+        {
+            return await CreateSelfEntryAsync(tenantId, location, advisorUserId, firstName, contact, cancellationToken);
+        }
+
+        return channel == IntakeInviteChannel.Email
+            ? await CreateAndEmailAsync(tenantId, location, advisorUserId, firstName, contact, cancellationToken)
+            : await CreateAndTextAsync(tenantId, location, advisorUserId, firstName, contact, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -132,14 +153,16 @@ public sealed class IntakeInviteService : IIntakeInviteService
     }
 
     /// <inheritdoc />
-    public IntakeInviteCapability GetCapability() => new(SmsEnabled: _smsService.IsEnabled);
+    public IntakeInviteCapability GetCapability() =>
+        new(SmsEnabled: _smsService.IsEnabled, EmailEnabled: _emailService.IsEnabled);
 
     private async Task<IntakeInviteCreateResult> CreateSelfEntryAsync(
-        string tenantId, Location location, string advisorUserId, string firstName, string? phone,
+        string tenantId, Location location, string advisorUserId, string firstName, InviteContact contact,
         CancellationToken cancellationToken)
     {
         var token = InviteToken.Generate();
-        var invite = NewInvite(tenantId, location.Id, advisorUserId, firstName, phone, token, isSelfEntry: true);
+        var invite = NewInvite(tenantId, location.Id, advisorUserId, firstName, contact, token,
+            IntakeInviteChannel.Sms, isSelfEntry: true);
 
         await _inviteRepository.CreateAsync(invite, cancellationToken);
 
@@ -153,9 +176,11 @@ public sealed class IntakeInviteService : IIntakeInviteService
     }
 
     private async Task<IntakeInviteCreateResult> CreateAndTextAsync(
-        string tenantId, Location location, string advisorUserId, string firstName, string phone,
+        string tenantId, Location location, string advisorUserId, string firstName, InviteContact contact,
         CancellationToken cancellationToken)
     {
+        var phone = contact.Phone!;
+
         if (!_smsService.IsEnabled)
         {
             throw new ConflictException(
@@ -168,7 +193,81 @@ public sealed class IntakeInviteService : IIntakeInviteService
                 "This number has opted out of texts. Use Fill it in myself to complete the intake during the call.");
         }
 
-        var limit = _rateLimiter.TryAcquire(tenantId, location.Id, advisorUserId);
+        AcquireRateLimitOrThrow(tenantId, location.Id, advisorUserId);
+
+        var token = InviteToken.Generate();
+        var invite = NewInvite(tenantId, location.Id, advisorUserId, firstName, contact, token,
+            IntakeInviteChannel.Sms, isSelfEntry: false);
+
+        // Persist first: the consent record must exist whether or not the text goes out.
+        await _inviteRepository.CreateAsync(invite, cancellationToken);
+
+        var link = ShortLink(location, token);
+        var message = IntakeInviteContent.BuildSmsBody(location.Name, firstName, link);
+
+        var messageId = await _smsService.SendSmsAsync(tenantId, location.Id, phone, message, cancellationToken);
+
+        await RecordSendAsync(invite, advisorUserId, messageId, cancellationToken);
+
+        _logger.LogInformation(
+            "Intake invite texted for tenant {TenantId}, location {LocationId}: {DeliveryStatus}",
+            tenantId, location.Id, invite.DeliveryStatus);
+
+        return new IntakeInviteCreateResult(invite, null);
+    }
+
+    private async Task<IntakeInviteCreateResult> CreateAndEmailAsync(
+        string tenantId, Location location, string advisorUserId, string firstName, InviteContact contact,
+        CancellationToken cancellationToken)
+    {
+        var email = contact.Email!;
+
+        if (!_emailService.IsEnabled)
+        {
+            throw new ConflictException(
+                "Email is not enabled here. Use Fill it in myself to complete the intake during the call.");
+        }
+
+        if (await IsEmailOptedOutAsync(tenantId, email, cancellationToken))
+        {
+            throw new ConflictException(
+                "This address has opted out of email. Use Fill it in myself to complete the intake during the call.");
+        }
+
+        AcquireRateLimitOrThrow(tenantId, location.Id, advisorUserId);
+
+        var token = InviteToken.Generate();
+        var invite = NewInvite(tenantId, location.Id, advisorUserId, firstName, contact, token,
+            IntakeInviteChannel.Email, isSelfEntry: false);
+
+        // Persist first: the consent record must exist whether or not the email goes out.
+        await _inviteRepository.CreateAsync(invite, cancellationToken);
+
+        var link = ShortLink(location, token);
+
+        var operationId = await _emailService.SendTransactionalEmailAsync(
+            email,
+            IntakeInviteContent.BuildEmailSubject(location.Name),
+            IntakeInviteContent.BuildEmailHtmlBody(location.Name, firstName, link, _options.ExpiryHours),
+            IntakeInviteContent.BuildEmailPlainTextBody(location.Name, firstName, link, _options.ExpiryHours),
+            cancellationToken);
+
+        await RecordSendAsync(invite, advisorUserId, operationId, cancellationToken);
+
+        _logger.LogInformation(
+            "Intake invite emailed for tenant {TenantId}, location {LocationId}: {DeliveryStatus}",
+            tenantId, location.Id, invite.DeliveryStatus);
+
+        return new IntakeInviteCreateResult(invite, null);
+    }
+
+    private string ShortLink(Location location, string token) =>
+        IntakeLinkBuilder.ShortLink(
+            _intakeUrlOptions.RedirectOrIntakeBaseUrl, location.Slug, IntakeSourceVocabulary.Advisor, token);
+
+    private void AcquireRateLimitOrThrow(string tenantId, string locationId, string advisorUserId)
+    {
+        var limit = _rateLimiter.TryAcquire(tenantId, locationId, advisorUserId);
         if (limit != IntakeInviteRateLimitResult.Allowed)
         {
             throw new RateLimitExceededException(limit switch
@@ -178,19 +277,16 @@ public sealed class IntakeInviteService : IIntakeInviteService
                 _ => "Your dealership has sent the most intake links allowed in an hour. Try again later.",
             });
         }
+    }
 
-        var token = InviteToken.Generate();
-        var invite = NewInvite(tenantId, location.Id, advisorUserId, firstName, phone, token, isSelfEntry: false);
-
-        // Persist first: the consent record must exist whether or not the text goes out.
-        await _inviteRepository.CreateAsync(invite, cancellationToken);
-
-        var link = IntakeLinkBuilder.ShortLink(
-            _intakeUrlOptions.RedirectOrIntakeBaseUrl, location.Slug, IntakeSourceVocabulary.Advisor, token);
-        var message = IntakeInviteContent.BuildSmsBody(location.Name, firstName, link);
-
-        var messageId = await _smsService.SendSmsAsync(tenantId, location.Id, phone, message, cancellationToken);
-
+    /// <summary>
+    /// Records the ACS id and the resulting delivery status. A failed write is logged, not
+    /// thrown: the message is already out and the token works regardless of this field, so
+    /// failing the request would only prompt a resend, and a second message to the caller.
+    /// </summary>
+    private async Task RecordSendAsync(
+        IntakeInvite invite, string advisorUserId, string? messageId, CancellationToken cancellationToken)
+    {
         invite.AcsMessageId = messageId;
         invite.SentAtUtc = messageId is null ? null : _timeProvider.GetUtcNow().UtcDateTime;
         invite.DeliveryStatus = messageId is null ? IntakeInviteDeliveryStatus.Failed : IntakeInviteDeliveryStatus.Queued;
@@ -202,23 +298,15 @@ public sealed class IntakeInviteService : IIntakeInviteService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The text is already out and the token works regardless of this field. Failing the
-            // request would only prompt a resend, and a second text to the caller.
             _logger.LogError(ex,
                 "Intake invite {InviteId} for tenant {TenantId}: failed to record the send (MessageId: {MessageId})",
-                invite.Id, tenantId, messageId);
+                invite.Id, invite.TenantId, messageId);
         }
-
-        _logger.LogInformation(
-            "Intake invite texted for tenant {TenantId}, location {LocationId}: {DeliveryStatus}",
-            tenantId, location.Id, invite.DeliveryStatus);
-
-        return new IntakeInviteCreateResult(invite, null);
     }
 
     private IntakeInvite NewInvite(
-        string tenantId, string locationId, string advisorUserId, string firstName, string? phone,
-        string token, bool isSelfEntry)
+        string tenantId, string locationId, string advisorUserId, string firstName, InviteContact contact,
+        string token, string channel, bool isSelfEntry)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -231,7 +319,9 @@ public sealed class IntakeInviteService : IIntakeInviteService
             CreatedByUserId = advisorUserId,
             CreatedAtUtc = now,
             FirstName = firstName,
-            Phone = phone,
+            Phone = contact.Phone,
+            Email = contact.Email,
+            Channel = channel,
             IsSelfEntry = isSelfEntry,
             ConsentCapturedAtUtc = isSelfEntry ? null : now,
             ExpiresAtUtc = now.AddHours(_options.ExpiryHours),
@@ -248,6 +338,17 @@ public sealed class IntakeInviteService : IIntakeInviteService
         var optedOut = await _customerProfileRepository.ListSmsOptedOutPhonesAsync(tenantId, cancellationToken);
 
         return optedOut.Any(stored => PhoneNumberNormalizer.Normalize(stored) == e164);
+    }
+
+    /// <summary>
+    /// Whether this tenant's profile for the address has opted out of email. Profiles are keyed
+    /// on the lower-cased address, so this is one lookup rather than a scan.
+    /// </summary>
+    private async Task<bool> IsEmailOptedOutAsync(string tenantId, string email, CancellationToken cancellationToken)
+    {
+        var profile = await _customerProfileRepository.GetByEmailAsync(tenantId, email, cancellationToken);
+
+        return profile?.EmailOptOut == true;
     }
 
     private string CurrentUserIdOrThrow() =>
@@ -278,4 +379,12 @@ public sealed class IntakeInviteService : IIntakeInviteService
     private static string NormalizePhoneOrThrow(string? phone) =>
         PhoneNumberNormalizer.Normalize(phone)
             ?? throw new ArgumentException("Enter a valid US or Canadian phone number.", nameof(phone));
+
+    private static string NormalizeEmailOrThrow(string? email) =>
+        email is not null && EmailValidator.Validate(email).IsValid
+            ? email.Trim().ToLowerInvariant()
+            : throw new ArgumentException("Enter a valid email address.", nameof(email));
+
+    /// <summary>The caller's contact details, each already normalised, or <c>null</c> when not given.</summary>
+    private sealed record InviteContact(string? Phone, string? Email);
 }

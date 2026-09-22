@@ -24,6 +24,7 @@ public class IntakeInviteServiceTests
     private const string Slug = "nova-hurricane";
     private const string AdvisorId = "auth0|advisor-1";
     private const string MessageId = "Outgoing_abc";
+    private const string EmailOperationId = "email-op-1";
     private const string RedirectBaseUrl = "https://go.rvintake.com";
     private const string IntakeBaseUrl = "https://rvintake.com";
 
@@ -33,12 +34,15 @@ public class IntakeInviteServiceTests
     private readonly Mock<ILocationRepository> _locationRepoMock = new();
     private readonly Mock<ICustomerProfileRepository> _profileRepoMock = new();
     private readonly Mock<ISmsNotificationService> _smsMock = new();
+    private readonly Mock<INotificationService> _emailMock = new();
     private readonly Mock<IIntakeInviteRateLimiter> _rateLimiterMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
     private readonly List<string> _calls = [];
 
     private IntakeInvite? _created;
     private string? _sentMessage;
+    private string? _sentEmailHtml;
+    private string? _sentEmailText;
 
     public IntakeInviteServiceTests()
     {
@@ -58,6 +62,17 @@ public class IntakeInviteServiceTests
                 _sentMessage = message;
             })
             .ReturnsAsync(MessageId);
+
+        _emailMock.Setup(e => e.IsEnabled).Returns(true);
+        _emailMock.Setup(e => e.SendTransactionalEmailAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string, string, string, CancellationToken>((_, _, html, text, _) =>
+            {
+                _calls.Add("email");
+                _sentEmailHtml = html;
+                _sentEmailText = text;
+            })
+            .ReturnsAsync(EmailOperationId);
 
         _rateLimiterMock.Setup(l => l.TryAcquire(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .Returns(IntakeInviteRateLimitResult.Allowed);
@@ -80,6 +95,7 @@ public class IntakeInviteServiceTests
         _locationRepoMock.Object,
         _profileRepoMock.Object,
         _smsMock.Object,
+        _emailMock.Object,
         _rateLimiterMock.Object,
         _userContextMock.Object,
         MsOptions.Create(new IntakeInviteOptions()),
@@ -91,6 +107,14 @@ public class IntakeInviteServiceTests
     {
         FirstName = "  Jane ",
         Phone = phone,
+        ConsentCaptured = true,
+    };
+
+    private static IntakeInviteCreateRequestDto EmailRequest(string email = "  Jane.Doe@Example.com ") => new()
+    {
+        FirstName = "  Jane ",
+        Channel = IntakeInviteChannel.Email,
+        Email = email,
         ConsentCaptured = true,
     };
 
@@ -390,6 +414,216 @@ public class IntakeInviteServiceTests
         result.IntakeUrl.Should().NotBeNull();
     }
 
+    // ── Email channel (issue #693) ───────────────────────────────────────
+
+    [Fact]
+    public async Task CreateAsync_WhenChannelIsOmitted_ShouldTextAndRecordTheSmsChannel()
+    {
+        // Clients written before #693 send no channel; they meant a text.
+        var result = await CreateService().CreateAsync(TenantId, LocationId, TextRequest());
+
+        result.Invite.Channel.Should().Be(IntakeInviteChannel.Sms);
+        _calls.Should().Equal("create", "send", "update");
+    }
+
+    [Theory]
+    [InlineData("fax")]
+    [InlineData("EMAIL")]
+    public async Task CreateAsync_WhenChannelIsUnknown_ShouldThrowArgumentExceptionAndSendNothing(string channel)
+    {
+        var act = () => CreateService().CreateAsync(TenantId, LocationId, EmailRequest() with { Channel = channel });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_WithoutConsent_ShouldThrowArgumentExceptionAndSendNothing()
+    {
+        var act = () => CreateService().CreateAsync(TenantId, LocationId, EmailRequest() with { ConsentCaptured = false });
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*email*");
+        _calls.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("jane")]
+    [InlineData("jane@example")]
+    [InlineData("jane@example.com<script>")]
+    public async Task CreateAsync_Email_WhenAddressIsInvalid_ShouldThrowArgumentExceptionAndSendNothing(string? email)
+    {
+        var act = () => CreateService().CreateAsync(TenantId, LocationId, EmailRequest() with { Email = email });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_WhenEmailIsDisabled_ShouldThrowConflictExceptionAndSendNothing()
+    {
+        _emailMock.Setup(e => e.IsEnabled).Returns(false);
+
+        var act = () => CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        await act.Should().ThrowAsync<ConflictException>().WithMessage("*not enabled*");
+        _calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_WhenTheAddressHasOptedOutOfEmail_ShouldThrowConflictExceptionAndSendNothing()
+    {
+        _profileRepoMock.Setup(r => r.GetByEmailAsync(TenantId, "jane.doe@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CustomerProfile { TenantId = TenantId, Email = "jane.doe@example.com", EmailOptOut = true });
+
+        var act = () => CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        await act.Should().ThrowAsync<ConflictException>().WithMessage("*opted out*");
+        _calls.Should().BeEmpty();
+        _rateLimiterMock.Verify(l => l.TryAcquire(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_WhenTheProfileHasOnlyOptedOutOfTexts_ShouldStillEmail()
+    {
+        _profileRepoMock.Setup(r => r.GetByEmailAsync(TenantId, "jane.doe@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CustomerProfile { TenantId = TenantId, Email = "jane.doe@example.com", SmsOptOut = true });
+
+        await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        _calls.Should().Contain("email");
+    }
+
+    [Theory]
+    [InlineData(IntakeInviteRateLimitResult.AdvisorLimitReached)]
+    [InlineData(IntakeInviteRateLimitResult.LocationLimitReached)]
+    [InlineData(IntakeInviteRateLimitResult.TenantLimitReached)]
+    public async Task CreateAsync_Email_WhenRateLimited_ShouldThrowRateLimitExceededExceptionAndSendNothing(IntakeInviteRateLimitResult limit)
+    {
+        // One budget for both channels: email is no cheaper a way to spam someone.
+        _rateLimiterMock.Setup(l => l.TryAcquire(TenantId, LocationId, AdvisorId)).Returns(limit);
+
+        var act = () => CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        await act.Should().ThrowAsync<RateLimitExceededException>();
+        _calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_ShouldWorkWhileTextingIsDisabled()
+    {
+        _smsMock.Setup(s => s.IsEnabled).Returns(false);
+
+        var result = await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        result.Invite.DeliveryStatus.Should().Be(IntakeInviteDeliveryStatus.Queued);
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_ShouldPersistTheInviteBeforeEmailingItAndTextNobody()
+    {
+        await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        _calls.Should().Equal("create", "email", "update");
+        _smsMock.Verify(s => s.SendSmsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_ShouldRecordTheChannelNormalisedAddressConsentAndExpiry()
+    {
+        await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        _created.Should().NotBeNull();
+        _created!.Channel.Should().Be(IntakeInviteChannel.Email);
+        _created.Email.Should().Be("jane.doe@example.com");
+        _created.Phone.Should().BeNull();
+        _created.FirstName.Should().Be("Jane");
+        _created.AdvisorUserId.Should().Be(AdvisorId);
+        _created.IsSelfEntry.Should().BeFalse();
+        _created.ConsentCapturedAtUtc.Should().Be(Now.UtcDateTime);
+        _created.ExpiresAtUtc.Should().Be(Now.UtcDateTime.AddHours(72));
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_ShouldEmailTheAdvisorLinkToTheAddressAndStoreOnlyTheTokenHash()
+    {
+        await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        _emailMock.Verify(e => e.SendTransactionalEmailAsync(
+            "jane.doe@example.com", It.Is<string>(subject => subject.Contains("Nova RV Hurricane")),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        var prefix = $"{RedirectBaseUrl}/{Slug}?src=advisor&amp;inv=";
+        _sentEmailHtml.Should().Contain(prefix);
+        var start = _sentEmailHtml!.IndexOf(prefix, StringComparison.Ordinal) + prefix.Length;
+        var token = _sentEmailHtml.Substring(start, InviteToken.Length);
+
+        InviteToken.IsWellFormed(token).Should().BeTrue();
+        _created!.Id.Should().Be(InviteToken.Hash(token));
+        _sentEmailText.Should().Contain($"{RedirectBaseUrl}/{Slug}?src=advisor&inv={token}");
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_WhenAcsAcceptsTheEmail_ShouldStoreTheOperationIdAsQueued()
+    {
+        var result = await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        result.Invite.AcsMessageId.Should().Be(EmailOperationId);
+        result.Invite.DeliveryStatus.Should().Be(IntakeInviteDeliveryStatus.Queued);
+        result.Invite.SentAtUtc.Should().Be(Now.UtcDateTime);
+        result.IntakeUrl.Should().BeNull("an emailed invite's link went to the caller, not back to the advisor");
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_WhenTheEmailIsNotSent_ShouldMarkTheInviteFailedAndKeepTheConsentRecord()
+    {
+        _emailMock.Setup(e => e.SendTransactionalEmailAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+
+        var result = await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        result.Invite.DeliveryStatus.Should().Be(IntakeInviteDeliveryStatus.Failed);
+        result.Invite.SentAtUtc.Should().BeNull();
+        result.Invite.ConsentCapturedAtUtc.Should().Be(Now.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_WhenAValidPhoneIsAlsoGiven_ShouldKeepItForThePrefill()
+    {
+        var result = await CreateService().CreateAsync(TenantId, LocationId, EmailRequest() with { Phone = "801-555-1234" });
+
+        result.Invite.Phone.Should().Be("+18015551234");
+    }
+
+    [Fact]
+    public async Task CreateAsync_Text_WhenAnInvalidEmailIsAlsoGiven_ShouldThrowArgumentException()
+    {
+        var act = () => CreateService().CreateAsync(TenantId, LocationId, TextRequest() with { Email = "not-an-email" });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateAsync_SelfEntry_WhenAnEmailIsGiven_ShouldStoreItNormalisedAndEmailNobody()
+    {
+        var result = await CreateService().CreateAsync(TenantId, LocationId, SelfEntryRequest() with { Email = " Jane@Example.com" });
+
+        result.Invite.Email.Should().Be("jane@example.com");
+        _emailMock.Verify(e => e.SendTransactionalEmailAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_SelfEntry_WhenEmailIsGivenButInvalid_ShouldThrowArgumentException()
+    {
+        var act = () => CreateService().CreateAsync(TenantId, LocationId, SelfEntryRequest() with { Email = "jane@" });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
     // ── GetByIdAsync ─────────────────────────────────────────────────────
 
     [Theory]
@@ -489,6 +723,16 @@ public class IntakeInviteServiceTests
         _smsMock.Setup(s => s.IsEnabled).Returns(false);
 
         CreateService().GetCapability().SmsEnabled.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GetCapability_ShouldReportWhetherEmailIsEnabled(bool enabled)
+    {
+        _emailMock.Setup(e => e.IsEnabled).Returns(enabled);
+
+        CreateService().GetCapability().EmailEnabled.Should().Be(enabled);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

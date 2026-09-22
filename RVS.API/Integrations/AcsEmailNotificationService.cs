@@ -46,6 +46,43 @@ public sealed class AcsEmailNotificationService : INotificationService
     }
 
     /// <inheritdoc />
+    public bool IsEnabled => true;
+
+    /// <inheritdoc />
+    public async Task<string?> SendTransactionalEmailAsync(
+        string toEmail, string subject, string htmlBody, string plainTextBody,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(toEmail);
+        ArgumentException.ThrowIfNullOrWhiteSpace(subject);
+        ArgumentException.ThrowIfNullOrWhiteSpace(htmlBody);
+        ArgumentException.ThrowIfNullOrWhiteSpace(plainTextBody);
+
+        try
+        {
+            var emailMessage = new EmailMessage(
+                senderAddress: _fromAddress,
+                recipientAddress: toEmail,
+                content: new EmailContent(subject)
+                {
+                    Html = htmlBody,
+                    PlainText = plainTextBody,
+                });
+
+            var operation = await _emailClient.SendAsync(Azure.WaitUntil.Started, emailMessage, cancellationToken);
+
+            _logger.LogInformation("ACS Email send initiated with operation {OperationId}", operation.Id);
+            return operation.Id;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Recipient left out on purpose: the caller has the invite id, and this is a customer address.
+            _logger.LogError(ex, "Failed to send transactional email via ACS");
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
     public Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(toEmail);

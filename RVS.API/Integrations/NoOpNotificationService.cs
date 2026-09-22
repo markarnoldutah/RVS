@@ -16,6 +16,18 @@ public sealed class NoOpNotificationService : INotificationService
     }
 
     /// <inheritdoc />
+    public bool IsEnabled => false;
+
+    /// <inheritdoc />
+    public Task<string?> SendTransactionalEmailAsync(
+        string toEmail, string subject, string htmlBody, string plainTextBody,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("NoOpNotificationService: Would send email to {Recipient} with subject '{Subject}'", toEmail, subject);
+        return Task.FromResult<string?>(null);
+    }
+
+    /// <inheritdoc />
     public Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("NoOpNotificationService: Would send email to {Recipient} with subject '{Subject}'", toEmail, subject);

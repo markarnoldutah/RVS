@@ -41,4 +41,19 @@ public class NoOpNotificationServiceTests
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
+
+    [Fact]
+    public void IsEnabled_ShouldBeFalse()
+    {
+        // The advisor invite dialog reads this: a no-op must not offer to email anyone.
+        _sut.IsEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SendTransactionalEmailAsync_ShouldSendNothingAndReturnNull()
+    {
+        var result = await _sut.SendTransactionalEmailAsync("user@example.com", "Subject", "<p>Body</p>", "Body");
+
+        result.Should().BeNull();
+    }
 }

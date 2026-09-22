@@ -94,4 +94,40 @@ public class IntakeInviteTests
 
         act.Should().Throw<InvalidOperationException>();
     }
+
+    // ── Channel (issue #693) ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Channel_WhenTheStoredDocumentPredatesIt_ShouldReadAsSms()
+    {
+        // Every invite written before #693 was texted and has no "channel" field.
+        var json = """{"id":"inv_1","tenantId":"ten_test","locationId":"loc_test","firstName":"Jane","phone":"+18015551234"}""";
+
+        var invite = Newtonsoft.Json.JsonConvert.DeserializeObject<IntakeInvite>(json);
+
+        invite!.Channel.Should().Be(IntakeInviteChannel.Sms);
+        invite.Email.Should().BeNull();
+    }
+
+    [Fact]
+    public void Channel_ShouldRoundTripAsCamelCaseJson()
+    {
+        var invite = new IntakeInvite { Id = "inv_1", TenantId = "ten_test", Channel = IntakeInviteChannel.Email, Email = "jane@example.com" };
+
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(invite);
+
+        json.Should().Contain("\"channel\":\"email\"").And.Contain("\"email\":\"jane@example.com\"");
+    }
+
+    [Theory]
+    [InlineData("sms", true)]
+    [InlineData("email", true)]
+    [InlineData("SMS", false)]
+    [InlineData("fax", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void IntakeInviteChannel_IsKnown_ShouldAcceptOnlyTheTwoChannels(string? channel, bool expected)
+    {
+        IntakeInviteChannel.IsKnown(channel).Should().Be(expected);
+    }
 }

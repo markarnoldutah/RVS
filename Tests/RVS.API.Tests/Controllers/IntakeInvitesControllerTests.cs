@@ -116,15 +116,16 @@ public class IntakeInvitesControllerTests
     }
 
     [Fact]
-    public void GetCapability_ShouldReturnWhetherTextingIsEnabled()
+    public void GetCapability_ShouldReturnWhetherTextingAndEmailAreEnabled()
     {
-        _serviceMock.Setup(s => s.GetCapability()).Returns(new IntakeInviteCapability(SmsEnabled: false));
+        _serviceMock.Setup(s => s.GetCapability()).Returns(new IntakeInviteCapability(SmsEnabled: false, EmailEnabled: true));
 
         var result = _sut.GetCapability();
 
         var dto = result.Result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<IntakeInviteCapabilityResponseDto>().Subject;
         dto.SmsEnabled.Should().BeFalse();
+        dto.EmailEnabled.Should().BeTrue();
     }
 
     private static IntakeInvite BuildInvite() => new()
