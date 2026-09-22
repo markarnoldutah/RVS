@@ -1,0 +1,60 @@
+@* Shown by MainLayout in place of every page once the API reports the tenant's logins disabled
+   (issue #625), instead of a raw 403 on each page. Signing out or retrying must always work. *@
+@using RVS.UI.Shared.Services
+@inject TenantAccessState TenantAccess
+@inject SignOutService SignOut
+@inject NavigationManager Navigation
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
+    <MudPaper Elevation="2" Class="pa-8 text-center" Style="max-width: 500px; width: 100%;">
+        <MudIcon Icon="@Icons.Material.Filled.Block"
+                 Color="Color.Error" Size="Size.Large" Class="mb-4"
+                 aria-hidden="true" />
+        <MudText Typo="Typo.h5" Class="mb-2">Access restricted</MudText>
+        <MudStack Spacing="2" Class="mb-6" role="alert">
+            <MudText Typo="Typo.body1">
+                We're sorry, access to this site has been restricted. Please contact support.
+            </MudText>
+            @if (TenantAccess.DisabledMessage is { } message)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@message</MudText>
+            }
+            @if (TenantAccess.SupportContactEmail is { } email)
+            {
+                <MudText Typo="Typo.body2">
+                    Support: <MudLink Href="@($"mailto:{email}")">@email</MudLink>
+                </MudText>
+            }
+        </MudStack>
+        <MudStack Row="true" Justify="Justify.Center" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Logout"
+                       Disabled="_signingOut"
+                       OnClick="SignOutAsync">
+                Sign out
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="TryAgain">
+                Try again
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private bool _signingOut;
+
+    private async Task SignOutAsync()
+    {
+        _signingOut = true;
+        await SignOut.SignOutAsync();
+    }
+
+    // Reloads the app, so once logins are re-enabled the user carries on without signing in again.
+    private void TryAgain()
+    {
+        TenantAccess.Reset();
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}

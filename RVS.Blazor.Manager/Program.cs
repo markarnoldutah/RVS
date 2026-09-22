@@ -23,6 +23,10 @@ builder.Services.AddSingleton<ManagerAppState>();
 // Theme switcher state (scoped per browser tab)
 builder.Services.AddScoped<ThemeService>();
 
+// Whether the API has reported this user's tenant disabled (issue #625) — the layout swaps
+// every page for an "access restricted" message while it is set.
+builder.Services.AddSingleton<TenantAccessState>();
+
 // Get API base URL from configuration
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
 
@@ -36,7 +40,8 @@ builder.Services.AddHttpClient("RVS.API", client =>
     var handler = sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(authorizedUrls: [apiBaseUrl]);
     return handler;
-});
+})
+.AddHttpMessageHandler(sp => new TenantAccessGateHandler(sp.GetRequiredService<TenantAccessState>()));
 
 // Register AuthorizationMessageHandler
 builder.Services.AddScoped<AuthorizationMessageHandler>();
@@ -63,6 +68,9 @@ builder.Services.AddScoped<RVS.UI.Shared.Services.IntakeInviteApiClient>(sp =>
 // Platform-admin provisioning (issue #563) — the hidden /admin pages. The API is the only gate.
 builder.Services.AddScoped<AdminApiClient>(sp =>
     new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+
+// Profile-menu and access-restricted sign-out (issues #498, #625).
+builder.Services.AddScoped<SignOutService>();
 
 // This device's "Keep me signed in" answer, read from js/session-persist.js once the host is
 // built (below). The OIDC options are resolved lazily on first use, after that read; if they were

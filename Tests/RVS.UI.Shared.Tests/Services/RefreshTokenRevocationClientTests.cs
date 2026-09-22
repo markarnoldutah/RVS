@@ -106,6 +106,35 @@ public class RefreshTokenRevocationClientTests
         result.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task RevokeAsync_WhenAuth0NeverAnswers_ShouldGiveUpAfterTheTimeoutAndReturnFalse()
+    {
+        // Issue #625: a revoke that never returned left the user stuck on "Log Out".
+        var sut = new RefreshTokenRevocationClient(
+            new HttpClient(new HangingHandler()), Authority, ClientId, TimeSpan.FromMilliseconds(50));
+
+        var result = await sut.RevokeAsync("rt-abc", TestContext.Current.CancellationToken);
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Constructor_WhenTimeoutIsNotPositive_ShouldThrowArgumentOutOfRangeException()
+    {
+        var act = () => new RefreshTokenRevocationClient(new HttpClient(), Authority, ClientId, TimeSpan.Zero);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    private sealed class HangingHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+    }
+
     private sealed record RecordedRequest(HttpMethod Method, string Uri, string? ContentType, string Body);
 
     private sealed class RecordingHandler(HttpStatusCode status, Exception? throws) : HttpMessageHandler

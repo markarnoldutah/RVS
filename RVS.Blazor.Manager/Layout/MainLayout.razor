@@ -3,6 +3,8 @@
 @inject RVS.Blazor.Manager.State.ManagerAppState AppState
 @inject ThemeService ThemeService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject RVS.UI.Shared.Services.TenantAccessState TenantAccess
+@inject NavigationManager Navigation
 
 <MudThemeProvider Theme="ThemeService.CurrentTheme" IsDarkMode="ThemeService.IsDarkMode" />
 <MudPopoverProvider />
@@ -39,7 +41,7 @@
                        OnClick="CycleThemeAsync" />
     </MudAppBar>
 
-    @if (_isAuthorized)
+    @if (_isAuthorized && !IsRestricted)
     {
         <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always"
                    Style="@(ThemeService.IsDarkMode ? "color: white;" : "")">
@@ -48,7 +50,11 @@
     }
 
     <MudMainContent Style="@GetMainContentStyle()">
-        @if (_isAuthorized)
+        @if (_isAuthorized && IsRestricted)
+        {
+            <TenantAccessRestricted />
+        }
+        else if (_isAuthorized)
         {
             <MudContainer MaxWidth="MaxWidth.Large" Class="py-4 px-4">
                 <ErrorBoundary>
@@ -91,6 +97,7 @@
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += StateHasChanged;
+        TenantAccess.Changed += OnTenantAccessChanged;
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
     }
 
@@ -107,6 +114,15 @@
             await ThemeService.InitializeAsync();
         }
     }
+
+    // Issue #625: once the API reports the tenant disabled, every page is replaced by one
+    // "access restricted" message. The authentication/* pages stay reachable so sign-out and
+    // sign-in still work.
+    private bool IsRestricted =>
+        TenantAccess.IsRestricted
+        && !Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("authentication/", StringComparison.OrdinalIgnoreCase);
+
+    private void OnTenantAccessChanged() => _ = InvokeAsync(StateHasChanged);
 
     private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
     {
@@ -128,6 +144,7 @@
     public void Dispose()
     {
         ThemeService.OnThemeChanged -= StateHasChanged;
+        TenantAccess.Changed -= OnTenantAccessChanged;
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     }
 
