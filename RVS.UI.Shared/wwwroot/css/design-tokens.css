@@ -1,72 +1,83 @@
 /* ============================================================
    RVS Design Tokens — CSS Custom Properties
-   Consumed by all three frontends:
-     Blazor.Intake, Blazor.Manager, MAUI.Tech
+   Consumed by Blazor.Intake and Blazor.Manager.
+
+   The brand values here mirror RVS.UI.Shared/Theme/RvsBrand.cs
+   ("RV Intake", Denim & Rust — Spec THEME-1). RvsBrand.cs is the
+   authoritative copy; this file exists for the components that
+   style themselves in plain CSS rather than through MudBlazor.
+   Change both together.
    ============================================================ */
 
 :root {
     /* --------------------------------------------------------
-       Colors — Brand (Material Design Indigo)
+       Colors — Brand (Denim & Rust)
+       Ink carries structure, Rust carries action. See RvsBrand.cs.
        -------------------------------------------------------- */
-    --rvs-color-primary: #3F51B5;           /* Indigo 500 */
-    --rvs-color-primary-hover: #3949AB;     /* Indigo 600 */
-    --rvs-color-primary-active: #303F9F;    /* Indigo 700 */
-    --rvs-color-secondary: #6B6B6B;
-    --rvs-color-secondary-hover: #5A5A5A;
+    --rvs-color-ink: #2F4C6B;               /* Denim */
+    --rvs-color-ink-dark: #1B2A3C;          /* Denim, dark-mode ground */
+    --rvs-color-paper: #F6F1E7;             /* Cream */
+    --rvs-color-paper-neutral: #FAF8F3;     /* Cream, barely tinted */
+    --rvs-color-primary: #C1502E;           /* Rust — action */
+    --rvs-color-primary-hover: #A84525;     /* Rust, pressed */
+    --rvs-color-primary-active: #8F3A1E;    /* Rust, active */
+    --rvs-color-primary-on-dark: #E8956D;   /* Rust, on Ink/dark surfaces */
+    --rvs-color-secondary: #2F4C6B;         /* Ink — structure */
+    --rvs-color-secondary-hover: #26405A;
 
     /* --------------------------------------------------------
        Colors — Semantic / Status
        -------------------------------------------------------- */
-    --rvs-color-success: #107C10;
-    --rvs-color-success-bg: #DFF6DD;
-    --rvs-color-warning: #FFB900;
-    --rvs-color-warning-bg: #FFF4CE;
-    --rvs-color-error: #D13438;
-    --rvs-color-error-bg: #FDE7E9;
-    --rvs-color-info: #0078D4;
-    --rvs-color-info-bg: #DEECF9;
+    --rvs-color-success: #3F7D58;
+    --rvs-color-success-bg: #E4EFE8;
+    --rvs-color-warning: #C98A2C;
+    --rvs-color-warning-bg: #FBF0DC;
+    --rvs-color-error: #B3261E;
+    --rvs-color-error-bg: #F9E3E1;
+    --rvs-color-info: #3B6E91;
+    --rvs-color-info-bg: #E3EDF3;
 
     /* --------------------------------------------------------
        Colors — Status badges
        -------------------------------------------------------- */
-    --rvs-status-new-bg: #E8F5E9;
-    --rvs-status-new-fg: #2E7D32;
-    --rvs-status-in-progress-bg: #E3F2FD;
-    --rvs-status-in-progress-fg: #1565C0;
-    --rvs-status-waiting-on-parts-bg: #FFF3E0;
-    --rvs-status-waiting-on-parts-fg: #E65100;
-    --rvs-status-waiting-on-customer-bg: #E0F2F1;
-    --rvs-status-waiting-on-customer-fg: #00695C;
-    --rvs-status-completed-bg: #F3E5F5;
-    --rvs-status-completed-fg: #6A1B9A;
-    --rvs-status-cancelled-bg: #FAFAFA;
-    --rvs-status-cancelled-fg: #616161;
-    --rvs-status-default-bg: #F5F5F5;
-    --rvs-status-default-fg: #424242;
+    --rvs-status-new-bg: #E4EFE8;
+    --rvs-status-new-fg: #2F6344;
+    --rvs-status-in-progress-bg: #E3EDF3;
+    --rvs-status-in-progress-fg: #2F4C6B;
+    --rvs-status-waiting-on-parts-bg: #FBF0DC;
+    --rvs-status-waiting-on-parts-fg: #8F5A12;
+    --rvs-status-waiting-on-customer-bg: #E0EEEC;
+    --rvs-status-waiting-on-customer-fg: #14625A;
+    --rvs-status-completed-bg: #EDE7F2;
+    --rvs-status-completed-fg: #5A3A78;
+    --rvs-status-cancelled-bg: #F1EDE5;
+    --rvs-status-cancelled-fg: #5E5951;
+    --rvs-status-default-bg: #F1EDE5;
+    --rvs-status-default-fg: #3D4B58;
 
     /* --------------------------------------------------------
        Colors — Priority badges
        -------------------------------------------------------- */
-    --rvs-priority-critical-bg: #D13438;
+    --rvs-priority-critical-bg: #B3261E;
     --rvs-priority-critical-fg: #FFFFFF;
-    --rvs-priority-high-bg: #FFB900;
-    --rvs-priority-high-fg: #3B3B3B;
-    --rvs-priority-medium-bg: #0078D4;
+    --rvs-priority-high-bg: #C98A2C;
+    --rvs-priority-high-fg: #2B2B2B;
+    --rvs-priority-medium-bg: #2F4C6B;
     --rvs-priority-medium-fg: #FFFFFF;
-    --rvs-priority-low-bg: #E1DFDD;
-    --rvs-priority-low-fg: #424242;
-    --rvs-priority-default-bg: #F5F5F5;
-    --rvs-priority-default-fg: #424242;
+    --rvs-priority-low-bg: #E3DDD0;
+    --rvs-priority-low-fg: #3D4B58;
+    --rvs-priority-default-bg: #F1EDE5;
+    --rvs-priority-default-fg: #3D4B58;
 
     /* --------------------------------------------------------
        Colors — Surfaces & Text
        -------------------------------------------------------- */
     --rvs-color-surface: #FFFFFF;
-    --rvs-color-surface-secondary: #FAFAFA;
-    --rvs-color-border: #E1DFDD;
-    --rvs-color-text-primary: #242424;
-    --rvs-color-text-secondary: #616161;
-    --rvs-color-text-disabled: #A19F9D;
+    --rvs-color-surface-secondary: #FAF8F3;
+    --rvs-color-border: #E3DDD0;
+    --rvs-color-text-primary: #20344A;
+    --rvs-color-text-secondary: rgba(32, 52, 74, 0.68);
+    --rvs-color-text-disabled: rgba(32, 52, 74, 0.38);
 
     /* --------------------------------------------------------
        Spacing — 4px base grid
@@ -82,7 +93,7 @@
     /* --------------------------------------------------------
        Typography
        -------------------------------------------------------- */
-    --rvs-font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
+    --rvs-font-family: 'Space Grotesk', 'Roboto', 'Helvetica', 'Arial', sans-serif;
     --rvs-font-size-xs: 0.75rem;    /* 12px */
     --rvs-font-size-sm: 0.8125rem;  /* 13px */
     --rvs-font-size-md: 0.875rem;   /* 14px */
@@ -98,9 +109,9 @@
     /* --------------------------------------------------------
        Border Radius
        -------------------------------------------------------- */
-    --rvs-radius-sm: 2px;
-    --rvs-radius-md: 4px;
-    --rvs-radius-lg: 8px;
+    --rvs-radius-sm: 4px;
+    --rvs-radius-md: 8px;
+    --rvs-radius-lg: 10px;
     --rvs-radius-pill: 9999px;
 
     /* --------------------------------------------------------
@@ -115,6 +126,18 @@
        Usage: background-image: var(--rvs-image-tetons)
        -------------------------------------------------------- */
     --rvs-image-tetons: url('/_content/RVS.UI.Shared/images/tetons.jpg');
+
+    /* --------------------------------------------------------
+       Brand marks — editable SVG sources from the logo kit.
+       In-app chrome uses the inlined <BrandWordmark> component
+       instead: an SVG loaded as an image cannot reach the
+       self-hosted Space Grotesk, so its live text would fall
+       back to a system font. These are for CSS backgrounds and
+       for handing to anyone outside the app.
+       -------------------------------------------------------- */
+    --rvs-mark-icon: url('/_content/RVS.UI.Shared/brand/icon.svg');
+    --rvs-mark-wordmark: url('/_content/RVS.UI.Shared/brand/wordmark-horizontal.svg');
+    --rvs-mark-wordmark-reversed: url('/_content/RVS.UI.Shared/brand/wordmark-horizontal-reversed.svg');
 }
 
 /* --------------------------------------------------------

@@ -11,8 +11,9 @@
 <KeepSignedInPrompt />
 
 <MudLayout Style="@GetLayoutStyle()">
-    <MudAppBar Elevation="2"
-               Color="Color.Primary">
+    @* No Color= : the app bar takes AppbarBackground (Ink) from the theme. Color="Color.Primary"
+       would paint it Rust, which the brand reserves for action, not structure (Spec THEME-1). *@
+    <MudAppBar Elevation="2">
         @if (_isAuthorized)
         {
             <MudIconButton Icon="@Icons.Material.Filled.Menu"
@@ -21,11 +22,11 @@
                            aria-label="Toggle navigation menu"
                            OnClick="ToggleDrawer" />
         }
-        <MudIconButton Icon="@Icons.Material.Filled.RvHookup"
-                       Color="Color.Inherit"
-                       Href="/"
-                       aria-label="RVS Manager home" />
-        <MudText Typo="Typo.h6" Class="ml-2" Style="@($"color: {(ThemeService.Mode == ThemeMode.HighContrast ? "black" : "white")};")">
+        <MudLink Href="/" aria-label="RVS Manager home" Class="d-flex align-center ml-1">
+            <BrandWordmark Variant="BrandWordmarkVariant.Icon" Reversed="true" Height="30px" Title="RV Intake" />
+        </MudLink>
+        @* AppbarText carries the colour now — see MainLayout. *@
+        <MudText Typo="Typo.h6" Class="ml-3">
             RVS Manager
         </MudText>
         <MudSpacer />

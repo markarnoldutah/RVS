@@ -1,5 +1,5 @@
 html, body {
-    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+    font-family: 'Space Grotesk', 'Roboto', 'Helvetica', 'Arial', sans-serif;
     margin: 0;
     padding: 0;
     background-color: var(--mud-palette-background);
@@ -31,9 +31,11 @@ html, body {
     min-height: 44px;
 }
 
-/* Focus indicator for keyboard navigation (WCAG 2.4.7) */
+/* Focus indicator for keyboard navigation (WCAG 2.4.7).
+   Tracks the active MudBlazor palette rather than a fixed hex, so the ring is Rust in
+   light, the on-dark accent in dark, and yellow in high contrast (Spec THEME-1). */
 :focus-visible {
-    outline: 2px solid #1565C0;
+    outline: 2px solid var(--mud-palette-primary);
     outline-offset: 2px;
 }
 
@@ -42,8 +44,8 @@ html, body {
     position: absolute;
     top: -40px;
     left: 0;
-    background: #1565C0;
-    color: white;
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
     padding: 8px 16px;
     z-index: 9999;
     font-size: 14px;

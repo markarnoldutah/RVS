@@ -3,8 +3,8 @@
   "short_name": "RV Intake",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#FAFAFA",
-  "theme_color": "#1565C0",
+  "background_color": "#F6F1E7",
+  "theme_color": "#2F4C6B",
   "prefer_related_applications": false,
   "icons": [
     {
@@ -16,6 +16,18 @@
       "src": "icon-512.png",
       "type": "image/png",
       "sizes": "512x512"
+    },
+    {
+      "src": "icon-192-maskable.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
     }
   ]
 }

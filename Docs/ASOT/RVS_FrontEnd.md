@@ -80,9 +80,13 @@ Typed clients in `Services/`:
 
 Also `Validation/` (`ClientVinValidator`, `VinTranscriptCleaner`, `ClientSearchInputSanitizer`; the intake contact rules, `EmailValidator` and `PhoneValidator`, live in `RVS.Domain/Validation` so the API applies the same ones, #679) and `Components/` — `StatusBadge`, `PriorityBadge`, `IntakeInviteStatusFormatting` (a MudBlazor-free label/tone helper for the send dialog) and `AttachmentPreview` (classifies an attachment for its SR-detail tile, #699) are used; `AssetDisplay`, `AttachmentThumbnail` and `DiagnosticResponseView` are referenced nowhere.
 
-**`ThemeService` is not in `RVS.UI.Shared`.** Each app has its own copy at `RVS.Blazor.{Intake,Manager}/Services/ThemeService.cs`. Documentation claiming otherwise is wrong.
+**Theme: palette shared, mode per app (#702).** `Theme/` holds the brand — `RvsBrand` (the Denim & Rust tokens and the Space Grotesk stack), `ManagerTheme` and `IntakeTheme` (a `Theme` and a `HighContrast` `MudTheme` each), plus the internal `RvsTypography` and `RvsHighContrastPalette` they are built from. That is the authoritative copy of brand colour; `wwwroot/css/design-tokens.css` mirrors it for the components that style themselves in plain CSS, and the two must change together.
 
-`RVS.UI.Shared` and its test project are excluded from Debug builds in the solution and build only on demand.
+**`ThemeService` is still not in `RVS.UI.Shared`.** Each app has its own copy at `RVS.Blazor.{Intake,Manager}/Services/ThemeService.cs`. What lives there now is only mode selection and persistence — which of the shared themes is active, and (Manager) writing that choice to `localStorage`. No palette is declared in either app.
+
+**Brand assets.** `wwwroot/fonts/` self-hosts Space Grotesk (Regular/Medium/Bold WOFF2 + `fonts.css`), reached by both apps as `_content/RVS.UI.Shared/fonts/fonts.css`; no app links Google Fonts any more, because the intake PWA has to render in brand from cache on a bad connection. A publish build puts all four files in `service-worker-assets.js`. `wwwroot/brand/` holds the logo kit's SVG sources. In-app chrome does **not** reference those files: `BrandWordmark` / `BrandWordmarkSvg` inline the mark instead, because the kit's SVGs carry live `<text>` and a browser will not load an external `@font-face` into an SVG used as an image — loaded that way the wordmark falls back to a system font.
+
+`RVS.UI.Shared` and its test project are excluded from Debug builds in the solution and build only on demand. The project references MudBlazor (kept in lockstep with the two apps) because the shared theme is typed against `MudTheme`.
 
 ---
 

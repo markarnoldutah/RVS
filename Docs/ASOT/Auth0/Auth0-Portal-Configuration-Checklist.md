@@ -316,16 +316,17 @@ There is no per-application override, and the per-*customer* branded login that 
 
 ### 7.1 The logo does not exist yet — decide this first
 
-§7.2 asks for a public HTTPS logo URL. **There is no RVS logo asset in this repo.** `RVS.Blazor.Manager/wwwroot/icon-192.png` and `icon-512.png` are both byte-identical 32×32 placeholders despite their filenames, and the Intake app's are the same. They serve 200 from `https://manager.rvintake.com/`, so the URL would work — and the login page would show a 32px smudge scaled up.
+§7.2 asks for a public HTTPS logo URL. **Issue #702 landed the logo kit, so there is now a real asset** — the previous placeholder problem (both apps shipped byte-identical 32×32 PNGs named `icon-192.png` and `icon-512.png`, which the login page would have rendered as a smudge scaled up) is gone.
 
-Three ways out, in order of preference:
+Use `https://manager.rvintake.com/icon-512.png`. It is the "RV Intake" badge from the kit — a genuine 512×512, cream `RV` on an Ink `#2F4C6B` rounded square — and Auth0 renders it at roughly 150×150, so there is headroom on retina. The Manager SWA is public and CDN-backed and serves it today; no `staticwebapp.config.json` change is needed.
 
-1. **Ship a real asset.** Auth0 fetches the URL server-side and renders it at roughly 150×150, so a square PNG at 300×300 (for retina) or an SVG is right. Drop it at `RVS.Blazor.Manager/wwwroot/images/login-logo.png` and use `https://manager.rvintake.com/images/login-logo.png`.
-   The Manager SWA is already public and CDN-backed, and `/images/` is served as-is (`images/tetons-desktop.jpg` answers 200 today), so no `staticwebapp.config.json` change is needed.
+Verify the exact URL with `curl` before pasting it into Auth0. A misspelled path does **not** 404: `navigationFallback` rewrites it to `index.html` and it answers **200 `text/html`**. Auth0 fetches server-side, stores what it gets, and shows a blank logo with no error — so a typo looks identical to a broken Auth0.
 
-   Verify the exact URL with `curl` before pasting it into Auth0. A missing or misspelled path under `/images/` does **not** 404: `navigationFallback` rewrites it to `index.html` and it answers **200 `text/html`**. Auth0 fetches server-side, stores what it gets, and shows you a blank logo with no error — so a typo looks identical to a broken Auth0.
-2. **A wordmark is enough.** The displayed brand is "RV Intake" ([`RVS.Domain/Packets/PacketBranding.cs`](../../../RVS.Domain/Packets/PacketBranding.cs) — `BrandName`, the same string on the packet masthead). A flat white-on-indigo "RV Intake" wordmark, square-cropped, is more legitimate-looking than a stretched icon and takes minutes.
-3. **Leave the field empty.** Auth0 then renders its own default mark. That is worse than either option above for the exact reason §6 exists — it reads as somebody else's login page — so treat this as a placeholder, not a decision.
+```bash
+curl -sI https://manager.rvintake.com/icon-512.png | head -3   # expect 200 and image/png, not text/html
+```
+
+If a wordmark is ever wanted instead of the badge, `RVS.UI.Shared/wwwroot/brand/wordmark-stacked.svg` is the square lockup — but it carries live `<text>`, so it needs Space Grotesk converted to outlines before anything outside the app renders it correctly. The badge has no text and no such caveat, which is why it is the recommendation here.
 
 Do not point the URL at `manager.rvserviceflow.com`. It was retired on 2026-09-17 and does not resolve; because Auth0 fetches it server-side the failure surfaces as a silently missing logo, not an error you would notice.
 
@@ -337,17 +338,20 @@ Do not point the URL at `manager.rvserviceflow.com`. It was retired on 2026-09-1
    | Field | Value | Source |
    | --- | --- | --- |
    | Logo | the URL decided in §7.1 | — |
-   | Primary color | `#3F51B5` | Indigo 500 — `PaletteLight.Primary` in both apps' `ThemeService.cs` |
-   | Page background | `#FAFAFA` | `PaletteLight.Background` — a near-white, deliberately not a second brand color competing with the button |
+   | Primary color | `#C1502E` | Rust — `RvsBrand.Accent`, the action colour the Manager app's buttons use |
+   | Page background | `#FAF8F3` | `RvsBrand.PaperNeutral` — Manager's `PaletteLight.Background`, a barely-tinted paper deliberately not competing with the button |
 
-   **`#3F51B5`, not `#1565C0`.** Earlier drafts of this section and of `CLAUDE.md`'s theme notes both said `#1565C0`, a value that has never been in the code; both were corrected alongside this. [`RVS.Blazor.Manager/Services/ThemeService.cs:94`](../../../RVS.Blazor.Manager/Services/ThemeService.cs) and [`RVS.Blazor.Intake/Services/ThemeService.cs:47`](../../../RVS.Blazor.Intake/Services/ThemeService.cs) are both Indigo 500.
-   Using `#1565C0` would put the login button in a visibly different blue from the app it hands off to, which is the specific failure this section exists to avoid.
+   **These changed with issue #702**, when the brand moved from Material Indigo to Denim & Rust. The old values were `#3F51B5` and `#FAFAFA`; a tenant still carrying them hands off to an app in a completely different palette, which is the specific failure this section exists to avoid. Read the current values from [`RVS.UI.Shared/Theme/RvsBrand.cs`](../../../RVS.UI.Shared/Theme/RvsBrand.cs) — the one authoritative copy — rather than from this table if the two ever disagree.
+
+   Note the split: the login **button** takes Rust because it is an action, while the Ink `#2F4C6B` that dominates the app bar is structure and does not belong in either field here.
 
 3. **Leave the watermark alone for now.** Free-plan tenants show a "Powered by Auth0" badge below the widget and it cannot be removed on Free — removing it means the paid Essentials tier (~$35/mo). It reads as "they didn't roll their own auth", not as a phishing signal. Revisit once there are paying customers.
 
 These settings apply automatically to the login, password-reset and MFA screens; there is nothing separate to configure for those. Check the password-reset screen anyway — it is the one a dealer sees under stress, and it is the one whose *link* depends on §6.4's notification toggle.
 
-Both apps also carry a dark palette and a separate high-contrast accessibility theme (`PaletteDark` and the `#FFFF00` palette in `ThemeService.cs`). The no-code customization editor takes **one** palette, so don't try to mirror either — the values above are the whole surface.
+Manager also carries a dark palette, and both apps carry a separate high-contrast accessibility theme (`PaletteDark` and `RvsHighContrastPalette` in `RVS.UI.Shared/Theme/`). The no-code customization editor takes **one** palette, so don't try to mirror either — the values above are the whole surface.
+
+The login page also cannot reach the app's self-hosted Space Grotesk, so it renders in Auth0's default face. That is expected and not worth fixing on the Free plan; the colour and the logo are what carry continuity across the hand-off.
 
 Don't try to script any of this. The configuration scripts deliberately don't manage tenant-wide settings — an edit here is not something `auth0-apply.sh` will report or revert.
 

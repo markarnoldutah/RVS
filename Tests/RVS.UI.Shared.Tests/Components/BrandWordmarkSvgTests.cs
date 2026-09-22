@@ -1,0 +1,77 @@
+using FluentAssertions;
+using RVS.UI.Shared.Components;
+using RVS.UI.Shared.Theme;
+
+namespace RVS.UI.Shared.Tests.Components;
+
+/// <summary>
+/// The wordmark is inlined rather than loaded as an image so the self-hosted Space Grotesk
+/// applies to its live text (Spec THEME-1, issue #702). These tests hold that inline copy to
+/// the logo kit's geometry and colourways.
+/// </summary>
+public class BrandWordmarkSvgTests
+{
+    [Fact]
+    public void Build_OnLightSurface_ShouldDrawInkBadgeAndRustRv()
+    {
+        var svg = BrandWordmarkSvg.Build(BrandWordmarkVariant.Horizontal, reversed: false, height: "32px", title: "RV Intake");
+
+        svg.Should().Contain($"fill=\"{RvsBrand.Ink}\"");
+        svg.Should().Contain($"fill=\"{RvsBrand.Accent}\"");
+        svg.Should().NotContain(RvsBrand.AccentOnDark);
+    }
+
+    [Fact]
+    public void Build_Reversed_ShouldUseTheOnDarkAccentAndCreamBadge()
+    {
+        var svg = BrandWordmarkSvg.Build(BrandWordmarkVariant.Horizontal, reversed: true, height: "32px", title: "RV Intake");
+
+        svg.Should().Contain($"fill=\"{RvsBrand.AccentOnDark}\"");
+        svg.Should().Contain($"fill=\"{RvsBrand.Paper}\"");
+        svg.Should().NotContain($"fill=\"{RvsBrand.Accent}\"");
+    }
+
+    [Fact]
+    public void Build_ShouldNameTheBrandTypefaceWithFallbacks()
+    {
+        var svg = BrandWordmarkSvg.Build(BrandWordmarkVariant.Horizontal, reversed: true, height: "32px", title: "RV Intake");
+
+        svg.Should().Contain("Space Grotesk");
+        svg.Should().Contain("sans-serif");
+        svg.Should().Contain("font-weight=\"700\"");
+    }
+
+    [Theory]
+    [InlineData(BrandWordmarkVariant.Horizontal, true, true)]
+    [InlineData(BrandWordmarkVariant.Icon, true, false)]
+    [InlineData(BrandWordmarkVariant.TextOnly, false, true)]
+    public void Build_ShouldIncludeOnlyThePartsTheVariantCallsFor(
+        BrandWordmarkVariant variant, bool expectBadge, bool expectWord)
+    {
+        var svg = BrandWordmarkSvg.Build(variant, reversed: false, height: "32px", title: "RV Intake");
+
+        svg.Contains("<rect", StringComparison.Ordinal).Should().Be(expectBadge);
+        svg.Contains("Intake</tspan>", StringComparison.Ordinal).Should().Be(expectWord);
+    }
+
+    [Fact]
+    public void Build_ShouldCarryAnAccessibleNameAndBeHiddenFromTheAccessibilityTreeTwice()
+    {
+        var svg = BrandWordmarkSvg.Build(BrandWordmarkVariant.Horizontal, reversed: false, height: "40px", title: "RVS Manager home");
+
+        svg.Should().Contain("role=\"img\"");
+        svg.Should().Contain("aria-label=\"RVS Manager home\"");
+        svg.Should().Contain("<title>RVS Manager home</title>");
+        svg.Should().Contain("height=\"40px\"");
+    }
+
+    [Fact]
+    public void Build_ShouldEscapeATitleThatWouldOtherwiseBreakOutOfTheMarkup()
+    {
+        var svg = BrandWordmarkSvg.Build(BrandWordmarkVariant.Icon, reversed: false, height: "32px", title: "Ben & Jay's \"RV\" <shop>");
+
+        svg.Should().NotContain("<shop>");
+        svg.Should().Contain("&amp;");
+        svg.Should().Contain("&lt;shop&gt;");
+    }
+}
