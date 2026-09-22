@@ -62,4 +62,71 @@ public class KeepSignedInPolicyTests
 
         act.Should().Throw<ArgumentNullException>();
     }
+
+    // ── Profile-menu control (issue #616) ────────────────────────────────────
+
+    [Theory]
+    [InlineData("yes", KeepSignedInState.On)]
+    [InlineData("no", KeepSignedInState.Off)]
+    [InlineData(null, KeepSignedInState.NotSet)]
+    [InlineData("", KeepSignedInState.NotSet)]
+    [InlineData("YES", KeepSignedInState.NotSet)]
+    [InlineData("No", KeepSignedInState.NotSet)]
+    [InlineData(" yes ", KeepSignedInState.NotSet)]
+    [InlineData("true", KeepSignedInState.NotSet)]
+    public void ParseState_ShouldMapOnlyExactStoredAnswers(string? preference, KeepSignedInState expected)
+    {
+        KeepSignedInPolicy.ParseState(preference).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ParseState_ShouldAgreeWithShouldForceLogin()
+    {
+        // The menu must never show "On" for a value the startup policy treats as not opted in.
+        foreach (var preference in new[] { "yes", "no", null, "", "YES", "true" })
+        {
+            var shownAsOn = KeepSignedInPolicy.ParseState(preference) == KeepSignedInState.On;
+            shownAsOn.Should().Be(!KeepSignedInPolicy.ShouldForceLogin(preference), $"preference '{preference}'");
+        }
+    }
+
+    [Theory]
+    [InlineData(KeepSignedInState.On, "On")]
+    [InlineData(KeepSignedInState.Off, "Off")]
+    [InlineData(KeepSignedInState.NotSet, "Not set")]
+    public void GetLabel_ShouldDescribeEachState(KeepSignedInState state, string expected)
+    {
+        KeepSignedInPolicy.GetLabel(state).Should().Be(expected);
+    }
+
+    [Fact]
+    public void GetLabel_WhenStateIsUndefined_ShouldThrowArgumentOutOfRangeException()
+    {
+        var act = () => KeepSignedInPolicy.GetLabel((KeepSignedInState)99);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Theory]
+    [InlineData(KeepSignedInState.On, true)]
+    [InlineData(KeepSignedInState.Off, false)]
+    public void ToPersist_WhenStateIsAnAnswer_ShouldReturnWhetherToKeepTheSignIn(KeepSignedInState state, bool expected)
+    {
+        KeepSignedInPolicy.ToPersist(state).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ToPersist_WhenStateIsNotSet_ShouldThrowArgumentOutOfRangeException()
+    {
+        // "Not set" is reached by resetting, never by storing an answer.
+        var act = () => KeepSignedInPolicy.ToPersist(KeepSignedInState.NotSet);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void SharedComputerWarning_ShouldWarnAgainstSharedAndPublicComputers()
+    {
+        KeepSignedInPolicy.SharedComputerWarning.Should().Be("Don't choose this on a shared or public computer.");
+    }
 }

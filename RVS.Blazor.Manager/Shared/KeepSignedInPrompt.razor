@@ -4,7 +4,8 @@
     Asks once per device, after sign-in, whether to keep the manager signed in across browser
     and installed-app restarts (issue #498). Until the user says yes, js/session-persist.js
     persists nothing and the session ends with the tab, which keeps shared service-desk computers
-    from staying signed in. The answer is stored on the device, so the prompt does not return.
+    from staying signed in. The answer is stored on the device, so the prompt does not return; the
+    profile menu (LoginDisplay) can change or reset it (issue #616).
 *@
 
 @if (_ask)
@@ -15,7 +16,7 @@
         <MudText Typo="Typo.subtitle1" Class="mb-1" id="keep-signed-in-title">Keep me signed in on this device?</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
             You'll stay signed in for up to 30 days (7 days without use), so status links in packet
-            emails open straight into the app. Don't choose this on a shared or public computer.
+            emails open straight into the app. @KeepSignedInPolicy.SharedComputerWarning
         </MudText>
         <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Wrap="Wrap.Wrap">
             <MudButton Variant="Variant.Text" OnClick="@(() => ChooseAsync(false))">Not on this device</MudButton>

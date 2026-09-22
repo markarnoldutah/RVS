@@ -3,7 +3,7 @@
 
 <AuthorizeView Context="authState">
     <Authorized>
-        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" OpenChanged="OnMenuOpenChangedAsync">
             <ActivatorContent>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
                            Style="cursor: pointer;" @onclick="context.ToggleAsync">
@@ -34,6 +34,43 @@
                                 <MudRadio T="ThemeMode" Value="ThemeMode.HighContrast" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">High Contrast</MudRadio>
                             </MudStack>
                         </MudRadioGroup>
+                    </MudStack>
+                </div>
+                <MudDivider />
+                @* Change or reset this device's "Keep me signed in" answer (issue #616). The saved
+                   sign-in is added or removed at once; the current tab stays signed in either way.
+                   Whether Auth0 asks for the password is decided when the app starts
+                   (KeepSignedInPolicy, Program.cs), so the rest applies from the next app load. *@
+                <div class="px-4 py-2" style="max-width: 280px;">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.subtitle2" Style="@($"color: {MenuItemTextColor}")">Keep me signed in on this device</MudText>
+                        @if (_keepSignedIn is { } keepSignedIn)
+                        {
+                            <MudText Typo="Typo.caption">Currently: @KeepSignedInPolicy.GetLabel(keepSignedIn)</MudText>
+                            <MudRadioGroup T="KeepSignedInState" Value="keepSignedIn" ValueChanged="OnKeepSignedInChangedAsync">
+                                <MudStack Spacing="0">
+                                    <MudRadio T="KeepSignedInState" Value="KeepSignedInState.On" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">On</MudRadio>
+                                    <MudRadio T="KeepSignedInState" Value="KeepSignedInState.Off" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">Off</MudRadio>
+                                </MudStack>
+                            </MudRadioGroup>
+                            <MudText Typo="Typo.caption" Color="@(keepSignedIn == KeepSignedInState.On ? Color.Warning : Color.Default)">
+                                @KeepSignedInPolicy.SharedComputerWarning
+                            </MudText>
+                            <MudText Typo="Typo.caption">
+                                This tab stays signed in. The change applies the next time you open the app.
+                            </MudText>
+                            @if (keepSignedIn != KeepSignedInState.NotSet)
+                            {
+                                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
+                                           Style="align-self: flex-start;" OnClick="ResetKeepSignedInAsync">
+                                    Ask me again at next sign-in
+                                </MudButton>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption">Not available in this browser.</MudText>
+                        }
                     </MudStack>
                 </div>
                 <MudDivider />
@@ -87,6 +124,42 @@
         }
 
         Navigation.NavigateToLogout("authentication/logout");
+    }
+
+    // Null until read, or when session-persist.js is unavailable.
+    private KeepSignedInState? _keepSignedIn;
+
+    // Re-read on every open: KeepSignedInPrompt may have stored an answer since the last render.
+    private async Task OnMenuOpenChangedAsync(bool open)
+    {
+        if (open)
+        {
+            await RefreshKeepSignedInAsync();
+        }
+    }
+
+    private async Task RefreshKeepSignedInAsync()
+    {
+        try
+        {
+            _keepSignedIn = KeepSignedInPolicy.ParseState(await JS.InvokeAsync<string?>("rvsSession_getPersistPreference"));
+        }
+        catch (JSException)
+        {
+            _keepSignedIn = null;
+        }
+    }
+
+    private async Task OnKeepSignedInChangedAsync(KeepSignedInState state)
+    {
+        await JS.InvokeVoidAsync("rvsSession_setPersist", KeepSignedInPolicy.ToPersist(state));
+        await RefreshKeepSignedInAsync();
+    }
+
+    private async Task ResetKeepSignedInAsync()
+    {
+        await JS.InvokeVoidAsync("rvsSession_resetPreference");
+        await RefreshKeepSignedInAsync();
     }
 
     private string MenuItemTextColor => ThemeService.Mode switch
