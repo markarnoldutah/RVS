@@ -101,30 +101,9 @@
     private IJSRuntime JS { get; set; } = default!;
 
     [Inject]
-    private IConfiguration Configuration { get; set; } = default!;
+    private SignOutService SignOut { get; set; } = default!;
 
-    [Inject]
-    private RVS.UI.Shared.Services.RefreshTokenRevocationClient RevocationClient { get; set; } = default!;
-
-    private async Task BeginLogout()
-    {
-        // Revoke the refresh token at Auth0 and drop the persisted sign-in before the framework's
-        // own sign-out (issue #498), so a token copied earlier stops working. Best effort: a
-        // failed revoke never blocks signing out.
-        try
-        {
-            var refreshToken = await JS.InvokeAsync<string?>("rvsAuth_getRefreshToken", Configuration["Auth0:ClientId"]);
-            await RevocationClient.RevokeAsync(refreshToken);
-            await JS.InvokeVoidAsync("rvsSession_clearPersisted");
-        }
-        catch (JSException)
-        {
-            // Interop unavailable — the framework sign-out below still removes the user record,
-            // which also clears the mirror.
-        }
-
-        Navigation.NavigateToLogout("authentication/logout");
-    }
+    private Task BeginLogout() => SignOut.SignOutAsync();
 
     // Null until read, or when session-persist.js is unavailable.
     private KeepSignedInState? _keepSignedIn;

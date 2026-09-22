@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using RVS.Domain.DTOs;
 using RVS.Domain.Interfaces;
 using Microsoft.AspNetCore.Http;
 
@@ -64,10 +65,14 @@ public sealed class TenantAccessGateMiddleware
         if (gate.LoginsEnabled == false)
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await ctx.Response.WriteAsJsonAsync(new
+            // DisabledReason is internal (e.g. "PastDue") and stays off the wire.
+            await ctx.Response.WriteAsJsonAsync(new TenantAccessDeniedResponseDto
             {
-                message = "Tenant disabled",
-                errorId = Guid.NewGuid().ToString()
+                Message = "Tenant disabled",
+                ErrorId = Guid.NewGuid().ToString(),
+                Code = TenantAccessDeniedResponseDto.TenantDisabledCode,
+                DisabledMessage = gate.DisabledMessage,
+                SupportContactEmail = gate.SupportContactEmail
             });
             return;
         }
