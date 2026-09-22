@@ -1,0 +1,63 @@
+@page "/terms"
+
+@* Public terms of use for customers filling in the intake form (Spec A-15, issue #680). A legal
+   document: wording changes need the owner's sign-off, and SiteIdentity.PoliciesLastUpdated must
+   move with them. Dealer terms live in Docs/Legal/RVS_Pilot_Agreement.md, not here. *@
+
+<PageTitle>Terms of Use</PageTitle>
+
+<MudStack AlignItems="AlignItems.Center" Class="mt-8">
+    <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 640px;">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.h5">RV Intake terms of use</MudText>
+            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+                Last updated @SiteIdentity.PoliciesLastUpdated
+            </MudText>
+
+            <MudText Typo="Typo.body1">
+                RV Intake is operated by @SiteIdentity.LegalEntityName ("we", "us"). By using this site you
+                agree to these terms.
+            </MudText>
+
+            <MudText Typo="Typo.h6">What RV Intake does</MudText>
+            <MudText Typo="Typo.body1">
+                RV Intake passes your service request to the RV dealership or service business named on the
+                form. We do not inspect, diagnose or repair RVs. Any appointment, estimate, repair or
+                warranty decision is between you and the dealership.
+            </MudText>
+
+            <MudText Typo="Typo.h6">Suggestions are advisory</MudText>
+            <MudText Typo="Typo.body1">
+                The form may suggest a problem category, ask follow-up questions, or read your VIN from a
+                photo. These suggestions are automated and may be wrong. Please check them before you submit.
+            </MudText>
+
+            <MudText Typo="Typo.h6">What you submit</MudText>
+            <MudText Typo="Typo.body1">
+                Please give accurate information, and upload only photos, videos and audio that you have the
+                right to share. Do not submit anything unlawful, or anything unrelated to your RV service
+                request. You allow us to store and process what you submit to deliver your request, as
+                described in our <MudLink Href="/privacy" Typo="Typo.body1">privacy policy</MudLink>.
+            </MudText>
+
+            <MudText Typo="Typo.h6">Text messages</MudText>
+            <MudText Typo="Typo.body1">
+                Texts about your request are covered by our
+                <MudLink Href="/sms-terms" Typo="Typo.body1">texting terms</MudLink>.
+            </MudText>
+
+            <MudText Typo="Typo.h6">No warranty</MudText>
+            <MudText Typo="Typo.body1">
+                RV Intake is provided "as is". We do not guarantee that it will always be available or free
+                of errors. To the extent the law allows, we are not liable for indirect or consequential
+                losses arising from your use of the site.
+            </MudText>
+
+            <MudText Typo="Typo.h6">Governing law and contact</MudText>
+            <MudText Typo="Typo.body1">
+                These terms are governed by the laws of the State of Florida. Questions:
+                <MudLink Href="@SiteIdentity.ContactMailto" Typo="Typo.body1">@SiteIdentity.ContactEmail</MudLink>.
+            </MudText>
+        </MudStack>
+    </MudPaper>
+</MudStack>

@@ -1,0 +1,101 @@
+@page "/privacy"
+
+@* Public privacy policy (Spec A-15, issue #680). A legal document: wording changes need the
+   owner's sign-off, and SiteIdentity.PoliciesLastUpdated must move with them. Keep the texting
+   paragraph consistent with /sms-terms, and the retention paragraph with RVS_Spec.md A-15. *@
+
+<PageTitle>Privacy Policy</PageTitle>
+
+<MudStack AlignItems="AlignItems.Center" Class="mt-8">
+    <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 640px;">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.h5">RV Intake privacy policy</MudText>
+            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+                Last updated @SiteIdentity.PoliciesLastUpdated
+            </MudText>
+
+            <MudText Typo="Typo.h6">Who we are</MudText>
+            <MudText Typo="Typo.body1">
+                RV Intake is a product of @SiteIdentity.LegalEntityName ("we", "us"). RV dealerships and
+                RV service businesses use it to collect service requests from their customers. When you fill
+                in the intake form, you are sending a request to the dealership named on the form, and we
+                handle your information on that dealership's behalf.
+            </MudText>
+
+            <MudText Typo="Typo.h6">What we collect</MudText>
+            <MudText Typo="Typo.body1">When you submit a service request, we collect:</MudText>
+            <ul>
+                <li><MudText Typo="Typo.body1">Your contact details: name, email address, mobile number, how you prefer to be contacted, and whether you have opted out of texts or email.</MudText></li>
+                <li><MudText Typo="Typo.body1">Details of your RV: VIN, make, model, year, warranty and approximate purchase date.</MudText></li>
+                <li><MudText Typo="Typo.body1">Your description of the problem and your answers to the follow-up questions.</MudText></li>
+                <li><MudText Typo="Typo.body1">Any photos, videos or audio files you attach.</MudText></li>
+                <li><MudText Typo="Typo.body1">Voice input, if you use the microphone. The recording is converted to text for the form and is not kept.</MudText></li>
+                <li><MudText Typo="Typo.body1">Technical information: your IP address, used to limit abuse, and which link you used to reach the form.</MudText></li>
+            </ul>
+
+            <MudText Typo="Typo.h6">How we use it</MudText>
+            <MudText Typo="Typo.body1">
+                We use your information to deliver your service request to the dealership, to send you a
+                confirmation and status updates by text or email, and to run the status page linked from
+                your confirmation. We use automated tools, including AI, to read your VIN from a photo,
+                convert speech to text, suggest a problem category and follow-up questions, and prepare a
+                preliminary assessment for the dealership. These suggestions are advisory. The dealership
+                decides what work is done.
+            </MudText>
+
+            <MudText Typo="Typo.h6">Who receives it</MudText>
+            <MudText Typo="Typo.body1">
+                <b>The dealership</b> you are requesting service from receives your request and everything
+                you submit with it. We also rely on service providers that process data for us only to run
+                RV Intake: Microsoft Azure (hosting, storage, AI processing, and text and email delivery).
+                Your VIN is sent to the U.S. National Highway Traffic Safety Administration's public VIN
+                decoder to look up your RV's details.
+            </MudText>
+            <MudText Typo="Typo.body1">
+                We do not sell your personal information. We do not share it with third parties for their
+                marketing. We disclose it otherwise only where the law requires us to.
+            </MudText>
+
+            <MudText Typo="Typo.h6">Text messages</MudText>
+            <MudText Typo="Typo.body1">
+                Your mobile number is used only to send the messages described in our
+                <MudLink Href="/sms-terms" Typo="Typo.body1">texting terms</MudLink>. It is not sold or shared
+                with third parties for marketing. Reply <b>STOP</b> to any message to stop receiving texts.
+            </MudText>
+
+            <MudText Typo="Typo.h6">How long we keep it</MudText>
+            <MudText Typo="Typo.body1">
+                Your contact details and service requests are kept for as long as the dealership uses
+                RV Intake, or until you ask us to delete them. We keep a service history for each RV,
+                identified by its VIN, indefinitely: the vehicle's details, the problem category and
+                description, and the date. We may use that history, with anything that identifies you,
+                the dealership or any other person removed, to produce aggregated statistics.
+            </MudText>
+
+            <MudText Typo="Typo.h6">Your choices</MudText>
+            <MudText Typo="Typo.body1">
+                You can opt out of texts at any time by replying <b>STOP</b>, or opt out of texts or email
+                when you fill in the form. To see, correct or delete the information we hold about you,
+                email us at the address below or contact the dealership handling your request.
+            </MudText>
+
+            <MudText Typo="Typo.h6">Security</MudText>
+            <MudText Typo="Typo.body1">
+                Information is encrypted in transit and at rest. Each dealership can see only its own
+                customers' requests.
+            </MudText>
+
+            <MudText Typo="Typo.h6">Children</MudText>
+            <MudText Typo="Typo.body1">
+                RV Intake is not directed at children under 13, and we do not knowingly collect their
+                information.
+            </MudText>
+
+            <MudText Typo="Typo.h6">Changes and contact</MudText>
+            <MudText Typo="Typo.body1">
+                If we change this policy, we will post the new version here with a new date. Questions or
+                requests: <MudLink Href="@SiteIdentity.ContactMailto" Typo="Typo.body1">@SiteIdentity.ContactEmail</MudLink>.
+            </MudText>
+        </MudStack>
+    </MudPaper>
+</MudStack>
