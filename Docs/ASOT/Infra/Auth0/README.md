@@ -39,12 +39,14 @@ Common edits:
 - **Renaming an application in the dashboard:** change `name` in its `baseline/clients/<name>.json` in the same change. Applications are matched by name, so after a dashboard rename the plan reports `+ create application <old name>`,
   and `--apply` would create a duplicate with a new client ID. The Manager was renamed to "RV Intake Manager" this way.
 - **Action change:** edit `baseline/actions/<name>.js`. Apply updates the Action, waits for the build, deploys it, and makes sure it is bound to its trigger.
+- **Branding or login wording:** change it in the dashboard (checklist §7) *and* in the tenant file's `AUTH0_EXPECT_*` value, in the same change. The script only reports the difference; it never closes it.
 
 ## What the scripts never do
 
 - Delete a resource. Removing a role or application from `baseline/` leaves it in the tenant; delete it in the dashboard. Within a managed resource the baseline is authoritative: a permission not in the baseline is removed from the RVS API, RVS roles and the Manager grant.
 - Touch users. Onboarding users (with `app_metadata`) is covered in the checklist and in `RVS_Identity.md`.
-- Manage tenant-wide settings (session lifetimes, attack protection, Universal Login prompts). While the tenant is shared with other products, most of those aren't RVS's to set. The exceptions RVS does set — the custom domain, the Friendly Name, Universal Login branding and the email provider — are deliberate, done by hand, and written up in [`../../Auth0/Auth0-Portal-Configuration-Checklist.md`](../../Auth0/Auth0-Portal-Configuration-Checklist.md) §6–§8. Each one reaches the other products in this tenant as well.
+- Manage tenant-wide settings (session lifetimes, attack protection, the Universal Login flow). While the tenant is shared with other products, most of those aren't RVS's to set. The exceptions RVS does set — the custom domain, the Friendly Name, the Universal Login branding and prompt text, and the email provider — are deliberate, done by hand, and written up in
+  [`../../Auth0/Auth0-Portal-Configuration-Checklist.md`](../../Auth0/Auth0-Portal-Configuration-Checklist.md) §6–§8. Each one reaches the other products in this tenant as well.
 
   The apply script **checks** most of them against the tenant file and reports drift. It never changes them, so a dashboard edit by anyone sharing the tenant shows up on the next plan:
 
@@ -53,8 +55,10 @@ Common edits:
   | Friendly Name | `AUTH0_EXPECT_FRIENDLY_NAME` | `read:tenant_settings` | The login card names something else |
   | Custom domain: ready, and the tenant default | the host in `AUTH0_APP_AUTHORITY` | `read:custom_domains` | `/admin` set-password links fall back to the canonical host |
   | Email provider and From address | `AUTH0_EXPECT_EMAIL_PROVIDER`, `AUTH0_EXPECT_EMAIL_FROM` | `read:email_provider` | Reset mail comes from `no-reply@auth0user.net`, or someone else's sender |
+  | Universal Login logo, favicon, primary colour, page background | `AUTH0_EXPECT_BRANDING_*` | `read:branding` | The login screen hands off to an app in a different palette — or shows an empty logo frame, which is what a URL Auth0 could not fetch looks like (#619) |
+  | The login widget's wording | `AUTH0_EXPECT_LOGIN_DESCRIPTION`, over the prompts in `AUTH0_EXPECT_LOGIN_PROMPTS` | `read:prompts` | Back to Auth0's default, "Log in to RV Intake to continue to RV Intake Manager" — one product named twice (#619) |
 
-  An unset value skips its check. A missing scope skips its check with a warning, so a plan works before the scopes are granted. Branding isn't checked yet; there is nothing set to compare against.
+  An unset value skips its check. A missing scope skips its check with a warning, so a plan works before the scopes are granted.
 - Edit Manager `appsettings.*.json` or Key Vault. The apply script checks that the appsettings files listed in the tenant file point at this tenant and application, and reports any mismatch. The authority it expects is `AUTH0_APP_AUTHORITY`, falling back to `https://$AUTH0_DOMAIN/`. Those differ once the tenant has a custom domain: the apps move to it, `AUTH0_DOMAIN` stays on the canonical `.us.auth0.com` host for the Management API.
 
 ## Splitting environments later

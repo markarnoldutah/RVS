@@ -27,7 +27,7 @@ The scripts authenticate as a Machine to Machine application.
    | Needed for | Scopes |
    |---|---|
    | Plan and export | `read:resource_servers` `read:roles` `read:clients` `read:client_grants` `read:connections` `read:actions` `read:triggers` `read:tenant_settings` `read:prompts` `read:attack_protection` |
-   | Plan: tenant-wide checks | `read:custom_domains` `read:email_provider` — optional; without them the plan skips those checks with a warning |
+   | Plan: tenant-wide checks | `read:custom_domains` `read:email_provider` `read:branding` (and the `read:prompts` above, which the §7.3 wording check also uses) — optional; without them the plan skips those checks with a warning |
    | Apply | `create:resource_servers` `update:resource_servers` `create:roles` `update:roles` `create:clients` `update:clients` `create:client_grants` `update:client_grants` `update:connections` `create:actions` `update:actions` `update:triggers` |
 
    Grant only the plan scopes until you need to apply. No `delete:*`, user or `read:client_keys` scopes are needed.
@@ -314,16 +314,19 @@ A blank Auth0 screen with nothing in the network tab is the CSP. A successful lo
 **Genuinely tenant-wide, unlike §6.** The custom domain is additive — the other products in this tenant keep using the canonical host until they choose to move. Branding is not: it changes the login, password-reset and MFA screens for every application in the tenant, including theirs, immediately.
 There is no per-application override, and the per-*customer* branded login that would give you one needs Organizations, which RVS permanently does not use (see "Not used"). Confirm that's acceptable before you touch it.
 
-### 7.1 The logo does not exist yet — decide this first
+### 7.1 Which logo
 
 §7.2 asks for a public HTTPS logo URL. **Issue #702 landed the logo kit, so there is now a real asset** — the previous placeholder problem (both apps shipped byte-identical 32×32 PNGs named `icon-192.png` and `icon-512.png`, which the login page would have rendered as a smudge scaled up) is gone.
 
-Use `https://manager.rvintake.com/icon-512.png`. It is the "RV Intake" badge from the kit — a genuine 512×512, cream `RV` on an Ink `#2F4C6B` rounded square — and Auth0 renders it at roughly 150×150, so there is headroom on retina. The Manager SWA is public and CDN-backed and serves it today; no `staticwebapp.config.json` change is needed.
+Use `https://manager.rvintake.com/icon-512.png`. It is the "RV Intake" badge from the kit — a genuine 512×512, cream `RV` on an Ink `#2F4C6B` rounded square — and Auth0 renders it at roughly 150×150, so there is headroom on retina. The Manager SWA is public and CDN-backed and serves it today, with no route configuration needed to reach it.
 
-Verify the exact URL with `curl` before pasting it into Auth0. A misspelled path does **not** 404: `navigationFallback` rewrites it to `index.html` and it answers **200 `text/html`**. Auth0 fetches server-side, stores what it gets, and shows a blank logo with no error — so a typo looks identical to a broken Auth0.
+Verify the exact URL with `curl` before pasting it into Auth0. Auth0 fetches it server-side, stores whatever comes back, and then shows a blank frame with no error — so a bad URL looks exactly like a broken Auth0.
+The Manager SWA makes that easy to hit: any path `navigationFallback` doesn't exclude is rewritten to `index.html` and answers **200 `text/html`** instead of 404.
+The `exclude` list in [`RVS.Blazor.Manager/wwwroot/staticwebapp.config.json`](../../../RVS.Blazor.Manager/wwwroot/staticwebapp.config.json) covers `/icon-*.png`, `/favicon*` and `/apple-touch-icon-*.png`, so a typo *inside* those shapes does 404 — but one that lands outside them (`/icons-512.png`) still does not.
 
 ```bash
-curl -sI https://manager.rvintake.com/icon-512.png | head -3   # expect 200 and image/png, not text/html
+curl -sI https://manager.rvintake.com/icon-512.png       | head -3   # expect 200 and image/png, not text/html
+curl -sI https://manager.rvintake.com/favicon-32x32.png  | head -3   # same, for §7.2's favicon
 ```
 
 If a wordmark is ever wanted instead of the badge, `RVS.UI.Shared/wwwroot/brand/wordmark-stacked.svg` is the square lockup — but it carries live `<text>`, so it needs Space Grotesk converted to outlines before anything outside the app renders it correctly. The badge has no text and no such caveat, which is why it is the recommendation here.
@@ -338,6 +341,7 @@ Do not point the URL at `manager.rvserviceflow.com`. It was retired on 2026-09-1
    | Field | Value | Source |
    | --- | --- | --- |
    | Logo | the URL decided in §7.1 | — |
+   | Favicon | `https://manager.rvintake.com/favicon-32x32.png` | The same badge at tab size, from the logo kit. Without it the login tab keeps Auth0's own favicon while the app's tab shows the badge |
    | Primary color | `#C1502E` | Rust — `RvsBrand.Accent`, the action colour the Manager app's buttons use |
    | Page background | `#FAF8F3` | `RvsBrand.PaperNeutral` — Manager's `PaletteLight.Background`, a barely-tinted paper deliberately not competing with the button |
 
@@ -353,7 +357,51 @@ Manager also carries a dark palette, and both apps carry a separate high-contras
 
 The login page also cannot reach the app's self-hosted Space Grotesk, so it renders in Auth0's default face. That is expected and not worth fixing on the Free plan; the colour and the logo are what carry continuity across the hand-off.
 
-Don't try to script any of this. The configuration scripts deliberately don't manage tenant-wide settings — an edit here is not something `auth0-apply.sh` will report or revert.
+Set all of it by hand: `auth0-apply.sh` deliberately doesn't apply tenant-wide settings. It does **check** them (#619) — the four fields above against `AUTH0_EXPECT_BRANDING_*` in `Docs/ASOT/Infra/Auth0/tenants/<tenant>.env`, and §7.3's wording against `AUTH0_EXPECT_LOGIN_DESCRIPTION` — so a dashboard edit by anyone sharing this tenant shows up on the next plan as a `!` line.
+Changing a value here means changing the tenant file in the same commit, or the next plan reports your own change as drift.
+
+### 7.3 The widget names the product twice
+
+Out of the box the login card reads **"Log in to RV Intake to continue to RV Intake Manager"** — Auth0's default description, `Log in to ${companyName} to continue to ${clientName}.`, filled in with the tenant Friendly Name from §6 and the application name. For one product whose two names differ by a word, that sentence is noise. It should read **"Log in to RV Intake Manager"** (#619).
+
+The fix is the prompt's custom text, not the Friendly Name — the Friendly Name is tenant-wide and other products' login screens use it too (and `auth0-apply.sh` checks it against `AUTH0_EXPECT_FRIENDLY_NAME`).
+
+**Keep the `${clientName}` placeholder.** Custom text is as tenant-wide as everything else in §7: hard-coding "RV Intake Manager" would put RVS's product name on the other products' login screens. `Log in to ${clientName}` renders each application's own name.
+
+Set it on three prompts. Which one a tenant renders depends on whether the login flow is identifier-first, and the flow can be changed later by anyone with dashboard access:
+
+| Prompt | Screen it draws |
+| --- | --- |
+| `login` | the single-page login card (default flow) |
+| `login-id` | the email step of an identifier-first flow |
+| `login-password` | the password step of an identifier-first flow |
+
+In the dashboard: **Branding → Universal Login → Advanced Options → Custom Text**, pick the prompt, language **English**, and set `description`. Or, with the same Management API application the scripts use (`update:prompts`, which is *not* in §2's list — grant it for this change and drop it again):
+
+```bash
+AUTH0_DOMAIN=dev-2jhzz8xmjggh26pm.us.auth0.com   # the tenant file's AUTH0_DOMAIN, not the custom domain
+KV=kv-rvs-staging-wus3                           # its AUTH0_MGMT_KEYVAULT
+
+TOKEN="$(jq -n \
+    --arg id  "$(az keyvault secret show --vault-name $KV --name Auth0Mgmt--ClientId     --query value -o tsv)" \
+    --arg sec "$(az keyvault secret show --vault-name $KV --name Auth0Mgmt--ClientSecret --query value -o tsv)" \
+    --arg aud "https://$AUTH0_DOMAIN/api/v2/" \
+    '{grant_type:"client_credentials", client_id:$id, client_secret:$sec, audience:$aud}' \
+  | curl -sS -X POST "https://$AUTH0_DOMAIN/oauth/token" -H 'content-type: application/json' --data-binary @- \
+  | jq -r .access_token)"
+
+for P in login login-id login-password; do
+  jq -nc --arg p "$P" '{($p): {description: "Log in to ${clientName}"}}' \
+    | curl -sS -X PUT "https://$AUTH0_DOMAIN/api/v2/prompts/$P/custom-text/en" \
+        -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @-
+done
+```
+
+The bodies go in on stdin, as `lib.sh` does it, so `${clientName}` survives a jq string untouched. Unlike `lib.sh` this does leave the secret and the token on a command line, where `ps` can read them for as long as the command runs — fine for a one-off on your own machine, not something to bake into anything that runs unattended.
+
+A `PUT` replaces that screen's custom text wholesale — anything else customised on the same screen has to be sent in the same body. Nothing else is customised today.
+
+Then `./auth0-apply.sh shared` and expect three `= login text (...)` lines. The title above the description stays Auth0's "Welcome"; leave it — it is the one line on the card that isn't naming something twice.
 
 ---
 
