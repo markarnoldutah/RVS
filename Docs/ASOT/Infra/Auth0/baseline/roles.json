@@ -35,7 +35,6 @@
       "service-requests:read",
       "service-requests:search",
       "service-requests:update",
-      "service-requests:update-service-event",
       "tenants:config:create",
       "tenants:config:read",
       "tenants:config:update"
@@ -58,8 +57,7 @@
       "service-requests:delete",
       "service-requests:read",
       "service-requests:search",
-      "service-requests:update",
-      "service-requests:update-service-event"
+      "service-requests:update"
     ]
   },
   {
@@ -82,7 +80,6 @@
       "service-requests:read",
       "service-requests:search",
       "service-requests:update",
-      "service-requests:update-service-event",
       "tenants:config:create",
       "tenants:config:read",
       "tenants:config:update"
@@ -118,8 +115,7 @@
       "service-requests:delete",
       "service-requests:read",
       "service-requests:search",
-      "service-requests:update",
-      "service-requests:update-service-event"
+      "service-requests:update"
     ]
   },
   {
@@ -132,8 +128,7 @@
       "locations:read",
       "lookups:read",
       "service-requests:read",
-      "service-requests:search",
-      "service-requests:update-service-event"
+      "service-requests:search"
     ]
   },
   {
@@ -158,7 +153,6 @@
       "service-requests:read",
       "service-requests:search",
       "service-requests:update",
-      "service-requests:update-service-event",
       "tenants:config:create",
       "tenants:config:read",
       "tenants:config:update"

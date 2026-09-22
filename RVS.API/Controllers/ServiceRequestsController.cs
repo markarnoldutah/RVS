@@ -106,24 +106,6 @@ public class ServiceRequestsController : ControllerBase
     }
 
     /// <summary>
-    /// Applies a shared repair outcome to multiple service requests in a single batch.
-    /// </summary>
-    /// <param name="dealershipId">Dealership identifier (route segment).</param>
-    /// <param name="request">Batch outcome request containing SR IDs and outcome fields.</param>
-    /// <param name="ct">Cancellation token.</param>
-    [HttpPatch("batch-outcome")]
-    [Authorize(Policy = "CanUpdateServiceEvent")]
-    public async Task<ActionResult<BatchOutcomeResponseDto>> BatchOutcome(
-        string dealershipId, [FromBody] BatchOutcomeRequestDto request, CancellationToken ct)
-    {
-        var tenantId = _claimsService.GetTenantIdOrThrow();
-
-        var result = await _service.BatchOutcomeAsync(tenantId, request, ct);
-
-        return Ok(result);
-    }
-
-    /// <summary>
     /// Deletes a service request.
     /// </summary>
     /// <param name="dealershipId">Dealership identifier (route segment).</param>

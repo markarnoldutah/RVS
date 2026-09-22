@@ -64,7 +64,7 @@ Every Cosmos query is single-partition on `tenantId`. Cross-partition access is 
 
 **Authenticated** (per-permission policies, not roles)
 
-`api/dealerships/{dealershipId}/service-requests` — POST, GET `{srId}`, POST `search`, PUT `{srId}`, PATCH `batch-outcome`, DELETE `{srId}`
+`api/dealerships/{dealershipId}/service-requests` — POST, GET `{srId}`, POST `search`, PUT `{srId}`, DELETE `{srId}`
 `.../service-requests/{srId}/attachments` — POST `upload-url`, POST `confirm`, GET `{attachmentId}/sas`, DELETE `{attachmentId}`
 `api/dealerships` — GET, GET `{id}`, PUT `{id}`
 `api/locations` — GET, GET `{id}`, POST, PUT `{id}`, GET `{id}/qr-code`, GET `{id}/intake-links`, GET `{id}/intake-sources`
@@ -179,7 +179,6 @@ This is the honest state of `../RVS_Spec.md`.
 Built for capability the Overview archives. Deleting this is real work and is not currently in the build order.
 
 - **Analytics** — `AnalyticsController`, `AnalyticsService`, `IAnalyticsService`, `GetForAnalyticsAsync`, `ServiceRequestAnalyticsResponseDto`
-- **Technician outcome workflow** — `ServiceEventEmbedded`, `PATCH batch-outcome`, `BatchOutcome*Dto`, `AssetLedgerEntry.Section10A`
 - **Scheduling / assignment fields** on `ServiceRequest` — `assignedTechnicianId`, `assignedBayId`, `scheduledDateUtc`, `requiredSkills`. (`boardSequence` is **not** on this list: it orders the Kanban board's columns, and the board is kept — #456 closed `not_planned`, Plan decision log Sep 21 2026)
 - **Messaging** — `MessageEmbedded` is defined and referenced nowhere
 - **Scaffolding** — `WeatherForecastController`, `WeatherForecast.cs`

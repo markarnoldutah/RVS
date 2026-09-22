@@ -94,13 +94,6 @@ public class ServiceRequest : EntityBase
     public List<ServiceRequestAttachmentEmbedded> Attachments { get; set; } = [];
 
     /// <summary>
-    /// Structured service event data per Section 10A.
-    /// Null until service work begins.
-    /// </summary>
-    [JsonProperty("serviceEvent")]
-    public ServiceEventEmbedded? ServiceEvent { get; set; }
-
-    /// <summary>
     /// AI-generated diagnostic question responses from the intake wizard.
     /// </summary>
     [JsonProperty("diagnosticResponses")]
@@ -612,36 +605,6 @@ public class ServiceRequestAttachmentEmbedded
 
     [JsonProperty("createdAtUtc")]
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
-}
-
-// ---------------------------------------------------------------------------
-// Embedded: ServiceEventEmbedded (Section 10A)
-// ---------------------------------------------------------------------------
-
-/// <summary>
-/// Structured service event data per Section 10A.
-/// Fields populated progressively across phases.
-/// MVP captures issueCategory and componentType only.
-/// </summary>
-public class ServiceEventEmbedded
-{
-    [JsonProperty("componentType")]
-    public string? ComponentType { get; set; }
-
-    [JsonProperty("failureMode")]
-    public string? FailureMode { get; set; }
-
-    [JsonProperty("repairAction")]
-    public string? RepairAction { get; set; }
-
-    [JsonProperty("partsUsed")]
-    public List<string> PartsUsed { get; set; } = [];
-
-    [JsonProperty("laborHours")]
-    public decimal? LaborHours { get; set; }
-
-    [JsonProperty("serviceDateUtc")]
-    public DateTime? ServiceDateUtc { get; set; }
 }
 
 // ---------------------------------------------------------------------------
