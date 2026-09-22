@@ -165,14 +165,20 @@ All feature implementation MUST follow Red → Green → Refactor. This is not o
 Both Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`) use **MudBlazor 9.x** (Material Design 3). Do not use Microsoft.FluentUI.AspNetCore.Components. There is no MAUI project — the technician app is archived.
 
 ### Setup (per project)
-- `wwwroot/index.html` (WASM) or `App.razor` (hosted): link `MudBlazor.min.css`, Roboto font, `MudBlazor.min.js`
+- `wwwroot/index.html` (WASM) or `App.razor` (hosted): link `MudBlazor.min.css`, `_content/RVS.UI.Shared/fonts/fonts.css` (self-hosted Space Grotesk — never a Google Fonts CDN link), `MudBlazor.min.js`
 - `Program.cs`: call `builder.Services.AddMudServices()`
 - `_Imports.razor`: add `@using MudBlazor`
 - Root layout: wrap body content in `<MudThemeProvider>`, `<MudPopoverProvider>`, `<MudDialogProvider>`, `<MudSnackbarProvider>`
 
 ### Theme
-- Define a single `MudTheme` in `MainLayout.razor` with `PaletteLight` (Primary `#1565C0`, Secondary `#00897B`)
-- Apply `<MudThemeProvider Theme="_theme" />` — never inline ad-hoc colours
+Brand is **"RV Intake" — Denim & Rust** (Spec THEME-1, issue #702; brief in `Docs/ASOT/Brand/`).
+- The palette lives in `RVS.UI.Shared/Theme/` — `RvsBrand` (tokens), `ManagerTheme` and `IntakeTheme` (a `Theme` and a `HighContrast` each). Never declare a `MudTheme` in `MainLayout.razor` or in an app.
+- Ink (Denim) `#2F4C6B` is structure — app bar, drawer, nav, headings. Rust `#C1502E` is action — buttons, links, active nav, focus rings; `#E8956D` on dark surfaces. Paper (Cream) `#F6F1E7` is the Intake ground; Manager uses `#FAF8F3`.
+- Layouts bind, they do not define: `<MudThemeProvider Theme="ThemeService.CurrentTheme" />` (plus `IsDarkMode` in Manager). `ThemeService` stays per app and only selects the mode.
+- Never put `Color="Color.Primary"` on `MudAppBar` — that paints structure with the action colour. Leave it off so the bar takes `AppbarBackground`.
+- Semantic colours are not brand-derived; `Error` stays true red `#B3261E` so it is never told apart from Rust by hue alone. Leave `Tertiary` at the MudBlazor default.
+- High contrast is deliberately not brand-coloured — legibility outranks identity there.
+- Never inline ad-hoc colours; `wwwroot/css/design-tokens.css` mirrors `RvsBrand.cs` and the two change together.
 
 ### Component Conventions
 - Layout: `MudLayout` → `MudAppBar` → `MudMainContent`

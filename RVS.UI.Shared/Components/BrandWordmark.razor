@@ -1,0 +1,25 @@
+@namespace RVS.UI.Shared.Components
+
+@* See BrandWordmarkSvg for why the mark is inlined rather than loaded as an image. *@
+
+<span class="@Class" style="display:inline-flex;align-items:center;">@Markup</span>
+
+@code {
+    /// <summary>Which lockup to draw.</summary>
+    [Parameter] public BrandWordmarkVariant Variant { get; set; } = BrandWordmarkVariant.Horizontal;
+
+    /// <summary>True when the mark sits on a dark or Ink surface, e.g. an app bar.</summary>
+    [Parameter] public bool Reversed { get; set; }
+
+    /// <summary>Rendered height, e.g. <c>"32px"</c>. Width follows the aspect ratio.</summary>
+    [Parameter] public string Height { get; set; } = "32px";
+
+    /// <summary>Accessible name, also the SVG <c>&lt;title&gt;</c>.</summary>
+    [Parameter] public string Title { get; set; } = "RV Intake";
+
+    /// <summary>Extra CSS classes on the wrapper.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    private MarkupString Markup =>
+        (MarkupString)BrandWordmarkSvg.Build(Variant, Reversed, Height, Title);
+}

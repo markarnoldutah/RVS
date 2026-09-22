@@ -6,18 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RVS Service Flow</title>
     <base href="/" />
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    <!-- Self-hosted Space Grotesk (Spec THEME-1): the intake PWA has to render in brand
+         from cache in a service bay, so no Google Fonts CDN dependency here. -->
+    <link href="_content/RVS.UI.Shared/fonts/fonts.css" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link href="_content/RVS.UI.Shared/css/design-tokens.css" rel="stylesheet" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link href="RVS.Blazor.Manager.styles.css" rel="stylesheet" />
     <!-- Installable PWA (issue #498) -->
-    <meta name="theme-color" content="#1565C0" />
+    <meta name="theme-color" content="#2F4C6B" />
     <link href="manifest.webmanifest" rel="manifest" />
-    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180x180.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
 </head>
 
 <!-- No inline <script> anywhere in this file: the Content-Security-Policy in
@@ -34,7 +36,7 @@
                 align-items: center;
                 justify-content: center;
                 min-height: 100vh;
-                font-family: Roboto, Helvetica, Arial, sans-serif;
+                font-family: 'Space Grotesk', Roboto, Helvetica, Arial, sans-serif;
                 background:
                     url('images/tetons-mobile.jpg') center 25% / cover no-repeat;
             }
@@ -46,11 +48,11 @@
             }
             /* Minimal splash on return from auth callback — plain background, spinner only */
             html[data-splash="minimal"] #splash-bg {
-                background: #FAFAFA;
+                background: #FAF8F3;
                 min-height: 100vh;
             }
             html[data-splash="minimal"] #splash-bg .splash-brand { display: none; }
-            html[data-splash="minimal"] .splash-bar > div { background: #3F51B5; }
+            html[data-splash="minimal"] .splash-bar > div { background: #C1502E; }
             @keyframes loading-progress {
                 0%   { transform: translateX(-150%); }
                 100% { transform: translateX(350%); }
@@ -61,7 +63,7 @@
                 <h3 style="margin:0 0 8px;font-weight:500;font-size:1.5rem;color:#ffffff;text-shadow:0 2px 4px rgba(0,0,0,0.5);">
                     RVS Service Flow
                 </h3>
-                <p style="margin:0 0 24px;font-size:0.875rem;color:#e0e0e0;text-shadow:0 1px 3px rgba(0,0,0,0.5);text-align:center;">
+                <p style="margin:0 0 24px;font-size:0.875rem;color:#F6F1E7;text-shadow:0 1px 3px rgba(0,0,0,0.5);text-align:center;">
                     Loading application&hellip;
                 </p>
             </div>

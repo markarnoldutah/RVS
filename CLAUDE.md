@@ -20,6 +20,7 @@ There is no target number of these. One authoritative home per fact; a document 
 **Technical detail** lives in [Docs/ASOT/](Docs/ASOT/): [RVS_Architecture.md](Docs/ASOT/RVS_Architecture.md), [RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md), [RVS_Infrastructure.md](Docs/ASOT/RVS_Infrastructure.md), [RVS_Identity.md](Docs/ASOT/RVS_Identity.md), [RVS_FrontEnd.md](Docs/ASOT/RVS_FrontEnd.md), [RVS_PacketComposition.md](Docs/ASOT/RVS_PacketComposition.md). These describe **what is built**; the Spec describes what is intended. Each ASOT doc carries a coverage or gap table where the two differ.
 
 - Infra source of truth: Bicep files in [Docs/ASOT/Infra/Bicep.IaC/](Docs/ASOT/Infra/Bicep.IaC/). Do not trust hand-drawn diagrams or older docs for Azure resource configuration.
+- Brand: [Docs/ASOT/Brand/](Docs/ASOT/Brand/) — the Denim & Rust theme brief (cited in code as **Spec THEME-1**) and the logo-kit asset inventory, both as handed over in #702. They carry the rationale; the palette itself is authoritative in `RVS.UI.Shared/Theme/RvsBrand.cs`.
 - GTM material: [Docs/Marketing/](Docs/Marketing/) — Positioning, GoToMarket, Objections.
 - Customer-facing how-tos: [Docs/Guides/](Docs/Guides/) — per-device guides for sending a channel-tagged intake link (Spec A-13). Written for a non-technical service advisor, not for engineers.
 - [Docs/ARCHIVE/](Docs/ARCHIVE/) and [Docs/Obsolete/](Docs/Obsolete/) are frozen snapshots. **Never cite them as current.**
@@ -324,18 +325,29 @@ All Blazor projects use **MudBlazor 9.x** (Material Design 3). **Do not** use `M
 
 ### Setup per project
 
-- `wwwroot/index.html`: link `MudBlazor.min.css`, Roboto font, `MudBlazor.min.js`.
+- `wwwroot/index.html`: link `MudBlazor.min.css`, `_content/RVS.UI.Shared/fonts/fonts.css` (self-hosted Space Grotesk — **never** a Google Fonts CDN link), `MudBlazor.min.js`.
 - `Program.cs`: `builder.Services.AddMudServices()`.
 - `_Imports.razor`: `@using MudBlazor`.
 - Root layout wraps body in `<MudThemeProvider>`, `<MudPopoverProvider>`, `<MudDialogProvider>`, `<MudSnackbarProvider>`.
 
 ### Theme
 
-Themes live in each app's own `Services/ThemeService.cs` — **not** in `MainLayout.razor`, and not in `RVS.UI.Shared`. Both apps declare the same `IndigoTheme`: `PaletteLight` Primary `#3F51B5` (Indigo 500), `PrimaryDarken`/`AppbarBackground` `#303F9F` (Indigo 700), Secondary `#00897B` (Teal 600), Background `#FAFAFA`.
+The brand is **"RV Intake" — Denim & Rust** (Spec THEME-1, issue #702). Ink (Denim) `#2F4C6B` carries structure: app bar, drawer, nav, headings. Rust `#C1502E` carries action: primary buttons, links, active nav, focus rings — `#E8956D` where it sits on a dark surface. Paper (Cream) `#F6F1E7` is the Intake page ground; Manager uses `#FAF8F3`, barely tinted, because full cream everywhere reads as a landing page rather than an 8-hour-shift console. Typeface is **Space Grotesk**, self-hosted from `RVS.UI.Shared/wwwroot/fonts/`.
 
-Each app also declares a `HighContrastTheme`, and `ThemeService.Mode` selects between them — `Light`/`Dark`/`HighContrast` in Manager, `Light`/`HighContrast` in Intake — persisting the choice to `localStorage`. `MainLayout.razor` binds the result rather than defining it: `<MudThemeProvider Theme="ThemeService.CurrentTheme" />`, plus `IsDarkMode="ThemeService.IsDarkMode"` in Manager.
+The palette lives in **`RVS.UI.Shared/Theme/`** — one home, so it cannot drift between the apps. `RvsBrand` holds the tokens; `ManagerTheme` and `IntakeTheme` each expose a `Theme` and a `HighContrast` `MudTheme`.
 
-Never inline ad-hoc colors. When an external surface needs the brand color — the Auth0 Universal Login page, for instance — read it from `ThemeService.cs` rather than from a doc; `#1565C0` appeared in this file and in the Auth0 checklist for a while and has never been in the code.
+`ThemeService` is **still** per app (`RVS.Blazor.{Intake,Manager}/Services/ThemeService.cs`) and is **not** in `RVS.UI.Shared` — but it now only selects a mode and persists it, and declares no colors. `ThemeService.Mode` is `Light`/`Dark`/`HighContrast` in Manager, `Light`/`HighContrast` in Intake (Intake has no dark mode — a form filled out once does not need one). `MainLayout.razor` binds the result rather than defining it: `<MudThemeProvider Theme="ThemeService.CurrentTheme" />`, plus `IsDarkMode="ThemeService.IsDarkMode"` in Manager.
+
+Two things that bite:
+
+- **Do not put `Color="Color.Primary"` on `MudAppBar`.** That paints the bar Rust; structure is Ink. Leave the color off and the bar takes `AppbarBackground` from the palette, in every mode.
+- **High contrast is deliberately not brand-colored.** Black/yellow/cyan beats anything Denim and Rust can reach, and someone who turns it on asked for legibility over identity. Only the typeface follows the brand there.
+
+Semantic colors are **not** derived from the brand pair, and `Error` stays a true red (`#B3261E`) so it never has to be told apart from Rust by hue alone. `Tertiary` is left at the MudBlazor default: this is a two-color brand.
+
+Never inline ad-hoc colors. When an external surface needs the brand color — the Auth0 Universal Login page, for instance — read it from `RVS.UI.Shared/Theme/RvsBrand.cs` rather than from a doc; `#1565C0` appeared in this file and in the Auth0 checklist for a while and was never in the code. `wwwroot/css/design-tokens.css` mirrors `RvsBrand.cs` for the plain-CSS components; change both together.
+
+The logo kit's SVG sources are in `RVS.UI.Shared/wwwroot/brand/`, but app chrome uses the `BrandWordmark` component, which **inlines** the mark — an SVG loaded as an image cannot reach the self-hosted font, so its live text would fall back to a system face.
 
 ### Component Conventions
 

@@ -6,16 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <title>RV Intake</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    <!-- Self-hosted Space Grotesk (Spec THEME-1): the intake PWA has to render in brand
+         from cache in a service bay, so no Google Fonts CDN dependency here. -->
+    <link href="_content/RVS.UI.Shared/fonts/fonts.css" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link href="_content/RVS.UI.Shared/css/design-tokens.css" rel="stylesheet" />
     <link href="app.css" rel="stylesheet" />
     <link href="RVS.Blazor.Intake.styles.css" rel="stylesheet" />
     <link href="manifest.webmanifest" rel="manifest" />
-    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180x180.png" />
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
+    <meta name="theme-color" content="#2F4C6B" />
 </head>
 
 <body>
@@ -28,7 +31,7 @@
                 align-items: center;
                 justify-content: center;
                 min-height: 100vh;
-                font-family: Roboto, Helvetica, Arial, sans-serif;
+                font-family: 'Space Grotesk', Roboto, Helvetica, Arial, sans-serif;
                 background: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url('images/tetons-mobile.jpg') center 25% / cover no-repeat;
             }
 
@@ -50,7 +53,7 @@
             <h3 style="margin:0 0 8px;font-weight:500;font-size:1.5rem;color:#ffffff;text-shadow:0 2px 4px rgba(0,0,0,0.5);">
                 RV Intake
             </h3>
-            <p style="margin:0 0 24px;font-size:0.875rem;color:#e0e0e0;text-shadow:0 1px 3px rgba(0,0,0,0.5);">
+            <p style="margin:0 0 24px;font-size:0.875rem;color:#F6F1E7;text-shadow:0 1px 3px rgba(0,0,0,0.5);">
                 Loading application&hellip;
             </p>
             <div style="width:200px;height:4px;background:rgba(255,255,255,0.3);border-radius:2px;overflow:hidden;">
