@@ -82,21 +82,6 @@ public class ServiceRequestsControllerTests
     }
 
     [Fact]
-    public async Task BatchOutcome_ShouldReturnOkWithResponse()
-    {
-        var request = new BatchOutcomeRequestDto { ServiceRequestIds = ["sr_1"], FailureMode = "Electrical" };
-        var response = new BatchOutcomeResponseDto { Succeeded = ["sr_1"] };
-        _serviceMock.Setup(s => s.BatchOutcomeAsync(TenantId, request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(response);
-
-        var result = await _sut.BatchOutcome("dlr_1", request, CancellationToken.None);
-
-        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var dto = okResult.Value.Should().BeOfType<BatchOutcomeResponseDto>().Subject;
-        dto.Succeeded.Should().Contain("sr_1");
-    }
-
-    [Fact]
     public async Task Delete_ShouldReturnNoContent()
     {
         _serviceMock.Setup(s => s.DeleteAsync(TenantId, "sr_1", It.IsAny<CancellationToken>()))

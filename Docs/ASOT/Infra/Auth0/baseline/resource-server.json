@@ -20,10 +20,6 @@
       "value": "service-requests:update"
     },
     {
-      "description": "Update Section10A fields (repair action, parts, labor)",
-      "value": "service-requests:update-service-event"
-    },
-    {
       "description": "Delete a service request",
       "value": "service-requests:delete"
     },

@@ -43,14 +43,13 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 | `/service-requests` | `ServiceRequestQueue` | Yes — but with a ten-field search panel (keyword, status, category, location, technician, bay, VIN, priority, two dates) against a specced "filter by status" |
 | drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, customer status note (C-9, #500), inline edit, comment thread, attachment viewing via read-SAS, diagnostic responses |
 | `/locations` | `Locations` | Yes — location CRUD, capability checkboxes, QR download, and a **Send intake link** row action (A-14, #666) |
-| `/` | `Home` | Partly — the **Send intake link** button beside `LocationSelector` is in scope (A-14, #666); the embedded `OutcomeComplianceWidget` is archived scope |
+| `/` | `Home` | Yes — welcome, `LocationSelector`, and the **Send intake link** button beside it (A-14, #666) |
 | dialog | `SendIntakeLinkDialog` | Yes — A-14 (#666), see below |
 | `/settings` | `Settings` | Partly — tenant-level config and access gate, not the per-location packet settings B-6 needs |
 | `/service-requests/{id}/edit` | `ServiceRequestEdit` | Partly — largely duplicates the detail drawer and carries technician, bay and scheduled-date fields |
 | `/board` | `ServiceBoard` + `BoardLayout` | Yes — kept, not a descope target (#456 closed `not_planned`; Plan decision log Sep 21 2026). Kanban with drag-drop status change (C-3), ordered within a column by `boardSequence`. It is the manager app's landing page: lands on an **Actionable today** view (`ActionableRequestFilter`: open requests plus anything closed today, toggleable), opens the detail drawer from `?sr={id}` (#498), and is the PWA start URL. Not to be extended |
 | `/sr/{id}` | `ServiceRequestDeepLink` | Yes — C-7 (#498). Packet-email landing: without `action` it forwards to `/board?sr={id}`; with `?action=in-progress\|waiting-on-parts\|completed` (`ManagerDeepLinks`) it shows a one-tap confirm and writes through the authenticated update endpoint. Nothing is written on page load |
 | `/analytics` | `Analytics` | **No** — dashboard with summary cards and top-category tables |
-| `/service-requests/batch-outcome` | `BatchOutcome` | **No** — bulk repair-outcome entry |
 | `/claims-debug` | `ClaimsDebug` | **No** — self-labelled "remove before production" |
 | `/authentication/{action}` | `Authentication` | Yes |
 
@@ -71,7 +70,7 @@ Typed clients in `Services/`:
 | Client | Targets |
 |---|---|
 | `IntakeApiClient` | All anonymous intake endpoints, plus `api/status/{token}` |
-| `ServiceRequestApiClient` | Service request CRUD, `search`, `batch-outcome` |
+| `ServiceRequestApiClient` | Service request CRUD, `search` |
 | `AttachmentApiClient` | Upload, read-SAS, delete |
 | `LookupApiClient` | Lookups, locations, QR code, dealerships, tenant config, access gate |
 | `IntakeInviteApiClient` | `api/locations/{locationId}/intake-invites` — send, recent sends, one invite, `capability` (A-14, #666). Refusals surface as `IntakeInviteApiException` carrying the API's ProblemDetails `detail`, or a fixed sentence for a body-less 403 |
@@ -89,9 +88,9 @@ Also `Validation/` (`ClientVinValidator`, `VinTranscriptCleaner`, `ClientSearchI
 
 Deleting these is the front-end half of aligning the code to the Overview.
 
-**Manager** — `Analytics.razor`, `BatchOutcome.razor`, `ClaimsDebug.razor`, `OutcomeComplianceWidget.razor`, and the matching `NavMenu` links. `ServiceRequestEdit.razor` should either absorb the detail drawer or go. The technician, bay and priority search filters lose meaning once the fields behind them are archived.
+**Manager** — `Analytics.razor`, `ClaimsDebug.razor`, and the matching `NavMenu` link. `ServiceRequestEdit.razor` should either absorb the detail drawer or go. The technician, bay and priority search filters lose meaning once the fields behind them are archived.
 
-**Shared** — `AnalyticsApiClient`, `ServiceRequestApiClient.BatchOutcomeAsync`, and the three unreferenced components.
+**Shared** — `AnalyticsApiClient` and the three unreferenced components.
 
 **Intake** — nothing is clearly dead. `/intake` is a dead-end page and `/` is unreachable from the normal slug flow.
 

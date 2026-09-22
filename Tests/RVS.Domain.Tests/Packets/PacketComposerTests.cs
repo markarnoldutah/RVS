@@ -801,16 +801,10 @@ public class PacketComposerTests
     // ── Never leaks pricing / other-customer data ──────────────────────────
 
     [Fact]
-    public void Compose_ShouldNeverExposePricingOrServiceEventData()
+    public void Compose_ShouldNeverExposePricingOrRepairData()
     {
         var request = FullyPopulatedRequest();
         request.Priority = "High";
-        request.ServiceEvent = new ServiceEventEmbedded
-        {
-            LaborHours = 4.5m,
-            RepairAction = "Replaced generator",
-            PartsUsed = ["gen-assembly"],
-        };
 
         var packet = PacketComposer.Compose(request, FullContext());
 

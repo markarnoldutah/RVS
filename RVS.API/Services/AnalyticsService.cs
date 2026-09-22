@@ -9,8 +9,6 @@ namespace RVS.API.Services;
 /// </summary>
 public sealed class AnalyticsService : IAnalyticsService
 {
-    private const int TopNCount = 10;
-
     private readonly IServiceRequestRepository _repository;
 
     /// <summary>
@@ -60,41 +58,6 @@ public sealed class AnalyticsService : IAnalyticsService
             .GroupBy(r => r.LocationId)
             .ToDictionary(g => g.Key, g => g.Count());
 
-        var topFailureModes = requests
-            .Where(r => r.ServiceEvent?.FailureMode is not null)
-            .GroupBy(r => r.ServiceEvent!.FailureMode!)
-            .OrderByDescending(g => g.Count())
-            .Take(TopNCount)
-            .Select(g => new AnalyticsRankItem(g.Key, g.Count()))
-            .ToList();
-
-        var topRepairActions = requests
-            .Where(r => r.ServiceEvent?.RepairAction is not null)
-            .GroupBy(r => r.ServiceEvent!.RepairAction!)
-            .OrderByDescending(g => g.Count())
-            .Take(TopNCount)
-            .Select(g => new AnalyticsRankItem(g.Key, g.Count()))
-            .ToList();
-
-        var topPartsUsed = requests
-            .Where(r => r.ServiceEvent is not null)
-            .SelectMany(r => r.ServiceEvent!.PartsUsed)
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .GroupBy(p => p)
-            .OrderByDescending(g => g.Count())
-            .Take(TopNCount)
-            .Select(g => new AnalyticsRankItem(g.Key, g.Count()))
-            .ToList();
-
-        var laborHours = requests
-            .Where(r => r.ServiceEvent?.LaborHours is not null)
-            .Select(r => r.ServiceEvent!.LaborHours!.Value)
-            .ToList();
-
-        decimal? averageRepairTimeHours = laborHours.Count > 0
-            ? Math.Round(laborHours.Average(), 2)
-            : null;
-
         var completedRequests = requests
             .Where(r => r.Status is "Completed" && r.UpdatedAtUtc.HasValue)
             .Select(r => (r.UpdatedAtUtc!.Value - r.CreatedAtUtc).TotalDays)
@@ -110,10 +73,6 @@ public sealed class AnalyticsService : IAnalyticsService
             RequestsByStatus = requestsByStatus,
             RequestsByCategory = requestsByCategory,
             RequestsByLocation = requestsByLocation,
-            TopFailureModes = topFailureModes,
-            TopRepairActions = topRepairActions,
-            AverageRepairTimeHours = averageRepairTimeHours,
-            TopPartsUsed = topPartsUsed,
             AverageDaysToComplete = averageDaysToComplete,
         };
     }
