@@ -24,6 +24,8 @@ public static class IntakeInviteMapper
             LocationId = entity.LocationId,
             FirstName = entity.FirstName,
             Phone = entity.Phone,
+            Email = entity.Email,
+            Channel = entity.Channel,
             IsSelfEntry = entity.IsSelfEntry,
             CreatedAtUtc = entity.CreatedAtUtc,
             SentAtUtc = entity.SentAtUtc,
@@ -40,7 +42,11 @@ public static class IntakeInviteMapper
     {
         ArgumentNullException.ThrowIfNull(capability);
 
-        return new IntakeInviteCapabilityResponseDto { SmsEnabled = capability.SmsEnabled };
+        return new IntakeInviteCapabilityResponseDto
+        {
+            SmsEnabled = capability.SmsEnabled,
+            EmailEnabled = capability.EmailEnabled
+        };
     }
 
     /// <summary>
@@ -58,6 +64,8 @@ public static class IntakeInviteMapper
             LocationId = entity.LocationId,
             FirstName = entity.FirstName,
             Phone = entity.Phone,
+            Email = entity.Email,
+            Channel = entity.Channel,
             IsSelfEntry = entity.IsSelfEntry,
             CreatedAtUtc = entity.CreatedAtUtc,
             SentAtUtc = entity.SentAtUtc,

@@ -11,13 +11,14 @@ public interface IIntakeInviteService
     /// <summary>
     /// Creates an invite for <paramref name="locationId"/> on behalf of the current advisor.
     ///
-    /// A texted invite requires the caller's consent and a US/Canada phone number, and is refused
-    /// while texting is disabled (<c>ConflictException</c>), for a number that has opted out of
-    /// texts (<c>ConflictException</c>), and once a rate limit is reached
-    /// (<c>RateLimitExceededException</c>). The invite is persisted before the text is sent, so
-    /// a failed send still leaves the consent record.
+    /// A texted invite requires the caller's consent and a US/Canada phone number; an emailed one
+    /// (issue #693) requires consent and a valid email address. Either is refused while its
+    /// channel is disabled (<c>ConflictException</c>), for an address that has opted out of that
+    /// channel (<c>ConflictException</c>), and once the shared rate limit is reached
+    /// (<c>RateLimitExceededException</c>). The invite is persisted before the message is sent,
+    /// so a failed send still leaves the consent record.
     ///
-    /// A self-entry invite texts nobody, works while texting is disabled, and returns the
+    /// A self-entry invite sends nothing, works while both channels are disabled, and returns the
     /// prefilled intake URL.
     /// </summary>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
@@ -52,23 +53,25 @@ public interface IIntakeInviteService
 
     /// <summary>
     /// What the send dialog can offer right now. Texting is an environment-level switch
-    /// (<c>AzureCommunicationServices:Sms:Enabled</c>), not a tenant setting, so this takes no
-    /// identifiers and reads the same for everyone in the environment.
+    /// (<c>AzureCommunicationServices:Sms:Enabled</c>) and email depends on the environment's ACS
+    /// endpoint, neither a tenant setting, so this takes no identifiers and reads the same for
+    /// everyone in the environment.
     /// </summary>
     IntakeInviteCapability GetCapability();
 }
 
 /// <summary>
-/// Whether the API can text an invite right now (<c>Spec A-14</c>, issue #666). While
-/// <paramref name="SmsEnabled" /> is <c>false</c> the dialog offers only <i>Fill it in myself</i>.
+/// Whether the API can text or email an invite right now (<c>Spec A-14</c>, issues #666, #693).
+/// While both are <c>false</c> the dialog offers only <i>Fill it in myself</i>.
 /// </summary>
-/// <param name="SmsEnabled">Whether an invite will actually be handed to ACS.</param>
-public sealed record IntakeInviteCapability(bool SmsEnabled);
+/// <param name="SmsEnabled">Whether a texted invite will actually be handed to ACS.</param>
+/// <param name="EmailEnabled">Whether an emailed invite will actually be handed to ACS.</param>
+public sealed record IntakeInviteCapability(bool SmsEnabled, bool EmailEnabled);
 
 /// <summary>
 /// A newly created invite, plus the prefilled intake URL when the advisor is to open it
 /// themselves. The URL carries the raw token, which is never stored, so it exists only here.
 /// </summary>
 /// <param name="Invite">The persisted invite.</param>
-/// <param name="IntakeUrl">The prefilled intake URL for a self-entry invite; <c>null</c> for a texted one.</param>
+/// <param name="IntakeUrl">The prefilled intake URL for a self-entry invite; <c>null</c> for a sent one.</param>
 public sealed record IntakeInviteCreateResult(IntakeInvite Invite, string? IntakeUrl);

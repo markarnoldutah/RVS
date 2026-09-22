@@ -77,4 +77,61 @@ public class IntakeInviteContentTests
 
         act.Should().Throw<ArgumentException>();
     }
+
+    // ── Email (issue #693) ───────────────────────────────────────────────────
+
+    [Fact]
+    public void BuildEmailSubject_ShouldNameTheLocation()
+    {
+        IntakeInviteContent.BuildEmailSubject("Nova RV").Should().Contain("Nova RV");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_ShouldGreetByNameNameTheLocationAndLinkTheInvite()
+    {
+        var html = IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72);
+
+        html.Should().Contain("Hi Jane,");
+        html.Should().Contain("Nova RV");
+        html.Should().Contain($"href=\"{Link.Replace("&", "&amp;")}\"");
+        html.Should().Contain("72 hours");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_ShouldEncodeWhatTheAdvisorTyped()
+    {
+        // The first name and location name are free text; the email is HTML.
+        var html = IntakeInviteContent.BuildEmailHtmlBody("Smith & Sons RV", "Jo\"e", Link, expiryHours: 72);
+
+        html.Should().Contain("Smith &amp; Sons RV");
+        html.Should().NotContain("Jo\"e");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_ShouldCarryNoTextingComplianceTail()
+    {
+        // STOP/HELP are carrier keywords; they mean nothing in an email.
+        IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72).Should().NotContain("STOP");
+    }
+
+    [Fact]
+    public void BuildEmailPlainTextBody_ShouldCarryTheRawLinkAndTheGreeting()
+    {
+        var text = IntakeInviteContent.BuildEmailPlainTextBody("Nova RV", "Jane", Link, expiryHours: 72);
+
+        text.Should().Contain("Hi Jane,");
+        text.Should().Contain(Link);
+        text.Should().NotContain("<");
+    }
+
+    [Theory]
+    [InlineData(null, "Jane", Link)]
+    [InlineData("Nova RV", null, Link)]
+    [InlineData("Nova RV", "Jane", null)]
+    public void BuildEmailHtmlBody_WhenAnArgumentIsBlank_ShouldThrowArgumentException(string? location, string? firstName, string? link)
+    {
+        var act = () => IntakeInviteContent.BuildEmailHtmlBody(location!, firstName!, link!, expiryHours: 72);
+
+        act.Should().Throw<ArgumentException>();
+    }
 }

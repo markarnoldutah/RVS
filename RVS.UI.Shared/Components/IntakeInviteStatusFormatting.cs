@@ -60,13 +60,19 @@ public static class IntakeInviteStatusFormatting
             return new IntakeInviteStatusDisplay("Expired", IntakeInviteStatusTone.Neutral);
         }
 
+        // Nothing reports email delivery back, so an accepted email is as far as it will get.
+        if (invite.Channel == IntakeInviteChannel.Email && invite.DeliveryStatus == IntakeInviteDeliveryStatus.Queued)
+        {
+            return new IntakeInviteStatusDisplay("Emailed", IntakeInviteStatusTone.Neutral);
+        }
+
         return invite.DeliveryStatus switch
         {
             IntakeInviteDeliveryStatus.Pending => new("Sending…", IntakeInviteStatusTone.Progress),
             IntakeInviteDeliveryStatus.Queued => new("Sent", IntakeInviteStatusTone.Progress),
             IntakeInviteDeliveryStatus.Delivered => new("Delivered", IntakeInviteStatusTone.Success),
             IntakeInviteDeliveryStatus.Failed => new("Not delivered", IntakeInviteStatusTone.Error),
-            IntakeInviteDeliveryStatus.NotSent => new("Not texted", IntakeInviteStatusTone.Neutral),
+            IntakeInviteDeliveryStatus.NotSent => new("Not sent", IntakeInviteStatusTone.Neutral),
             _ when string.IsNullOrWhiteSpace(invite.DeliveryStatus) =>
                 new("Unknown", IntakeInviteStatusTone.Neutral),
             _ => new(invite.DeliveryStatus, IntakeInviteStatusTone.Neutral)
@@ -82,8 +88,23 @@ public static class IntakeInviteStatusFormatting
     {
         ArgumentNullException.ThrowIfNull(invite);
 
-        return invite.DeliveryStatus is IntakeInviteDeliveryStatus.Pending
-            or IntakeInviteDeliveryStatus.Queued;
+        // Only texts get delivery reports (issue #693): polling an email would only spin.
+        return invite.Channel != IntakeInviteChannel.Email
+            && (invite.DeliveryStatus is IntakeInviteDeliveryStatus.Pending or IntakeInviteDeliveryStatus.Queued);
+    }
+
+    /// <summary>
+    /// Who the invite went to, as the recent-sends list shows it: the address for an emailed
+    /// invite, the number read back for anything else, and the address when there is no number.
+    /// </summary>
+    /// <param name="invite">The invite.</param>
+    public static string FormatContact(IntakeInviteSummaryResponseDto invite)
+    {
+        ArgumentNullException.ThrowIfNull(invite);
+
+        return invite.Channel == IntakeInviteChannel.Email || string.IsNullOrWhiteSpace(invite.Phone)
+            ? invite.Email ?? FormatPhone(invite.Phone)
+            : FormatPhone(invite.Phone);
     }
 
     /// <summary>

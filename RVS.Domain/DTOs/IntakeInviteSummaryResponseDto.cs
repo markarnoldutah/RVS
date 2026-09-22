@@ -15,8 +15,17 @@ public record IntakeInviteSummaryResponseDto
     /// <summary>The caller's first name.</summary>
     public required string FirstName { get; init; }
 
-    /// <summary>The caller's phone in E.164, or <c>null</c> for a self-entry invite without one.</summary>
+    /// <summary>The caller's phone in E.164, or <c>null</c> when none was given.</summary>
     public string? Phone { get; init; }
+
+    /// <summary>The caller's email address, or <c>null</c> when none was given.</summary>
+    public string? Email { get; init; }
+
+    /// <summary>
+    /// <c>sms</c> or <c>email</c> (<c>IntakeInviteChannel</c>): how the link went out. Defaults
+    /// to <c>sms</c> when an older API does not send it.
+    /// </summary>
+    public string Channel { get; init; } = Entities.IntakeInviteChannel.Sms;
 
     /// <summary><c>true</c> for a <i>Fill it in myself</i> invite.</summary>
     public bool IsSelfEntry { get; init; }
@@ -24,7 +33,7 @@ public record IntakeInviteSummaryResponseDto
     /// <summary>When the invite was created.</summary>
     public DateTime CreatedAtUtc { get; init; }
 
-    /// <summary>When the text was handed to ACS, or <c>null</c> if it never was.</summary>
+    /// <summary>When the text or email was handed to ACS, or <c>null</c> if it never was.</summary>
     public DateTime? SentAtUtc { get; init; }
 
     /// <summary>When the link stops working.</summary>

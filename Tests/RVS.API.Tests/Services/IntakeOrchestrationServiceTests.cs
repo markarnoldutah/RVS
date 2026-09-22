@@ -1225,6 +1225,16 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task GetInvitePrefillAsync_WhenTheInviteWasEmailed_ShouldAlsoReturnTheEmail()
+    {
+        SetupInvite(BuildInvite(channel: IntakeInviteChannel.Email, email: "jane@example.com"));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result!.Email.Should().Be("jane@example.com");
+    }
+
+    [Fact]
     public async Task GetInvitePrefillAsync_ShouldPointReadByTheTokenHashInTheSlugsTenant()
     {
         SetupInvite(BuildInvite());
@@ -1473,8 +1483,11 @@ public class IntakeOrchestrationServiceTests
     private const string InviteTokenValue = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     private static IntakeInvite BuildInvite(
-        string locationId = "loc_test", DateTime? expiresAtUtc = null, DateTime? redeemedAtUtc = null) => new()
+        string locationId = "loc_test", DateTime? expiresAtUtc = null, DateTime? redeemedAtUtc = null,
+        string channel = IntakeInviteChannel.Sms, string? email = null) => new()
     {
+        Channel = channel,
+        Email = email,
         Id = InviteToken.Hash(InviteTokenValue),
         TenantId = "ten_test",
         LocationId = locationId,

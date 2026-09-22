@@ -38,7 +38,8 @@ Then **wait for a clear yes**. "Yes", "Sure", "Go ahead" and "Please do" all cou
 |---|---|
 | A clear yes | Tick the consent box and tap **Send** |
 | "Uh, I guess?" or anything unsure | Ask once more: *"Just to check, OK to text you the link?"* Send only on a clear yes |
-| No, or "just email me" | **Don't send.** Use **Fill it in myself** and take the details on the call |
+| No | **Don't send.** Use **Fill it in myself** and take the details on the call |
+| "Just email me" | Don't text. Choose **Email** instead (see below) |
 | "Send it to my wife's phone" | Only if she's on the call and says yes herself. Otherwise, text the caller |
 | No answer, or the call dropped | **Don't send.** A missed call is not a yes |
 
@@ -64,10 +65,22 @@ still on the same call. If it's a later call, ask again first.
 If this number has replied STOP to us before, the app won't send, and it will tell you so.
 Don't try to get around it. Use **Fill it in myself**, or ask for an email address instead.
 
+## If they'd rather have an email
+
+Some customers would rather get the link by email. In **Send intake link**, choose
+**Email**, type their email address and read it back to them. Tick the box once they've
+said yes, then tap **Send**. There's no script to read for an email. It's the same link, it
+comes from RV Intake on the store's behalf, and it works once for about 3 days. The app
+shows **Emailed** once it's gone out. Unlike a text, it can't tell you whether the email
+was delivered, so if they say it hasn't arrived, ask them to check their junk folder before
+you resend.
+
+If the app says the address has opted out of email, don't send. Use **Fill it in myself**.
+
 ## If texting is switched off
 
 Sometimes the app says **texting is not yet enabled**. That means the texting number is
-still waiting for approval from the phone carriers. **Fill it in myself** still works.
+still waiting for approval from the phone carriers. Email and **Fill it in myself** still work.
 
 ---
 

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using RVS.Domain.DTOs;
+using RVS.Domain.Entities;
 using RVS.UI.Shared.Components;
 
 namespace RVS.UI.Shared.Tests.Components;
@@ -16,12 +17,15 @@ public class IntakeInviteStatusFormattingTests
         string deliveryStatus,
         DateTime? redeemedAtUtc = null,
         DateTime? expiresAtUtc = null,
-        bool isSelfEntry = false) => new()
+        bool isSelfEntry = false,
+        string channel = IntakeInviteChannel.Sms) => new()
         {
             Id = "inv-1",
             LocationId = "loc-1",
             FirstName = "Jane",
-            Phone = "+18015551234",
+            Phone = channel == IntakeInviteChannel.Sms ? "+18015551234" : null,
+            Email = channel == IntakeInviteChannel.Email ? "jane@example.com" : null,
+            Channel = channel,
             IsSelfEntry = isSelfEntry,
             CreatedAtUtc = Now.AddMinutes(-5),
             ExpiresAtUtc = expiresAtUtc ?? Now.AddHours(72),
@@ -75,11 +79,11 @@ public class IntakeInviteStatusFormattingTests
     }
 
     [Fact]
-    public void Describe_WhenSelfEntry_ShouldSayNothingWasTexted()
+    public void Describe_WhenSelfEntry_ShouldSayNothingWasSent()
     {
         var display = IntakeInviteStatusFormatting.Describe(Invite("notSent", isSelfEntry: true), Now);
 
-        display.Label.Should().Be("Not texted");
+        display.Label.Should().Be("Not sent");
         display.Tone.Should().Be(IntakeInviteStatusTone.Neutral);
     }
 
@@ -150,6 +154,59 @@ public class IntakeInviteStatusFormattingTests
         var act = () => IntakeInviteStatusFormatting.IsAwaitingDeliveryReport(null!);
 
         act.Should().Throw<ArgumentNullException>();
+    }
+
+    // ── Email channel (issue #693) ───────────────────────────────────────────
+
+    [Fact]
+    public void Describe_AnAcceptedEmail_ShouldReadAsEmailedWithNothingPending()
+    {
+        // No delivery report comes back for an email, so it must not look like it is waiting on one.
+        var display = IntakeInviteStatusFormatting.Describe(
+            Invite(IntakeInviteDeliveryStatus.Queued, channel: IntakeInviteChannel.Email), Now);
+
+        display.Label.Should().Be("Emailed");
+        display.Tone.Should().Be(IntakeInviteStatusTone.Neutral);
+    }
+
+    [Fact]
+    public void Describe_AFailedEmail_ShouldReadAsNotDelivered()
+    {
+        IntakeInviteStatusFormatting.Describe(
+                Invite(IntakeInviteDeliveryStatus.Failed, channel: IntakeInviteChannel.Email), Now)
+            .Tone.Should().Be(IntakeInviteStatusTone.Error);
+    }
+
+    [Theory]
+    [InlineData(IntakeInviteDeliveryStatus.Pending)]
+    [InlineData(IntakeInviteDeliveryStatus.Queued)]
+    public void IsAwaitingDeliveryReport_ForAnEmail_ShouldBeFalse(string status)
+    {
+        // Nothing reports email delivery back to the invite, so polling would only spin.
+        IntakeInviteStatusFormatting.IsAwaitingDeliveryReport(Invite(status, channel: IntakeInviteChannel.Email))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void FormatContact_ForATextedInvite_ShouldReadThePhoneBack()
+    {
+        IntakeInviteStatusFormatting.FormatContact(Invite(IntakeInviteDeliveryStatus.Queued))
+            .Should().Be("(801) 555-1234");
+    }
+
+    [Fact]
+    public void FormatContact_ForAnEmailedInvite_ShouldShowTheAddress()
+    {
+        IntakeInviteStatusFormatting.FormatContact(Invite(IntakeInviteDeliveryStatus.Queued, channel: IntakeInviteChannel.Email))
+            .Should().Be("jane@example.com");
+    }
+
+    [Fact]
+    public void FormatContact_ForASelfEntryInviteWithOnlyAnEmail_ShouldShowTheAddress()
+    {
+        var invite = Invite(IntakeInviteDeliveryStatus.NotSent, isSelfEntry: true) with { Phone = null, Email = "jane@example.com" };
+
+        IntakeInviteStatusFormatting.FormatContact(invite).Should().Be("jane@example.com");
     }
 
     // ── FormatPhone ──────────────────────────────────────────────────────────

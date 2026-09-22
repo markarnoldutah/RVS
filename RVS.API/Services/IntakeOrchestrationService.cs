@@ -622,7 +622,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         return invite is null
             ? null
-            : new IntakeInvitePrefillResponseDto { FirstName = invite.FirstName, Phone = invite.Phone };
+            : new IntakeInvitePrefillResponseDto { FirstName = invite.FirstName, Phone = invite.Phone, Email = invite.Email };
     }
 
     /// <inheritdoc />

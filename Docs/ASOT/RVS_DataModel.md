@@ -100,23 +100,24 @@ This document is what powers the customer status page and, once A-7 returns, ret
 
 ### IntakeInvite — `intake-invites`
 
-An advisor-initiated intake invite (`Spec A-14`, issue #663). `id` is `InviteToken.Hash(token)`: lowercase hex SHA-256 of a 32-byte, base64url token (`RVS.Domain/Security/InviteToken.cs`). The raw token is never stored; it exists only in the texted link (or the self-entry URL returned once, on create). Making the hash the id is what makes redemption a point read once `slug-lookups` has given the tenant.
+An advisor-initiated intake invite (`Spec A-14`, issue #663). `id` is `InviteToken.Hash(token)`: lowercase hex SHA-256 of a 32-byte, base64url token (`RVS.Domain/Security/InviteToken.cs`). The raw token is never stored; it exists only in the texted or emailed link (or the self-entry URL returned once, on create). Making the hash the id is what makes redemption a point read once `slug-lookups` has given the tenant.
 
 | Field | Meaning |
 |---|---|
 | `locationId`, `advisorUserId` | Where the invite opens, and who sent it. The resulting request is attributed to the advisor (#664) |
-| `firstName`, `phone` | Prefill for the intake form. `phone` is E.164; optional only for self-entry |
-| `isSelfEntry` | *Fill it in myself*: minted for the advisor, never texted |
-| `consentCapturedAtUtc` | When the advisor confirmed the caller's verbal consent. Separate from `sentAtUtc` and from delivery, never cleared; `null` only for self-entry |
-| `sentAtUtc` | When ACS accepted the text; `null` for self-entry or a send that never reached ACS |
+| `firstName`, `phone`, `email` | Prefill for the intake form. `phone` is E.164, required for a texted invite; `email` is trimmed and lower-cased like `CustomerProfile.email`, required for an emailed one (#693). Either is optional otherwise, and validated when given |
+| `channel` | `sms` or `email` (`IntakeInviteChannel`, #693). Absent on invites written before #693, which read as `sms`; meaningless for self-entry |
+| `isSelfEntry` | *Fill it in myself*: minted for the advisor, never sent |
+| `consentCapturedAtUtc` | When the advisor confirmed the caller's verbal consent to the text or email. Separate from `sentAtUtc` and from delivery, never cleared; `null` only for self-entry |
+| `sentAtUtc` | When ACS accepted the text or email; `null` for self-entry or a send that never reached ACS |
 | `expiresAtUtc` | `createdAtUtc` + `IntakeInvites:ExpiryHours` (72) |
 | `redeemedAtUtc`, `serviceRequestId` | Set on intake **submission**, not on open (#664): link previews fetch the URL, and redeeming on open would spend the invite before the customer tapped it. Written after the service request is created; a failed write is logged and the submission stands. `IntakeInvite.IsRedeemableAt` (unredeemed and `expiresAtUtc` in the future) gates both prefill and attribution |
-| `acsMessageId` | The ACS message id; delivery reports are matched back by it (#665) |
-| `deliveryStatus` | `pending` → `queued` / `failed`; then `delivered` / `failed` from delivery reports. `notSent` for self-entry |
+| `acsMessageId` | The ACS SMS message id, which delivery reports are matched back by (#665), or the ACS email operation id for an emailed invite, which nothing reads yet |
+| `deliveryStatus` | `pending` → `queued` / `failed`; then `delivered` / `failed` from SMS delivery reports. An emailed invite stops at `queued` or `failed`. `notSent` for self-entry |
 
 **No TTL, and never deleted.** The consent fields are the opt-in evidence for toll-free verification and for any complaint, so the document outlives the invite. `expiresAtUtc` retires the token, not the record.
 
-The opt-out check before a send reads `customer-profiles` in the tenant's partition for `smsOptOut = true` and compares each stored phone after E.164 normalisation, because stored phones are as the customer typed them. It does not read `global-customer-accounts` (partitioned by email, so that would be cross-partition).
+The opt-out check before a text reads `customer-profiles` in the tenant's partition for `smsOptOut = true` and compares each stored phone after E.164 normalisation, because stored phones are as the customer typed them. Before an email it reads the tenant's profile for that address with `GetByEmailAsync` (stored lower-cased, so one lookup) and refuses on `emailOptOut`. It does not read `global-customer-accounts` (partitioned by email, so that would be cross-partition).
 
 **Inbound keywords write across tenants (#665).** `STOP` and its synonyms set `smsOptOut`; `START` and `UNSTOP` clear it, and a keyword is the only thing that clears it, since intake sets an opt-out but never clears one (#673). The keyword arrives with a phone number and no tenant, and the toll-free sending number is shared, so `ListByPhoneE164AcrossTenantsAsync` matches `phoneE164` in **every** tenant's partition and each matching profile is updated. Scoping it to one tenant would leave the other dealers texting into a carrier block. Keyword traffic is rare and the result is bounded by how many dealers know one customer. A number matching no profile is a no-op: the carrier still enforces its own block. `HELP` writes nothing at all — it is answered with a fixed reply and is neither consent nor a revocation, so it needs no profile and does not move `smsKeywordAtUtc`. Delivery reports match an invite through `GetByAcsMessageIdAcrossTenantsAsync` on the already-indexed `acsMessageId`, for the same reason — a report carries no tenant.
 

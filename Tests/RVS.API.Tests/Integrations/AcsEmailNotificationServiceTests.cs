@@ -55,6 +55,27 @@ public class AcsEmailNotificationServiceTests
         await act.Should().NotThrowAsync();
     }
 
+    // ── SendTransactionalEmailAsync (Spec A-14, issue #693) ────────────────
+
+    [Fact]
+    public void IsEnabled_ShouldBeTrue()
+    {
+        CreateService().IsEnabled.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null, "Subject", "<p>Body</p>", "Body")]
+    [InlineData("user@example.com", " ", "<p>Body</p>", "Body")]
+    [InlineData("user@example.com", "Subject", "", "Body")]
+    [InlineData("user@example.com", "Subject", "<p>Body</p>", null)]
+    public async Task SendTransactionalEmailAsync_WhenAnArgumentIsBlank_ShouldThrowArgumentException(
+        string? toEmail, string? subject, string? html, string? text)
+    {
+        var act = () => CreateService().SendTransactionalEmailAsync(toEmail!, subject!, html!, text!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
     // ── SendPacketEmailAsync (Spec B-4, issue #437) ───────────────────────
 
     [Fact]

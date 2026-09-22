@@ -12,8 +12,10 @@ public class IntakeInviteMapperTests
 {
     private static readonly DateTime Created = new(2026, 9, 18, 15, 0, 0, DateTimeKind.Utc);
 
-    private static IntakeInvite BuildInvite() => new()
+    private static IntakeInvite BuildInvite(string channel = IntakeInviteChannel.Sms, string? email = null) => new()
     {
+        Channel = channel,
+        Email = email,
         Id = "0f1e2d",
         TenantId = "ten_test",
         LocationId = "loc_slc",
@@ -45,6 +47,19 @@ public class IntakeInviteMapperTests
         dto.ExpiresAtUtc.Should().Be(Created.AddHours(72));
         dto.RedeemedAtUtc.Should().Be(Created.AddHours(1));
         dto.DeliveryStatus.Should().Be(IntakeInviteDeliveryStatus.Delivered);
+        dto.Channel.Should().Be(IntakeInviteChannel.Sms);
+        dto.Email.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToSummaryAndDetailDto_ShouldCarryTheEmailChannelAndAddress()
+    {
+        var invite = BuildInvite(IntakeInviteChannel.Email, "jane@example.com");
+
+        invite.ToSummaryDto().Channel.Should().Be(IntakeInviteChannel.Email);
+        invite.ToSummaryDto().Email.Should().Be("jane@example.com");
+        invite.ToDetailDto().Channel.Should().Be(IntakeInviteChannel.Email);
+        invite.ToDetailDto().Email.Should().Be("jane@example.com");
     }
 
     [Fact]
@@ -66,8 +81,15 @@ public class IntakeInviteMapperTests
     [Fact]
     public void ToDto_ShouldCarryTheSmsEnabledFlag()
     {
-        new IntakeInviteCapability(SmsEnabled: true).ToDto().SmsEnabled.Should().BeTrue();
-        new IntakeInviteCapability(SmsEnabled: false).ToDto().SmsEnabled.Should().BeFalse();
+        new IntakeInviteCapability(SmsEnabled: true, EmailEnabled: false).ToDto().SmsEnabled.Should().BeTrue();
+        new IntakeInviteCapability(SmsEnabled: false, EmailEnabled: false).ToDto().SmsEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToDto_ShouldCarryTheEmailEnabledFlag()
+    {
+        new IntakeInviteCapability(SmsEnabled: false, EmailEnabled: true).ToDto().EmailEnabled.Should().BeTrue();
+        new IntakeInviteCapability(SmsEnabled: true, EmailEnabled: false).ToDto().EmailEnabled.Should().BeFalse();
     }
 
     [Fact]
