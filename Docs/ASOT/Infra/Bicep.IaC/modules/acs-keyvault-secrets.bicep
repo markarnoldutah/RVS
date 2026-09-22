@@ -17,10 +17,6 @@ param keyVaultName string
 @description('The name of the ACS resource in the current resource group.')
 param acsName string
 
-@description('Shared secret for the inbound Event Grid webhook (issue #665), stored as EventGrid--Inbound--Key and bound by the API to EventGrid:Inbound:Key. Empty means the secret is not managed here and the webhook stays refused.')
-@secure()
-param eventGridWebhookKey string = ''
-
 // ── Existing Resource References ──────────────────────────────
 
 resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
@@ -55,12 +51,6 @@ resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01
   }
 }
 
-@description('Shared secret the inbound Event Grid webhook checks on every request (issue #665). The same value goes into the subscription endpoint URL, so both sides move together.')
-resource eventGridInboundKeySecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (!empty(eventGridWebhookKey)) {
-  parent: keyVault
-  name: 'EventGrid--Inbound--Key'
-  properties: {
-    value: eventGridWebhookKey
-    contentType: 'text/plain'
-  }
-}
+// EventGrid--Inbound--Key is deliberately NOT written here (#678). It is created
+// once by hand, and the .bicepparam files read it back with az.getSecret, so the
+// vault is its only source of truth. See the runbook in RVS_Infrastructure.md.

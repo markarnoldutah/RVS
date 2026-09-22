@@ -119,16 +119,17 @@ param acsCustomDomainVerified = true
 param acsSmsFromPhoneNumber = '+18332398230'
 param acsSmsEnabled = false
 
-// Inbound Event Grid webhook (#665). SECRET — never committed here. Supply it at
-// deploy time, e.g.
-//   az deployment sub create ... --parameters eventGridWebhookKey="$EVENTGRID_KEY"
-// Bicep writes it to Key Vault as EventGrid--Inbound--Key and puts the same value
-// in the subscription URL. Empty (the default) deploys no system topic and no
-// subscription, and the API's /api/events/acs-sms answers 503 to everything.
-// Generate: openssl rand -base64 48 | tr -d /+= | cut -c1-48
-// First bring-up: seed EventGrid--Inbound--Key in Key Vault and restart the API
-// BEFORE deploying, so it can answer Event Grid's endpoint validation. See the
-// runbook in RVS_Infrastructure.md.
+// Inbound Event Grid webhook (#665, #678). The value lives only in Key Vault as
+// EventGrid--Inbound--Key; this line makes ARM read it at deploy time, so it is
+// never typed, never on a command line and never in this file. Every deploy
+// picks up the current value. If the secret cannot be read (missing, vault not
+// enabledForTemplateDeployment, deployer lacks
+// Microsoft.KeyVault/vaults/deploy/action) the deploy FAILS before creating or
+// removing anything, rather than quietly deploying no subscription.
+// The subscription id is the one this environment deploys into; getSecret needs
+// it as a literal. Rotation and first bring-up of a brand-new environment: see
+// the runbook in RVS_Infrastructure.md.
+param eventGridWebhookKey = az.getSecret('4d1d5e99-e872-496d-98be-e8a0a4232aec', 'rg-rvs-prod-westus3', 'kv-rvs-prod-wus3', 'EventGrid--Inbound--Key')
 
 // Static Web Apps — Free until go-live, to cut cost while prod carries no
 // traffic. Set back to 'Standard' at go-live for the SLA:
