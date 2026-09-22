@@ -85,7 +85,9 @@ The `/admin` pages create users through the Management API, so they need their o
 
 1. **Provisioner application.** **Applications → Applications → Create Application.** Name it `RVS API Provisioner`, choose **Machine to Machine**, and select **Auth0 Management API**. Authorize exactly these scopes and nothing else:
 
-   `read:users` `create:users` `update:users` `update:users_app_metadata` `read:roles` `create:role_members` `create:user_tickets`
+   `read:users` `create:users` `update:users` `delete:users` `update:users_app_metadata` `read:roles` `read:role_members` `create:role_members` `delete:role_members` `create:user_tickets`
+
+   `delete:users`, `read:role_members` and `delete:role_members` arrived with the Users page (#647). An application authorised before then needs them added under **APIs → Auth0 Management API → Machine To Machine Applications**; until it has them, listing, editing and deleting users fail with a 403 from Auth0 and adding a user that already exists fails at the role step.
 
    This is a different application from `rvs-config-automation` (§2). Never swap their credentials: the configuration application can rewrite the tenant, and the provisioner can create users.
 

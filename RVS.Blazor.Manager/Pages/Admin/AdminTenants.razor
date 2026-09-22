@@ -124,6 +124,10 @@ else
                                            OnClick="@(() => StartEdit(t))">
                                     Edit
                                 </MudButton>
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.People"
+                                           Href="@UsersPath(t)">
+                                    Users
+                                </MudButton>
                                 <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PersonAdd"
                                            Href="@AddUserPath(t)">
                                     Add user
@@ -298,6 +302,9 @@ else
         "Pilot" => Color.Info,
         _ => Color.Default
     };
+
+    private static string UsersPath(TenantSummaryResponseDto tenant) =>
+        $"/admin/tenants/{Uri.EscapeDataString(tenant.TenantId)}/users";
 
     private static string AddUserPath(TenantSummaryResponseDto tenant) =>
         $"/admin/tenants/{Uri.EscapeDataString(tenant.TenantId)}/users/new";

@@ -6,7 +6,7 @@ using RVS.Domain.Provisioning;
 namespace RVS.Domain.Interfaces;
 
 /// <summary>
-/// Platform-admin tenant provisioning (Spec P-1 … P-7, issue #563). Unlike every other service,
+/// Platform-admin tenant provisioning (Spec P-1 … P-12, issues #563 and #647). Unlike every other service,
 /// <c>tenantId</c> comes from the route, not the caller's claims — the caller is RVS staff acting
 /// on another tenant, and the <c>PlatformAdmin</c> policy is what authorizes that.
 /// </summary>
@@ -48,6 +48,36 @@ public interface ITenantProvisioningService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">The tenant or user does not exist, or the user belongs to another tenant.</exception>
     Task<PasswordTicket> CreatePasswordTicketAsync(string tenantId, string userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists the tenant's Manager-app users with their roles, ordered by name then email (P-9).</summary>
+    /// <param name="tenantId">Tenant whose users to list.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">The tenant does not exist.</exception>
+    Task<IReadOnlyList<IdentityUser>> ListUsersAsync(string tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>Replaces a user's name, role and locations (P-10).</summary>
+    /// <param name="tenantId">Tenant the user must belong to.</param>
+    /// <param name="userId">Auth0 user id.</param>
+    /// <param name="request">The new values.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="ArgumentException">The request is invalid, or names a location outside the tenant.</exception>
+    /// <exception cref="KeyNotFoundException">The tenant or user does not exist, or the user belongs to another tenant.</exception>
+    Task<IdentityUser> UpdateUserAsync(string tenantId, string userId, TenantUserUpdateRequestDto request, CancellationToken cancellationToken = default);
+
+    /// <summary>Disables or re-enables one user's logins (P-11).</summary>
+    /// <param name="tenantId">Tenant the user must belong to.</param>
+    /// <param name="userId">Auth0 user id.</param>
+    /// <param name="request">The new login state.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">The tenant or user does not exist, or the user belongs to another tenant.</exception>
+    Task<IdentityUser> SetUserLoginsEnabledAsync(string tenantId, string userId, TenantUserAccessUpdateRequestDto request, CancellationToken cancellationToken = default);
+
+    /// <summary>Permanently deletes a user from the identity provider (P-12).</summary>
+    /// <param name="tenantId">Tenant the user must belong to.</param>
+    /// <param name="userId">Auth0 user id.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">The tenant or user does not exist, or the user belongs to another tenant.</exception>
+    Task DeleteUserAsync(string tenantId, string userId, CancellationToken cancellationToken = default);
 
     /// <summary>Enables or disables logins for a tenant. Never changes the commercial status.</summary>
     /// <param name="tenantId">Tenant to gate.</param>

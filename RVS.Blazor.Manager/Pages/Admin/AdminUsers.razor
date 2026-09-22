@@ -1,0 +1,341 @@
+@page "/admin/tenants/{TenantId}/users"
+@inject AdminApiClient AdminApi
+@inject ISnackbar Snackbar
+
+@* A tenant's users: list, edit role and locations, disable, delete (Spec P-9 … P-12, issue #647). *@
+<PageTitle>RVS Admin — Users</PageTitle>
+
+@if (_forbidden)
+{
+    <AccessDeniedCard />
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="px-0">
+        <MudStack Spacing="3">
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Href="/admin"
+                       Style="align-self: flex-start;">
+                Tenants
+            </MudButton>
+
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h4">Users</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@(_tenant?.Name ?? TenantId)</MudText>
+            </MudStack>
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                       StartIcon="@Icons.Material.Filled.PersonAdd" Href="@AddUserPath">
+                Add user
+            </MudButton>
+
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+            else if (_tenant is null)
+            {
+                <MudAlert Severity="Severity.Error">Tenant '@TenantId' was not found.</MudAlert>
+            }
+            else
+            {
+                @if (_users.Count == 0)
+                {
+                    <MudText Color="Color.Secondary">No users yet.</MudText>
+                }
+
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    A user added in the last few seconds may not be listed yet.
+                </MudText>
+
+                @foreach (var user in _users)
+                {
+                    var u = user;
+                    <MudCard Elevation="2">
+                        <MudCardContent>
+                            <MudStack Spacing="2">
+                                <MudStack Spacing="0">
+                                    <MudText Typo="Typo.h6">@(u.DisplayName ?? u.Email)</MudText>
+                                    <MudText Typo="Typo.body2" Style="word-break: break-all;">@u.Email</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@LastLoginText(u)</MudText>
+                                </MudStack>
+
+                                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                    @if (u.Roles.Count == 0)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error">No role</MudChip>
+                                    }
+                                    @foreach (var role in u.Roles)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@role</MudChip>
+                                    }
+                                </MudStack>
+
+                                @if (u.LocationIds.Count > 0)
+                                {
+                                    <MudText Typo="Typo.body2">@LocationNames(u.LocationIds)</MudText>
+                                }
+
+                                <MudSwitch T="bool" Value="@u.LoginsEnabled"
+                                           ValueChanged="@(enabled => SetAccessAsync(u, enabled))"
+                                           Disabled="@(_busyUserId == u.UserId)"
+                                           Color="Color.Success"
+                                           Label="@(u.LoginsEnabled ? "Logins enabled" : "Logins disabled")" />
+
+                                @if (_ticketUserId == u.UserId && _ticket is not null)
+                                {
+                                    <CopyField Label="Set-password link" Value="@_ticket.PasswordTicketUrl"
+                                               Hint="@TicketHint(_ticket.ExpiresAtUtc)" />
+                                }
+
+                                @if (_editingUserId == u.UserId)
+                                {
+                                    <MudDivider />
+                                    <MudTextField T="string" @bind-Value="_edit.DisplayName" Label="Name"
+                                                  Variant="Variant.Outlined" autocomplete="off" />
+                                    <MudSelect T="string" @bind-Value="_edit.Role" Label="Role" Variant="Variant.Outlined">
+                                        @foreach (var role in TenantProvisioningValidator.ProvisionableRoles)
+                                        {
+                                            <MudSelectItem T="string" Value="@role">@role</MudSelectItem>
+                                        }
+                                    </MudSelect>
+
+                                    @if (TenantProvisioningValidator.IsLocationScopedRole(_edit.Role))
+                                    {
+                                        <MudStack Spacing="1">
+                                            <MudText Typo="Typo.subtitle2">Locations</MudText>
+                                            @foreach (var location in _tenant.Locations)
+                                            {
+                                                var id = location.LocationId;
+                                                <MudCheckBox T="bool"
+                                                             Value="@_edit.LocationIds.Contains(id)"
+                                                             ValueChanged="@(on => ToggleLocation(id, on))"
+                                                             Label="@location.Name"
+                                                             Color="Color.Primary" />
+                                            }
+                                        </MudStack>
+                                    }
+
+                                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                                   Disabled="@(_busyUserId == u.UserId)"
+                                                   OnClick="@(() => SaveEditAsync(u))">
+                                            Save
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Text" OnClick="CancelEdit">Cancel</MudButton>
+                                    </MudStack>
+                                }
+
+                                @if (_deletingUserId == u.UserId)
+                                {
+                                    <MudAlert Severity="Severity.Warning">
+                                        Delete @u.Email permanently? This cannot be undone. A session already open
+                                        keeps working for up to an hour. To keep the account, turn off logins instead.
+                                    </MudAlert>
+                                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Error"
+                                                   Disabled="@(_busyUserId == u.UserId)"
+                                                   OnClick="@(() => DeleteAsync(u))">
+                                            Delete user
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Text" OnClick="@(() => _deletingUserId = null)">Cancel</MudButton>
+                                    </MudStack>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit"
+                                           OnClick="@(() => StartEdit(u))">
+                                    Edit
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Key"
+                                           Disabled="@(_busyUserId == u.UserId)"
+                                           OnClick="@(() => NewTicketAsync(u))">
+                                    New link
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete"
+                                           OnClick="@(() => StartDelete(u))">
+                                    Delete
+                                </MudButton>
+                            </MudStack>
+                        </MudCardActions>
+                    </MudCard>
+                }
+            }
+        </MudStack>
+    </MudContainer>
+}
+
+@code {
+    [Parameter] public string TenantId { get; set; } = string.Empty;
+
+    private TenantSummaryResponseDto? _tenant;
+    private List<TenantUserSummaryResponseDto> _users = [];
+    private bool _loading = true;
+    private bool _forbidden;
+    private string? _error;
+
+    private string? _busyUserId;
+    private string? _editingUserId;
+    private string? _deletingUserId;
+    private string? _ticketUserId;
+    private PasswordTicketResponseDto? _ticket;
+    private EditForm _edit = new();
+
+    private string AddUserPath => $"/admin/tenants/{Uri.EscapeDataString(TenantId)}/users/new";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var tenants = await AdminApi.ListTenantsAsync();
+            _tenant = tenants.FirstOrDefault(t => t.TenantId == TenantId);
+            if (_tenant is not null)
+            {
+                _users = await AdminApi.ListUsersAsync(TenantId);
+            }
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void StartEdit(TenantUserSummaryResponseDto user)
+    {
+        _deletingUserId = null;
+        _editingUserId = user.UserId;
+        _edit = new EditForm
+        {
+            DisplayName = user.DisplayName,
+            Role = user.Roles.FirstOrDefault(r => TenantProvisioningValidator.ProvisionableRoles.Contains(r)) ?? "dealer:manager",
+        };
+        _edit.LocationIds.UnionWith(user.LocationIds);
+    }
+
+    private void CancelEdit() => _editingUserId = null;
+
+    private void StartDelete(TenantUserSummaryResponseDto user)
+    {
+        _editingUserId = null;
+        _deletingUserId = user.UserId;
+    }
+
+    private void ToggleLocation(string locationId, bool on)
+    {
+        if (on)
+        {
+            _edit.LocationIds.Add(locationId);
+        }
+        else
+        {
+            _edit.LocationIds.Remove(locationId);
+        }
+    }
+
+    private Task SaveEditAsync(TenantUserSummaryResponseDto user) =>
+        RunAsync(user, async () =>
+        {
+            Replace(await AdminApi.UpdateUserAsync(TenantId, user.UserId, new TenantUserUpdateRequestDto
+            {
+                DisplayName = _edit.DisplayName ?? string.Empty,
+                Role = _edit.Role ?? string.Empty,
+                LocationIds = TenantProvisioningValidator.IsLocationScopedRole(_edit.Role) ? [.. _edit.LocationIds] : []
+            }));
+            _editingUserId = null;
+            Snackbar.Add("User saved. An open session picks it up within an hour.", Severity.Success);
+        });
+
+    private Task SetAccessAsync(TenantUserSummaryResponseDto user, bool enabled) =>
+        RunAsync(user, async () =>
+        {
+            Replace(await AdminApi.SetUserAccessAsync(TenantId, user.UserId,
+                new TenantUserAccessUpdateRequestDto { LoginsEnabled = enabled }));
+            Snackbar.Add(enabled ? "Logins enabled." : "Logins disabled. An open session ends within an hour.", Severity.Success);
+        });
+
+    private Task NewTicketAsync(TenantUserSummaryResponseDto user) =>
+        RunAsync(user, async () =>
+        {
+            _ticket = await AdminApi.CreatePasswordTicketAsync(TenantId, user.UserId);
+            _ticketUserId = user.UserId;
+        });
+
+    private Task DeleteAsync(TenantUserSummaryResponseDto user) =>
+        RunAsync(user, async () =>
+        {
+            await AdminApi.DeleteUserAsync(TenantId, user.UserId);
+            _users.RemoveAll(u => u.UserId == user.UserId);
+            _deletingUserId = null;
+            Snackbar.Add($"{user.Email} deleted.", Severity.Success);
+        });
+
+    private async Task RunAsync(TenantUserSummaryResponseDto user, Func<Task> action)
+    {
+        _busyUserId = user.UserId;
+        try
+        {
+            await action();
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busyUserId = null;
+        }
+    }
+
+    private void Replace(TenantUserSummaryResponseDto updated)
+    {
+        var index = _users.FindIndex(u => u.UserId == updated.UserId);
+        if (index >= 0)
+        {
+            _users[index] = updated;
+        }
+    }
+
+    private string LocationNames(IEnumerable<string> locationIds) =>
+        string.Join(", ", locationIds.Select(id =>
+            _tenant?.Locations.FirstOrDefault(l => l.LocationId == id)?.Name ?? id));
+
+    private static string LastLoginText(TenantUserSummaryResponseDto user) =>
+        user.LastLoginAtUtc is { } lastLogin
+            ? $"Last signed in {lastLogin.ToLocalTime():g}"
+            : "Has not signed in yet";
+
+    private static string TicketHint(DateTime expiresAtUtc) =>
+        $"Expires {expiresAtUtc.ToLocalTime():g}. Nothing is emailed: send this to the user yourself.";
+
+    private sealed class EditForm
+    {
+        public string? DisplayName { get; set; }
+        public string? Role { get; set; }
+        public HashSet<string> LocationIds { get; } = [];
+    }
+}

@@ -238,7 +238,62 @@ public class TenantProvisioningValidatorTests
         TenantProvisioningValidator.ValidateAddUser(request).IsValid.Should().BeFalse();
     }
 
-    // ── ValidateAccessGate (Spec P-4) ────────────────────────────────────────
+    // ── ValidateUpdateUser (Spec P-10) ───────────────────────────────────────
+
+    [Fact]
+    public void ValidateUpdateUser_WhenRequestIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => TenantProvisioningValidator.ValidateUpdateUser(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void ValidateUpdateUser_WhenOwnerWithoutLocations_ShouldPass()
+    {
+        var request = new TenantUserUpdateRequestDto { DisplayName = "Jay Lyons", Role = "dealer:owner" };
+
+        TenantProvisioningValidator.ValidateUpdateUser(request).IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidateUpdateUser_WhenLocationScopedRoleWithLocation_ShouldPass()
+    {
+        var request = new TenantUserUpdateRequestDto
+        {
+            DisplayName = "Sam Advisor",
+            Role = "dealer:advisor",
+            LocationIds = ["loc_nova_rv_1"],
+        };
+
+        TenantProvisioningValidator.ValidateUpdateUser(request).IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidateUpdateUser_WhenLocationScopedRoleWithoutLocations_ShouldFail()
+    {
+        var request = new TenantUserUpdateRequestDto { DisplayName = "Sam Advisor", Role = "dealer:manager" };
+
+        var result = TenantProvisioningValidator.ValidateUpdateUser(request);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("location");
+    }
+
+    [Theory]
+    [InlineData("", "dealer:owner")]
+    [InlineData("<b>Sam</b>", "dealer:owner")]
+    [InlineData("Sam", "dealer:technician")]
+    [InlineData("Sam", "platform:admin")]
+    [InlineData("Sam", "")]
+    public void ValidateUpdateUser_WhenFieldInvalid_ShouldFail(string displayName, string role)
+    {
+        var request = new TenantUserUpdateRequestDto { DisplayName = displayName, Role = role };
+
+        TenantProvisioningValidator.ValidateUpdateUser(request).IsValid.Should().BeFalse();
+    }
+
+    // ── ValidateAccessGate (Spec P-4)────────────────────────────────────────
 
     [Fact]
     public void ValidateAccessGate_WhenDisablingWithoutReason_ShouldFail()

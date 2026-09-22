@@ -505,6 +505,307 @@ public sealed class TenantProvisioningServiceTests
         VerifyNeverLogged(TicketUrl);
     }
 
+    // ── ListUsersAsync (Spec P-9) ────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task ListUsersAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.ListUsersAsync(tenantId!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task ListUsersAsync_WhenTenantNotFound_ShouldThrowKeyNotFoundAndNotCallAuth0()
+    {
+        _tenantRepoMock.Setup(r => r.GetAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync((Tenant?)null);
+
+        var act = () => _sut.ListUsersAsync(TenantId);
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+        _identityMock.Verify(i => i.ListUsersAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ListUsersAsync_ShouldReturnOnlyThisTenantsUsersOrderedByName()
+    {
+        SetupExistingTenant();
+        _identityMock.Setup(i => i.ListUsersAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new IdentityUser("auth0|sam", "sam@nova.example.com", TenantId) { DisplayName = "Sam Advisor" },
+                new IdentityUser("auth0|stray", "x@other.example.com", "ten_other") { DisplayName = "Aaron Other" },
+                new IdentityUser("auth0|jay", OwnerEmail, TenantId) { DisplayName = "Jay Lyons" },
+            ]);
+
+        var users = await _sut.ListUsersAsync(TenantId);
+
+        users.Select(u => u.UserId).Should().Equal("auth0|jay", "auth0|sam");
+    }
+
+    // ── UpdateUserAsync (Spec P-10) ──────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task UpdateUserAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.UpdateUserAsync(tenantId!, "auth0|sam", ValidUserUpdate());
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task UpdateUserAsync_WhenUserIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? userId)
+    {
+        var act = () => _sut.UpdateUserAsync(TenantId, userId!, ValidUserUpdate());
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenRequestIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => _sut.UpdateUserAsync(TenantId, "auth0|sam", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenRequestInvalid_ShouldThrowArgumentExceptionAndChangeNothing()
+    {
+        SetupExistingTenant();
+        SetupTenantUser("auth0|sam");
+
+        var act = () => _sut.UpdateUserAsync(TenantId, "auth0|sam", ValidUserUpdate() with { Role = "dealer:technician" });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        VerifyNoIdentityWrites();
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenTenantNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _tenantRepoMock.Setup(r => r.GetAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync((Tenant?)null);
+
+        var act = () => _sut.UpdateUserAsync(TenantId, "auth0|sam", ValidUserUpdate());
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenUserBelongsToAnotherTenant_ShouldThrowKeyNotFoundAndChangeNothing()
+    {
+        SetupExistingTenant();
+        _identityMock.Setup(i => i.GetUserAsync("auth0|other", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IdentityUser("auth0|other", "x@other.example.com", "ten_other"));
+
+        var act = () => _sut.UpdateUserAsync(TenantId, "auth0|other", ValidUserUpdate());
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+        VerifyNoIdentityWrites();
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenLocationNotInTenant_ShouldThrowArgumentExceptionAndChangeNothing()
+    {
+        SetupExistingTenant();
+        SetupTenantUser("auth0|sam");
+
+        var act = () => _sut.UpdateUserAsync(TenantId, "auth0|sam", ValidUserUpdate() with { LocationIds = ["loc_elsewhere"] });
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*loc_elsewhere*");
+        VerifyNoIdentityWrites();
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenLocationScoped_ShouldSendTrimmedNameRoleAndLocations()
+    {
+        SetupExistingTenant();
+        SetupTenantUser("auth0|sam");
+        IdentityUserUpdate? sent = null;
+        _identityMock.Setup(i => i.UpdateUserAsync("auth0|sam", It.IsAny<IdentityUserUpdate>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, IdentityUserUpdate u, CancellationToken _) => sent = u)
+            .ReturnsAsync(new IdentityUser("auth0|sam", "sam@nova.example.com", TenantId) { Roles = ["dealer:manager"] });
+
+        var user = await _sut.UpdateUserAsync(TenantId, "auth0|sam", ValidUserUpdate() with
+        {
+            DisplayName = "  Sam Manager ",
+            Role = "dealer:manager",
+            LocationIds = [$" {FirstLocationId} ", FirstLocationId],
+        });
+
+        user.Roles.Should().Equal("dealer:manager");
+        sent.Should().NotBeNull();
+        sent!.DisplayName.Should().Be("Sam Manager");
+        sent.Role.Should().Be("dealer:manager");
+        sent.LocationIds.Should().Equal(FirstLocationId);
+        VerifyLoggedContaining(AdminUserId, "auth0|sam", "dealer:manager", TenantId);
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenPromotedToOwner_ShouldClearLocations()
+    {
+        SetupExistingTenant();
+        SetupTenantUser("auth0|sam");
+        IdentityUserUpdate? sent = null;
+        _identityMock.Setup(i => i.UpdateUserAsync("auth0|sam", It.IsAny<IdentityUserUpdate>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, IdentityUserUpdate u, CancellationToken _) => sent = u)
+            .ReturnsAsync(new IdentityUser("auth0|sam", "sam@nova.example.com", TenantId));
+
+        await _sut.UpdateUserAsync(TenantId, "auth0|sam", ValidUserUpdate() with
+        {
+            Role = "dealer:owner",
+            LocationIds = ["loc_ignored"],
+        });
+
+        sent!.Role.Should().Be("dealer:owner");
+        sent.LocationIds.Should().BeEmpty();
+    }
+
+    // ── SetUserLoginsEnabledAsync (Spec P-11) ────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SetUserLoginsEnabledAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.SetUserLoginsEnabledAsync(tenantId!, "auth0|sam", new TenantUserAccessUpdateRequestDto());
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SetUserLoginsEnabledAsync_WhenUserIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? userId)
+    {
+        var act = () => _sut.SetUserLoginsEnabledAsync(TenantId, userId!, new TenantUserAccessUpdateRequestDto());
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task SetUserLoginsEnabledAsync_WhenRequestIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => _sut.SetUserLoginsEnabledAsync(TenantId, "auth0|sam", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task SetUserLoginsEnabledAsync_WhenUserBelongsToAnotherTenant_ShouldThrowKeyNotFoundAndChangeNothing()
+    {
+        SetupExistingTenant();
+        _identityMock.Setup(i => i.GetUserAsync("auth0|other", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IdentityUser("auth0|other", "x@other.example.com", "ten_other"));
+
+        var act = () => _sut.SetUserLoginsEnabledAsync(TenantId, "auth0|other", new TenantUserAccessUpdateRequestDto { LoginsEnabled = false });
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+        VerifyNoIdentityWrites();
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task SetUserLoginsEnabledAsync_ShouldBlockOrUnblockTheUser(bool loginsEnabled, bool expectedBlocked)
+    {
+        SetupExistingTenant();
+        SetupTenantUser("auth0|sam");
+        _identityMock.Setup(i => i.SetBlockedAsync("auth0|sam", expectedBlocked, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IdentityUser("auth0|sam", "sam@nova.example.com", TenantId) { Blocked = expectedBlocked });
+
+        var user = await _sut.SetUserLoginsEnabledAsync(
+            TenantId, "auth0|sam", new TenantUserAccessUpdateRequestDto { LoginsEnabled = loginsEnabled });
+
+        user.Blocked.Should().Be(expectedBlocked);
+        _identityMock.Verify(i => i.SetBlockedAsync("auth0|sam", expectedBlocked, It.IsAny<CancellationToken>()), Times.Once);
+        VerifyLoggedContaining(AdminUserId, "auth0|sam", TenantId);
+    }
+
+    // ── DeleteUserAsync (Spec P-12) ──────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DeleteUserAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.DeleteUserAsync(tenantId!, "auth0|sam");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DeleteUserAsync_WhenUserIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? userId)
+    {
+        var act = () => _sut.DeleteUserAsync(TenantId, userId!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task DeleteUserAsync_WhenTenantNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _tenantRepoMock.Setup(r => r.GetAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync((Tenant?)null);
+
+        var act = () => _sut.DeleteUserAsync(TenantId, "auth0|sam");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+        VerifyNoIdentityWrites();
+    }
+
+    [Fact]
+    public async Task DeleteUserAsync_WhenUserNotFound_ShouldThrowKeyNotFoundException()
+    {
+        SetupExistingTenant();
+        _identityMock.Setup(i => i.GetUserAsync("auth0|missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IdentityUser?)null);
+
+        var act = () => _sut.DeleteUserAsync(TenantId, "auth0|missing");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+        VerifyNoIdentityWrites();
+    }
+
+    [Fact]
+    public async Task DeleteUserAsync_WhenUserBelongsToAnotherTenant_ShouldThrowKeyNotFoundAndDeleteNothing()
+    {
+        SetupExistingTenant();
+        _identityMock.Setup(i => i.GetUserAsync("auth0|other", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IdentityUser("auth0|other", "x@other.example.com", "ten_other"));
+
+        var act = () => _sut.DeleteUserAsync(TenantId, "auth0|other");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+        VerifyNoIdentityWrites();
+    }
+
+    [Fact]
+    public async Task DeleteUserAsync_WhenUserInTenant_ShouldDeleteAndLogWithoutEmail()
+    {
+        SetupExistingTenant();
+        SetupTenantUser("auth0|sam");
+
+        await _sut.DeleteUserAsync(TenantId, "auth0|sam");
+
+        _identityMock.Verify(i => i.DeleteUserAsync("auth0|sam", It.IsAny<CancellationToken>()), Times.Once);
+        VerifyLoggedContaining(AdminUserId, "auth0|sam", TenantId);
+        VerifyNeverLogged("sam@nova.example.com");
+    }
+
     // ── SetAccessGateAsync (Spec P-4) ────────────────────────────────────────
 
     [Theory]
@@ -740,6 +1041,24 @@ public sealed class TenantProvisioningServiceTests
         Role = "dealer:advisor",
         LocationIds = [FirstLocationId],
     };
+
+    private static TenantUserUpdateRequestDto ValidUserUpdate() => new()
+    {
+        DisplayName = "Sam Advisor",
+        Role = "dealer:advisor",
+        LocationIds = [FirstLocationId],
+    };
+
+    private void SetupTenantUser(string userId) =>
+        _identityMock.Setup(i => i.GetUserAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IdentityUser(userId, "sam@nova.example.com", TenantId));
+
+    private void VerifyNoIdentityWrites()
+    {
+        _identityMock.Verify(i => i.UpdateUserAsync(It.IsAny<string>(), It.IsAny<IdentityUserUpdate>(), It.IsAny<CancellationToken>()), Times.Never);
+        _identityMock.Verify(i => i.SetBlockedAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        _identityMock.Verify(i => i.DeleteUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 
     private static TenantLocationCreateRequestDto ValidLocation() => new()
     {

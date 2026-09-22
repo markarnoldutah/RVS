@@ -109,6 +109,30 @@ public sealed class Auth0ManagementProvisionerTests
     }
 
     [Fact]
+    public async Task EnsureUserAsync_WhenExistingUserHadAnotherDealerRole_ShouldReplaceItAndKeepOtherRoles()
+    {
+        // Re-adding someone with a new role used to leave them holding both, and permissions are
+        // the union of roles, so a downgrade silently did nothing.
+        _handler.UsersByEmailJson = ExistingUserJson("auth0|existing1", tenantId: "ten_nova");
+        _handler.UserRolesJson =
+            """[{"id":"rol_owner","name":"dealer:owner"},{"id":"rol_manager","name":"dealer:manager"},{"id":"rol_other_product","name":"acme:viewer"}]""";
+
+        await CreateSut().EnsureUserAsync(OwnerRequest() with { Role = "dealer:manager", LocationIds = ["loc_nova_1"] });
+
+        var remove = _handler.Single(HttpMethod.Delete, "/api/v2/users/auth0%7Cexisting1/roles");
+        using var body = JsonDocument.Parse(remove.Body!);
+        body.RootElement.GetProperty("roles").EnumerateArray().Select(e => e.GetString()).Should().Equal("rol_owner");
+    }
+
+    [Fact]
+    public async Task EnsureUserAsync_WhenUserIsNew_ShouldNotLookUpOrRemoveRoles()
+    {
+        await CreateSut().EnsureUserAsync(OwnerRequest());
+
+        _handler.Requests.Should().NotContain(r => r.Path.EndsWith("/roles") && r.Path.StartsWith("/api/v2/users/"));
+    }
+
+    [Fact]
     public async Task EnsureUserAsync_WhenEmailBelongsToAnotherTenant_ShouldThrowConflictAndChangeNothing()
     {
         _handler.UsersByEmailJson = ExistingUserJson("auth0|existing1", tenantId: "ten_other");
@@ -245,6 +269,240 @@ public sealed class Auth0ManagementProvisionerTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task GetUserAsync_ShouldMapProfileFieldsWithoutFetchingRoles()
+    {
+        _handler.GetUserResponse = () => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = Json("""
+                {"user_id":"auth0|u1","email":"sam@nova.example.com","name":"Sam Advisor","blocked":true,
+                 "created_at":"2026-09-01T12:00:00.000Z","last_login":"2026-09-20T08:30:00.000Z",
+                 "app_metadata":{"tenantId":"ten_nova","locationIds":["loc_1","loc_2"]}}
+                """),
+        };
+
+        var user = await CreateSut().GetUserAsync("auth0|u1");
+
+        user!.DisplayName.Should().Be("Sam Advisor");
+        user.Blocked.Should().BeTrue();
+        user.LocationIds.Should().Equal("loc_1", "loc_2");
+        user.CreatedAtUtc.Should().Be(new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc));
+        user.LastLoginAtUtc.Should().Be(new DateTime(2026, 9, 20, 8, 30, 0, DateTimeKind.Utc));
+        user.Roles.Should().BeEmpty();
+        _handler.Requests.Should().NotContain(r => r.Path.EndsWith("/roles"));
+    }
+
+    // ── ListUsersAsync (Spec P-9) ────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task ListUsersAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => CreateSut().ListUsersAsync(tenantId!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("ten_nova\" OR tenantId:*")]
+    [InlineData("ten_nova OR *")]
+    [InlineData("ten_*")]
+    public async Task ListUsersAsync_WhenTenantIdCouldAlterTheSearchQuery_ShouldThrowBeforeCallingAuth0(string tenantId)
+    {
+        var act = () => CreateSut().ListUsersAsync(tenantId);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _handler.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ListUsersAsync_ShouldSearchByTenantIdInAppMetadata()
+    {
+        await CreateSut().ListUsersAsync("ten_nova");
+
+        var search = _handler.Requests.First(r => r.Method == HttpMethod.Get && r.Path == "/api/v2/users");
+        var query = Uri.UnescapeDataString(search.Uri.Query);
+        query.Should().Contain("q=app_metadata.tenantId:\"ten_nova\"");
+        query.Should().Contain("search_engine=v3");
+        query.Should().Contain("per_page=100");
+    }
+
+    [Fact]
+    public async Task ListUsersAsync_ShouldReturnEachUserWithItsRoles()
+    {
+        _handler.SearchPages =
+        [
+            """
+            [{"user_id":"auth0|jay","email":"jay@nova.example.com","name":"Jay Lyons","app_metadata":{"tenantId":"ten_nova"}},
+             {"user_id":"auth0|sam","email":"sam@nova.example.com","name":"Sam Advisor","blocked":true,
+              "app_metadata":{"tenantId":"ten_nova","locationIds":["loc_1"]}}]
+            """,
+        ];
+        _handler.UserRolesByUser["auth0|jay"] = """[{"id":"rol_owner","name":"dealer:owner"}]""";
+        _handler.UserRolesByUser["auth0|sam"] = """[{"id":"rol_advisor","name":"dealer:advisor"}]""";
+
+        var users = await CreateSut().ListUsersAsync("ten_nova");
+
+        users.Should().HaveCount(2);
+        users[0].UserId.Should().Be("auth0|jay");
+        users[0].Roles.Should().Equal("dealer:owner");
+        users[0].Blocked.Should().BeFalse();
+        users[1].Roles.Should().Equal("dealer:advisor");
+        users[1].Blocked.Should().BeTrue();
+        users[1].LocationIds.Should().Equal("loc_1");
+        users[1].TenantId.Should().Be("ten_nova");
+    }
+
+    [Fact]
+    public async Task ListUsersAsync_WhenAFullPageIsReturned_ShouldRequestTheNextPage()
+    {
+        var fullPage = "[" + string.Join(",", Enumerable.Range(0, 100).Select(i =>
+            $$$"""{"user_id":"auth0|u{{{i}}}","email":"u{{{i}}}@nova.example.com","app_metadata":{"tenantId":"ten_nova"}}""")) + "]";
+        _handler.SearchPages =
+        [
+            fullPage,
+            """[{"user_id":"auth0|last","email":"last@nova.example.com","app_metadata":{"tenantId":"ten_nova"}}]""",
+        ];
+
+        var users = await CreateSut().ListUsersAsync("ten_nova");
+
+        users.Should().HaveCount(101);
+        _handler.Requests.Count(r => r.Method == HttpMethod.Get && r.Path == "/api/v2/users").Should().Be(2);
+    }
+
+    // ── UpdateUserAsync (Spec P-10) ──────────────────────────────────────────
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenChangesIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => CreateSut().UpdateUserAsync("auth0|u1", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_ShouldPatchNameAndLocationsOnlyLeavingTenantIdAlone()
+    {
+        await CreateSut().UpdateUserAsync("auth0|u1", new IdentityUserUpdate("Sam Manager", ["loc_2"], "dealer:manager"));
+
+        var patch = _handler.Single(HttpMethod.Patch, "/api/v2/users/auth0%7Cu1");
+        using var body = JsonDocument.Parse(patch.Body!);
+        body.RootElement.GetProperty("name").GetString().Should().Be("Sam Manager");
+        var metadata = body.RootElement.GetProperty("app_metadata");
+        metadata.GetProperty("locationIds").EnumerateArray().Select(e => e.GetString()).Should().Equal("loc_2");
+
+        // app_metadata PATCHes merge top-level keys; sending tenantId would let an edit move a user.
+        metadata.TryGetProperty("tenantId", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_ShouldAssignTheNewRoleThenRemoveOtherDealerRoles()
+    {
+        _handler.UserRolesJson =
+            """[{"id":"rol_advisor","name":"dealer:advisor"},{"id":"rol_other_product","name":"acme:viewer"}]""";
+
+        await CreateSut().UpdateUserAsync("auth0|u1", new IdentityUserUpdate("Sam", ["loc_1"], "dealer:manager"));
+
+        var assign = _handler.Single(HttpMethod.Post, "/api/v2/roles/rol_manager/users");
+        var remove = _handler.Single(HttpMethod.Delete, "/api/v2/users/auth0%7Cu1/roles");
+        using var body = JsonDocument.Parse(remove.Body!);
+        body.RootElement.GetProperty("roles").EnumerateArray().Select(e => e.GetString()).Should().Equal("rol_advisor");
+
+        // Assign before remove, so a failure part-way never leaves the user with no role at all.
+        _handler.Requests.IndexOf(assign).Should().BeLessThan(_handler.Requests.IndexOf(remove));
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenRoleUnchanged_ShouldRemoveNothing()
+    {
+        _handler.UserRolesJson = """[{"id":"rol_manager","name":"dealer:manager"}]""";
+
+        await CreateSut().UpdateUserAsync("auth0|u1", new IdentityUserUpdate("Sam", ["loc_1"], "dealer:manager"));
+
+        _handler.Requests.Should().NotContain(r => r.Method == HttpMethod.Delete);
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WhenRoleNotFound_ShouldThrowBeforeChangingTheUser()
+    {
+        _handler.RolesJson = "[]";
+
+        var act = () => CreateSut().UpdateUserAsync("auth0|u1", new IdentityUserUpdate("Sam", [], "dealer:owner"));
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*dealer:owner*");
+        _handler.Requests.Should().NotContain(r => r.Method == HttpMethod.Patch);
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_ShouldReturnTheUserWithCurrentRoles()
+    {
+        _handler.UserRolesJson = """[{"id":"rol_manager","name":"dealer:manager"}]""";
+
+        var user = await CreateSut().UpdateUserAsync("auth0|u1", new IdentityUserUpdate("Sam", ["loc_1"], "dealer:manager"));
+
+        user.UserId.Should().Be("auth0|u1");
+        user.Roles.Should().Equal("dealer:manager");
+    }
+
+    // ── SetBlockedAsync (Spec P-11) ──────────────────────────────────────────
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SetBlockedAsync_ShouldPatchTheBlockedFlagOnly(bool blocked)
+    {
+        await CreateSut().SetBlockedAsync("auth0|u1", blocked);
+
+        var patch = _handler.Single(HttpMethod.Patch, "/api/v2/users/auth0%7Cu1");
+        using var body = JsonDocument.Parse(patch.Body!);
+        body.RootElement.GetProperty("blocked").GetBoolean().Should().Be(blocked);
+        body.RootElement.EnumerateObject().Select(p => p.Name).Should().Equal("blocked");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SetBlockedAsync_WhenUserIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? userId)
+    {
+        var act = () => CreateSut().SetBlockedAsync(userId!, blocked: true);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    // ── DeleteUserAsync (Spec P-12) ──────────────────────────────────────────
+
+    [Fact]
+    public async Task DeleteUserAsync_ShouldDeleteTheUser()
+    {
+        await CreateSut().DeleteUserAsync("auth0|u1");
+
+        _handler.Single(HttpMethod.Delete, "/api/v2/users/auth0%7Cu1");
+    }
+
+    [Fact]
+    public async Task DeleteUserAsync_WhenAlreadyGone_ShouldSucceed()
+    {
+        _handler.DeleteUserStatus = HttpStatusCode.NotFound;
+
+        var act = () => CreateSut().DeleteUserAsync("auth0|u1");
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DeleteUserAsync_WhenUserIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? userId)
+    {
+        var act = () => CreateSut().DeleteUserAsync(userId!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
     // ── CreatePasswordTicketAsync (Spec P-2 step 4, P-3) ─────────────────────
 
     [Fact]
@@ -331,6 +589,13 @@ public sealed class Auth0ManagementProvisionerTests
         public string UsersByEmailJson { get; set; } = "[]";
         public string RolesJson { get; set; } =
             """[{"id":"rol_owner","name":"dealer:owner"},{"id":"rol_manager","name":"dealer:manager"},{"id":"rol_regional","name":"dealer:regional-manager"}]""";
+        /// <summary>Roles returned for any user not in <see cref="UserRolesByUser"/>.</summary>
+        public string UserRolesJson { get; set; } = "[]";
+        public Dictionary<string, string> UserRolesByUser { get; } = [];
+
+        /// <summary>User-search result pages, by <c>page</c> index; past the end is an empty page.</summary>
+        public List<string> SearchPages { get; set; } = [];
+        public HttpStatusCode DeleteUserStatus { get; set; } = HttpStatusCode.NoContent;
         public Func<HttpResponseMessage> CreateUserResponse { get; set; } = () => new HttpResponseMessage(HttpStatusCode.Created)
         {
             Content = Json("""{"user_id":"auth0|new1","email":"jay@nova.example.com"}"""),
@@ -362,8 +627,19 @@ public sealed class Auth0ManagementProvisionerTests
                 return new HttpResponseMessage(HttpStatusCode.OK);
             if (method == HttpMethod.Post && path == "/api/v2/users")
                 return CreateUserResponse();
+            if (method == HttpMethod.Get && path == "/api/v2/users")
+                return Ok(SearchPage(recorded.Uri));
+            if (path.StartsWith("/api/v2/users/") && path.EndsWith("/roles"))
+            {
+                if (method == HttpMethod.Delete)
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
+                var userId = Uri.UnescapeDataString(path["/api/v2/users/".Length..^"/roles".Length]);
+                return Ok(UserRolesByUser.GetValueOrDefault(userId, UserRolesJson));
+            }
+            if (method == HttpMethod.Delete && path.StartsWith("/api/v2/users/"))
+                return new HttpResponseMessage(DeleteUserStatus);
             if (method == HttpMethod.Patch && path.StartsWith("/api/v2/users/"))
-                return Ok("""{"user_id":"patched"}""");
+                return Ok($$$"""{"user_id":"{{{Uri.UnescapeDataString(path["/api/v2/users/".Length..])}}}","email":"sam@nova.example.com","app_metadata":{"tenantId":"ten_nova"}}""");
             if (method == HttpMethod.Get && path.StartsWith("/api/v2/users/"))
                 return GetUserResponse();
             if (method == HttpMethod.Post && path == "/api/v2/tickets/password-change")
@@ -373,6 +649,13 @@ public sealed class Auth0ManagementProvisionerTests
         }
 
         private static HttpResponseMessage Ok(string json) => new(HttpStatusCode.OK) { Content = Json(json) };
+
+        private string SearchPage(Uri uri)
+        {
+            var page = System.Web.HttpUtility.ParseQueryString(uri.Query)["page"];
+            var index = int.TryParse(page, out var i) ? i : 0;
+            return index < SearchPages.Count ? SearchPages[index] : "[]";
+        }
     }
 
     private sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider

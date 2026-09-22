@@ -57,6 +57,39 @@ public sealed class AdminApiClient
         return await ReadAsync<TenantUserProvisioningResponseDto>(response, cancellationToken);
     }
 
+    /// <summary>Lists a tenant's users with their roles.</summary>
+    public async Task<List<TenantUserSummaryResponseDto>> ListUsersAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"{TenantPath(tenantId)}/users", cancellationToken);
+        return await ReadAsync<List<TenantUserSummaryResponseDto>>(response, cancellationToken);
+    }
+
+    /// <summary>Replaces a user's name, role and locations.</summary>
+    public async Task<TenantUserSummaryResponseDto> UpdateUserAsync(
+        string tenantId, string userId, TenantUserUpdateRequestDto request, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PutAsJsonAsync(UserPath(tenantId, userId), request, cancellationToken);
+        return await ReadAsync<TenantUserSummaryResponseDto>(response, cancellationToken);
+    }
+
+    /// <summary>Disables or re-enables one user's logins.</summary>
+    public async Task<TenantUserSummaryResponseDto> SetUserAccessAsync(
+        string tenantId, string userId, TenantUserAccessUpdateRequestDto request, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PutAsJsonAsync($"{UserPath(tenantId, userId)}/access", request, cancellationToken);
+        return await ReadAsync<TenantUserSummaryResponseDto>(response, cancellationToken);
+    }
+
+    /// <summary>Permanently deletes a user.</summary>
+    public async Task DeleteUserAsync(string tenantId, string userId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.DeleteAsync(UserPath(tenantId, userId), cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await AdminApiException.FromResponseAsync(response, cancellationToken);
+        }
+    }
+
     /// <summary>Issues a new set-password link for an existing user.</summary>
     public async Task<PasswordTicketResponseDto> CreatePasswordTicketAsync(
         string tenantId, string userId, CancellationToken cancellationToken = default)
@@ -90,6 +123,12 @@ public sealed class AdminApiClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         return $"{BasePath}/{Uri.EscapeDataString(tenantId)}";
+    }
+
+    private static string UserPath(string tenantId, string userId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        return $"{TenantPath(tenantId)}/users/{Uri.EscapeDataString(userId)}";
     }
 
     private static async Task<T> ReadAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)

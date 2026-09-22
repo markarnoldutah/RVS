@@ -219,6 +219,52 @@ public class TenantProvisioningMapperTests
         dto.IntakeUrl.Should().Be("https://rvintake.com/nova-st-george");
     }
 
+    [Fact]
+    public void ToSummaryDto_ForIdentityUser_WhenUserIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => ((IdentityUser)null!).ToSummaryDto();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void ToSummaryDto_ForIdentityUser_ShouldCarryRolesLocationsAndLoginState()
+    {
+        var created = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        var lastLogin = new DateTime(2026, 9, 20, 8, 30, 0, DateTimeKind.Utc);
+        var user = new IdentityUser("auth0|u1", "sam@nova.example.com", "ten_nova")
+        {
+            DisplayName = "Sam Advisor",
+            Roles = ["dealer:advisor"],
+            LocationIds = ["loc_1", "loc_2"],
+            Blocked = true,
+            CreatedAtUtc = created,
+            LastLoginAtUtc = lastLogin,
+        };
+
+        var dto = user.ToSummaryDto();
+
+        dto.UserId.Should().Be("auth0|u1");
+        dto.Email.Should().Be("sam@nova.example.com");
+        dto.DisplayName.Should().Be("Sam Advisor");
+        dto.Roles.Should().Equal("dealer:advisor");
+        dto.LocationIds.Should().Equal("loc_1", "loc_2");
+        dto.LoginsEnabled.Should().BeFalse();
+        dto.CreatedAtUtc.Should().Be(created);
+        dto.LastLoginAtUtc.Should().Be(lastLogin);
+    }
+
+    [Fact]
+    public void ToSummaryDto_ForIdentityUser_WhenNotBlocked_ShouldReportLoginsEnabled()
+    {
+        var dto = new IdentityUser("auth0|u1", "sam@nova.example.com", "ten_nova").ToSummaryDto();
+
+        dto.LoginsEnabled.Should().BeTrue();
+        dto.Roles.Should().BeEmpty();
+        dto.LocationIds.Should().BeEmpty();
+        dto.LastLoginAtUtc.Should().BeNull();
+    }
+
     private static Tenant BuildTenant() => new()
     {
         Id = "ten_nova",

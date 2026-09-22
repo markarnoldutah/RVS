@@ -49,6 +49,7 @@ else
                                     New link
                                 </MudButton>
                                 <MudButton Variant="Variant.Outlined" OnClick="Reset">Add another user</MudButton>
+                                <MudButton Variant="Variant.Text" Href="@UsersPath">All users</MudButton>
                             </MudStack>
                         </MudStack>
                     </MudPaper>
@@ -109,6 +110,8 @@ else
 
 @code {
     [Parameter] public string TenantId { get; set; } = string.Empty;
+
+    private string UsersPath => $"/admin/tenants/{Uri.EscapeDataString(TenantId)}/users";
 
     private TenantSummaryResponseDto? _tenant;
     private UserForm _form = new();

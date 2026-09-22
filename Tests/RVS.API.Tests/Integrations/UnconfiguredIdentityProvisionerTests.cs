@@ -35,4 +35,36 @@ public sealed class UnconfiguredIdentityProvisionerTests
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Auth0Provisioner*");
     }
+
+    [Fact]
+    public async Task ListUsersAsync_ShouldThrowNamingTheMissingSettings()
+    {
+        var act = () => _sut.ListUsersAsync("ten_a");
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Auth0Provisioner*");
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_ShouldThrowNamingTheMissingSettings()
+    {
+        var act = () => _sut.UpdateUserAsync("auth0|u1", new IdentityUserUpdate("A", [], "dealer:owner"));
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Auth0Provisioner*");
+    }
+
+    [Fact]
+    public async Task SetBlockedAsync_ShouldThrowNamingTheMissingSettings()
+    {
+        var act = () => _sut.SetBlockedAsync("auth0|u1", blocked: true);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Auth0Provisioner*");
+    }
+
+    [Fact]
+    public async Task DeleteUserAsync_ShouldThrowNamingTheMissingSettings()
+    {
+        var act = () => _sut.DeleteUserAsync("auth0|u1");
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Auth0Provisioner*");
+    }
 }
