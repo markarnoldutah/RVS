@@ -1,7 +1,6 @@
 @inject ServiceRequestApiClient SrClient
 @inject LookupApiClient LookupClient
 @inject AttachmentApiClient AttachmentClient
-@inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject ThemeService ThemeService
@@ -493,30 +492,61 @@
                                    without scrolling past photo/video attachments (issue #583). *@
                                 @foreach (var att in OrderedAttachments())
                                 {
+                                    var kind = AttachmentPreview.Classify(att.ContentType);
+                                    var readUrl = ReadUrlFor(att);
                                     <MudItem xs="6" sm="4" md="3">
                                         <div class="text-center">
-                                            <MudIcon Icon="@GetAttachmentIcon(att.ContentType)"
-                                                     Size="Size.Large" Color="Color.Info" />
-                                            <MudText Typo="Typo.caption" Class="d-block text-truncate">
+                                            @* Videos play in the inline player (issue #583); everything else is a
+                                               real link that opens in a new tab so the manager app stays put (issue #699). *@
+                                            @if (kind == AttachmentPreviewKind.Video)
+                                            {
+                                                <button type="button" class="attachment-thumb" title="Play @att.FileName"
+                                                        aria-label="Play @att.FileName"
+                                                        @onclick="@(() => PlayVideoAsync(att))">
+                                                    @if (readUrl is not null)
+                                                    {
+                                                        <video src="@AttachmentPreview.VideoThumbnailSrc(readUrl)"
+                                                               preload="metadata" muted playsinline tabindex="-1"></video>
+                                                        <span class="attachment-thumb-overlay">
+                                                            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large" />
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudIcon Icon="@Icons.Material.Filled.Movie" Size="Size.Large" Color="Color.Info" />
+                                                    }
+                                                </button>
+                                            }
+                                            else if (readUrl is not null)
+                                            {
+                                                <a class="attachment-thumb" href="@readUrl" target="_blank" rel="noopener noreferrer"
+                                                   title="Open @att.FileName in a new tab">
+                                                    @if (kind == AttachmentPreviewKind.Image)
+                                                    {
+                                                        <img src="@readUrl" alt="@att.FileName" loading="lazy" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudIcon Icon="@GetAttachmentIcon(kind)" Size="Size.Large" Color="Color.Info" />
+                                                    }
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                @* Read URL not available (still loading, or the fetch failed) —
+                                                   fetch on click and open in a new tab. *@
+                                                <button type="button" class="attachment-thumb" title="Open @att.FileName in a new tab"
+                                                        aria-label="Open @att.FileName in a new tab"
+                                                        @onclick="@(() => OpenAttachmentInNewTabAsync(att))">
+                                                    <MudIcon Icon="@GetAttachmentIcon(kind)" Size="Size.Large" Color="Color.Info" />
+                                                </button>
+                                            }
+                                            <MudText Typo="Typo.caption" Class="d-block text-truncate mt-1">
                                                 @att.FileName
                                             </MudText>
                                             <MudText Typo="Typo.caption" Color="Color.Info">
                                                 @FormatFileSize(att.SizeBytes)
                                             </MudText>
-                                            @if (IsVideo(att.ContentType))
-                                            {
-                                                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
-                                                           OnClick="@(() => PlayVideoAsync(att))">
-                                                    Play
-                                                </MudButton>
-                                            }
-                                            else
-                                            {
-                                                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
-                                                           OnClick="@(() => ViewAttachmentAsync(att))">
-                                                    View
-                                                </MudButton>
-                                            }
                                         </div>
                                     </MudItem>
                                 }
@@ -912,6 +942,9 @@
     private string? _videoDialogUrl;
     private string? _videoDialogFileName;
 
+    /// <summary>Read SAS URLs keyed by attachment id, prefetched on load (issue #699).</summary>
+    private readonly Dictionary<string, string> _attachmentUrls = [];
+
     /// <summary>
     /// Controls visibility of the dialog. Bind two-way from parent.
     /// </summary>
@@ -1118,6 +1151,7 @@
 
         _error = null;
         _sr = null;
+        _attachmentUrls.Clear();
         _statusError = null;
         _selectedStatus = null;
 
@@ -1159,6 +1193,13 @@
         finally
         {
             _loading = false;
+        }
+
+        // Show the request first; thumbnails fill in when their read URLs arrive.
+        if (_sr is not null && _sr.Attachments.Count > 0)
+        {
+            StateHasChanged();
+            await LoadAttachmentUrlsAsync();
         }
     }
 
@@ -1633,20 +1674,69 @@
         }
     }
 
-    private async Task ViewAttachmentAsync(AttachmentDto attachment)
+    /// <summary>
+    /// Fetches a read URL for every attachment so each tile can show a thumbnail and be a real
+    /// <c>target="_blank"</c> link (issue #699). A plain anchor opens the new tab inside the
+    /// click's user gesture, so no popup blocker gets a say. Fetches run in parallel; one that
+    /// fails leaves its tile on the click-to-fetch fallback. The URLs are 1-hour read SAS
+    /// tokens, refreshed each time the drawer loads a request.
+    /// </summary>
+    private async Task LoadAttachmentUrlsAsync()
+    {
+        _attachmentUrls.Clear();
+
+        if (_dealershipId is null || _sr is null || _sr.Attachments.Count == 0) return;
+
+        var dealershipId = _dealershipId;
+        var srId = _sr.Id;
+
+        async Task<(string Id, string? Url)> FetchAsync(AttachmentDto att)
+        {
+            try
+            {
+                var sas = await AttachmentClient.GetReadSasAsync(dealershipId, srId, att.AttachmentId);
+                return (att.AttachmentId, sas.SasUrl);
+            }
+            catch (Exception)
+            {
+                return (att.AttachmentId, null);
+            }
+        }
+
+        var results = await Task.WhenAll(_sr.Attachments.Select(FetchAsync));
+
+        // The drawer may have moved on to another request while these were in flight.
+        if (_sr?.Id != srId) return;
+
+        foreach (var (id, url) in results)
+        {
+            if (url is not null) _attachmentUrls[id] = url;
+        }
+    }
+
+    private string? ReadUrlFor(AttachmentDto attachment) =>
+        _attachmentUrls.GetValueOrDefault(attachment.AttachmentId);
+
+    /// <summary>
+    /// Fallback for a tile whose read URL was not prefetched: fetch it now and open it in a
+    /// new tab. The fetch is quick enough to stay inside the browser's user-activation window.
+    /// </summary>
+    private async Task OpenAttachmentInNewTabAsync(AttachmentDto attachment)
     {
         if (_dealershipId is null || _sr is null) return;
 
         try
         {
             var sas = await AttachmentClient.GetReadSasAsync(_dealershipId, _sr.Id, attachment.AttachmentId);
-            Navigation.NavigateTo(sas.SasUrl, forceLoad: true);
+            _attachmentUrls[attachment.AttachmentId] = sas.SasUrl;
+            await JS.InvokeVoidAsync("open", sas.SasUrl, "_blank", "noopener");
         }
         catch (Exception ex)
         {
             _statusError = $"Failed to open attachment: {ex.Message}";
-            StateHasChanged();
         }
+
+        StateHasChanged();
     }
 
     /// <summary>
@@ -1660,8 +1750,8 @@
 
         try
         {
-            var sas = await AttachmentClient.GetReadSasAsync(_dealershipId, _sr.Id, attachment.AttachmentId);
-            _videoDialogUrl = sas.SasUrl;
+            _videoDialogUrl = ReadUrlFor(attachment)
+                ?? (await AttachmentClient.GetReadSasAsync(_dealershipId, _sr.Id, attachment.AttachmentId)).SasUrl;
             _videoDialogFileName = attachment.FileName;
             _videoDialogOpen = true;
         }
@@ -1672,9 +1762,6 @@
 
         StateHasChanged();
     }
-
-    private static bool IsVideo(string contentType) =>
-        contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The PDF (when present) sorts first so it is always visible without scrolling past
@@ -1801,14 +1888,13 @@
         return makeModelStr;
     }
 
-    private static string GetAttachmentIcon(string contentType)
+    private static string GetAttachmentIcon(AttachmentPreviewKind kind) => kind switch
     {
-        if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-            return Icons.Material.Filled.Image;
-        if (contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase))
-            return Icons.Material.Filled.PictureAsPdf;
-        return Icons.Material.Filled.InsertDriveFile;
-    }
+        AttachmentPreviewKind.Image => Icons.Material.Filled.Image,
+        AttachmentPreviewKind.Video => Icons.Material.Filled.Movie,
+        AttachmentPreviewKind.Pdf => Icons.Material.Filled.PictureAsPdf,
+        _ => Icons.Material.Filled.InsertDriveFile
+    };
 
     private static string FormatFileSize(long bytes) => bytes switch
     {

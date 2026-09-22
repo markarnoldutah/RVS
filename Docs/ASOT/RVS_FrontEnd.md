@@ -43,7 +43,7 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 | Route | Component | In Spec C scope |
 |---|---|---|
 | `/service-requests` | `ServiceRequestQueue` | Yes — but with a ten-field search panel (keyword, status, category, location, technician, bay, VIN, priority, two dates) against a specced "filter by status" |
-| drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, customer status note (C-9, #500), inline edit, comment thread, attachment viewing via read-SAS, diagnostic responses |
+| drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, customer status note (C-9, #500), inline edit, comment thread, attachment tiles with thumbnails (read-SAS prefetched on load; photos, PDF and files open in a new tab, video plays in an inline player — #583, #699), diagnostic responses |
 | `/locations` | `Locations` | Yes — location CRUD, capability checkboxes, QR download, and a **Send intake link** row action (A-14, #666) |
 | `/` | `Home` | Yes — welcome, `LocationSelector`, and the **Send intake link** button beside it (A-14, #666) |
 | dialog | `SendIntakeLinkDialog` | Yes — A-14 (#666), see below |
@@ -78,7 +78,7 @@ Typed clients in `Services/`:
 | `IntakeInviteApiClient` | `api/locations/{locationId}/intake-invites` — send, recent sends, one invite, `capability` (A-14, #666). Refusals surface as `IntakeInviteApiException` carrying the API's ProblemDetails `detail`, or a fixed sentence for a body-less 403 |
 | `AnalyticsApiClient` | The analytics summary endpoint — **archived**, its only consumer is `Analytics.razor` |
 
-Also `Validation/` (`ClientVinValidator`, `VinTranscriptCleaner`, `ClientSearchInputSanitizer`; the intake contact rules, `EmailValidator` and `PhoneValidator`, live in `RVS.Domain/Validation` so the API applies the same ones, #679) and `Components/` — `StatusBadge`, `PriorityBadge` and `IntakeInviteStatusFormatting` (a MudBlazor-free label/tone helper for the send dialog) are used; `AssetDisplay`, `AttachmentThumbnail` and `DiagnosticResponseView` are referenced nowhere.
+Also `Validation/` (`ClientVinValidator`, `VinTranscriptCleaner`, `ClientSearchInputSanitizer`; the intake contact rules, `EmailValidator` and `PhoneValidator`, live in `RVS.Domain/Validation` so the API applies the same ones, #679) and `Components/` — `StatusBadge`, `PriorityBadge`, `IntakeInviteStatusFormatting` (a MudBlazor-free label/tone helper for the send dialog) and `AttachmentPreview` (classifies an attachment for its SR-detail tile, #699) are used; `AssetDisplay`, `AttachmentThumbnail` and `DiagnosticResponseView` are referenced nowhere.
 
 **`ThemeService` is not in `RVS.UI.Shared`.** Each app has its own copy at `RVS.Blazor.{Intake,Manager}/Services/ThemeService.cs`. Documentation claiming otherwise is wrong.
 
