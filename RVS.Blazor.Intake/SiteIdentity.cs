@@ -9,7 +9,7 @@ public static class SiteIdentity
 {
     public const string LegalEntityName = "Arnold Digital Solutions";
 
-    public const string ContactEmail = "mark.arnold@arnolddigitalsolutions.com";
+    public const string ContactEmail = "support@arnolddigitalsolutions.com";
 
     public const string ContactMailto = "mailto:" + ContactEmail;
 
