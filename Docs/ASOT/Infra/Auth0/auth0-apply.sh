@@ -24,8 +24,10 @@
 #   Manager appsettings    AUTH0_MANAGER_APPSETTINGS point at AUTH0_APP_AUTHORITY and this client
 #   tenant-wide settings   the ones RVS sets by hand (Auth0 checklist §6-§8): the tenant
 #                          Friendly Name, the custom domain (ready and the tenant default),
-#                          and the email provider and its From address. Expected values
-#                          come from the tenant file; an unset value skips its check.
+#                          the email provider and its From address, the Universal Login
+#                          branding (logo, favicon, colours) and the login widget's own
+#                          wording. Expected values come from the tenant file; an unset
+#                          value skips its check.
 #
 # What it leaves alone: everything else in the tenant (other products' APIs and apps,
 # Postman / API Explorer apps, other tenant-wide settings, attack protection, users). It
@@ -36,7 +38,8 @@
 #   plan   read:resource_servers read:roles read:clients read:client_grants
 #          read:connections read:actions read:triggers
 #          and, for the tenant-wide checks, read:tenant_settings read:custom_domains
-#          read:email_provider — a check whose scope is missing is skipped with a warning
+#          read:email_provider read:branding read:prompts — a check whose scope is
+#          missing is skipped with a warning
 #   apply  plan scopes + create:resource_servers update:resource_servers create:roles
 #          update:roles create:clients update:clients create:client_grants
 #          update:client_grants update:connections create:actions update:actions
@@ -496,9 +499,21 @@ mismatch() {
 
 lower() { tr '[:upper:]' '[:lower:]' <<<"$1"; }
 
+# check_value WHAT FOUND EXPECTED
+# Compares case-insensitively — Auth0 lowercases the hex colours it stores, and none of
+# the values compared this way are case-sensitive. An empty EXPECTED skips the check.
+check_value() {
+  [[ -n "$3" ]] || return 0
+  if [[ "$(lower "$2")" == "$(lower "$3")" ]]; then
+    echo "  = $1: $2"
+  else
+    mismatch "$1" "${2:-<unset>}" "$3"
+  fi
+}
+
 check_tenant_settings() {
   log "Tenant-wide settings (checked, never applied)"
-  local body got host domain status is_default name enabled from
+  local body got host domain status is_default name enabled from prompt
 
   if [[ -n "${AUTH0_EXPECT_FRIENDLY_NAME:-}" ]] \
       && fetch body "/tenants/settings" read:tenant_settings "friendly name"; then
@@ -557,6 +572,40 @@ check_tenant_settings() {
           "${AUTH0_EXPECT_EMAIL_PROVIDER:-$name}, enabled=true, from ${AUTH0_EXPECT_EMAIL_FROM:-$from}"
       fi
     fi
+  fi
+
+  # Universal Login branding (checklist §7). The logo and favicon are URLs Auth0 fetches
+  # server-side: it stores whatever comes back and shows an empty frame if that was an HTML
+  # error page, so a typo is invisible on the login screen and visible only here.
+  if [[ -n "${AUTH0_EXPECT_BRANDING_LOGO_URL:-}${AUTH0_EXPECT_BRANDING_FAVICON_URL:-}${AUTH0_EXPECT_BRANDING_PRIMARY_COLOR:-}${AUTH0_EXPECT_BRANDING_PAGE_BACKGROUND:-}" ]] \
+      && fetch body "/branding" read:branding "Universal Login branding"; then
+    check_value "login logo" "$(jq -r '.logo_url // ""' <<<"$body")" "${AUTH0_EXPECT_BRANDING_LOGO_URL:-}"
+    check_value "login favicon" "$(jq -r '.favicon_url // ""' <<<"$body")" "${AUTH0_EXPECT_BRANDING_FAVICON_URL:-}"
+    check_value "login primary colour" "$(jq -r '.colors.primary // ""' <<<"$body")" "${AUTH0_EXPECT_BRANDING_PRIMARY_COLOR:-}"
+    # page_background is a string for a flat colour and an object for a gradient; a gradient
+    # prints as its JSON so the mismatch line says what is actually set.
+    check_value "login page background" \
+      "$(jq -r '.colors.page_background // "" | if type == "string" then . else tojson end' <<<"$body")" \
+      "${AUTH0_EXPECT_BRANDING_PAGE_BACKGROUND:-}"
+  fi
+
+  # The login widget's wording (checklist §7.3). Custom text is keyed by screen; for these
+  # prompts the screen has the prompt's name. Which prompt a tenant actually renders depends
+  # on whether the flow is identifier-first, so every prompt named in the tenant file is
+  # checked rather than guessing. The expected text is meant to carry Auth0's ${clientName}
+  # placeholder: this is tenant-wide, and the other products in the tenant need their own
+  # names in the same sentence.
+  if [[ -n "${AUTH0_EXPECT_LOGIN_DESCRIPTION:-}" ]]; then
+    for prompt in ${AUTH0_EXPECT_LOGIN_PROMPTS:-login login-id login-password}; do
+      fetch body "/prompts/$prompt/custom-text/en" read:prompts "login text" || break
+      got="$(jq -r --arg p "$prompt" '.[$p].description // ""' <<<"$body")"
+      if [[ -z "$got" ]]; then
+        mismatch "login text ($prompt)" "not customised — Auth0's default names the tenant and the application" \
+          "$AUTH0_EXPECT_LOGIN_DESCRIPTION (checklist §7.3)"
+      else
+        check_value "login text ($prompt)" "$got" "$AUTH0_EXPECT_LOGIN_DESCRIPTION"
+      fi
+    done
   fi
 }
 
