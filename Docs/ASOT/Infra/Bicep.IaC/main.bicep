@@ -141,6 +141,9 @@ param apiZoneName string = 'rvserviceflow.com'
 @description('DNS zone for every customer-facing host: Intake (apex in prod, subdomain CNAME in non-prod envs), Manager, the channel-tagging redirect, the ACS sending domain and the Auth0 login host.')
 param intakeZoneName string = 'rvintake.com'
 
+@description('The Intake SWA apex validation token, minted once when the apex was registered out of band. Read it from the zone (`az network dns record-set txt show -z rvintake.com -n @`), not from `az staticwebapp hostname show`, whose validationToken reads blank once the apex is Ready. Prod only. It shares the apex TXT record-set with the SPF string (#652), and a deploy PUTs that whole set, so Bicep has to carry the token or it deletes it. Empty = the apex TXT record-set is not declared at all: no SPF, and nothing already in the zone is removed.')
+param intakeApexValidationToken string = ''
+
 @description('Subdomain prefix for the Manager SWA CNAME record, in the INTAKE zone (#632) — "manager" in prod, "manager-<env>" elsewhere. The literal "staging" in the non-prod label is load-bearing: RVS.Blazor.Manager/wwwroot/js/blazor-start.js selects its environment by matching that substring against the browser hostname, so a label without it would boot Production config against staging.')
 param managerDnsPrefix string = environmentName == 'prod' ? 'manager' : 'manager-${environmentName}'
 
@@ -968,6 +971,60 @@ module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
 // auth0CustomDomainCnameTarget is set — see "login.rvintake.com" above. That one is
 // tenant-wide rather than per-environment, so unlike every other record here both
 // environments write the same name and value.
+
+// Mail posture for the intake APEX (#652). The apex sends no mail: the packet
+// email goes out From mail.rvintake.com (prod) / mail-staging.rvintake.com
+// (staging), and each of those has its own _dmarc record above. Without SPF and
+// DMARC here, anyone could forge From: anything@rvintake.com (the brand customers
+// actually see) and a receiver would have nothing to check it against.
+// rvserviceflow.com got the same treatment in #651.
+//
+//   SPF "-all" with no mechanisms: no host is authorised to send as the apex.
+//   DMARC p=reject; sp=reject: act on failures, for the apex and for every
+//     subdomain that lacks a _dmarc record of its own.
+//
+// ⚠ READ THIS BEFORE ADDING A SENDING SUBDOMAIN. A DMARC policy applies to every
+// subdomain with no record of its own, and this one says reject. A new sender
+// under rvintake.com (a second ACS domain, a transactional or marketing provider)
+// that is not given its own _dmarc record has ALL of its mail rejected from the
+// first message. Nothing on the sending side tells you why, and nobody changed a
+// record. Give the new subdomain a _dmarc record, the way acsCustomDomainDmarcRecord
+// does, in the same change that starts it sending.
+//
+// Why sp=reject rather than sp=none: mail.rvintake.com is expected to stay the
+// only sender. sp=none would keep future senders working without that record,
+// but every subdomain would be spoofable until someone remembered to add one.
+// sp= is written out even though reject is also what it would inherit from p=,
+// so the choice is visible here and not left to a default.
+//
+// No MX and no rua, deliberately. rvintake.com accepts no mail today, which is
+// why dmarc-reports@rvintake.com bounces. Whether the apex gets a null MX
+// (RFC 7505) or a real one that receives DMARC reports is #608's decision, and
+// both belong in the same change. Add rua here when #608 gives reports somewhere
+// to land.
+//
+// Prod deploy only, like the apex ALIAS: staging writes into this same zone and
+// never touches "@". The SPF string shares the apex TXT record-set with the SWA
+// validation token, and dns.bicep replaces a record-set wholesale. So the TXT set
+// is declared only when intakeApexValidationToken is supplied, and a deploy that
+// cannot re-assert the token never removes it. DMARC lives at its own name, so it
+// has no such dependency.
+var intakeApexIsManaged = environmentName == 'prod'
+
+var intakeApexSpfTxtRecords = (intakeApexIsManaged && !empty(intakeApexValidationToken)) ? [
+  {
+    name: '@'
+    values: [ intakeApexValidationToken, 'v=spf1 -all' ]
+  }
+] : []
+
+var intakeApexDmarcTxtRecords = intakeApexIsManaged ? [
+  {
+    name: '_dmarc'
+    values: [ 'v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s' ]
+  }
+] : []
+
 module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
   name: 'deploy-dns-intake-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
@@ -987,7 +1044,7 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         targetResourceId: swaIntake.outputs.id
       }
     ] : []
-    txtRecords: concat(acsCustomDomainTxtRecords, redirectTxtRecords)
+    txtRecords: concat(acsCustomDomainTxtRecords, redirectTxtRecords, intakeApexSpfTxtRecords, intakeApexDmarcTxtRecords)
   }
 }
 
