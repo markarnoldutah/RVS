@@ -100,8 +100,10 @@ zlib). Upstream texts are vendored at
 
 ## 3. Other redistributed components
 
-All permissively licensed; no copyleft. License bodies are in
-[§5](#5-license-texts).
+All permissively licensed; no copyleft. (Space Grotesk's OFL-1.1 restricts only
+selling the font *by itself* and reusing its name for a modified version —
+neither applies to bundling it unmodified in an app — so it belongs in this
+category too.) License bodies are in [§5](#5-license-texts).
 
 ### Server — `RVS.API`
 
@@ -128,6 +130,7 @@ All permissively licensed; no copyleft. License bodies are in
 | Microsoft.AspNetCore.Components.WebAssembly (+ `.Web`, `.Authentication`) | 10.0.7 | MIT | © .NET Foundation and Contributors |
 | Microsoft.Extensions.Http | 10.0.7 | MIT | © .NET Foundation and Contributors |
 | .NET runtime for WebAssembly (emitted by the SDK into the published bundle) | 10.0.x | MIT | © .NET Foundation and Contributors — see <https://github.com/dotnet/runtime> `THIRD-PARTY-NOTICES.TXT` |
+| Space Grotesk (WOFF2, self-hosted for the brand theme, #702) | — | **SIL OFL-1.1** | © 2020 The Space Grotesk Project Authors |
 
 ### Shared native — `RVS.Infra.*`, `RVS.Domain`
 
@@ -152,9 +155,16 @@ assemblies and `runtimes/` folder they describe:
 No end-user-facing display is required: the RVS apps interact with users only
 over the network and never convey these components to a browser or device
 (GPLv3/LGPLv3 §"Mere interaction … is not conveying"; Apache-2.0 / MIT attach to
-distribution). The client WASM bundles ship only MIT-licensed components. If an
-OSS bill of materials is ever needed for procurement, generate an SBOM
-(CycloneDX / SPDX) in CI rather than adding a UI page.
+distribution). The client WASM bundles are otherwise MIT-licensed, plus one
+**OFL-1.1** asset: the self-hosted Space Grotesk font (`RVS.UI.Shared/wwwroot/fonts/`,
+#702). OFL §2 requires its notice to travel with the font files it covers rather
+than with this document's `licenses/` folder, so the license text is vendored
+alongside the `.woff2` files themselves —
+[`RVS.UI.Shared/wwwroot/fonts/OFL.txt`](RVS.UI.Shared/wwwroot/fonts/OFL.txt) —
+and ships to `_content/RVS.UI.Shared/fonts/OFL.txt` in both Blazor apps' published
+bundles as an ordinary Razor class library static asset. If an OSS bill of
+materials is ever needed for procurement, generate an SBOM (CycloneDX / SPDX) in
+CI rather than adding a UI page.
 
 ---
 
@@ -202,6 +212,18 @@ Full texts in
 [`licenses/Magick.NET.THIRD-PARTY-NOTICES.txt`](licenses/Magick.NET.THIRD-PARTY-NOTICES.txt)
 (the `libde265` and `libheif` sections). Compliance statement in
 [§1](#lgpl-30-compliance-libheif-libde265).
+
+### SIL Open Font License 1.1 (Space Grotesk)
+
+Applies to the self-hosted **Space Grotesk** WOFF2 files shipped by
+`RVS.Blazor.Intake` and `RVS.Blazor.Manager` (via `RVS.UI.Shared`). Full text
+travels with the font files rather than in `licenses/` — OFL §2 requires the
+notice to accompany the Font Software itself, and the font is a WASM static
+asset, not something `RVS.API` copies:
+[`RVS.UI.Shared/wwwroot/fonts/OFL.txt`](RVS.UI.Shared/wwwroot/fonts/OFL.txt).
+
+The font is used unmodified — no glyphs added, subset, or renamed — so none of
+the Reserved Font Name restrictions (OFL §3–4) come into play.
 
 ### BSD-3-Clause (SkiaSharp / skia, Moq is test-only)
 
