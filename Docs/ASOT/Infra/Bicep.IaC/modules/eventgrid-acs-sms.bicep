@@ -7,21 +7,21 @@
 //
 // The webhook is anonymous — Event Grid presents no bearer token — so the
 // subscription's endpoint URL carries a shared secret that the API checks on
-// every request. The same secret is written to Key Vault as
-// EventGrid--Inbound--Key, which the API's Key Vault configuration provider
-// binds to EventGrid:Inbound:Key, so the two sides cannot drift.
+// every request. Key Vault is the only source of truth for it (#678): the
+// secret EventGrid--Inbound--Key is created by hand, the API's Key Vault
+// configuration provider binds it to EventGrid:Inbound:Key, and each
+// .bicepparam reads the same secret back with az.getSecret to build the URL
+// below. Nothing writes it from Bicep and nobody passes it on a command line.
 //
 // ORDERING: creating a subscription triggers Event Grid's validation
 // handshake against the live endpoint, and the API has to answer it with the
-// secret already loaded. This deployment writes that secret to Key Vault too,
-// but in parallel with the subscription, so it cannot be what makes the API
-// ready. On a first bring-up, seed the vault secret by hand and restart the API
-// BEFORE running this deployment:
-//   1. the API carrying /api/events/acs-sms is deployed (merge to main)
-//   2. az keyvault secret set  EventGrid--Inbound--Key
-//   3. az webapp restart       (the API reads Key Vault at startup only)
-//   4. deploy this template with eventGridWebhookKey set
-// The runbook with exact commands is in RVS_Infrastructure.md.
+// secret already loaded. The API reads Key Vault at startup only, so on a
+// first bring-up, and after any rotation, the order is:
+//   1. az keyvault secret set  EventGrid--Inbound--Key
+//   2. az webapp restart       (the API picks up the value only on start)
+//   3. deploy main.bicep       (az.getSecret reads the value from step 1)
+// The runbook with exact commands, including a brand-new environment whose
+// vault does not exist yet, is in RVS_Infrastructure.md.
 // ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
@@ -39,7 +39,7 @@ param tags object
 @description('The API hostname that receives the events, e.g. api-staging.rvserviceflow.com. No scheme.')
 param apiHostName string
 
-@description('Shared secret the subscription presents as the key query parameter. Must match EventGrid--Inbound--Key in Key Vault; the API refuses every request when it is unset.')
+@description('Shared secret the subscription presents as the key query parameter. Read from EventGrid--Inbound--Key in Key Vault by the .bicepparam (az.getSecret), so it always matches what the API loaded at its last restart.')
 @secure()
 param eventGridWebhookKey string
 

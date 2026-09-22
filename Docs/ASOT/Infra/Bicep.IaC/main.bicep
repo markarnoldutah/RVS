@@ -104,9 +104,10 @@ param acsSmsFromPhoneNumber string = ''
 @description('Turns outbound SMS on, injected as AzureCommunicationServices__Sms__Enabled (#661). Leave false until acsSmsFromPhoneNumber has cleared toll-free verification: carriers reject an unverified number\'s traffic, and the API refuses to start with SMS enabled and no number. Only takes effect when deployAcs is true.')
 param acsSmsEnabled bool = false
 
-@description('Shared secret for the inbound Event Grid webhook that carries ACS SMS keywords and delivery reports to the API (issue #665). Event Grid cannot present a bearer token, so the subscription URL carries this and the API checks it. Stored in Key Vault as EventGrid--Inbound--Key so both sides move together. EMPTY means no system topic or subscription is deployed and the endpoint refuses everything — that is the safe default, not a broken state. Generate with: openssl rand -base64 48 | tr -d /+= | cut -c1-48')
+@description('Shared secret for the inbound Event Grid webhook that carries ACS SMS keywords and delivery reports to the API (issue #665). Event Grid cannot present a bearer token, so the subscription URL carries this and the API checks it. REQUIRED, no default (#678): each .bicepparam reads it from Key Vault (EventGrid--Inbound--Key) with az.getSecret, so the subscription URL and the API always use the same value, and a deploy that cannot resolve it fails instead of quietly skipping the subscription. Never pass it on the command line.')
 @secure()
-param eventGridWebhookKey string = ''
+@minLength(32)
+param eventGridWebhookKey string
 
 // ── Static Web App Parameters ─────────────────────────────────
 
@@ -768,18 +769,18 @@ module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs &
     keyVaultName: deployKeyVault ? keyVault.outputs.name : 'unused'
     #disable-next-line BCP318
     acsName: deployAcs ? communicationServices.outputs.name : 'unused'
-    eventGridWebhookKey: eventGridWebhookKey
   }
 }
 
 // ── Event Grid: inbound ACS SMS events (issue #665) ───────────
 
-// Needs the API host to deliver to, and a secret the API can check. With no
-// key there is no subscription: an anonymous webhook that writes opt-outs is
-// worse switched on than off. See the module header for the two-pass ordering
-// a first bring-up needs — Event Grid validates the endpoint as it creates the
-// subscription, so the API has to be running with the secret already.
-module eventGridAcsSms 'modules/eventgrid-acs-sms.bicep' = if (deployAcs && deployAppService && !empty(eventGridWebhookKey)) {
+// Needs the API host to deliver to, and the secret the API checks. The key is
+// not part of the condition (#678): it is read from Key Vault by the
+// .bicepparam, so a missing key fails the deploy rather than dropping this
+// module. See the module header for the secret-first ordering a first bring-up
+// needs — Event Grid validates the endpoint as it creates the subscription, so
+// the API has to be running with the secret already.
+module eventGridAcsSms 'modules/eventgrid-acs-sms.bicep' = if (deployAcs && deployAppService) {
   name: 'deploy-eventgrid-acs-sms-${environmentName}'
   scope: rgPrimary
   params: {

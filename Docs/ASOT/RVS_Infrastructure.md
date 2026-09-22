@@ -117,23 +117,44 @@ Prod's warmed custom domain is what carries the local cluster (`#527`).
 
 **How the number reaches the API (#661).** The number is bought in the portal, so Bicep cannot derive it. Each `.bicepparam` carries it as `acsSmsFromPhoneNumber`, and `app-service-config.bicep` injects it as `AzureCommunicationServices__Sms__FromPhoneNumber`, beside email's `FromAddress`. `acsSmsEnabled` is injected as `AzureCommunicationServices__Sms__Enabled` in every environment, including when it is `false`. Until #661, `appsettings.json` hardcoded `+18662331894`, a number neither resource owns. Both vaults hold the ACS endpoint, so every confirmation text failed silently. Flip `acsSmsEnabled` only after that environment's number shows verified. The API refuses to start with SMS enabled and no valid E.164 number.
 
-**Inbound ACS events reach the API through Event Grid (#665).** `modules/eventgrid-acs-sms.bicep` creates a system topic on the ACS resource (global, like ACS itself) and one subscription for `Microsoft.Communication.SMSReceived` and `Microsoft.Communication.SMSDeliveryReportReceived`, delivering to `POST https://{api host}/api/events/acs-sms`. Event Grid cannot present a bearer token to an anonymous endpoint, so the subscription URL carries `?key=`, whose value is the `eventGridWebhookKey` parameter: Bicep writes the same value to Key Vault as `EventGrid--Inbound--Key`, which the API's Key Vault configuration provider binds to `EventGrid:Inbound:Key`, so the two sides cannot drift. Generate one with `openssl rand -base64 48 | tr -d /+= | cut -c1-48`.
+**Inbound ACS events reach the API through Event Grid (#665).** `modules/eventgrid-acs-sms.bicep` creates a system topic on the ACS resource (global, like ACS itself) and one subscription for `Microsoft.Communication.SMSReceived` and `Microsoft.Communication.SMSDeliveryReportReceived`, delivering to `POST https://{api host}/api/events/acs-sms`. Event Grid cannot present a bearer token to an anonymous endpoint, so the subscription URL carries `?key=`. **Key Vault is the only source of truth for that key (#678).** The secret `EventGrid--Inbound--Key` is created by hand, once. The API's Key Vault configuration provider binds it to `EventGrid:Inbound:Key`. Each `.bicepparam` reads the same secret back at deploy time with `az.getSecret(...)` and passes it to the required `eventGridWebhookKey` parameter. Nothing in Bicep writes the secret, and nobody passes it on a command line. Generate one with `openssl rand -base64 48 | tr -d /+= | cut -c1-48`.
 
 **The HELP reply is an outbound send, so it obeys `acsSmsEnabled`.** While an environment's number is unverified the handler still runs and still ignores non-keywords; the reply is simply silent. That is the same gate every other send passes, and it means HELP costs nothing until the number is live.
 
-**Empty key = no subscription, and the endpoint refuses everything (503).** That is the safe default, not a broken state: an anonymous webhook that writes opt-outs is worse switched on than off.
+**A deploy that cannot read the key fails; it never skips the subscription.** `eventGridWebhookKey` has no default and a 32-character minimum, and the module is conditioned only on `deployAcs && deployAppService`. If ARM cannot resolve the reference (the secret is missing, the vault lacks `enabledForTemplateDeployment`, or the deployer lacks `deploy/action`), the deployment is rejected at parameter evaluation, before anything is created or removed.
 
-**First bring-up is secret-first, not deploy-twice.** Event Grid validates the endpoint while creating the subscription, so the API must already be running with the secret in its configuration. The template writes the vault secret too, but in parallel with the subscription, so it cannot be what makes the API ready. Order:
+**What the deploy needs from the vault.**
 
-1. Merge to `main`, so `deploy-staging.yml` ships the API with `POST api/events/acs-sms`.
-2. Generate a key: `openssl rand -base64 48 | tr -d /+= | cut -c1-48`.
+- `enabledForTemplateDeployment: true` on the vault. `modules/key-vault.bicep` sets it, but a deploy evaluates its `getSecret` references *before* it can update the vault, so each vault that existed before #678 needs it turned on once by hand: `az keyvault update --name kv-rvs-{env}-wus3 --enabled-for-template-deployment true`.
+- The deployer needs `Microsoft.KeyVault/vaults/deploy/action` on the vault's resource group. **Contributor and Owner both include it.** The prod deployer SP already has Contributor on `rg-rvs-prod-westus3` (`PROD_DEPLOYER_SP_SETUP.md` §A.2 / §B.3), and whoever deploys staging by hand has at least Contributor on `rg-rvs-staging-westus3`. No Key Vault data-plane role is required for this: ARM resolves the reference itself. If a deployer is ever narrowed below Contributor, grant `deploy/action` explicitly.
+- The subscription id in each `az.getSecret(...)` call is a literal. It must be the subscription that environment deploys into.
+
+**Existing environment, first deploy after #678 (staging and prod).** Both already hold `EventGrid--Inbound--Key` (Bicep wrote it before #678, and removing that resource from the template does not delete the secret: deploys are incremental).
+
+1. `az keyvault secret show --vault-name kv-rvs-{env}-wus3 --name EventGrid--Inbound--Key --query id`: confirm the secret exists.
+2. `az keyvault update --name kv-rvs-{env}-wus3 --enabled-for-template-deployment true`.
+3. `what-if` with the plain Section 1 command in `deployment-cmds.azcli` and no `eventGridWebhookKey` override. Expect nothing deleted and the system topic and subscription unchanged. **`what-if` proves nothing about the key:** it does not dereference Key Vault parameter references (a deliberately wrong secret name still produces a clean `what-if`), and the subscription's endpoint URL is write-only, so it reads `NoChange` whatever key is supplied.
+4. Deploy, then check the endpoint: `POST https://{api host}/api/events/acs-sms?key=<vault value>` answers 200, a wrong key 401, and `az eventgrid system-topic event-subscription show ... --query provisioningState` reads `Succeeded`. This is the only proof that the reference resolved and matches what the API loaded.
+
+**Brand-new environment.** The vault does not exist yet, so `getSecret` cannot resolve. This is the only time the key goes on a command line:
+
+1. Generate a key: `openssl rand -base64 48 | tr -d /+= | cut -c1-48`.
+2. Deploy `main.bicep` with the environment's `.bicepparam` **plus** `--parameters eventGridWebhookKey="$KEY"`. The trailing override replaces the Key Vault reference for this run. Everything deploys except the Event Grid subscription, which fails its validation handshake because the API is not yet running with the key. That failure is expected.
 3. `az keyvault secret set --vault-name kv-rvs-{env}-wus3 --name EventGrid--Inbound--Key --value "$KEY"`.
-4. `az webapp restart -n app-rvs-api-{env}-wus3 -g rg-rvs-{env}-westus3`. The API reads Key Vault at startup only. Before the restart the endpoint answers 503, after it 401 to a request with no key.
-5. Deploy `main.bicep` with `--parameters eventGridWebhookKey="$KEY"`, as `what-if` first.
+4. Ship the API (merge to `main` / promote), then `az webapp restart -n app-rvs-api-{env}-wus3 -g rg-rvs-{env}-westus3`. The API reads Key Vault at startup only. Before the restart the endpoint answers 503, after it 401 to a request with no key.
+5. Deploy again with the plain `.bicepparam` and no override. The subscription is created and validates.
 
-**Pass the key on every later deploy.** Omitting it removes the subscription and silently ends inbound handling. Retries are 10 attempts over 24 hours, so a brief API outage loses nothing. There is no dead-letter destination: a keyword that exhausts its retries is still enforced by the carrier, and the next send simply fails rather than reaching an opted-out customer.
+**Rotation always ends with an API restart, and happens in this order.** The API holds the key in memory from its last start, so the vault, the API and the subscription must move in this sequence:
 
-**Key Vault** — standard SKU, RBAC authorization, 90-day soft delete, purge protection on, public access enabled.
+1. `az keyvault secret set ... --name EventGrid--Inbound--Key --value "$NEW_KEY"`
+2. `az webapp restart ...` (the API now expects the new key; the subscription still presents the old one, so deliveries 401 and Event Grid retries them)
+3. Redeploy `main.bicep` with the plain `.bicepparam` (the subscription picks up the new key; the retries succeed)
+
+Do steps 2 and 3 back to back. Retries run for 24 hours (10 attempts). There is no dead-letter destination, so anything still failing after that is dropped. A carrier keyword that exhausts its retries is still enforced by the carrier: the next send fails rather than reaching an opted-out customer.
+
+**Leaving the key out would not remove anything.** ARM deploys here are incremental (nothing passes `--mode`, and module deployments are always incremental). A module whose condition is false is left out of the template, and whatever it created stays in place. Before #678 the risk of omitting the key was silent drift, not deletion: `what-if` gave no sign the subscription existed. Reading the key from the vault removes that failure mode.
+
+**Key Vault** — standard SKU, RBAC authorization, enabled for template deployment (so `.bicepparam` files can read secrets with `az.getSecret`, #678), 90-day soft delete, purge protection on, public access enabled.
 
 **Static Web Apps** — Standard, staging environments enabled, config file updates allowed, enterprise CDN off.
 
