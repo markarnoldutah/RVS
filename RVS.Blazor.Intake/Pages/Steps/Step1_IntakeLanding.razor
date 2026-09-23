@@ -1,68 +1,118 @@
-<MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 480px; margin: 0 auto;">
+@* Step 0 — the first screen after following an intake link (issue #707). It borrows the
+   public landing page's shape: an Ink hero band carries the badge and the dealership's name,
+   then the page says what the next few minutes will ask for, then offers the one control on
+   it. The wizard proper starts on the next step, so this one is allowed to be scenery. *@
+
+<MudStack AlignItems="AlignItems.Center" Spacing="5"
+          Style="width: 100%; max-width: 560px; margin: 0 auto;">
     @if (_isLoading)
     {
-        <MudStack AlignItems="AlignItems.Center" Spacing="5"
+        <MudStack AlignItems="AlignItems.Center" Spacing="5" Style="width: 100%;"
                   aria-busy="true" aria-label="Loading location information">
-            <MudSkeleton SkeletonType="SkeletonType.Circle" Width="64px" Height="64px" />
-            <MudSkeleton SkeletonType="SkeletonType.Text" Width="60%" />
-            <MudSkeleton SkeletonType="SkeletonType.Text" Width="40%" />
-            <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" />
-            <MudDivider Style="width: 100%;" />
-            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="300px" Height="44px" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="220px"
+                         Class="rounded-lg" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="180px"
+                         Class="rounded-lg" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="52px"
+                         Class="rounded-lg" />
         </MudStack>
     }
     else if (_error is not null)
     {
-        <MudStack AlignItems="AlignItems.Center" Spacing="4">
-            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
-                     Style="font-size: 4rem;" />
-            <MudText Typo="Typo.h5" Color="Color.Error" Align="Align.Center">
-                The link provided appears to be invalid.
-            </MudText>
-            <MudText Typo="Typo.body1" Align="Align.Center"
-                     Style="color: var(--mud-palette-text-secondary);">
-                @_error
-            </MudText>
-        </MudStack>
+        <MudPaper Elevation="2" Class="pa-8 rounded-lg" Style="width: 100%;">
+            <MudStack AlignItems="AlignItems.Center" Spacing="4">
+                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Error"
+                         Style="font-size: 4rem;" />
+                <MudText Typo="Typo.h5" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
+                    The link provided appears to be invalid.
+                </MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center"
+                         Style="color: var(--mud-palette-text-secondary);">
+                    @_error
+                </MudText>
+            </MudStack>
+        </MudPaper>
     }
     else if (State.Config is not null)
     {
-        <MudStack AlignItems="AlignItems.Center" Spacing="5">
-            @if (State.Config.TokenExpired)
-            {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-2" Style="width: 100%;"
-                          Icon="@Icons.Material.Filled.Schedule">
-                    Your link has expired. You can still submit a service request below, but your information won't be pre-filled.
-                    Contact the dealership if you need a new link.
-                </MudAlert>
-            }
+        @if (State.Config.TokenExpired)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Style="width: 100%;"
+                      Icon="@Icons.Material.Filled.Schedule">
+                Your link has expired. You can still submit a service request below, but your information won't be pre-filled.
+                Contact the dealership if you need a new link.
+            </MudAlert>
+        }
 
-            <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary"
-                     Style="font-size: 4rem;" />
+        @* Hero band — the same Ink-on-cream lockup the public landing page opens with. *@
+        <MudPaper Elevation="3" Class="pa-8 rounded-lg"
+                  Style="width: 100%; background: var(--mud-palette-secondary); text-align: center;">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <BrandWordmark Variant="BrandWordmarkVariant.Icon" Reversed="true" Height="56px" />
 
-            <MudText Typo="Typo.h5" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
-                Start a Service Request<br />
-                with
-            </MudText>
+                <MudText Typo="Typo.h4" Style="color: var(--mud-palette-secondary-text); font-weight: 700;">
+                    Start a service request
+                </MudText>
 
-            <MudText Typo="Typo.h6" Align="Align.Center"
-                     Style="color: var(--mud-palette-text-secondary);">
-                @State.Config.LocationName
-            </MudText>
+                <MudDivider Style="width: 64px; border-color: var(--mud-palette-secondary-text); opacity: 0.35;" />
 
-            <MudDivider Class="my-2" Style="width: 100%;" />
+                <MudText Typo="Typo.h6" Style="color: var(--mud-palette-secondary-text);">
+                    @State.Config.LocationName
+                </MudText>
 
+                @if (!string.IsNullOrWhiteSpace(State.Config.DealershipName)
+                     && !string.Equals(State.Config.DealershipName, State.Config.LocationName, StringComparison.OrdinalIgnoreCase))
+                {
+                    <MudText Typo="Typo.body2" Style="color: var(--mud-palette-secondary-text); opacity: 0.85;">
+                        @State.Config.DealershipName
+                    </MudText>
+                }
+            </MudStack>
+        </MudPaper>
+
+        @* What the wizard is about to ask for, so nobody starts it wondering how long it runs. *@
+        <MudPaper Elevation="2" Class="pa-6 rounded-lg"
+                  Style="width: 100%; border-top: 4px solid var(--mud-palette-primary);">
+            <MudStack Spacing="4">
+                <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary); font-weight: 700;">
+                    What we'll ask for
+                </MudText>
+
+                @foreach (var item in Expectations)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                        <MudIcon Icon="@item.Icon" Color="Color.Primary" Style="font-size: 1.75rem;" />
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-primary); font-weight: 700;">
+                                @item.Title
+                            </MudText>
+                            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+                                @item.Detail
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                }
+            </MudStack>
+        </MudPaper>
+
+        <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="width: 100%;">
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        Size="Size.Large"
                        FullWidth="true"
+                       EndIcon="@Icons.Material.Filled.ArrowForward"
                        OnClick="HandleStart"
                        Style="text-transform: none;">
                 Continue
             </MudButton>
+
+            <MudText Typo="Typo.body2" Align="Align.Center"
+                     Style="color: var(--mud-palette-text-secondary);">
+                About 5 minutes. No app to install and no account to create.
+            </MudText>
         </MudStack>
     }
-</MudPaper>
+</MudStack>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
@@ -71,6 +121,22 @@
 
     private bool _isLoading = true;
     private string? _error;
+
+    /// <summary>
+    /// What the wizard goes on to ask for, in the order it asks. Listed on step 0 so nobody
+    /// starts an eight-step form without knowing its shape — it mirrors steps 2, 3-4, 5-6 and 7.
+    /// </summary>
+    private static readonly (string Icon, string Title, string Detail)[] Expectations =
+    [
+        (Icons.Material.Filled.Person, "Who you are",
+            "Name, phone and email, so the service department can reach you."),
+        (Icons.Material.Filled.RvHookup, "Your RV",
+            "Type, speak or photograph the VIN — or just give the year, make and model."),
+        (Icons.Material.Filled.Build, "What's wrong",
+            "Describe it, or say it out loud and we'll write it down."),
+        (Icons.Material.Filled.PhotoCamera, "Photos",
+            "Optional — but a picture of the problem saves a phone call.")
+    ];
 
     protected override async Task OnInitializedAsync()
     {
