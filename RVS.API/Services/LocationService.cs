@@ -73,6 +73,7 @@ public sealed class LocationService : ILocationService
         ArgumentNullException.ThrowIfNull(entity);
 
         ValidatePacketConfig(entity);
+        ValidateTimeZone(entity);
 
         var dealership = await GetDealershipAsync(tenantId, cancellationToken);
         var alreadyReserved = false;
@@ -171,6 +172,7 @@ public sealed class LocationService : ILocationService
         ArgumentNullException.ThrowIfNull(entity);
 
         ValidatePacketConfig(entity);
+        ValidateTimeZone(entity);
 
         var existing = await _locationRepository.GetByIdAsync(tenantId, id, cancellationToken)
             ?? throw new KeyNotFoundException($"Location '{id}' not found.");
@@ -211,6 +213,7 @@ public sealed class LocationService : ILocationService
         existing.Name = entity.Name;
         existing.Slug = entity.Slug;
         existing.Phone = entity.Phone;
+        existing.TimeZoneId = entity.TimeZoneId;
         existing.Address = entity.Address;
         existing.IntakeConfig = entity.IntakeConfig;
         existing.EnabledCapabilities = entity.EnabledCapabilities;
@@ -219,6 +222,7 @@ public sealed class LocationService : ILocationService
         existing.MarkAsUpdated(_userContext.UserId);
 
         ValidatePacketConfig(existing);
+        ValidateTimeZone(existing);
 
         return await _locationRepository.UpdateAsync(existing, cancellationToken);
     }
@@ -338,6 +342,20 @@ public sealed class LocationService : ILocationService
     private static void ValidatePacketConfig(Location entity)
     {
         var result = PacketConfigValidator.Validate(entity.PacketConfig);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(entity));
+        }
+    }
+
+    /// <summary>
+    /// Rejects a <see cref="Location.TimeZoneId"/> that is neither blank nor a recognised IANA
+    /// id (issue #506). Surfaces as an <see cref="ArgumentException"/> (HTTP 400) via
+    /// <c>ExceptionHandlingMiddleware</c>.
+    /// </summary>
+    private static void ValidateTimeZone(Location entity)
+    {
+        var result = TimeZoneValidator.Validate(entity.TimeZoneId);
         if (!result.IsValid)
         {
             throw new ArgumentException(result.ErrorMessage, nameof(entity));

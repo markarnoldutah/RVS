@@ -696,4 +696,95 @@ public class LocationMapperTests
             Slug = "phoenix-service-center",
             Phone = "(602) 555-0200"
         };
+
+    // ── Time zone (issue #506) ──────────────────────────────────────────
+
+    [Fact]
+    public void ToDetailDto_ShouldCarryTheTimeZoneId()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            TimeZoneId = "America/Phoenix"
+        };
+
+        entity.ToDetailDto().TimeZoneId.Should().Be("America/Phoenix");
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenNoTimeZoneIsSet_ShouldReturnNull()
+    {
+        var entity = new Location { TenantId = "ten_1", Name = "Phoenix Service Center" };
+
+        entity.ToDetailDto().TimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToEntity_ShouldTrimTheTimeZoneId()
+    {
+        var dto = BuildValidCreateRequest() with { TimeZoneId = "  America/Phoenix  " };
+
+        dto.ToEntity("ten_1", "usr_1").TimeZoneId.Should().Be("America/Phoenix");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToEntity_WhenTimeZoneIdIsBlank_ShouldLeaveItNull(string? timeZoneId)
+    {
+        var dto = BuildValidCreateRequest() with { TimeZoneId = timeZoneId };
+
+        dto.ToEntity("ten_1", "usr_1").TimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenTimeZoneIdIsNull_ShouldLeaveTheExistingZoneUnchanged()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            TimeZoneId = "America/Phoenix"
+        };
+        var dto = BuildValidCreateRequest() with { TimeZoneId = null };
+
+        entity.ApplyUpdate(dto, "usr_2");
+
+        entity.TimeZoneId.Should().Be("America/Phoenix");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenTimeZoneIdIsBlank_ShouldClearTheZone()
+    {
+        // An explicit blank is the clear signal — it returns the packet to a UTC Received line.
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            TimeZoneId = "America/Phoenix"
+        };
+        var dto = BuildValidCreateRequest() with { TimeZoneId = "" };
+
+        entity.ApplyUpdate(dto, "usr_2");
+
+        entity.TimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyUpdate_ShouldReplaceTheZone()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            TimeZoneId = "America/Phoenix"
+        };
+        var dto = BuildValidCreateRequest() with { TimeZoneId = "America/Denver" };
+
+        entity.ApplyUpdate(dto, "usr_2");
+
+        entity.TimeZoneId.Should().Be("America/Denver");
+    }
 }

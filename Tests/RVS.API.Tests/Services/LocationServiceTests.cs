@@ -528,6 +528,83 @@ public class LocationServiceTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // ── Time zone (issue #506) ──────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateAsync_WhenTimeZoneIdIsUnknown_ShouldThrowArgumentExceptionAndNotPersist()
+    {
+        var entity = BuildLocation();
+        entity.TimeZoneId = "Mars/Olympus_Mons";
+
+        var act = () => _sut.CreateAsync("ten_1", entity);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenTimeZoneIdIsUnknown_ShouldThrowArgumentException()
+    {
+        var updated = BuildLocation();
+        updated.TimeZoneId = "Mars/Olympus_Mons";
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldPersistTheTimeZoneIdOntoTheExistingLocation()
+    {
+        // UpdateAsync copies fields onto the freshly-loaded entity one by one, so a field
+        // missing from that block is silently dropped on every save. This is its guard.
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.TimeZoneId = "America/Denver";
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.TimeZoneId.Should().Be("America/Denver");
+        _locationRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<Location>(l => l.TimeZoneId == "America/Denver"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithACuratedTimeZone_ShouldPersistIt()
+    {
+        var entity = BuildLocation();
+        entity.TimeZoneId = "America/Denver";
+
+        _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.CreateAsync("ten_1", entity);
+
+        result.TimeZoneId.Should().Be("America/Denver");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenTimeZoneIdIsNull_ShouldSucceed()
+    {
+        // Unset is legal: the packet's Received line stays in UTC.
+        var entity = BuildLocation();
+        entity.TimeZoneId = null;
+
+        _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.CreateAsync("ten_1", entity);
+
+        result.TimeZoneId.Should().BeNull();
+    }
+
     [Fact]
     public async Task UpdateAsync_ShouldCarryDisabledRecipientsAcrossASettingsSave()
     {

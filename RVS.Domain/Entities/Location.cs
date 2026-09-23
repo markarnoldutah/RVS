@@ -39,6 +39,16 @@ public class Location : EntityBase
     public string? Phone { get; set; }
 
     /// <summary>
+    /// IANA time-zone id for this location (e.g. <c>America/Denver</c>), issue #506. The
+    /// service packet's <c>Received</c> line is rendered in this zone so a service advisor
+    /// reads the time they actually took the request. <c>null</c> — the default, and what
+    /// every location created before #506 carries — leaves that line in UTC. Validated by
+    /// <see cref="Validation.TimeZoneValidator"/>.
+    /// </summary>
+    [JsonProperty("timeZoneId")]
+    public string? TimeZoneId { get; set; }
+
+    /// <summary>
     /// Intake form configuration specific to this location.
     /// </summary>
     [JsonProperty("intakeConfig")]

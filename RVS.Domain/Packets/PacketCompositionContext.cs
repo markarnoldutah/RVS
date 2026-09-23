@@ -18,6 +18,13 @@ public sealed record PacketCompositionContext
     /// <summary>Public phone number for that location.</summary>
     public string? LocationPhone { get; init; }
 
+    /// <summary>
+    /// The location's IANA time-zone id (issue #506), e.g. <c>America/Denver</c>. The packet's
+    /// <c>Received</c> line is rendered in this zone; <c>null</c>, blank, or an id this host
+    /// cannot resolve falls back to the UTC form.
+    /// </summary>
+    public string? LocationTimeZoneId { get; init; }
+
     /// <summary>When the request was submitted.</summary>
     public required DateTimeOffset SubmittedAtUtc { get; init; }
 

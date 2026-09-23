@@ -25,8 +25,11 @@ internal sealed record PacketPdfLayout
 
     /// <summary>
     /// The submission timestamp for the top-of-masthead <c>Received</c> line, formatted
-    /// <c>yyyy-MM-dd HH:mm UTC</c>. This is the one Received line on the packet — the
-    /// Location column no longer repeats it (issue #492 items 4–5).
+    /// <c>yyyy-MM-dd HH:mm</c> plus a zone: the location's own zone when it sets one
+    /// (<c>… 08:30 MDT</c>), UTC otherwise (issue #506). Taken straight from
+    /// <see cref="PacketOrigin.ReceivedDisplay"/> so it matches the HTML rendering exactly.
+    /// This is the one Received line on the packet — the Location column no longer repeats
+    /// it (issue #492 items 4–5).
     /// </summary>
     public required string ReceivedDisplay { get; init; }
 
@@ -83,9 +86,9 @@ internal sealed record PacketPdfLayout
             sections.Add(statusLink);
         }
 
-        var received = packet.Origin.SubmittedAtUtc
-            .ToUniversalTime()
-            .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
+        // Projected from the packet, not re-derived: PacketHtmlRenderer reads the same
+        // property, so the two renderings cannot drift (issue #506).
+        var received = packet.Origin.ReceivedDisplay;
 
         var customerHeadline = string.IsNullOrWhiteSpace(packet.Customer.SortableName)
             ? null

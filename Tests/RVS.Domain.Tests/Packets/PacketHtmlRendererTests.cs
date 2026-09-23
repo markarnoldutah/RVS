@@ -40,6 +40,7 @@ public class PacketHtmlRendererTests
         {
             LocationName = "Salt Lake Service Center",
             LocationPhone = "555-0199",
+            LocationTimeZoneId = "America/Denver",
             SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
             ReferenceCode = "A1B2C3D4",
         },
@@ -288,7 +289,7 @@ public class PacketHtmlRendererTests
         var html = PacketHtmlRenderer.Render(FullPacket());
 
         html.Should().Contain("A1B2C3D4");
-        html.Should().Contain("2026-09-05 14:30 UTC");
+        html.Should().Contain("2026-09-05 08:30 MDT");
         html.Should().Contain("Salt Lake Service Center");
     }
 
@@ -303,9 +304,9 @@ public class PacketHtmlRendererTests
         // Mirrors IDS "W/O #" top-right: the tracking number comes before any section body.
         html.IndexOf("A1B2C3D4", StringComparison.Ordinal)
             .Should().BeLessThan(Order(html, "section:customer"));
-        // The top-of-packet Received line carries the full timestamp, date + time, UTC
-        // (issue #492 item 4).
-        html.Should().Contain("Received: 2026-09-05 14:30 UTC");
+        // The top-of-packet Received line carries the full timestamp, date + time, in the
+        // dealership's own zone (issue #492 item 4, finished by #506).
+        html.Should().Contain("Received: 2026-09-05 08:30 MDT");
     }
 
     // ── Masthead: brand, logo, customer headline, received line (issue #492) ──
@@ -495,6 +496,7 @@ public class PacketHtmlRendererTests
             Origin = new PacketOrigin
             {
                 LocationName = "Salt Lake Service Center",
+                LocationTimeZoneId = "America/Denver",
                 SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
                 ReferenceCode = "A1B2C3D4",
             },
@@ -507,6 +509,45 @@ public class PacketHtmlRendererTests
         var open = html.IndexOf("@bottom-left", StringComparison.Ordinal);
         var slice = html[open..html.IndexOf("@bottom-right", StringComparison.Ordinal)];
         slice.Split('"').Length.Should().Be(3, "content should be exactly one quoted string");
+    }
+
+    [Fact]
+    public void Render_RunningFooterContent_ShouldCarryTheZoneAbbreviation()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var slice = html[Order(html, "@bottom-left")..Order(html, "@bottom-right")];
+        slice.Should().Contain("2026-09-05 08:30 MDT");
+    }
+
+    [Fact]
+    public void Render_ShouldUseOneReceivedStringAcrossTheMastheadTheRunningFooterAndTheStaticFooter()
+    {
+        // The three surfaces read one derived value (PacketOrigin.ReceivedDisplay, issue
+        // #506). Without this test the guarantee is convention: a future edit could re-derive
+        // one of them and only a visual diff would catch it.
+        var packet = FullPacket();
+        var html = PacketHtmlRenderer.Render(packet);
+        var received = packet.Origin.ReceivedDisplay;
+
+        received.Should().Be("2026-09-05 08:30 MDT");
+
+        var runningFooter = html[Order(html, "@bottom-left")..Order(html, "@bottom-right")];
+        var masthead = html[Order(html, "class=\"received\"")..Order(html, "section:category")];
+        var staticFooter = html[Order(html, "class=\"packet-foot\"")..];
+
+        runningFooter.Should().Contain(received);
+        masthead.Should().Contain(received);
+        staticFooter.Should().Contain(received);
+    }
+
+    [Fact]
+    public void Render_WhenTheLocationHasNoTimeZone_ShouldKeepTheUtcReceivedLine()
+    {
+        // The fallback that every packet rendered before #506, still exact.
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        html.Should().Contain("Received: 2026-09-05 14:30 UTC");
     }
 
     // ── 4. Category ────────────────────────────────────────────────────────

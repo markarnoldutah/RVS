@@ -52,6 +52,7 @@ public class PacketPdfRendererTests
         {
             LocationName = "Salt Lake Service Center",
             LocationPhone = "555-0199",
+            LocationTimeZoneId = "America/Denver",
             SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
             ReferenceCode = "A1B2C3D4",
         },
@@ -423,12 +424,14 @@ public class PacketPdfRendererTests
     [Fact]
     public void Build_ShouldExposeAnInvariantReceivedDisplayForTheTopOfTheMasthead()
     {
-        Layout(FullPacket()).ReceivedDisplay.Should().Be("2026-09-05 14:30 UTC");
+        Layout(FullPacket()).ReceivedDisplay.Should().Be("2026-09-05 08:30 MDT");
     }
 
     [Fact]
-    public void Build_ShouldNormaliseTheSubmittedTimestampToUtc()
+    public void Build_ShouldNormaliseTheSubmittedInstantBeforeConvertingToTheLocationZone()
     {
+        // 09:30-05:00 is the same instant as 14:30Z, which is 08:30 in Denver (issue #506;
+        // before it, this line read 14:30 UTC whatever zone the location was in).
         var packet = FullPacket() with
         {
             Origin = FullPacket().Origin with
@@ -437,7 +440,23 @@ public class PacketPdfRendererTests
             },
         };
 
-        Layout(packet).ReceivedDisplay.Should().Be("2026-09-05 14:30 UTC");
+        Layout(packet).ReceivedDisplay.Should().Be("2026-09-05 08:30 MDT");
+    }
+
+    [Fact]
+    public void Build_WhenTheLocationHasNoTimeZone_ShouldFallBackToTheUtcReceivedDisplay()
+    {
+        Layout(MinimalPacket()).ReceivedDisplay.Should().Be("2026-09-05 14:30 UTC");
+    }
+
+    [Fact]
+    public void Build_ShouldTakeItsReceivedDisplayFromThePacketOrigin()
+    {
+        // The PDF-side half of the no-drift guarantee: the layout projects the packet's own
+        // derived value rather than re-deriving it (issue #506).
+        var packet = FullPacket();
+
+        Layout(packet).ReceivedDisplay.Should().Be(packet.Origin.ReceivedDisplay);
     }
 
     [Fact]
@@ -451,7 +470,7 @@ public class PacketPdfRendererTests
     {
         var text = Layout(FullPacket()).ToPlainText();
 
-        Order(text, "Received: 2026-09-05 14:30 UTC").Should().BeLessThan(Order(text, "Gribble, Dale"));
+        Order(text, "Received: 2026-09-05 08:30 MDT").Should().BeLessThan(Order(text, "Gribble, Dale"));
         Order(text, "Gribble, Dale").Should().BeLessThan(Order(text, "[section:unit]"));
     }
 
@@ -787,7 +806,7 @@ public class PacketPdfRendererTests
 
         string[] values =
         [
-            "2026-09-05 14:30 UTC",
+            "2026-09-05 08:30 MDT",
             "Gribble, Dale",
             "2021 Winnebago View",
             "1FDXE45S12HB00001",

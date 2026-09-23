@@ -59,9 +59,10 @@ public static class PacketHtmlRenderer
     {
         ArgumentNullException.ThrowIfNull(packet);
 
-        var submittedUtc = packet.Origin.SubmittedAtUtc
-            .ToUniversalTime()
-            .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
+        // One string, three surfaces: the masthead, the @page running footer, and the static
+        // end-of-flow footer. Derived on the packet (issue #506) so the PDF renderer reads the
+        // very same value rather than a second copy of the same expression.
+        var received = packet.Origin.ReceivedDisplay;
         var brandName = packet.Branding.BrandName;
 
         var sb = new StringBuilder(4096);
@@ -71,13 +72,13 @@ public static class PacketHtmlRenderer
         sb.Append("<meta charset=\"utf-8\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         sb.Append("<title>Service Packet ").Append(Text(packet.Origin.ReferenceCode)).Append("</title>\n");
-        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(packet.Origin.ReferenceCode, submittedUtc, brandName)))
+        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(packet.Origin.ReferenceCode, received, brandName)))
             .Append("\n</style>\n");
         sb.Append("</head>\n<body>\n");
         sb.Append("<main class=\"packet\">\n");
 
         AppendManagerActions(sb, packet.ManagerLinks);
-        AppendMasthead(sb, packet, submittedUtc);
+        AppendMasthead(sb, packet, received);
         AppendCategory(sb, packet.IssueCategory);
         // The curated issue and the AI assessment sit above the verbatim complaint: a service
         // manager should see the concise recreation of the problem first, then the customer's
@@ -89,7 +90,7 @@ public static class PacketHtmlRenderer
         AppendPhotos(sb, packet.Photos, managerAppServiceRequestUrl);
         AppendPasteBlock(sb, packet.PasteBlock);
         AppendStatusLink(sb, packet.StatusLink);
-        AppendFooter(sb, packet.Origin.ReferenceCode, submittedUtc, brandName);
+        AppendFooter(sb, packet.Origin.ReferenceCode, received, brandName);
 
         sb.Append("</main>\n</body>\n</html>\n");
 
@@ -140,7 +141,7 @@ public static class PacketHtmlRenderer
     // contract is unchanged.
 
     private static void AppendMasthead(
-        StringBuilder sb, ServicePacket packet, string submittedUtc)
+        StringBuilder sb, ServicePacket packet, string received)
     {
         var unit = packet.Unit;
         var customer = packet.Customer;
@@ -168,9 +169,10 @@ public static class PacketHtmlRenderer
         sb.Append("</td>\n");
         sb.Append("<td class=\"refbox\" style=\"vertical-align:top;text-align:right;white-space:nowrap;\">\n");
         sb.Append("<p class=\"rvsno\" style=\"margin:0;font-size:12pt;\">RVS #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
-        // Received line carries the full timestamp (date + time, UTC) — it is the one
-        // Received line on the packet (the Location column no longer repeats it).
-        sb.Append("<p class=\"received\" style=\"margin:0.5mm 0 0;font-size:9pt;\">Received: ").Append(Text(submittedUtc)).Append("</p>\n");
+        // Received line carries the full timestamp — date + time in the dealership's own
+        // zone when the location sets one, UTC otherwise (issue #506). It is the one Received
+        // line on the packet (the Location column no longer repeats it).
+        sb.Append("<p class=\"received\" style=\"margin:0.5mm 0 0;font-size:9pt;\">Received: ").Append(Text(received)).Append("</p>\n");
         sb.Append("</td>\n</tr>\n</table>\n");
 
         // Title line: customer name (family-name-first) and unit descriptor on one line,
@@ -443,14 +445,14 @@ public static class PacketHtmlRenderer
 
     // ── Running footer (mirrors IDS "Printed On … © … Page N of N") ───────
 
-    private static void AppendFooter(StringBuilder sb, string referenceCode, string submittedUtc, string brandName)
+    private static void AppendFooter(StringBuilder sb, string referenceCode, string received, string brandName)
     {
         // A static end-of-flow footer for engines that ignore @page margin boxes
         // (Safari); the @page rule in the stylesheet repeats the same line on every
         // printed page where supported. A presentational <table> so the two ends stay on
         // one line in a mail client (no flexbox).
         sb.Append("<table role=\"presentation\" class=\"packet-foot\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:8mm;border-top:1px solid #000;font-size:8pt;\">\n<tr>\n");
-        sb.Append("<td style=\"padding-top:2mm;vertical-align:top;\">RVS #").Append(Text(referenceCode)).Append(" · ").Append(Text(submittedUtc)).Append("</td>\n");
+        sb.Append("<td style=\"padding-top:2mm;vertical-align:top;\">RVS #").Append(Text(referenceCode)).Append(" · ").Append(Text(received)).Append("</td>\n");
         sb.Append("<td style=\"padding-top:2mm;vertical-align:top;text-align:right;\">").Append(Text(brandName)).Append(" — service intake packet</td>\n");
         sb.Append("</tr>\n</table>\n");
     }
@@ -473,11 +475,14 @@ public static class PacketHtmlRenderer
     /// <summary>
     /// The running-footer text baked into the <c>@page</c> margin box. CSS
     /// <c>content:</c> is a quoted string, so it must be ASCII and carry no <c>"</c> or
-    /// <c>\</c>; the reference code and timestamp are already in that alphabet.
+    /// <c>\</c>; the reference code and timestamp are already in that alphabet. The
+    /// timestamp stays in it because its zone abbreviation comes from
+    /// <see cref="Validation.DealershipTimeZones"/> rather than from
+    /// <see cref="TimeZoneInfo"/>'s locale-dependent display names (issue #506).
     /// </summary>
-    private static string RunningFooterText(string referenceCode, string submittedUtc, string brandName)
+    private static string RunningFooterText(string referenceCode, string received, string brandName)
     {
-        var raw = $"RVS #{referenceCode} / {submittedUtc} / {brandName}";
+        var raw = $"RVS #{referenceCode} / {received} / {brandName}";
         var sb = new StringBuilder(raw.Length);
         foreach (var ch in raw)
         {

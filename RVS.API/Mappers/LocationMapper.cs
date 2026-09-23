@@ -22,6 +22,7 @@ public static class LocationMapper
             Name = entity.Name,
             Slug = entity.Slug,
             Phone = entity.Phone,
+            TimeZoneId = entity.TimeZoneId,
             Address = entity.Address.ToDto(),
             IntakeConfig = entity.IntakeConfig.ToDto(),
             EnabledCapabilities = [.. entity.EnabledCapabilities],
@@ -80,6 +81,7 @@ public static class LocationMapper
             // a unique slug from {dealership-slug}-{location-name} when so.
             Slug = string.IsNullOrWhiteSpace(dto.Slug) ? string.Empty : dto.Slug.Trim().ToLowerInvariant(),
             Phone = dto.Phone?.Trim(),
+            TimeZoneId = string.IsNullOrWhiteSpace(dto.TimeZoneId) ? null : dto.TimeZoneId.Trim(),
             Address = dto.Address is not null ? dto.Address.ToEmbedded() : new AddressEmbedded(),
             IntakeConfig = dto.IntakeConfig is not null ? dto.IntakeConfig.ToEmbedded() : new IntakeFormConfigEmbedded(),
             EnabledCapabilities = dto.EnabledCapabilities is not null ? [.. dto.EnabledCapabilities] : [],
@@ -111,6 +113,13 @@ public static class LocationMapper
         if (dto.Phone is not null)
         {
             entity.Phone = dto.Phone.Trim();
+        }
+
+        // null leaves the zone alone; an explicit blank clears it, returning the packet's
+        // Received line to UTC (issue #506).
+        if (dto.TimeZoneId is not null)
+        {
+            entity.TimeZoneId = string.IsNullOrWhiteSpace(dto.TimeZoneId) ? null : dto.TimeZoneId.Trim();
         }
 
         if (dto.Address is not null)
