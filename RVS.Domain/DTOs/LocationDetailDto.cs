@@ -12,6 +12,13 @@ public sealed record LocationDetailDto
     public string Name { get; init; } = default!;
     public string Slug { get; init; } = default!;
     public string? Phone { get; init; }
+
+    /// <summary>
+    /// IANA time-zone id for this location (issue #506), or <c>null</c> when unset — in which
+    /// case the packet's <c>Received</c> line stays in UTC.
+    /// </summary>
+    public string? TimeZoneId { get; init; }
+
     public AddressDto? Address { get; init; }
     public IntakeConfigDto? IntakeConfig { get; init; }
 

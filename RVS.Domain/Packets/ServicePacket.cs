@@ -149,8 +149,22 @@ public sealed record PacketOrigin
     public string? LocationPhone { get; init; }
     public required DateTimeOffset SubmittedAtUtc { get; init; }
 
+    /// <summary>
+    /// The location's IANA time-zone id (issue #506), or <c>null</c> when it has none — in
+    /// which case <see cref="ReceivedDisplay"/> falls back to UTC.
+    /// </summary>
+    public string? LocationTimeZoneId { get; init; }
+
     /// <summary>Short reference code derived from the service request id.</summary>
     public required string ReferenceCode { get; init; }
+
+    /// <summary>
+    /// The masthead <c>Received</c> string, rendered in the location's own time zone when one
+    /// is set and in UTC otherwise (issue #506). Derived here rather than in the renderers so
+    /// the HTML and the PDF read one value and cannot drift — the same arrangement as
+    /// <see cref="PacketCustomer.SortableName"/>.
+    /// </summary>
+    public string ReceivedDisplay => PacketReceivedFormatter.Format(SubmittedAtUtc, LocationTimeZoneId);
 }
 
 /// <summary>One diagnostic question and the customer's answer(s) to it.</summary>

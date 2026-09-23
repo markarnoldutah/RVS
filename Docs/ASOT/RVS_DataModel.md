@@ -132,7 +132,9 @@ This is Spec X-2. Nothing else reads it, and that is correct. It exists so the r
 
 ### Location — `locations`
 
-`slug`, address, phone, `intakeConfig`, `enabledCapabilities[]`, `packetConfig`. The slug is the public intake URL segment and is unique per tenant.
+`slug`, address, phone, `timeZoneId`, `intakeConfig`, `enabledCapabilities[]`, `packetConfig`. The slug is the public intake URL segment and is unique per tenant.
+
+`timeZoneId` (issue #506) is an optional IANA id such as `America/Denver`. It exists so the service packet's `Received` line reads in the time the service advisor actually took the request; `null` — every location created before #506 — leaves that line in UTC. Validated by `TimeZoneValidator` (blank is legal; otherwise a zone the host resolves, or one of the eleven in `DealershipTimeZones`, whose curated short spellings the packet renders). Set from the Manager app's location drawer; an empty string on update clears it, `null` leaves it unchanged.
 
 `packetConfig` (Spec B-6 / C-6, issue #435) is embedded: `enabled` (bool, default true), `recipients[]` (0–10 email addresses — validated by `PacketConfigValidator`), `disabledRecipients[]` (issue #439 — `{ email, reason, disabledAtUtc }`; addresses parked after a hard bounce, an address is never in both lists), `attachPdf` (default true), `includePhotos` (default true), `pasteBlockCharacterCap` (default 1000, range 100–5000), `statusLinkTtlDays` (default 30, range 1–30), `logoUrl` (optional absolute http(s) URL). Defaults are chosen so a location only needs a recipient address set. Read and written through the existing `api/locations` endpoints (`disabledRecipients` is response-only — carried across a settings save by `LocationService`, and re-enabled by re-adding its address to `recipients`); `Dealership.ServiceEmail` stays dealership-level and unread.
 

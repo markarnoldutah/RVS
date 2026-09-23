@@ -63,6 +63,9 @@ public static class PacketPdfRenderer
 
         var layout = PacketPdfLayout.Build(packet);
         var images = photoImages ?? NoImages;
+        // Document metadata dates stay UTC by PDF spec — deliberately not the location-local
+        // Received line (issue #506). Converting them would make the bytes depend on the host's
+        // time-zone database and break the determinism test below.
         var submitted = packet.Origin.SubmittedAtUtc.UtcDateTime;
 
         var masthead = MastheadSectionIds
@@ -148,7 +151,8 @@ public static class PacketPdfRenderer
                         t.Span("RVS #: ").FontSize(11f);
                         t.Span(packet.Origin.ReferenceCode).Bold().FontSize(12f);
                     });
-                    // Full timestamp (date + time, UTC) — the one Received line on the packet.
+                    // Full timestamp in the location's own zone, UTC when it has none
+                    // (issue #506) — the one Received line on the packet.
                     right.Item().AlignRight().Text($"Received: {layout.ReceivedDisplay}").FontSize(9f);
                 });
             });

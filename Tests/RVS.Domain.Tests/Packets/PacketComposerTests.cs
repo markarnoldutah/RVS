@@ -79,6 +79,7 @@ public class PacketComposerTests
     {
         LocationName = "Salt Lake Service Center",
         LocationPhone = "555-0199",
+        LocationTimeZoneId = "America/Denver",
         SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
         StatusLinkUrl = "https://rvintake.com/status/abc123",
         PasteBlock = "ELECTRICAL\nGenerator quits after ten minutes.\nhttps://rvintake.com/status/abc123",
@@ -153,6 +154,7 @@ public class PacketComposerTests
         // 3. Location + timestamp + reference code
         packet.Origin.LocationName.Should().Be("Salt Lake Service Center");
         packet.Origin.LocationPhone.Should().Be("555-0199");
+        packet.Origin.LocationTimeZoneId.Should().Be("America/Denver");
         packet.Origin.SubmittedAtUtc.Should().Be(new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero));
         packet.Origin.ReferenceCode.Should().Be("A1B2C3D4");
 
@@ -299,6 +301,48 @@ public class PacketComposerTests
         var packet = PacketComposer.Compose(request, FullContext());
 
         packet.Customer.SortableName.Should().Be(packet.Customer.FullName);
+    }
+
+    // ── Location time zone (issue #506) ──────────────────────────────────
+
+    [Fact]
+    public void Compose_ShouldCarryTheLocationTimeZoneIdOntoTheOrigin()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.Origin.LocationTimeZoneId.Should().Be("America/Denver");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Compose_WhenContextTimeZoneIdIsBlank_ShouldLeaveItNull(string? timeZoneId)
+    {
+        var context = FullContext() with { LocationTimeZoneId = timeZoneId };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Origin.LocationTimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_ShouldExposeAReceivedDisplayInTheLocationZone()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        // 14:30 UTC is 08:30 in Denver on 5 September, during daylight saving.
+        packet.Origin.ReceivedDisplay.Should().Be("2026-09-05 08:30 MDT");
+    }
+
+    [Fact]
+    public void Compose_WhenNoTimeZoneIsSet_ShouldExposeAUtcReceivedDisplay()
+    {
+        var context = FullContext() with { LocationTimeZoneId = null };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Origin.ReceivedDisplay.Should().Be("2026-09-05 14:30 UTC");
     }
 
     // ── Branding (issue #492 items 1–2) ──────────────────────────────────

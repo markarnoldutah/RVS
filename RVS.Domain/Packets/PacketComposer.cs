@@ -33,6 +33,7 @@ public static class PacketComposer
             {
                 LocationName = NullIfBlank(context.LocationName),
                 LocationPhone = NullIfBlank(context.LocationPhone),
+                LocationTimeZoneId = NullIfBlank(context.LocationTimeZoneId),
                 SubmittedAtUtc = context.SubmittedAtUtc,
                 ReferenceCode = DeriveReferenceCode(request.Id),
             },

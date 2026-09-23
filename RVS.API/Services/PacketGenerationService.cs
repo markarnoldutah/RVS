@@ -132,7 +132,13 @@ public sealed class PacketGenerationService : IPacketGenerationService
             {
                 LocationName = location?.Name,
                 LocationPhone = location?.Phone,
-                SubmittedAtUtc = request.CreatedAtUtc,
+                LocationTimeZoneId = location?.TimeZoneId,
+                // SpecifyKind, not a bare widening: CreatedAtUtc is a DateTime, and a Cosmos
+                // round-trip can hand it back with Kind=Unspecified, which DateTimeOffset reads
+                // as server-local. Harmless while the Received line was re-normalised to UTC;
+                // a wrong wall-clock hour once it is converted into a named zone (issue #506).
+                SubmittedAtUtc = new DateTimeOffset(
+                    DateTime.SpecifyKind(request.CreatedAtUtc, DateTimeKind.Utc)),
                 StatusLinkUrl = null,   // minted by #427
                 ManagerLinks = ManagerDeepLinks.Build(_managerAppUrlOptions.BaseUrl, request.Id),
                 PasteBlock = PasteBlockGenerator.Generate(

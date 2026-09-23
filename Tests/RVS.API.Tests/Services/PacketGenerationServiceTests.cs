@@ -1227,4 +1227,64 @@ public class PacketGenerationServiceTests
 
         await Task.CompletedTask;
     }
+
+    // ── Location time zone on the Received line (issue #506) ────────────
+
+    /// <summary>Captures the packet email the orchestrator sends, or null if it sent none.</summary>
+    private async Task<PacketEmailMessage?> GenerateAndCaptureEmailAsync(ServiceRequest sr, Location location)
+    {
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        return sent;
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldRenderTheReceivedLineInTheLocationTimeZone()
+    {
+        var location = LocationWithRecipients();
+        location.TimeZoneId = "America/Denver";
+        var sr = BuildRequestCreatedAt(new DateTime(2026, 9, 5, 14, 30, 0, DateTimeKind.Utc));
+
+        var sent = await GenerateAndCaptureEmailAsync(sr, location);
+
+        sent.Should().NotBeNull();
+        sent!.HtmlBody.Should().Contain("Received: 2026-09-05 08:30 MDT");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheLocationHasNoTimeZone_ShouldRenderTheReceivedLineInUtc()
+    {
+        var sr = BuildRequestCreatedAt(new DateTime(2026, 9, 5, 14, 30, 0, DateTimeKind.Utc));
+
+        var sent = await GenerateAndCaptureEmailAsync(sr, LocationWithRecipients());
+
+        sent.Should().NotBeNull();
+        sent!.HtmlBody.Should().Contain("Received: 2026-09-05 14:30 UTC");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenCreatedAtUtcHasUnspecifiedKind_ShouldStillTreatItAsUtc()
+    {
+        // A Cosmos round-trip can hand CreatedAtUtc back with Kind=Unspecified. Widening that
+        // to DateTimeOffset would read it as server-local and shift the wall clock by the
+        // host's own offset, so the orchestrator pins the kind explicitly. Note this only
+        // discriminates on a non-UTC host — CI runners are UTC, where both paths agree.
+        var location = LocationWithRecipients();
+        location.TimeZoneId = "America/Denver";
+        var unspecified = new DateTime(2026, 9, 5, 14, 30, 0, DateTimeKind.Unspecified);
+        var sr = BuildRequestCreatedAt(unspecified);
+
+        var sent = await GenerateAndCaptureEmailAsync(sr, location);
+
+        sent.Should().NotBeNull();
+        sent!.HtmlBody.Should().Contain("Received: 2026-09-05 08:30 MDT");
+    }
 }

@@ -61,6 +61,7 @@ public class DealershipLocationDtoTests
             Name = "Main Service Center",
             Slug = "main-service-center",
             Phone = "555-5678",
+            TimeZoneId = "America/Denver",
             Address = new AddressDto
             {
                 Address1 = "123 Main St",
@@ -78,8 +79,16 @@ public class DealershipLocationDtoTests
 
         dto.Address.Should().NotBeNull();
         dto.Address!.City.Should().Be("Salt Lake City");
+        dto.TimeZoneId.Should().Be("America/Denver");
         dto.IntakeConfig.Should().NotBeNull();
         dto.IntakeConfig!.AllowAnonymousIntake.Should().BeFalse();
+    }
+
+    [Fact]
+    public void LocationDetailDto_TimeZoneId_ShouldDefaultToNull()
+    {
+        // An unset zone is legal and leaves the packet's Received line in UTC (issue #506).
+        new LocationDetailDto().TimeZoneId.Should().BeNull();
     }
 
     [Fact]

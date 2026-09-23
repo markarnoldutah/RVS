@@ -198,6 +198,22 @@
                         </MudItem>
                     </MudGrid>
 
+                    @* Time zone — follows from the address; drives the packet Received line (issue #506) *@
+                    <MudStack Spacing="1">
+                        <MudSelect T="string" @bind-Value="_form.TimeZoneId"
+                                   Label="Time zone"
+                                   Variant="Variant.Filled"
+                                   Margin="Margin.Dense"
+                                   Clearable="true"
+                                   HelperText="Sets the Received time shown on service packets. Leave blank to show UTC."
+                                   HelperTextOnFocus="false">
+                            @foreach (var tz in DealershipTimeZones.All)
+                            {
+                                <MudSelectItem T="string" Value="@tz.IanaId">@tz.DisplayName</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudStack>
+
                     @* Capabilities Section *@
                     @if (_tenantCapabilities.Count > 0)
                     {
@@ -253,7 +269,7 @@
     //       – MaxFileSizeMb / MaxAttachments (numeric inputs)
     //       – AcceptedFileTypes (chip-list editor)
     //       – AiContext (multiline text area for system-prompt augmentation)
-    //   • Operating hours / timezone
+    //   • Operating hours (the time zone itself is now editable — issue #506)
     //   • Service email and dedicated SMS sender phone for ACS notifications
     //   • Branding overrides (logo URL, accent color)
     //   • Default service-advisor / round-robin queue assignment rules
@@ -381,6 +397,7 @@
         {
             Name = location.Name,
             Phone = location.Phone,
+            TimeZoneId = location.TimeZoneId,
             Address1 = location.Address?.Address1,
             Address2 = location.Address?.Address2,
             City = location.Address?.City,
@@ -422,6 +439,10 @@
                 Name = _form.Name ?? string.Empty,
                 Slug = _editingLocationId is not null ? _editingLocationSlug : null,
                 Phone = _form.Phone,
+                // The drawer always shows the current zone, so an empty string here is a
+                // deliberate clear rather than "unchanged" — which is what makes the
+                // picker's Clearable actually clear (issue #506).
+                TimeZoneId = _form.TimeZoneId ?? string.Empty,
                 Address = new AddressDto
                 {
                     Address1 = _form.Address1,
@@ -496,6 +517,7 @@
     {
         public string? Name { get; set; }
         public string? Phone { get; set; }
+        public string? TimeZoneId { get; set; }
         public string? Address1 { get; set; }
         public string? Address2 { get; set; }
         public string? City { get; set; }

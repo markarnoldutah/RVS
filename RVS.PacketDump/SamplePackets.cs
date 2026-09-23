@@ -50,6 +50,9 @@ internal static class SamplePackets
             {
                 LocationName = "Salt Lake Service Center",
                 LocationPhone = "(801) 555-0199",
+                // Set so a print test exercises the dealership-local Received line (issue
+                // #506); Minimal() is left zone-less so the UTC fallback is printed too.
+                LocationTimeZoneId = "America/Denver",
                 SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
                 ReferenceCode = "A1B2C3D4",
             },

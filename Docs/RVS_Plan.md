@@ -27,7 +27,7 @@ The target is **one mobile technician live on a paid 30-day pilot in the fewest 
 
 | Step | Work | Issues | Why it gates the first tech |
 |---|---|---|---|
-| 1 | Packet layout + masthead + PDF photo render | #492 (items 1–6, 8) | A packet with an "RV ServiceFlow" masthead or blank photo cells is not shippable. #492 shipped the seams and stopped HEIC from failing the whole render — see step 2. **Defer** the follow-ups it split off: #505 (per-location branding UI), #506 (packet local-time), #507 (structured-assessment spike). |
+| 1 | Packet layout + masthead + PDF photo render | #492 (items 1–6, 8) | A packet with an "RV ServiceFlow" masthead or blank photo cells is not shippable. #492 shipped the seams and stopped HEIC from failing the whole render — see step 2. **Defer** the follow-ups it split off: #505 (per-location branding UI) — #506 (packet local-time) and #507 (structured-assessment spike) have since been built. |
 | 2 | Transcode HEIC/HEIF uploads to JPEG server-side | #508 | Confirmed root cause of "photos don't appear": iPhone uploads are HEIC, which QuestPDF's decoder and most mail clients can't render. #492's mitigation shows a placeholder instead of crashing; the photo still doesn't show until this lands. |
 | 3 | Finalise the issue-category vocabulary | #452 | The packet's most differentiating section. Domain work — start day one, alongside everything. |
 | 4 | Per-category fallback diagnostic questions | #453 | The cheapest quality lever in the product; makes the packet read as expert with the AI switched off. Needs #452. |
@@ -52,7 +52,6 @@ Non-code blockers: the one-page, phone-signable design-partner agreement carryin
 | Manager app to thin scope (build item 4) | epic #420 → #443–#448, plus #498, #468, #470 | The dealer-group pitch. The mobile tech does not use it. Build item 5 (C-7) no longer stands apart from this row — #498 folded it in; see Spec C-7 and the Sep 11 2026 decision log entry. |
 | Per-location packet branding UI (brand name + logo) | #505 | Needs the manager location-config screen (#470 territory). #492 already ships the default "RV Intake" masthead. |
 | Stripe billing + trial (build item 7) | epic #425, #478 | Three shops running. First five customers get a hand-sent invoice + Stripe link. |
-| Packet "Received" line in dealership-local time | #506 | Cosmetic; falls back to a `… UTC` string until a Location timezone field exists. |
 | Structured preliminary assessment (probable cause / fix / parts) | #507 | Spike, then its own issue(s). Architecture where the #452/#453 craft work is cheaper first (scope filter #3). |
 | Intake dealer-capability search when no slug is supplied | #471 | Explicitly future state. |
 
