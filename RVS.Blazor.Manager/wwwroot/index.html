@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RVS Service Flow</title>
+    <title>RV Intake Manager</title>
     <base href="/" />
     <!-- Self-hosted Space Grotesk (Spec THEME-1): the intake PWA has to render in brand
          from cache in a service bay, so no Google Fonts CDN dependency here. -->
@@ -27,9 +27,18 @@
 <body>
     <div id="app">
         <!-- Loading screen — replaced by Blazor once the WASM runtime initializes.
-             js/splash-mode.js picks the full splash or the minimal post-login spinner. -->
+             js/splash-mode.js picks the full splash or the minimal post-login spinner, and
+             grounds both in the theme the user last chose. -->
         <script src="js/splash-mode.js"></script>
         <style>
+            /* A plain surface, not a photograph. Manager is an all-hours console, and a
+               cover-scaled hero re-scaled and flashed through every authentication state
+               change — splash, AuthStatePanel, app (#703). All three now paint the same
+               ground, so the only thing that changes is the content.
+
+               These hex values mirror ManagerTheme's Background / TextPrimary / Primary
+               (RvsBrand, Spec THEME-1) and are repeated here only because this markup
+               renders before MudThemeProvider exists. Change them with RvsBrand.cs. */
             #splash-bg {
                 display: flex;
                 flex-direction: column;
@@ -37,22 +46,50 @@
                 justify-content: center;
                 min-height: 100vh;
                 font-family: 'Space Grotesk', Roboto, Helvetica, Arial, sans-serif;
-                background:
-                    url('images/tetons-mobile.jpg') center 25% / cover no-repeat;
+                background: #FAF8F3;            /* RvsBrand.PaperNeutral */
+                color: #20344A;                 /* RvsBrand.TextOnPaper */
+                --splash-track: rgba(32, 52, 74, 0.26);
+                --splash-bar: #C1502E;          /* RvsBrand.Accent */
             }
-            @media (min-width: 768px) {
-                #splash-bg {
-                    background:
-                        url('images/tetons-desktop.jpg') center 40% / cover no-repeat;
-                }
+            html[data-theme="dark"] #splash-bg {
+                background: #1B2A3C;            /* RvsBrand.InkDarkSurface */
+                color: #F0ECE1;                 /* RvsBrand.TextOnInk */
+                --splash-track: rgba(240, 236, 225, 0.35);
+                --splash-bar: #E8956D;          /* RvsBrand.AccentOnDark */
             }
-            /* Minimal splash on return from auth callback — plain background, spinner only */
-            html[data-splash="minimal"] #splash-bg {
-                background: #FAF8F3;
-                min-height: 100vh;
+            html[data-theme="highcontrast"] #splash-bg {
+                background: #000000;
+                color: #FFFFFF;
+                --splash-track: #666666;
+                --splash-bar: #FFFF00;
             }
+            /* Minimal splash on return from the auth callback — same ground, bar only. */
             html[data-splash="minimal"] #splash-bg .splash-brand { display: none; }
-            html[data-splash="minimal"] .splash-bar > div { background: #C1502E; }
+            .splash-brand h3 {
+                margin: 0 0 8px;
+                font-weight: 500;
+                font-size: 1.5rem;
+            }
+            .splash-brand p {
+                margin: 0 0 24px;
+                font-size: 0.875rem;
+                text-align: center;
+                opacity: 0.7;
+            }
+            .splash-bar {
+                width: 200px;
+                height: 4px;
+                background: var(--splash-track);
+                border-radius: 2px;
+                overflow: hidden;
+            }
+            .splash-bar > div {
+                width: 40%;
+                height: 100%;
+                background: var(--splash-bar);
+                border-radius: 2px;
+                animation: loading-progress 1.5s ease-in-out infinite;
+            }
             @keyframes loading-progress {
                 0%   { transform: translateX(-150%); }
                 100% { transform: translateX(350%); }
@@ -60,17 +97,11 @@
         </style>
         <div id="splash-bg">
             <div class="splash-brand">
-                <h3 style="margin:0 0 8px;font-weight:500;font-size:1.5rem;color:#ffffff;text-shadow:0 2px 4px rgba(0,0,0,0.5);">
-                    RVS Service Flow
-                </h3>
-                <p style="margin:0 0 24px;font-size:0.875rem;color:#F6F1E7;text-shadow:0 1px 3px rgba(0,0,0,0.5);text-align:center;">
-                    Loading application&hellip;
-                </p>
+                <h3>RV Intake Manager</h3>
+                <p>Loading application&hellip;</p>
             </div>
-            <div class="splash-bar" style="width:200px;height:4px;background:rgba(255,255,255,0.3);border-radius:2px;overflow:hidden;"
-                 role="progressbar" aria-label="Loading application">
-                <div style="width:40%;height:100%;background:#ffffff;border-radius:2px;
-                            animation:loading-progress 1.5s ease-in-out infinite;"></div>
+            <div class="splash-bar" role="progressbar" aria-label="Loading application">
+                <div></div>
             </div>
             <!-- Reserves the same vertical space as AuthStatePanel's (hidden) MudButton Size.Large
                  so the centered stack lines up identically and the swap to AuthStatePanel is jank-free. -->

@@ -57,11 +57,11 @@ public class BrandWordmarkSvgTests
     [Fact]
     public void Build_ShouldCarryAnAccessibleNameAndBeHiddenFromTheAccessibilityTreeTwice()
     {
-        var svg = BrandWordmarkSvg.Build(BrandWordmarkVariant.Horizontal, reversed: false, height: "40px", title: "RVS Manager home");
+        var svg = BrandWordmarkSvg.Build(BrandWordmarkVariant.Horizontal, reversed: false, height: "40px", title: "RV Intake Manager home");
 
         svg.Should().Contain("role=\"img\"");
-        svg.Should().Contain("aria-label=\"RVS Manager home\"");
-        svg.Should().Contain("<title>RVS Manager home</title>");
+        svg.Should().Contain("aria-label=\"RV Intake Manager home\"");
+        svg.Should().Contain("<title>RV Intake Manager home</title>");
         svg.Should().Contain("height=\"40px\"");
     }
 

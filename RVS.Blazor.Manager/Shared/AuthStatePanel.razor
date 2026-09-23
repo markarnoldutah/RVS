@@ -1,18 +1,25 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; display: flex; align-items: center; justify-content: center; background: url('images/tetons-desktop.jpg') center 40%/cover no-repeat fixed;">
+@* Covers the viewport while authentication resolves. It used to paint the Tetons photo, as
+   did index.html's splash and the unauthenticated layout, and a cover-scaled hero re-scaled
+   and flashed at every handover between them (#703). All three now use the app's own ground,
+   which here means the active MudTheme — so this follows light, dark and high contrast
+   without naming a colour, and only the content changes as the state does. *@
+<div class="auth-state-panel">
     <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="0">
-        <MudText Typo="Typo.h5" Style="margin: 0 0 8px; font-weight: 500; font-size: 1.5rem; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
-            RVS Service Flow
-        </MudText>
-        <MudText Typo="Typo.body2" Style="margin: 0 0 24px; font-size: 0.875rem; color: #e0e0e0; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
-            @Message
-        </MudText>
+        @* Typo + MudBlazor spacing only — no sizes or weights of our own. Typo.h5 is already
+           Space Grotesk 500 at 1.5rem and Typo.body2 0.875rem (RvsTypography), which is what
+           index.html's splash copies so the handover to this panel does not jump. *@
+        <MudText Typo="Typo.h5" Class="mb-2">RV Intake Manager</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="mb-6">@Message</MudText>
         @if (!string.IsNullOrEmpty(ErrorDetail))
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true"
-                      Style="margin: 0 0 16px; max-width: 600px; word-break: break-all;">
+            @* Filled, not Outlined: an outlined alert is transparent, and Warning's #C98A2C on
+               the old photo was unreadable (#703). Filled Error keeps the detail on a solid
+               surface with contrast text on every ground this panel can have. *@
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true"
+                      Style="margin: 0 0 16px; max-width: 600px; overflow-wrap: anywhere;">
                 <MudText Typo="Typo.caption">@ErrorDetail</MudText>
             </MudAlert>
         }

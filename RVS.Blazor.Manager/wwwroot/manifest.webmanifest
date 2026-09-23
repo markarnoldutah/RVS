@@ -1,6 +1,6 @@
 {
-  "name": "RVS Service Flow Manager",
-  "short_name": "RVS Manager",
+  "name": "RV Intake Manager",
+  "short_name": "Intake Manager",
   "start_url": "./board",
   "scope": "./",
   "display": "standalone",

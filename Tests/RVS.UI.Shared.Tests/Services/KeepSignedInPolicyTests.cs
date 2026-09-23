@@ -91,23 +91,6 @@ public class KeepSignedInPolicyTests
     }
 
     [Theory]
-    [InlineData(KeepSignedInState.On, "On")]
-    [InlineData(KeepSignedInState.Off, "Off")]
-    [InlineData(KeepSignedInState.NotSet, "Not set")]
-    public void GetLabel_ShouldDescribeEachState(KeepSignedInState state, string expected)
-    {
-        KeepSignedInPolicy.GetLabel(state).Should().Be(expected);
-    }
-
-    [Fact]
-    public void GetLabel_WhenStateIsUndefined_ShouldThrowArgumentOutOfRangeException()
-    {
-        var act = () => KeepSignedInPolicy.GetLabel((KeepSignedInState)99);
-
-        act.Should().Throw<ArgumentOutOfRangeException>();
-    }
-
-    [Theory]
     [InlineData(KeepSignedInState.On, true)]
     [InlineData(KeepSignedInState.Off, false)]
     public void ToPersist_WhenStateIsAnAnswer_ShouldReturnWhetherToKeepTheSignIn(KeepSignedInState state, bool expected)
@@ -118,7 +101,7 @@ public class KeepSignedInPolicyTests
     [Fact]
     public void ToPersist_WhenStateIsNotSet_ShouldThrowArgumentOutOfRangeException()
     {
-        // "Not set" is reached by resetting, never by storing an answer.
+        // "Not set" is where a device starts, never something the menu stores.
         var act = () => KeepSignedInPolicy.ToPersist(KeepSignedInState.NotSet);
 
         act.Should().Throw<ArgumentOutOfRangeException>();

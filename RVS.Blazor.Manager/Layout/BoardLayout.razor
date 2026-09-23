@@ -10,7 +10,7 @@
 <MudSnackbarProvider />
 <KeepSignedInPrompt />
 
-<MudLayout Style="@GetLayoutStyle()">
+<MudLayout>
     @* No Color= : the app bar takes AppbarBackground (Ink) from the theme. Color="Color.Primary"
        would paint it Rust, which the brand reserves for action, not structure (Spec THEME-1). *@
     <MudAppBar Elevation="2">
@@ -22,12 +22,12 @@
                            aria-label="Toggle navigation menu"
                            OnClick="ToggleDrawer" />
         }
-        <MudLink Href="/" aria-label="RVS Manager home" Class="d-flex align-center ml-1">
+        <MudLink Href="/" aria-label="RV Intake Manager home" Class="d-flex align-center ml-1">
             <BrandWordmark Variant="BrandWordmarkVariant.Icon" Reversed="true" Height="30px" Title="RV Intake" />
         </MudLink>
-        @* AppbarText carries the colour now — see MainLayout. *@
+        @* "Intake Manager" completes the badge's "RV" — see MainLayout. *@
         <MudText Typo="Typo.h6" Class="ml-3">
-            RVS Manager
+            Intake Manager
         </MudText>
         <MudSpacer />
         @if (_isAuthorized)
@@ -102,8 +102,8 @@
     {
         if (firstRender)
         {
+            // The theme is already restored in Program.cs, before the first render (#703).
             await AppState.InitializeAsync();
-            await ThemeService.InitializeAsync();
         }
     }
 
@@ -167,12 +167,5 @@
         return _isAuthorized
             ? string.Empty
             : "min-height: calc(100vh - var(--mud-appbar-height));";
-    }
-
-    private string GetLayoutStyle()
-    {
-        return _isAuthorized
-            ? string.Empty
-            : "background: url('images/tetons-desktop.jpg') center 40%/cover no-repeat fixed; min-height: 100vh;";
     }
 }

@@ -37,35 +37,33 @@
                     </MudStack>
                 </div>
                 <MudDivider />
-                @* Change or reset this device's "Keep me signed in" answer (issue #616). The saved
-                   sign-in is added or removed at once; the current tab stays signed in either way.
-                   Whether Auth0 asks for the password is decided when the app starts
-                   (KeepSignedInPolicy, Program.cs), so the rest applies from the next app load. *@
+                @* Change this device's "Keep me signed in" answer (issue #616). The saved sign-in is
+                   added or removed at once; the current tab stays signed in either way. Whether Auth0
+                   asks for the password is decided when the app starts (KeepSignedInPolicy,
+                   Program.cs), so the rest applies from the next app load.
+
+                   Trimmed in #703: the radios already say which answer is stored, so the "Currently:"
+                   line and the "Ask me again at next sign-in" reset are gone — re-asking is the same
+                   decision the radios make, spelled out twice. The shared-computer warning stays, but
+                   only on the answer it warns about. *@
                 <div class="px-4 py-2" style="max-width: 280px;">
                     <MudStack Spacing="1">
                         <MudText Typo="Typo.subtitle2" Style="@($"color: {MenuItemTextColor}")">Keep me signed in on this device</MudText>
                         @if (_keepSignedIn is { } keepSignedIn)
                         {
-                            <MudText Typo="Typo.caption">Currently: @KeepSignedInPolicy.GetLabel(keepSignedIn)</MudText>
                             <MudRadioGroup T="KeepSignedInState" Value="keepSignedIn" ValueChanged="OnKeepSignedInChangedAsync">
                                 <MudStack Spacing="0">
                                     <MudRadio T="KeepSignedInState" Value="KeepSignedInState.On" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">On</MudRadio>
                                     <MudRadio T="KeepSignedInState" Value="KeepSignedInState.Off" Dense="true" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;">Off</MudRadio>
                                 </MudStack>
                             </MudRadioGroup>
-                            <MudText Typo="Typo.caption" Color="@(keepSignedIn == KeepSignedInState.On ? Color.Warning : Color.Default)">
-                                @KeepSignedInPolicy.SharedComputerWarning
-                            </MudText>
-                            <MudText Typo="Typo.caption">
-                                This tab stays signed in. The change applies the next time you open the app.
-                            </MudText>
-                            @if (keepSignedIn != KeepSignedInState.NotSet)
+                            @if (keepSignedIn == KeepSignedInState.On)
                             {
-                                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
-                                           Style="align-self: flex-start;" OnClick="ResetKeepSignedInAsync">
-                                    Ask me again at next sign-in
-                                </MudButton>
+                                <MudText Typo="Typo.caption" Color="Color.Warning">
+                                    @KeepSignedInPolicy.SharedComputerWarning
+                                </MudText>
                             }
+                            <MudText Typo="Typo.caption">Applies next time you open the app.</MudText>
                         }
                         else
                         {
@@ -132,12 +130,6 @@
     private async Task OnKeepSignedInChangedAsync(KeepSignedInState state)
     {
         await JS.InvokeVoidAsync("rvsSession_setPersist", KeepSignedInPolicy.ToPersist(state));
-        await RefreshKeepSignedInAsync();
-    }
-
-    private async Task ResetKeepSignedInAsync()
-    {
-        await JS.InvokeVoidAsync("rvsSession_resetPreference");
         await RefreshKeepSignedInAsync();
     }
 

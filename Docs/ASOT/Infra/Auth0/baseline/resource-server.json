@@ -1,7 +1,7 @@
 {
   "allow_offline_access": true,
   "enforce_policies": true,
-  "name": "RV Service Flow API",
+  "name": "RV Intake API",
   "scopes": [
     {
       "description": "View service request details",
