@@ -106,12 +106,6 @@ public class ServiceRequest : EntityBase
     public DateTime? ScheduledDateUtc { get; set; }
 
     /// <summary>
-    /// Assigned service bay identifier. Null until assigned.
-    /// </summary>
-    [JsonProperty("assignedBayId")]
-    public string? AssignedBayId { get; set; }
-
-    /// <summary>
     /// Assigned technician identifier. Null until assigned.
     /// </summary>
     [JsonProperty("assignedTechnicianId")]

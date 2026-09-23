@@ -182,7 +182,7 @@ This is the honest state of `../RVS_Spec.md`.
 Built for capability the Overview archives. Deleting this is real work and is not currently in the build order.
 
 - **Analytics** — `AnalyticsController`, `AnalyticsService`, `IAnalyticsService`, `GetForAnalyticsAsync`, `ServiceRequestAnalyticsResponseDto`
-- **Scheduling / assignment fields** on `ServiceRequest` — `assignedTechnicianId`, `assignedBayId`, `scheduledDateUtc`, `requiredSkills`. (`boardSequence` is **not** on this list: it orders the Kanban board's columns, and the board is kept — #456 closed `not_planned`, Plan decision log Sep 21 2026)
+- ~~**Scheduling / assignment fields** on `ServiceRequest`~~ — **no longer a descope target.** #459 closed `not_planned` on 2026-09-22, so `assignedTechnicianId`, `scheduledDateUtc` and `requiredSkills` stay. `assignedBayId` was removed separately in #713, because retiring `ServiceRequestEdit` left it with no editor. (`boardSequence` was never on this list: it orders the Kanban board's columns, and the board is kept — #456 closed `not_planned`, Plan decision log Sep 21 2026)
 - **Messaging** — `MessageEmbedded` is defined and referenced nowhere
 - **Scaffolding** — `WeatherForecastController`, `WeatherForecast.cs`
 - **`rv-warranty-rules`** — seeded, no repository, never read

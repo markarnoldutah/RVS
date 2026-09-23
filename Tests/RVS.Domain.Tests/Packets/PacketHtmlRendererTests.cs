@@ -828,10 +828,10 @@ public class PacketHtmlRendererTests
     [Fact]
     public void Render_WhenAManagerAppUrlIsGiven_ShouldAddANoteWithADeepLink()
     {
-        var html = PacketHtmlRenderer.Render(FullPacket(), "https://manager.example/service-requests/sr_1/edit");
+        var html = PacketHtmlRenderer.Render(FullPacket(), "https://manager.example/sr/sr_1");
 
         html.Should().Contain("Some images can only be shown in the manager app");
-        html.Should().Contain("href=\"https://manager.example/service-requests/sr_1/edit\"");
+        html.Should().Contain("href=\"https://manager.example/sr/sr_1\"");
     }
 
     [Fact]

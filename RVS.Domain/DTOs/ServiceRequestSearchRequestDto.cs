@@ -10,7 +10,6 @@ public sealed record ServiceRequestSearchRequestDto
     public string? IssueCategory { get; init; }
     public string? LocationId { get; init; }
     public string? AssignedTechnicianId { get; init; }
-    public string? AssignedBayId { get; init; }
     public string? AssetId { get; init; }
     public DateTime? DateFrom { get; init; }
     public DateTime? DateTo { get; init; }

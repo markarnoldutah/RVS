@@ -44,7 +44,6 @@ public class ServiceRequestMapperApplyUpdateTests
             HasExtendedWarranty = "  Yes  ",
             ApproxPurchaseDate = "  March 2023  ",
             AssignedTechnicianId = "  tech_1  ",
-            AssignedBayId = "  bay_2  ",
             ScheduledDateUtc = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc),
             RequiredSkills = ["electrical", "plumbing"],
             BoardSequence = 4
@@ -62,7 +61,6 @@ public class ServiceRequestMapperApplyUpdateTests
         entity.HasExtendedWarranty.Should().Be("Yes");
         entity.ApproxPurchaseDate.Should().Be("March 2023");
         entity.AssignedTechnicianId.Should().Be("tech_1");
-        entity.AssignedBayId.Should().Be("bay_2");
         entity.ScheduledDateUtc.Should().Be(new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc));
         entity.RequiredSkills.Should().BeEquivalentTo(["electrical", "plumbing"]);
         entity.BoardSequence.Should().Be(4);

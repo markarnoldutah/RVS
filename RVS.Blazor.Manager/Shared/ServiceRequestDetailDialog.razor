@@ -591,6 +591,36 @@
                             <MudDivider Class="my-4" />
                         }
 
+                        @* Priority — the retired ServiceRequestEdit page was the only other editor (#713). *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Priority</MudText>
+                            @if (_priorityUpdating)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                        </MudStack>
+                        <MudSelect T="string" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   FullWidth="true"
+                                   Value="@_selectedPriority"
+                                   ValueChanged="OnPriorityChangeAsync"
+                                   AnchorOrigin="Origin.BottomCenter"
+                                   TransformOrigin="Origin.TopCenter"
+                                   Dense="true"
+                                   Class="compact-field">
+                            @foreach (var priority in _priorities)
+                            {
+                                <MudSelectItem T="string" Value="@priority">
+                                    <span style="font-size: 0.875rem;">@priority</span>
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                        @if (_priorityError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_priorityError</MudAlert>
+                        }
+                        <MudDivider Class="my-4" />
+
                         @* Customer status note (Spec C-9) *@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
                             <MudText Typo="Typo.body2" Style="font-weight: 700;">Customer status note</MudText>
@@ -983,6 +1013,10 @@
     private string? _selectedStatus;
     private bool _statusUpdating;
     private string? _statusError;
+    private static readonly string[] _priorities = ["Critical", "High", "Medium", "Low"];
+    private string? _selectedPriority;
+    private bool _priorityUpdating;
+    private string? _priorityError;
     private bool _saving;
     private CreateForm _createForm = new();
     private MudForm? _createFormRef;
@@ -1154,6 +1188,8 @@
         _attachmentUrls.Clear();
         _statusError = null;
         _selectedStatus = null;
+        _priorityError = null;
+        _selectedPriority = null;
 
         if (string.IsNullOrEmpty(ServiceRequestId))
         {
@@ -1180,7 +1216,7 @@
             var categoriesTask = EnsureIssueCategoriesAsync();
             _sr = await srTask;
             await categoriesTask;
-            RefreshAllowedStatuses();
+            RefreshSidebarSelections();
         }
         catch (AccessTokenNotAvailableException ex)
         {
@@ -1237,11 +1273,12 @@
             string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase))?.Name ?? code;
     }
 
-    private void RefreshAllowedStatuses()
+    private void RefreshSidebarSelections()
     {
         if (_sr is null) return;
         _allowedStatuses = ["New", "InProgress", "WaitingOnCustomer", "WaitingOnParts", "Completed", "Cancelled"];
         _selectedStatus = _sr.Status;
+        _selectedPriority = _sr.Priority ?? "Medium";
     }
 
     @* The API's ApplyUpdate is a full overwrite, not a merge: every field absent from the
@@ -1259,7 +1296,6 @@
         HasExtendedWarranty = _sr.HasExtendedWarranty,
         ApproxPurchaseDate = _sr.ApproxPurchaseDate,
         AssignedTechnicianId = _sr.AssignedTechnicianId,
-        AssignedBayId = _sr.AssignedBayId,
         ScheduledDateUtc = _sr.ScheduledDateUtc,
         RequiredSkills = _sr.RequiredSkills,
         BoardSequence = _sr.BoardSequence
@@ -1283,7 +1319,7 @@
             var request = BuildUpdateRequest(combinedSummary) with { Status = newStatus };
 
             _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
-            RefreshAllowedStatuses();
+            RefreshSidebarSelections();
             await OnChanged.InvokeAsync();
         }
         catch (Exception ex)
@@ -1293,6 +1329,37 @@
         finally
         {
             _statusUpdating = false;
+        }
+    }
+
+    private async Task OnPriorityChangeAsync(string newPriority)
+    {
+        if (_sr is null || _dealershipId is null || string.IsNullOrEmpty(newPriority)) return;
+        if (string.Equals(newPriority, _sr.Priority, StringComparison.OrdinalIgnoreCase)) return;
+
+        _priorityUpdating = true;
+        _priorityError = null;
+        StateHasChanged();
+
+        try
+        {
+            var combinedSummary = ActivityLogFormatter.PrependSystemEntry(
+                _sr.TechnicianSummary,
+                $"Priority changed to {newPriority}");
+
+            var request = BuildUpdateRequest(combinedSummary) with { Priority = newPriority };
+
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            RefreshSidebarSelections();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _priorityError = ex.Message;
+        }
+        finally
+        {
+            _priorityUpdating = false;
         }
     }
 
@@ -1465,7 +1532,6 @@
                 HasExtendedWarranty = _sr.HasExtendedWarranty,
                 ApproxPurchaseDate = _sr.ApproxPurchaseDate,
                 AssignedTechnicianId = _sr.AssignedTechnicianId,
-                AssignedBayId = _sr.AssignedBayId,
                 ScheduledDateUtc = scheduledUtc,
                 RequiredSkills = _sr.RequiredSkills
             };

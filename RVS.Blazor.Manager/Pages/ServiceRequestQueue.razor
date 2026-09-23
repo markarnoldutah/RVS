@@ -81,15 +81,6 @@
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
                     <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Assigned bay</MudText>
-                        <MudTextField T="string" @bind-Value="_search.AssignedBayId"
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      Placeholder="Bay ID" />
-                    </MudStack>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudStack Spacing="1">
                         <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Asset / VIN</MudText>
                         <MudTextField T="string" @bind-Value="_search.AssetId"
                                       Variant="Variant.Outlined"
@@ -282,7 +273,6 @@
                 IssueCategory = _search.IssueCategory,
                 LocationId = _search.LocationId,
                 AssignedTechnicianId = _search.AssignedTechnicianId,
-                AssignedBayId = _search.AssignedBayId,
                 AssetId = _search.AssetId,
                 Priority = _search.Priority,
                 DateFrom = _dateFrom?.ToUniversalTime(),
@@ -366,7 +356,6 @@
         public string? IssueCategory { get; set; }
         public string? LocationId { get; set; }
         public string? AssignedTechnicianId { get; set; }
-        public string? AssignedBayId { get; set; }
         public string? AssetId { get; set; }
         public string? Priority { get; set; }
     }
