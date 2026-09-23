@@ -1,11 +1,20 @@
 # RV Intake — Logo Asset Kit
 
-> **Status: the logo kit's README as shipped (issue #702), kept as the asset inventory.**
+> **Status: the logo kit's README as shipped, kept as the asset inventory. Re-issued
+> September 22 2026 with the revised lockup** — the badge already reads "RV", so the text
+> beside it now says only "Intake"; the full two-tone "RV Intake" survives only in the
+> text-only files, which have no badge to repeat. Only the SVG lockups changed; the favicon,
+> Apple touch and Android/PWA rasters are byte-identical to the first issue (#702) and were
+> left alone.
+>
 > The SVG sources live in `RVS.UI.Shared/wwwroot/brand/`; the raster icons were dropped into
-> each app's `wwwroot/`. One departure from the advice below: app chrome does **not** reference
-> the SVGs by URL. They carry live `<text>`, and a browser will not load an external
-> `@font-face` into an SVG used as an image, so the wordmark would render in a system font.
-> The `BrandWordmark` component inlines the mark instead. The `email/` and `print/` assets are
+> each app's `wwwroot/`. Two departures from the advice below. App chrome does **not**
+> reference the SVGs by URL: they carry live `<text>`, and a browser will not load an external
+> `@font-face` into an SVG used as an image, so the wordmark would render in a system font —
+> the `BrandWordmark` component inlines the mark instead. And the repo's copies name the
+> typeface as a CSS font stack with `font-weight="700"` rather than the kit's
+> `font-family="Space Grotesk Bold"`, which no browser resolves: the family is
+> "Space Grotesk", the boldness is a weight. The `email/`, `print/` and `social/` assets are
 > not wired up yet — packet letterhead was left to its own issue.
 
 Concept: Confident Wordmark (Concept D). Colorway: **Denim & Rust**.
@@ -26,9 +35,10 @@ Font: **Space Grotesk**, Bold weight for all lockups (Google Fonts, OFL-licensed
 ### `svg/` — vector sources, edit these first
 - `icon.svg` — square badge, rounded corners baked in. Use for favicons, touch icons, anywhere a "classic" square icon is wanted.
 - `icon-maskable.svg` — same mark, full-bleed square background, content kept inside Android's safe zone. Use **only** for Android/PWA maskable icons — the OS applies its own mask shape.
-- `wordmark-horizontal.svg` / `wordmark-horizontal-reversed.svg` — badge + "RV Intake", for light and dark backgrounds respectively.
+- `wordmark-horizontal.svg` / `wordmark-horizontal-reversed.svg` — badge + "Intake" (the badge already reads "RV," so the text completes it rather than repeating it), for light and dark backgrounds respectively.
 - `wordmark-text-only.svg` / `wordmark-text-only-reversed.svg` — no badge, just the wordmark. Use in narrow headers, letterhead, print, anywhere a square badge doesn't fit.
-- `wordmark-stacked.svg` — badge above wordmark, centered. Use for square placements (splash screens, social profile pictures if you ever want text baked in).
+- `wordmark-stacked.svg` — badge above "Intake" (same reasoning as the horizontal lockup), centered. Use for square placements (splash screens, social profile pictures if you ever want text baked in).
+- `wordmark-text-only.svg` / `wordmark-text-only-reversed.svg` — the only files that still show the full two-tone "RV Intake" — there's no badge alongside them, so no repetition. Use these wherever you want the full name spelled out in text.
 
 All are plain SVG with hex colors — no external font dependency at render time (text is live, not outlined, so if you edit these in another tool you'll need Space Grotesk Bold installed, or convert text to paths first).
 

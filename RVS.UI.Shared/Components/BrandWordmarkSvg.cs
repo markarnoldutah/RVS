@@ -15,6 +15,11 @@ namespace RVS.UI.Shared.Components;
 /// Inlined, the self-hosted Space Grotesk applies and it renders in brand.
 /// </para>
 /// <para>
+/// The badge already reads "RV", so the text beside it says only "Intake" — the lockup
+/// completes the name instead of repeating it. The full two-tone "RV Intake" survives in
+/// <see cref="BrandWordmarkVariant.TextOnly"/>, which has no badge to repeat.
+/// </para>
+/// <para>
 /// The standalone files in <c>wwwroot/brand/</c> stay the editable sources and are what to
 /// hand to anyone outside the app; the geometry here mirrors them.
 /// </para>
@@ -46,8 +51,8 @@ public static class BrandWordmarkSvg
         var viewBox = variant switch
         {
             BrandWordmarkVariant.Icon => "0 0 140 140",
-            BrandWordmarkVariant.TextOnly => "142 0 289 140",
-            _ => "0 0 431.2 140"
+            BrandWordmarkVariant.TextOnly => "0 0 289.2 98",
+            _ => "0 0 340.7 140"
         };
 
         var svg = new StringBuilder(512);
@@ -60,12 +65,23 @@ public static class BrandWordmarkSvg
             svg.AppendFormat(CultureInfo.InvariantCulture, BadgeMarkup, badgeFill, badgeText, FontStack);
         }
 
-        if (variant is BrandWordmarkVariant.Horizontal or BrandWordmarkVariant.TextOnly)
+        if (variant is not BrandWordmarkVariant.Icon)
         {
             svg.Append(CultureInfo.InvariantCulture,
                 $"""<text font-family="{FontStack}" font-weight="700" font-size="58">""");
-            svg.Append(CultureInfo.InvariantCulture, $"""<tspan x="156" y="90" fill="{accentFill}">RV</tspan>""");
-            svg.Append(CultureInfo.InvariantCulture, $"""<tspan x="227.8" y="90" fill="{wordFill}"> Intake</tspan>""");
+
+            if (variant is BrandWordmarkVariant.TextOnly)
+            {
+                // No badge alongside, so this lockup spells the whole name, Rust "RV" and all.
+                svg.Append(CultureInfo.InvariantCulture, $"""<tspan x="14" y="69" fill="{accentFill}">RV</tspan>""");
+                svg.Append(CultureInfo.InvariantCulture, $"""<tspan x="85.8" y="69" fill="{wordFill}"> Intake</tspan>""");
+            }
+            else
+            {
+                // Beside the badge the word stands alone — the badge already reads "RV".
+                svg.Append(CultureInfo.InvariantCulture, $"""<tspan x="152" y="90" fill="{wordFill}">Intake</tspan>""");
+            }
+
             svg.Append("</text>");
         }
 

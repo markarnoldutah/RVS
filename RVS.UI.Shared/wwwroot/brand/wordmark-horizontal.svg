@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 431.2 140.0" width="431.2" height="140.0">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340.7 140.0" width="340.7" height="140.0">
   <rect x="14" y="14" width="112" height="112" rx="25" fill="#2F4C6B"/>
   <text x="41.5" y="86.5" font-family="Space Grotesk, Roboto, Helvetica, Arial, sans-serif" font-weight="700" font-size="46" fill="#F6F1E7">RV</text>
-  <text font-family="Space Grotesk, Roboto, Helvetica, Arial, sans-serif" font-weight="700" font-size="58"><tspan x="156.0" y="90.0" fill="#C1502E">RV</tspan><tspan x="227.8" y="90.0" fill="#2F4C6B"> Intake</tspan></text>
+  <text font-family="Space Grotesk, Roboto, Helvetica, Arial, sans-serif" font-weight="700" font-size="58"><tspan x="152.0" y="90.0" fill="#2F4C6B">Intake</tspan></text>
 </svg>
