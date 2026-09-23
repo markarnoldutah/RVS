@@ -43,7 +43,7 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 | Route | Component | In Spec C scope |
 |---|---|---|
 | `/service-requests` | `ServiceRequestQueue` | Yes — but with a ten-field search panel (keyword, status, category, location, technician, bay, VIN, priority, two dates) against a specced "filter by status" |
-| drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, customer status note (C-9, #500), inline edit, comment thread, attachment tiles with thumbnails (read-SAS prefetched on load; photos, PDF and files open in a new tab, video plays in an inline player — #583, #699), diagnostic responses |
+| drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, customer status note (C-9, #500), inline edit, activity timeline (comments, system status/technician events, and customer status note writes — #620), attachment tiles with thumbnails (read-SAS prefetched on load; photos, PDF and files open in a new tab, video plays in an inline player — #583, #699), diagnostic responses |
 | `/locations` | `Locations` | Yes — location CRUD, capability checkboxes, QR download, and a **Send intake link** row action (A-14, #666) |
 | `/` | `Home` | Yes — welcome, `LocationSelector`, and the **Send intake link** button beside it (A-14, #666) |
 | dialog | `SendIntakeLinkDialog` | Yes — A-14 (#666), see below |
