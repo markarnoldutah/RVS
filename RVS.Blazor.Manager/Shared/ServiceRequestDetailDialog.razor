@@ -1244,6 +1244,27 @@
         _selectedStatus = _sr.Status;
     }
 
+    @* The API's ApplyUpdate is a full overwrite, not a merge: every field absent from the
+       request is written back as null. Activity-log writes only mean to change the summary,
+       so they start from the request the loaded SR already implies and override from there. *@
+    private ServiceRequestUpdateRequestDto BuildUpdateRequest(string? technicianSummary) => new()
+    {
+        Status = _sr!.Status,
+        IssueDescription = _sr.IssueDescription,
+        IssueCategory = _sr.IssueCategory,
+        TechnicianSummary = technicianSummary,
+        Priority = _sr.Priority ?? "Medium",
+        Urgency = _sr.Urgency,
+        RvUsage = _sr.RvUsage,
+        HasExtendedWarranty = _sr.HasExtendedWarranty,
+        ApproxPurchaseDate = _sr.ApproxPurchaseDate,
+        AssignedTechnicianId = _sr.AssignedTechnicianId,
+        AssignedBayId = _sr.AssignedBayId,
+        ScheduledDateUtc = _sr.ScheduledDateUtc,
+        RequiredSkills = _sr.RequiredSkills,
+        BoardSequence = _sr.BoardSequence
+    };
+
     private async Task OnStatusChangeAsync(string newStatus)
     {
         if (_sr is null || _dealershipId is null || string.IsNullOrEmpty(newStatus)) return;
@@ -1259,13 +1280,7 @@
                 _sr.TechnicianSummary,
                 $"Status changed to {FormatStatus(newStatus)}");
 
-            var request = new ServiceRequestUpdateRequestDto
-            {
-                Status = newStatus,
-                IssueDescription = _sr.IssueDescription,
-                Priority = _sr.Priority ?? "Medium",
-                TechnicianSummary = combinedSummary
-            };
+            var request = BuildUpdateRequest(combinedSummary) with { Status = newStatus };
 
             _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
             RefreshAllowedStatuses();
@@ -1295,15 +1310,7 @@
             var newEntry = $"{byline}\n{_commentText.Trim()}";
             var combined = ActivityLogFormatter.PrependEntry(_sr.TechnicianSummary, newEntry);
 
-            var request = new ServiceRequestUpdateRequestDto
-            {
-                Status = _sr.Status,
-                IssueDescription = _sr.IssueDescription,
-                Priority = _sr.Priority ?? "Medium",
-                TechnicianSummary = combined
-            };
-
-            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, BuildUpdateRequest(combined));
             _commentText = null;
             await OnChanged.InvokeAsync();
         }
@@ -1504,15 +1511,7 @@
                 summary = ActivityLogFormatter.PrependSystemEntry(summary, description);
             }
 
-            var request = new ServiceRequestUpdateRequestDto
-            {
-                Status = _sr.Status,
-                IssueDescription = _sr.IssueDescription,
-                Priority = _sr.Priority ?? "Medium",
-                TechnicianSummary = summary,
-                AssignedTechnicianId = newTechId,
-                RequiredSkills = _sr.RequiredSkills
-            };
+            var request = BuildUpdateRequest(summary) with { AssignedTechnicianId = newTechId };
             _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
             _editingTech = false;
             await OnChanged.InvokeAsync();
@@ -1547,8 +1546,24 @@
         StateHasChanged();
         try
         {
+            var previous = _sr.CustomerStatusNote?.Text;
+
             _sr = await SrClient.SetStatusNoteAsync(_dealershipId, _sr.Id, note);
             _editingStatusNote = false;
+
+            // C-9 overwrites the note in place, so the write leaves no trace of its own.
+            // Record it on the activity timeline instead (issue #620) — second call, because
+            // the status-note endpoint deliberately touches nothing but the note. A save that
+            // changed nothing is not worth a timeline entry.
+            var saved = _sr.CustomerStatusNote?.Text;
+            if (!string.Equals(saved ?? string.Empty, previous ?? string.Empty, StringComparison.Ordinal))
+            {
+                var summary = ActivityLogFormatter.PrependStatusNoteEntry(
+                    _sr.TechnicianSummary, _userDisplayName, saved);
+
+                _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, BuildUpdateRequest(summary));
+            }
+
             await OnChanged.InvokeAsync();
         }
         catch (Exception ex) { _statusNoteError = ex.Message; }
@@ -1977,8 +1992,9 @@
     }
 
     @* Comments are stored in TechnicianSummary as `[Name — MMM d, yyyy h:mm tt]\nBody`, separated
-       by `\n\n`. Any block without that byline (legacy intake-generated summary) is skipped to
-       avoid a redundant "Initial Advisor Notes" entry alongside the Issue Description / Diagnostics. *@
+       by `\n\n`, with an optional kind after the date for non-comment entries. Any block without
+       that byline (legacy intake-generated summary) is skipped to avoid a redundant "Initial
+       Advisor Notes" entry alongside the Issue Description / Diagnostics. *@
     private static IReadOnlyList<TimelineEntry> ParseTechnicianSummary(
         string? summary,
         DateTime fallbackUtc,
@@ -1991,20 +2007,12 @@
 
         for (var i = 0; i < blocks.Length; i++)
         {
-            var block = blocks[i];
-            var match = System.Text.RegularExpressions.Regex.Match(
-                block,
-                @"^\[(?<name>.+?)\s+—\s+(?<date>.+?)\]\r?\n(?<body>.*)$",
-                System.Text.RegularExpressions.RegexOptions.Singleline);
+            if (!ActivityLogFormatter.TryParseEntry(blocks[i], out var parsed)) continue;
 
-            if (!match.Success) continue;
-
-            var name = match.Groups["name"].Value.Trim();
-            var dateStr = match.Groups["date"].Value.Trim();
-            var body = match.Groups["body"].Value.Trim();
+            var name = parsed.Author;
 
             DateTime ts;
-            if (DateTime.TryParse(dateStr, out var parsedLocal))
+            if (DateTime.TryParse(parsed.Timestamp, out var parsedLocal))
             {
                 ts = DateTime.SpecifyKind(parsedLocal, DateTimeKind.Local).ToUniversalTime();
             }
@@ -2020,19 +2028,22 @@
                     Dot: TimelineDot.System,
                     AuthorName: null,
                     AuthorInitials: null,
-                    Title: body,
+                    Title: parsed.Body,
                     Body: null));
             }
             else
             {
                 var isCurrentUser = string.Equals(name, currentUserName, StringComparison.OrdinalIgnoreCase);
+                var isStatusNote = string.Equals(
+                    parsed.Kind, ActivityLogFormatter.StatusNoteKind, StringComparison.OrdinalIgnoreCase);
+
                 entries.Add(new TimelineEntry(
                     TimestampUtc: ts,
                     Dot: isCurrentUser ? TimelineDot.CurrentUser : TimelineDot.OtherPerson,
                     AuthorName: name,
                     AuthorInitials: ResolveInitials(name),
-                    Title: $"{name} commented",
-                    Body: body));
+                    Title: isStatusNote ? $"{name} updated the customer status note" : $"{name} commented",
+                    Body: parsed.Body));
             }
         }
 
