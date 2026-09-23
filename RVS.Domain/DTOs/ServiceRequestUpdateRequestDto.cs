@@ -28,7 +28,6 @@ public sealed record ServiceRequestUpdateRequestDto
     public string? HasExtendedWarranty { get; init; }
     public string? ApproxPurchaseDate { get; init; }
     public string? AssignedTechnicianId { get; init; }
-    public string? AssignedBayId { get; init; }
     public DateTime? ScheduledDateUtc { get; init; }
     public List<string> RequiredSkills { get; init; } = [];
 

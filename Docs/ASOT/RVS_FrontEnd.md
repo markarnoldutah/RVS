@@ -42,13 +42,12 @@ Spec C calls for a deliberately thin app: list, detail, status, disposition, res
 
 | Route | Component | In Spec C scope |
 |---|---|---|
-| `/service-requests` | `ServiceRequestQueue` | Yes — but with a ten-field search panel (keyword, status, category, location, technician, bay, VIN, priority, two dates) against a specced "filter by status" |
-| drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, customer status note (C-9, #500), inline edit, activity timeline (comments, system status/technician events, and customer status note writes — #620), attachment tiles with thumbnails (read-SAS prefetched on load; photos, PDF and files open in a new tab, video plays in an inline player — #583, #699), diagnostic responses |
+| `/service-requests` | `ServiceRequestQueue` | Yes — but with a nine-field search panel (keyword, status, category, location, technician, VIN, priority, two dates) against a specced "filter by status". The bay filter went with the field in #713 |
+| drawer | `ServiceRequestDetailDialog` (~1,800 lines) | Yes — detail, status select, priority select (#713, inherited from the retired edit page), customer status note (C-9, #500), inline edit, activity timeline (comments, system status/technician events, and customer status note writes — #620), attachment tiles with thumbnails (read-SAS prefetched on load; photos, PDF and files open in a new tab, video plays in an inline player — #583, #699), diagnostic responses |
 | `/locations` | `Locations` | Yes — location CRUD, capability checkboxes, QR download, and a **Send intake link** row action (A-14, #666) |
 | `/` | `Home` | Yes — welcome, `LocationSelector`, and the **Send intake link** button beside it (A-14, #666) |
 | dialog | `SendIntakeLinkDialog` | Yes — A-14 (#666), see below |
 | `/settings` | `Settings` | Partly — tenant-level config and access gate, not the per-location packet settings B-6 needs |
-| `/service-requests/{id}/edit` | `ServiceRequestEdit` | Partly — largely duplicates the detail drawer and carries technician, bay and scheduled-date fields |
 | `/board` | `ServiceBoard` + `BoardLayout` | Yes — kept, not a descope target (#456 closed `not_planned`; Plan decision log Sep 21 2026). Kanban with drag-drop status change (C-3), ordered within a column by `boardSequence`. It is the manager app's landing page: lands on an **Actionable today** view (`ActionableRequestFilter`: open requests plus anything closed today, toggleable), opens the detail drawer from `?sr={id}` (#498), and is the PWA start URL. Not to be extended |
 | `/sr/{id}` | `ServiceRequestDeepLink` | Yes — C-7 (#498). Packet-email landing: without `action` it forwards to `/board?sr={id}`; with `?action=in-progress\|waiting-on-parts\|completed` (`ManagerDeepLinks`) it shows a one-tap confirm and writes through the authenticated update endpoint. Nothing is written on page load |
 | `/analytics` | `Analytics` | **No** — dashboard with summary cards and top-category tables |
@@ -94,7 +93,9 @@ Also `Validation/` (`ClientVinValidator`, `VinTranscriptCleaner`, `ClientSearchI
 
 Deleting these is the front-end half of aligning the code to the Overview.
 
-**Manager** — `Analytics.razor`, `ClaimsDebug.razor`, and the matching `NavMenu` link. `ServiceRequestEdit.razor` should either absorb the detail drawer or go. The technician, bay and priority search filters lose meaning once the fields behind them are archived.
+**Manager** — `Analytics.razor`, `ClaimsDebug.razor`, and the matching `NavMenu` link.
+
+`ServiceRequestEdit.razor` is **done** (#713): deleted, after #712 removed the last link to it. Its Priority control moved to the detail drawer. Assigned bay did not move — instead the field was removed from the app entirely in the same issue, since the page was its only writer. The technician and priority search filters stay, because #459 closed `not_planned` on 2026-09-22 and the fields behind them are no longer an archive target.
 
 **Shared** — `AnalyticsApiClient` and the three unreferenced components.
 

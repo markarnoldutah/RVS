@@ -88,8 +88,6 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
             conditions.Add("c.locationId = @locationId");
         if (!string.IsNullOrWhiteSpace(request.AssignedTechnicianId))
             conditions.Add("c.assignedTechnicianId = @assignedTechnicianId");
-        if (!string.IsNullOrWhiteSpace(request.AssignedBayId))
-            conditions.Add("c.assignedBayId = @assignedBayId");
         if (!string.IsNullOrWhiteSpace(request.AssetId))
             conditions.Add("c.assetInfo.assetId = @assetId");
         if (request.DateFrom.HasValue)
@@ -114,8 +112,6 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
             definition = definition.WithParameter("@locationId", request.LocationId);
         if (!string.IsNullOrWhiteSpace(request.AssignedTechnicianId))
             definition = definition.WithParameter("@assignedTechnicianId", request.AssignedTechnicianId);
-        if (!string.IsNullOrWhiteSpace(request.AssignedBayId))
-            definition = definition.WithParameter("@assignedBayId", request.AssignedBayId);
         if (!string.IsNullOrWhiteSpace(request.AssetId))
             definition = definition.WithParameter("@assetId", request.AssetId);
         if (request.DateFrom.HasValue)

@@ -38,7 +38,6 @@ public static class ServiceRequestMapper
             ApproxPurchaseDate = entity.ApproxPurchaseDate,
             Priority = entity.Priority,
             AssignedTechnicianId = entity.AssignedTechnicianId,
-            AssignedBayId = entity.AssignedBayId,
             ScheduledDateUtc = entity.ScheduledDateUtc,
             RequiredSkills = entity.RequiredSkills,
             BoardSequence = entity.BoardSequence,
@@ -194,7 +193,6 @@ public static class ServiceRequestMapper
         entity.HasExtendedWarranty = dto.HasExtendedWarranty?.Trim();
         entity.ApproxPurchaseDate = dto.ApproxPurchaseDate?.Trim();
         entity.AssignedTechnicianId = dto.AssignedTechnicianId?.Trim();
-        entity.AssignedBayId = dto.AssignedBayId?.Trim();
         entity.ScheduledDateUtc = dto.ScheduledDateUtc;
         entity.RequiredSkills = dto.RequiredSkills;
         entity.BoardSequence = dto.BoardSequence ?? entity.BoardSequence;
