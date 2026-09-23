@@ -1,11 +1,12 @@
 @* Operator identity and policy links on every Intake page (Spec A-15, issue #680).
-   A toll-free verification reviewer reads these to connect the filing entity to rvintake.com. *@
+   A toll-free verification reviewer reads these to connect the filing entity to rvintake.com.
+   The contact email lives at the bottom of each policy document linked below (issue #695),
+   not here — the footer states identity, the policies state contact. *@
 
 <MudDivider Class="mt-8" />
 <MudStack AlignItems="AlignItems.Center" Spacing="1" Class="py-4">
     <MudText Typo="Typo.body2" Align="Align.Center" Style="color: var(--mud-palette-text-secondary);">
         RV Intake is a product of @SiteIdentity.LegalEntityName.
-        Contact: <MudLink Href="@SiteIdentity.ContactMailto" Typo="Typo.body2">@SiteIdentity.ContactEmail</MudLink>
     </MudText>
     <MudStack Row="true" Justify="Justify.Center" Spacing="3" Wrap="Wrap.Wrap">
         <MudLink Href="/privacy" Typo="Typo.body2">Privacy policy</MudLink>
