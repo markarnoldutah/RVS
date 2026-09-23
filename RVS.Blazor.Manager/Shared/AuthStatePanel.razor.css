@@ -1,12 +1,30 @@
+/* Every colour here comes from the active MudTheme, so the panel is the same ground the app
+   itself is in light, dark and high contrast. Nothing brand-coloured is hard-coded — see the
+   comment in AuthStatePanel.razor and RVS.UI.Shared/Theme/RvsBrand.cs. */
+
 @keyframes auth-bar-slide {
     0%   { transform: translateX(-150%); }
     100% { transform: translateX(350%); }
 }
 
+.auth-state-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--mud-palette-background);
+    color: var(--mud-palette-text-primary);
+}
+
+/* action-disabled, not divider: it is the one palette entry that is a mid grey in all three
+   modes, so the Primary bar stays legible against it — high contrast sets Divider to pure
+   white, which would have left a yellow bar on white. */
 .auth-progress-track {
     width: 200px;
     height: 4px;
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--mud-palette-action-disabled);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -14,7 +32,7 @@
 .auth-progress-bar {
     width: 40%;
     height: 100%;
-    background: #ffffff;
+    background: var(--mud-palette-primary);
     border-radius: 2px;
     animation: auth-bar-slide 1.5s ease-in-out infinite;
 }

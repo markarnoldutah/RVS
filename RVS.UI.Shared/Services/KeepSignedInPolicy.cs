@@ -72,25 +72,16 @@ public static class KeepSignedInPolicy
         _ => KeepSignedInState.NotSet,
     };
 
-    /// <summary>Returns the short label the profile menu shows for <paramref name="state"/>.</summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="state"/> is not a defined value.</exception>
-    public static string GetLabel(KeepSignedInState state) => state switch
-    {
-        KeepSignedInState.On => "On",
-        KeepSignedInState.Off => "Off",
-        KeepSignedInState.NotSet => "Not set",
-        _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unknown keep-signed-in state."),
-    };
-
     /// <summary>
     /// Returns the argument for <c>rvsSession_setPersist</c> that stores <paramref name="state"/>.
-    /// <see cref="KeepSignedInState.NotSet"/> is not an answer — it is reached by resetting.
+    /// <see cref="KeepSignedInState.NotSet"/> is not an answer — it is where a device starts,
+    /// before the prompt or the profile menu has stored one.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="state"/> is not On or Off.</exception>
     public static bool ToPersist(KeepSignedInState state) => state switch
     {
         KeepSignedInState.On => true,
         KeepSignedInState.Off => false,
-        _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Only On or Off can be stored; reset clears the answer."),
+        _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Only On or Off can be stored."),
     };
 }

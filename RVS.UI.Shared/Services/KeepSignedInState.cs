@@ -6,7 +6,7 @@ namespace RVS.UI.Shared.Services;
 /// </summary>
 public enum KeepSignedInState
 {
-    /// <summary>Not asked yet, or the answer was reset — the prompt appears on the next sign-in.</summary>
+    /// <summary>Not asked yet — the prompt appears on the next sign-in.</summary>
     NotSet,
 
     /// <summary>The device opted in: the sign-in survives restarts and Auth0 may skip the password.</summary>

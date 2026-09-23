@@ -177,6 +177,13 @@ catch (JSException)
 {
     // session-persist.js missing or storage blocked — fail closed.
 }
+// Restore the saved theme before the first render. The layouts used to do this in
+// OnAfterRenderAsync, so a dark-mode or high-contrast user got one frame of the light palette
+// on every boot — including the return from the auth callback, which is what made the
+// authentication hand-off flash (#703). js/splash-mode.js reads the same key to ground the
+// pre-Blazor splash, so splash, AuthStatePanel and app all come up in the chosen theme.
+await app.Services.GetRequiredService<ThemeService>().InitializeAsync();
+
 await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] Environment       : {builder.HostEnvironment.Environment}");
 await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] BaseAddress       : {builder.HostEnvironment.BaseAddress}");
 await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] ApiBaseUrl resolved: {apiBaseUrl}");

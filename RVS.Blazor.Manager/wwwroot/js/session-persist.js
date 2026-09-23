@@ -122,12 +122,4 @@
     window.rvsSession_clearPersisted = function () {
         removeMirrors();
     };
-
-    // Forgets this device's answer (profile menu "Ask me again", issue #616) and removes any
-    // persisted sign-in, so the device is treated as not opted in and the prompt returns on the
-    // next sign-in. The current tab stays signed in.
-    window.rvsSession_resetPreference = function () {
-        try { removeItem.call(window.localStorage, PREFERENCE_KEY); } catch (e) { }
-        removeMirrors();
-    };
 })();

@@ -39,8 +39,11 @@ public sealed class ThemeService(IJSRuntime js)
     };
 
     /// <summary>
-    /// Loads the persisted theme preference from localStorage.
-    /// Call once in MainLayout.OnAfterRenderAsync on first render.
+    /// Loads the persisted theme preference from localStorage. Called once in
+    /// <c>Program.cs</c> between <c>builder.Build()</c> and <c>RunAsync()</c> — before the
+    /// first render, so a dark-mode user never sees a frame of the light palette (#703).
+    /// <c>wwwroot/js/splash-mode.js</c> reads <see cref="ThemeStorageKey"/> for the same
+    /// reason, to ground the splash that paints before this class exists.
     /// </summary>
     public async Task InitializeAsync()
     {
