@@ -1,40 +1,60 @@
 @page "/"
 
+@* Landing page (issue #695) — a hero band carries the brand and the pitch; the two next
+   steps are equal-weight tiles below it rather than a stack of full-width buttons. *@
+
 <PageTitle>RV Intake</PageTitle>
-<MudStack AlignItems="AlignItems.Center" Class="mt-8">
-    <MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 480px;">
-        <MudStack AlignItems="AlignItems.Center" Spacing="6">
-            <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary" Size="Size.Large"
-                     Style="font-size: 4rem;" />
 
-            <MudText Typo="Typo.h4" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
-                RV Intake
+<MudStack AlignItems="AlignItems.Center" Spacing="6" Class="mt-4">
+    <MudPaper Elevation="3" Class="pa-8 rounded-lg"
+              Style="width: 100%; max-width: 560px; background: var(--mud-palette-secondary); text-align: center;">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3">
+            <BrandWordmark Variant="BrandWordmarkVariant.Icon" Reversed="true" Height="60px" />
+
+            <MudText Typo="Typo.h4" Style="color: var(--mud-palette-secondary-text); font-weight: 700;">
+                Get your RV back on the road
             </MudText>
 
-            <MudText Typo="Typo.body1" Align="Align.Center">
-                Send your RV's service request straight to your dealership's service department.
-                RV Intake is a product of @SiteIdentity.LegalEntityName.
+            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-secondary-text); opacity: 0.85;">
+                Send your service request straight to the dealership's service department —
+                no app, no account, just a few taps.
             </MudText>
-
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       Size="Size.Large"
-                       StartIcon="@Icons.Material.Filled.Add"
-                       Href="/intake"
-                       FullWidth="true"
-                       Style="text-transform: none; min-width: 250px;">
-                New Service Request
-            </MudButton>
-
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Primary"
-                       Size="Size.Large"
-                       StartIcon="@Icons.Material.Filled.Search"
-                       Href="/status"
-                       FullWidth="true"
-                       Style="text-transform: none; min-width: 250px;">
-                Check Request Status
-            </MudButton>
         </MudStack>
     </MudPaper>
+
+    <MudGrid Justify="Justify.Center" Spacing="3" Style="width: 100%; max-width: 560px;">
+        <MudItem xs="12" sm="6">
+            <MudLink Href="/intake" Style="text-decoration: none; display: block; height: 100%;">
+                <MudPaper Elevation="2" Class="pa-6 rounded-lg"
+                          Style="height: 100%; border-top: 4px solid var(--mud-palette-primary);">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Style="font-size: 2.5rem;" />
+                        <MudText Typo="Typo.h6" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
+                            New Service Request
+                        </MudText>
+                        <MudText Typo="Typo.body2" Align="Align.Center" Style="color: var(--mud-palette-text-secondary);">
+                            Tell us what's wrong — takes about 5 minutes.
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudLink>
+        </MudItem>
+
+        <MudItem xs="12" sm="6">
+            <MudLink Href="/status" Style="text-decoration: none; display: block; height: 100%;">
+                <MudPaper Elevation="2" Class="pa-6 rounded-lg"
+                          Style="height: 100%; border-top: 4px solid var(--mud-palette-secondary);">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Secondary" Style="font-size: 2.5rem;" />
+                        <MudText Typo="Typo.h6" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
+                            Check Request Status
+                        </MudText>
+                        <MudText Typo="Typo.body2" Align="Align.Center" Style="color: var(--mud-palette-text-secondary);">
+                            See updates on a request you already sent.
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudLink>
+        </MudItem>
+    </MudGrid>
 </MudStack>
