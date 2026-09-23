@@ -396,12 +396,16 @@ public sealed class PacketGenerationService : IPacketGenerationService
         // lists photos by name only, it no longer embeds them by SAS URL) — point the reader
         // at the Manager app instead of silently losing the photo. Re-rendering after Fit()
         // costs a few dozen bytes against the budget's 500 KB margin, which is negligible.
+        //
+        // The pointer is the packet's own /sr/{id} link, not a second hand-built URL: it lands on
+        // the board's detail dialog, the one place in the manager app that renders photos
+        // (issue #581). Null when no base URL is configured, and the renderer then omits the note
+        // rather than emitting a dead href.
         var droppedAPhoto = fit.Dropped.Any(
             d => d.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase));
         if (droppedAPhoto)
         {
-            var managerAppUrl = $"{_managerAppUrlOptions.BaseUrl.TrimEnd('/')}/service-requests/{request.Id}/edit";
-            html = PacketHtmlRenderer.Render(packet, managerAppUrl);
+            html = PacketHtmlRenderer.Render(packet, packet.ManagerLinks?.RequestUrl);
         }
 
         if (fit.PdfDropped)

@@ -1156,7 +1156,10 @@ public class PacketGenerationServiceTests
     public async Task GenerateAsync_WhenAPhotoIsDroppedByTheEmailBudget_ShouldAddAManagerAppLinkNoteToTheBody()
     {
         // Issue #580: photos are no longer embedded by SAS URL in the HTML body, so a dropped
-        // photo attachment needs a pointer to where it can still be seen.
+        // photo attachment needs a pointer to where it can still be seen. Issue #581: that
+        // pointer is the same /sr/{id} deep link the status actions use — it opens the board's
+        // detail dialog, which is the only place in the manager app that renders photos. The
+        // edit page it used to point at shows none.
         var sut = BuildSutWithEmailBudget(200_000);
 
         var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 500_000, out var sr);
@@ -1164,7 +1167,22 @@ public class PacketGenerationServiceTests
         await Task.CompletedTask;
         sent.Should().NotBeNull();
         sent!.HtmlBody.Should().Contain("Some images can only be shown in the manager app");
-        sent.HtmlBody.Should().Contain($"{ManagerAppBaseUrl}/service-requests/{sr.Id}/edit");
+        sent.HtmlBody.Should().Contain($"{ManagerAppBaseUrl}/sr/{sr.Id}");
+        sent.HtmlBody.Should().NotContain("/edit");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenAPhotoIsDroppedAndTheManagerAppBaseUrlIsBlank_ShouldOmitTheNote()
+    {
+        // With no base URL there is nowhere to send the reader, so the note would render an
+        // empty href. Better to list the photo by name only than to offer a dead link.
+        var sut = BuildSutWithEmailBudget(200_000, managerAppBaseUrl: "");
+
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 500_000, out _);
+
+        await Task.CompletedTask;
+        sent.Should().NotBeNull();
+        sent!.HtmlBody.Should().NotContain("Some images can only be shown in the manager app");
     }
 
     [Fact]
