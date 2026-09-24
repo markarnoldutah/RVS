@@ -2,6 +2,7 @@
 @inject LookupApiClient LookupClient
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
+@using RVS.UI.Shared.Validation
 
 <PageTitle>RV Intake Manager — Locations</PageTitle>
 
@@ -238,6 +239,104 @@
                             </MudPaper>
                         </MudStack>
                     }
+
+                    @* Service packet email — Spec B-6 / C-6 (issue #447). Defaults work as they
+                       come, so the only thing a new location needs here is a recipient. *@
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Service Packet Email</MudText>
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                            Each new service request is emailed to these addresses as a one-page packet.
+                        </MudText>
+                        <MudSwitch T="bool" @bind-Value="_form.PacketEnabled"
+                                   Color="Color.Primary"
+                                   Label="@(_form.PacketEnabled ? "Packet email on" : "Packet email off")" />
+
+                        <MudPaper Elevation="0" Outlined="true" Class="pa-2">
+                            <MudStack Spacing="1">
+                                @if (_form.Recipients.Count == 0)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">No recipients yet.</MudText>
+                                }
+                                @foreach (var recipient in _form.Recipients)
+                                {
+                                    var address = recipient;
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                        <MudText Typo="Typo.body2" Style="word-break: break-all;">@address</MudText>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                       Size="Size.Small"
+                                                       aria-label="@($"Remove {address}")"
+                                                       OnClick="@(() => RemoveRecipient(address))" />
+                                    </MudStack>
+                                }
+                                <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="1">
+                                    <MudTextField T="string" @bind-Value="_newRecipient"
+                                                  Label="Add recipient email"
+                                                  Variant="Variant.Filled"
+                                                  Margin="Margin.Dense"
+                                                  InputType="InputType.Email"
+                                                  Placeholder="service@yourdealership.com"
+                                                  Error="@(_recipientError is not null)"
+                                                  ErrorText="@_recipientError"
+                                                  HelperText="@($"{_form.Recipients.Count} of {MaxRecipients}")"
+                                                  Immediate="true"
+                                                  OnKeyDown="OnRecipientKeyDown"
+                                                  Disabled="@(_form.Recipients.Count >= MaxRecipients)"
+                                                  autocomplete="off" />
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                               Class="mt-2"
+                                               OnClick="@(() => AddRecipient())"
+                                               Disabled="@(_form.Recipients.Count >= MaxRecipients)"
+                                               Style="text-transform: none;">
+                                        Add
+                                    </MudButton>
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+
+                        @if (_packetError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true">@_packetError</MudAlert>
+                        }
+
+                        <MudCheckBox T="bool" @bind-Value="_form.AttachPdf"
+                                     Label="Attach the packet as a PDF"
+                                     Color="Color.Primary"
+                                     Dense="true" />
+                        <MudCheckBox T="bool" @bind-Value="_form.IncludePhotos"
+                                     Label="Attach the customer's original photos"
+                                     Color="Color.Primary"
+                                     Dense="true" />
+
+                        <MudExpansionPanels Elevation="0" Outlined="true" Dense="true">
+                            <MudExpansionPanel Text="More packet options" Dense="true">
+                                <MudStack Spacing="3">
+                                    <MudNumericField T="int" @bind-Value="_form.PasteBlockCharacterCap"
+                                                     Label="Paste block length (characters)"
+                                                     Variant="Variant.Filled"
+                                                     Margin="Margin.Dense"
+                                                     Min="MinPasteBlockCharacterCap"
+                                                     Max="MaxPasteBlockCharacterCap"
+                                                     HelperText="@($"Longest the DMS paste block may be. {MinPasteBlockCharacterCap}–{MaxPasteBlockCharacterCap}.")" />
+                                    <MudNumericField T="int" @bind-Value="_form.StatusLinkTtlDays"
+                                                     Label="Customer status link lasts (days)"
+                                                     Variant="Variant.Filled"
+                                                     Margin="Margin.Dense"
+                                                     Min="1"
+                                                     Max="MaxStatusLinkTtlDays"
+                                                     HelperText="@($"1–{MaxStatusLinkTtlDays} days.")" />
+                                    <MudTextField T="string" @bind-Value="_form.LogoUrl"
+                                                  Validation="@(new Func<string?, string?>(ValidateLogoUrl))"
+                                                  Label="Logo URL (optional)"
+                                                  Variant="Variant.Filled"
+                                                  Margin="Margin.Dense"
+                                                  InputType="InputType.Url"
+                                                  Placeholder="https://yourdealership.com/logo.png"
+                                                  HelperText="Shown at the top of this location's packets."
+                                                  autocomplete="off" />
+                                </MudStack>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    </MudStack>
                 </MudStack>
             </MudForm>
         </MudStack>
@@ -271,7 +370,7 @@
     //       – AiContext (multiline text area for system-prompt augmentation)
     //   • Operating hours (the time zone itself is now editable — issue #506)
     //   • Service email and dedicated SMS sender phone for ACS notifications
-    //   • Branding overrides (logo URL, accent color)
+    //   • Branding overrides (accent color — the packet logo URL is editable, issue #447)
     //   • Default service-advisor / round-robin queue assignment rules
     //   • Tax / labor-rate codes per location (for downstream estimating)
     // ──────────────────────────────────────────────────────────────────────────
@@ -290,9 +389,58 @@
     private bool _sendLinkOpen;
     private string? _sendLinkLocationId;
     private string? _sendLinkLocationName;
+    private string? _newRecipient;
+    private string? _recipientError;
+    private string? _packetError;
+
+    private const int MaxRecipients = RVS.Domain.Entities.PacketConfigEmbedded.MaxRecipients;
+    private const int MinPasteBlockCharacterCap = RVS.Domain.Entities.PacketConfigEmbedded.MinPasteBlockCharacterCap;
+    private const int MaxPasteBlockCharacterCap = RVS.Domain.Entities.PacketConfigEmbedded.MaxPasteBlockCharacterCap;
+    private const int MaxStatusLinkTtlDays = RVS.Domain.Entities.PacketConfigEmbedded.MaxStatusLinkTtlDays;
 
     private string? ValidateName(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a location name" : null;
+
+    private static string? ValidateLogoUrl(string? value) =>
+        PacketConfigValidator.ValidateLogoUrl(value).ErrorMessage;
+
+    /// <summary>
+    /// Moves the typed address onto the recipient list. Returns false (and shows why) when the
+    /// address is malformed, a duplicate, or the list is full.
+    /// </summary>
+    private bool AddRecipient()
+    {
+        var result = ClientPacketConfigValidator.ValidateNewRecipient(_newRecipient, _form.Recipients);
+        if (!result.IsValid)
+        {
+            _recipientError = result.ErrorMessage;
+            return false;
+        }
+
+        _form.Recipients.Add(_newRecipient!.Trim());
+        _newRecipient = null;
+        _recipientError = null;
+        _packetError = null;
+        return true;
+    }
+
+    private void RemoveRecipient(string address)
+    {
+        _form.Recipients.Remove(address);
+        _packetError = null;
+    }
+
+    private void OnRecipientKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddRecipient();
+        }
+        else
+        {
+            _recipientError = null;
+        }
+    }
 
     private string GetCapabilityName(string code) =>
         _tenantCapabilities.FirstOrDefault(c => c.Code == code)?.Name ?? code;
@@ -361,6 +509,7 @@
         _editingLocationId = null;
         _editingLocationSlug = null;
         _form = new LocationForm();
+        ResetPacketEditor();
         _submitted = false;
         _dialogOpen = true;
     }
@@ -403,9 +552,24 @@
             City = location.Address?.City,
             State = location.Address?.State,
             PostalCode = location.Address?.PostalCode,
-            EnabledCapabilities = [.. location.EnabledCapabilities]
+            EnabledCapabilities = [.. location.EnabledCapabilities],
+            PacketEnabled = location.PacketConfig.Enabled,
+            Recipients = [.. location.PacketConfig.Recipients],
+            AttachPdf = location.PacketConfig.AttachPdf,
+            IncludePhotos = location.PacketConfig.IncludePhotos,
+            PasteBlockCharacterCap = location.PacketConfig.PasteBlockCharacterCap,
+            StatusLinkTtlDays = location.PacketConfig.StatusLinkTtlDays,
+            LogoUrl = location.PacketConfig.LogoUrl
         };
+        ResetPacketEditor();
         _dialogOpen = true;
+    }
+
+    private void ResetPacketEditor()
+    {
+        _newRecipient = null;
+        _recipientError = null;
+        _packetError = null;
     }
 
     private void CloseDialog()
@@ -416,14 +580,28 @@
     private async Task SaveLocationAsync()
     {
         _submitted = true;
+
+        // An address typed but not yet added is almost certainly meant to be saved — the
+        // common case for a new location is "enter one recipient, click Save" (Spec B-6).
+        if (!string.IsNullOrWhiteSpace(_newRecipient) && !AddRecipient())
+        {
+            Snackbar.Add("Fix the recipient address and try again.", Severity.Warning);
+            return;
+        }
+
+        var packetConfig = BuildPacketConfig();
+        var packetResult = ClientPacketConfigValidator.ValidateForSave(packetConfig);
+        _packetError = packetResult.ErrorMessage;
+
         if (_form2 is not null)
         {
             await _form2.ValidateAsync();
-            if (!_form2.IsValid)
-            {
-                Snackbar.Add("Fix the highlighted fields and try again.", Severity.Warning);
-                return;
-            }
+        }
+
+        if ((_form2 is not null && !_form2.IsValid) || !packetResult.IsValid)
+        {
+            Snackbar.Add("Fix the highlighted fields and try again.", Severity.Warning);
+            return;
         }
 
         _saving = true;
@@ -451,7 +629,9 @@
                     State = _form.State,
                     PostalCode = _form.PostalCode
                 },
-                EnabledCapabilities = [.. _form.EnabledCapabilities]
+                EnabledCapabilities = [.. _form.EnabledCapabilities],
+                // Sent whole: a non-null PacketConfig replaces the stored one wholesale.
+                PacketConfig = packetConfig
             };
 
             if (_editingLocationId is not null)
@@ -477,6 +657,17 @@
             _saving = false;
         }
     }
+
+    private PacketConfigDto BuildPacketConfig() => new()
+    {
+        Enabled = _form.PacketEnabled,
+        Recipients = [.. _form.Recipients],
+        AttachPdf = _form.AttachPdf,
+        IncludePhotos = _form.IncludePhotos,
+        PasteBlockCharacterCap = _form.PasteBlockCharacterCap,
+        StatusLinkTtlDays = _form.StatusLinkTtlDays,
+        LogoUrl = string.IsNullOrWhiteSpace(_form.LogoUrl) ? null : _form.LogoUrl.Trim()
+    };
 
     private void OpenSendIntakeLink(LocationSummaryResponseDto location)
     {
@@ -524,5 +715,16 @@
         public string? State { get; set; }
         public string? PostalCode { get; set; }
         public List<string> EnabledCapabilities { get; set; } = [];
+
+        // Packet settings start from the PacketConfigDto defaults, so the form and the API
+        // share one definition of "works out of the box" (Spec B-6).
+        private static readonly PacketConfigDto PacketDefaults = new();
+        public bool PacketEnabled { get; set; } = PacketDefaults.Enabled;
+        public List<string> Recipients { get; set; } = [];
+        public bool AttachPdf { get; set; } = PacketDefaults.AttachPdf;
+        public bool IncludePhotos { get; set; } = PacketDefaults.IncludePhotos;
+        public int PasteBlockCharacterCap { get; set; } = PacketDefaults.PasteBlockCharacterCap;
+        public int StatusLinkTtlDays { get; set; } = PacketDefaults.StatusLinkTtlDays;
+        public string? LogoUrl { get; set; } = PacketDefaults.LogoUrl;
     }
 }
