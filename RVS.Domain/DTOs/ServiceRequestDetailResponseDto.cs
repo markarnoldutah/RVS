@@ -57,8 +57,30 @@ public sealed record ServiceRequestDetailResponseDto
     /// </summary>
     public CustomerStatusNoteDto? CustomerStatusNote { get; init; }
 
+    /// <summary>
+    /// How the request was closed without work (<c>Spec C-4</c>), or <c>null</c> when it was not.
+    /// Present only while <see cref="Status"/> is <c>Cancelled</c>. Manager-only; never shown to
+    /// the customer.
+    /// </summary>
+    public ServiceRequestDispositionDto? Disposition { get; init; }
+
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
+}
+
+/// <summary>
+/// A request's disposition (<c>Spec C-4</c>) as returned to the manager app.
+/// </summary>
+public sealed record ServiceRequestDispositionDto
+{
+    /// <summary>The stored reason code, e.g. <c>WrongLocation</c>.</summary>
+    public string ReasonCode { get; init; } = default!;
+
+    /// <summary>The human label for <see cref="ReasonCode"/>, e.g. <c>Wrong location</c>.</summary>
+    public string ReasonLabel { get; init; } = default!;
+
+    /// <summary>UTC time the request was dispositioned.</summary>
+    public DateTime DisposedAtUtc { get; init; }
 }
 
 /// <summary>

@@ -588,6 +588,62 @@
                             {
                                 <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_statusError</MudAlert>
                             }
+
+                            @* Disposition — close without work, with a reason (Spec C-4) *@
+                            @if (_sr.Disposition is { } disposition)
+                            {
+                                <MudText Typo="Typo.body2" Class="mt-2" Style="@LabelStyle">
+                                    Closed without work: <strong>@disposition.ReasonLabel</strong>
+                                    · @disposition.DisposedAtUtc.ToLocalTime().ToString("g")
+                                </MudText>
+                            }
+                            else if (_disposing)
+                            {
+                                <MudStack Spacing="2" Class="mt-2">
+                                    <MudSelect T="string" @bind-Value="_dispositionReason"
+                                               Label="Reason" Variant="Variant.Outlined"
+                                               Margin="Margin.Dense" Dense="true"
+                                               AnchorOrigin="Origin.BottomCenter"
+                                               TransformOrigin="Origin.TopCenter"
+                                               Class="compact-field">
+                                        @foreach (var reason in DispositionReasons.All)
+                                        {
+                                            <MudSelectItem T="string" Value="@reason">@DispositionReasons.GetLabel(reason)</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                    <MudText Typo="Typo.caption" Style="@IssueLabelStyle">
+                                        Sets the request to Cancelled. The customer sees Cancelled, not the reason.
+                                    </MudText>
+                                    <MudStack Row="true" Spacing="2">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                                   OnClick="ConfirmDispositionAsync"
+                                                   Disabled="@(_dispositionSaving || _dispositionReason is null)">
+                                            Close request
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Text" Size="Size.Small"
+                                                   OnClick="CancelDisposition"
+                                                   Disabled="@_dispositionSaving">
+                                            Cancel
+                                        </MudButton>
+                                        @if (_dispositionSaving)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                        }
+                                    </MudStack>
+                                    @if (_dispositionError is not null)
+                                    {
+                                        <MudAlert Severity="Severity.Error" Dense="true">@_dispositionError</MudAlert>
+                                    }
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Text" Size="Size.Small" Class="mt-2"
+                                           StartIcon="@Icons.Material.Outlined.DoNotDisturbOn"
+                                           OnClick="BeginDisposition">
+                                    Close without work…
+                                </MudButton>
+                            }
                             <MudDivider Class="my-4" />
                         }
 
@@ -1013,6 +1069,10 @@
     private string? _selectedStatus;
     private bool _statusUpdating;
     private string? _statusError;
+    private bool _disposing;
+    private string? _dispositionReason;
+    private bool _dispositionSaving;
+    private string? _dispositionError;
     private static readonly string[] _priorities = ["Critical", "High", "Medium", "Low"];
     private string? _selectedPriority;
     private bool _priorityUpdating;
@@ -1188,6 +1248,7 @@
         _attachmentUrls.Clear();
         _statusError = null;
         _selectedStatus = null;
+        CancelDisposition();
         _priorityError = null;
         _selectedPriority = null;
 
@@ -1329,6 +1390,54 @@
         finally
         {
             _statusUpdating = false;
+        }
+    }
+
+    private void BeginDisposition()
+    {
+        _disposing = true;
+        _dispositionReason = null;
+        _dispositionError = null;
+    }
+
+    private void CancelDisposition()
+    {
+        _disposing = false;
+        _dispositionReason = null;
+        _dispositionError = null;
+        _dispositionSaving = false;
+    }
+
+    private async Task ConfirmDispositionAsync()
+    {
+        if (_sr is null || _dealershipId is null || _dispositionReason is null) return;
+
+        _dispositionSaving = true;
+        _dispositionError = null;
+        StateHasChanged();
+
+        try
+        {
+            _sr = await SrClient.SetDispositionAsync(_dealershipId, _sr.Id, _dispositionReason);
+
+            // Second, deliberate write: the timeline entry. Status stays Cancelled, so the
+            // disposition just stored survives this update.
+            var combinedSummary = ActivityLogFormatter.PrependSystemEntry(
+                _sr.TechnicianSummary,
+                $"Closed without work — {DispositionReasons.GetLabel(_dispositionReason)}");
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, BuildUpdateRequest(combinedSummary));
+
+            CancelDisposition();
+            RefreshSidebarSelections();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _dispositionError = ex.Message;
+        }
+        finally
+        {
+            _dispositionSaving = false;
         }
     }
 

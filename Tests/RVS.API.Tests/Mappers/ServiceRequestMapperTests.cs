@@ -421,6 +421,95 @@ public class ServiceRequestMapperTests
         dto.CustomerStatusNote.Should().BeNull();
     }
 
+    // ── Disposition (Spec C-4) ───────────────────────────────────────────────
+
+    [Fact]
+    public void ToDetailDto_WhenDisposed_ShouldMapReasonCodeLabelAndTimestamp()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.CloseWithDisposition("WrongLocation", "usr_mgr");
+
+        var dto = entity.ToDetailDto();
+
+        dto.Disposition.Should().NotBeNull();
+        dto.Disposition!.ReasonCode.Should().Be("WrongLocation");
+        dto.Disposition.ReasonLabel.Should().Be("Wrong location");
+        dto.Disposition.DisposedAtUtc.Should().Be(entity.Disposition!.DisposedAtUtc);
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenNotDisposed_ShouldReturnNullDisposition()
+    {
+        var dto = new ServiceRequest { Priority = "Medium" }.ToDetailDto();
+
+        dto.Disposition.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToSummaryDto_WhenDisposed_ShouldCarryReasonCode()
+    {
+        var entity = new ServiceRequest();
+        entity.CloseWithDisposition("Spam", "usr_mgr");
+
+        var dto = entity.ToSummaryDto();
+
+        dto.Status.Should().Be("Cancelled");
+        dto.DispositionReasonCode.Should().Be("Spam");
+    }
+
+    [Fact]
+    public void ToSummaryDto_WhenNotDisposed_ShouldHaveNullReasonCode()
+    {
+        var dto = new ServiceRequest { Status = "Cancelled" }.ToSummaryDto();
+
+        dto.DispositionReasonCode.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenDisposed_ShouldNotCarryTheReason()
+    {
+        // The customer sees "Cancelled" only — a reason such as "Spam" is internal.
+        var entity = new ServiceRequest();
+        entity.CloseWithDisposition("Spam", "usr_mgr");
+
+        var dto = entity.ToCustomerStatusItemDto("555-0100");
+
+        dto.Status.Should().Be("Cancelled");
+        System.Text.Json.JsonSerializer.Serialize(dto).Should().NotContain("Spam");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenStatusMovesOffCancelled_ShouldClearDisposition()
+    {
+        var entity = new ServiceRequest();
+        entity.CloseWithDisposition("Duplicate", "usr_mgr");
+
+        entity.ApplyUpdate(new ServiceRequestUpdateRequestDto
+        {
+            Status = "New",
+            IssueDescription = "desc",
+            Priority = "Medium"
+        }, "usr_mgr");
+
+        entity.Disposition.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenStatusStaysCancelled_ShouldKeepDisposition()
+    {
+        var entity = new ServiceRequest();
+        entity.CloseWithDisposition("Duplicate", "usr_mgr");
+
+        entity.ApplyUpdate(new ServiceRequestUpdateRequestDto
+        {
+            Status = "Cancelled",
+            IssueDescription = "desc",
+            Priority = "Medium"
+        }, "usr_mgr");
+
+        entity.Disposition!.ReasonCode.Should().Be("Duplicate");
+    }
+
     // ── ToEntity (create) ────────────────────────────────────────────────────
 
     [Fact]

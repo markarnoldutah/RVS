@@ -160,6 +160,43 @@ public class ServiceRequestsControllerTests
         result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
     }
 
+    // ── SetDisposition (Spec C-4) ────────────────────────────────────────────
+
+    [Fact]
+    public async Task SetDisposition_WithKnownReason_ShouldReturnOkAndDelegateWithTenantFromClaims()
+    {
+        var sr = BuildServiceRequest();
+        sr.CloseWithDisposition("Duplicate", "usr_mgr");
+        _serviceMock.Setup(s => s.CloseWithDispositionAsync(TenantId, sr.Id, "Duplicate", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var request = new ServiceRequestDispositionRequestDto { ReasonCode = "Duplicate" };
+        var result = await _sut.SetDisposition("dlr_1", sr.Id, request, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = ok.Value.Should().BeOfType<ServiceRequestDetailResponseDto>().Subject;
+        dto.Status.Should().Be("Cancelled");
+        dto.Disposition.Should().NotBeNull();
+        dto.Disposition!.ReasonCode.Should().Be("Duplicate");
+        _serviceMock.Verify(s => s.CloseWithDispositionAsync(TenantId, sr.Id, "Duplicate", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Other")]
+    [InlineData("spam")]
+    public async Task SetDisposition_WhenReasonUnknownOrBlank_ShouldReturn422AndNotCallService(string? reasonCode)
+    {
+        var request = new ServiceRequestDispositionRequestDto { ReasonCode = reasonCode! };
+
+        var result = await _sut.SetDisposition("dlr_1", "sr_1", request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+        _serviceMock.Verify(s => s.CloseWithDispositionAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static ServiceRequest BuildServiceRequest() => new()
     {
         Id = "sr_test_1",

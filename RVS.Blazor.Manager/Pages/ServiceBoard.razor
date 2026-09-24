@@ -204,7 +204,7 @@
                                                         <MudChip T="string" Size="Size.Small"
                                                                  Variant="Variant.Outlined"
                                                                  Style="@($"color: {ChipFontColor};")">
-                                                            @GetStatusLabel(boardItem.Status)
+                                                            @GetCardStatusLabel(boardItem)
                                                         </MudChip>
                                                     }
                                                 </MudStack>
@@ -699,6 +699,15 @@
         "Cancelled"         => "Cancelled",
         _                   => status,
     };
+
+    /// <summary>
+    /// The status chip on a card. A request closed without work (<c>Spec C-4</c>) shows its reason
+    /// instead of a bare "Cancelled", so it reads differently from a manual cancel.
+    /// </summary>
+    private static string GetCardStatusLabel(BoardItem item) =>
+        item.Status == "Cancelled" && item.Summary.DispositionReasonCode is { } reasonCode
+            ? $"Closed: {DispositionReasons.GetLabel(reasonCode)}"
+            : GetStatusLabel(item.Status);
 
     private static string GetZoneForStatus(string status) => status switch
     {

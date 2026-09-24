@@ -166,6 +166,13 @@
                 </MudTd>
                 <MudTd DataLabel="Status">
                     <StatusBadge Status="@context.Status" />
+                    @if (context.DispositionReasonCode is { } reasonCode)
+                    {
+                        @* Spec C-4: a disposition reads differently from a plain close. *@
+                        <MudText Typo="Typo.caption" Style="display: block; color: var(--mud-palette-text-secondary);">
+                            Closed without work · @DispositionReasons.GetLabel(reasonCode)
+                        </MudText>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Priority">
                     @if (!string.IsNullOrEmpty(context.Priority))

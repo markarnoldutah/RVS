@@ -87,4 +87,69 @@ public class ServiceRequestTests
         sr.CustomerStatusNote.Should().BeNull();
         sr.UpdatedByUserId.Should().Be("auth0|advisor-2");
     }
+
+    // --- Disposition (Spec C-4, issue #445) ---------------------------------------------------
+
+    [Fact]
+    public void CloseWithDisposition_WithReason_SetsStatusCancelledAndStoresReasonWithAudit()
+    {
+        var sr = new ServiceRequest { Status = "InProgress" };
+        var before = DateTime.UtcNow;
+
+        sr.CloseWithDisposition("Duplicate", "auth0|advisor-1");
+
+        sr.Status.Should().Be("Cancelled");
+        sr.Disposition.Should().NotBeNull();
+        sr.Disposition!.ReasonCode.Should().Be("Duplicate");
+        sr.Disposition.DisposedByUserId.Should().Be("auth0|advisor-1");
+        sr.Disposition.DisposedAtUtc.Should().BeOnOrAfter(before).And.BeOnOrBefore(DateTime.UtcNow);
+        sr.UpdatedByUserId.Should().Be("auth0|advisor-1");
+        sr.UpdatedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void CloseWithDisposition_WhenAlreadyDisposed_OverwritesReason()
+    {
+        var sr = new ServiceRequest();
+        sr.CloseWithDisposition("Duplicate", "auth0|advisor-1");
+
+        sr.CloseWithDisposition("Spam", "auth0|advisor-2");
+
+        sr.Disposition!.ReasonCode.Should().Be("Spam");
+        sr.Disposition.DisposedByUserId.Should().Be("auth0|advisor-2");
+    }
+
+    [Fact]
+    public void NewServiceRequest_HasNoDisposition()
+    {
+        new ServiceRequest().Disposition.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("New")]
+    [InlineData("InProgress")]
+    [InlineData("WaitingOnParts")]
+    [InlineData("WaitingOnCustomer")]
+    [InlineData("Completed")]
+    public void ClearDispositionIfReopened_WhenStatusMovedOffCancelled_ClearsDisposition(string status)
+    {
+        var sr = new ServiceRequest();
+        sr.CloseWithDisposition("WrongLocation", "auth0|advisor-1");
+        sr.Status = status;
+
+        sr.ClearDispositionIfReopened();
+
+        sr.Disposition.Should().BeNull();
+    }
+
+    [Fact]
+    public void ClearDispositionIfReopened_WhenStillCancelled_KeepsDisposition()
+    {
+        var sr = new ServiceRequest();
+        sr.CloseWithDisposition("CustomerWithdrew", "auth0|advisor-1");
+
+        sr.ClearDispositionIfReopened();
+
+        sr.Disposition!.ReasonCode.Should().Be("CustomerWithdrew");
+    }
 }

@@ -104,6 +104,7 @@ public sealed class ServiceRequestService : IServiceRequestService
         }
 
         existing.Status = newStatus;
+        existing.ClearDispositionIfReopened();
         existing.MarkAsUpdated(_userContext.UserId);
 
         return await _repository.UpdateAsync(existing, cancellationToken);
@@ -139,6 +140,25 @@ public sealed class ServiceRequestService : IServiceRequestService
             ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
 
         existing.SetCustomerStatusNote(note, _userContext.UserId);
+
+        return await _repository.UpdateAsync(existing, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<ServiceRequest> CloseWithDispositionAsync(string tenantId, string id, string reasonCode, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        if (!DispositionReasons.IsValid(reasonCode))
+        {
+            throw new ArgumentException($"Unknown disposition reason '{reasonCode}'.", nameof(reasonCode));
+        }
+
+        var existing = await _repository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
+
+        existing.CloseWithDisposition(reasonCode, _userContext.UserId);
 
         return await _repository.UpdateAsync(existing, cancellationToken);
     }
