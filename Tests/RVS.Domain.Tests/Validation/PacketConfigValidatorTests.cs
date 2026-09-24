@@ -225,4 +225,57 @@ public class PacketConfigValidatorTests
 
         act.Should().Throw<ArgumentNullException>();
     }
+
+    // ── Single-field checks, reused by the manager settings form (issue #447) ─
+
+    [Theory]
+    [InlineData("service@dealer.com")]
+    [InlineData("first.last+packets@sub.dealer.com")]
+    public void ValidateRecipientAddress_ValidAddress_ReturnsSuccess(string address)
+    {
+        PacketConfigValidator.ValidateRecipientAddress(address).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not-an-email")]
+    [InlineData("two addresses@dealer.com")]
+    public void ValidateRecipientAddress_InvalidAddress_ReturnsFailure(string? address)
+    {
+        var result = PacketConfigValidator.ValidateRecipientAddress(address);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void ValidateRecipientAddress_LongerThan254Characters_ReturnsFailure()
+    {
+        var address = new string('a', 250) + "@dealer.com";
+
+        var result = PacketConfigValidator.ValidateRecipientAddress(address);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("254");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("https://cdn.dealer.com/logo.png")]
+    public void ValidateLogoUrl_BlankOrAbsoluteHttpUrl_ReturnsSuccess(string? url)
+    {
+        PacketConfigValidator.ValidateLogoUrl(url).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("not-a-url")]
+    [InlineData("ftp://dealer.com/logo.png")]
+    [InlineData("javascript:alert(1)")]
+    public void ValidateLogoUrl_InvalidUrl_ReturnsFailure(string url)
+    {
+        PacketConfigValidator.ValidateLogoUrl(url).IsValid.Should().BeFalse();
+    }
 }

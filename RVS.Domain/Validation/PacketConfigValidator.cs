@@ -41,20 +41,10 @@ public static class PacketConfigValidator
 
         foreach (var recipient in config.Recipients)
         {
-            if (string.IsNullOrWhiteSpace(recipient))
+            var recipientResult = ValidateRecipientAddress(recipient);
+            if (!recipientResult.IsValid)
             {
-                return ValidationResult.Failure("Packet recipient addresses must not be blank.");
-            }
-
-            if (recipient.Length > MaxRecipientLength)
-            {
-                return ValidationResult.Failure(
-                    $"Packet recipient address must not exceed {MaxRecipientLength} characters.");
-            }
-
-            if (recipient.Any(char.IsWhiteSpace) || !EmailValidator.IsValid(recipient))
-            {
-                return ValidationResult.Failure($"'{recipient}' is not a valid email address.");
+                return recipientResult;
             }
         }
 
@@ -107,19 +97,58 @@ public static class PacketConfigValidator
                 $"Status-link TTL must be between 1 and {PacketConfigEmbedded.MaxStatusLinkTtlDays} days.");
         }
 
-        if (!string.IsNullOrWhiteSpace(config.LogoUrl))
-        {
-            if (config.LogoUrl.Length > MaxLogoUrlLength)
-            {
-                return ValidationResult.Failure(
-                    $"Logo URL must not exceed {MaxLogoUrlLength} characters.");
-            }
+        return ValidateLogoUrl(config.LogoUrl);
+    }
 
-            if (!Uri.TryCreate(config.LogoUrl, UriKind.Absolute, out var uri)
-                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-            {
-                return ValidationResult.Failure("Logo URL must be an absolute http(s) URL.");
-            }
+    /// <summary>
+    /// Validates one active packet-recipient address: not blank, at most 254 characters, no
+    /// whitespace, and a well-formed email address. Exposed so the manager settings form can
+    /// check an address as it is typed (issue #447) against the same rule the API enforces.
+    /// </summary>
+    /// <param name="recipient">The address to check.</param>
+    public static ValidationResult ValidateRecipientAddress(string? recipient)
+    {
+        if (string.IsNullOrWhiteSpace(recipient))
+        {
+            return ValidationResult.Failure("Packet recipient addresses must not be blank.");
+        }
+
+        if (recipient.Length > MaxRecipientLength)
+        {
+            return ValidationResult.Failure(
+                $"Packet recipient address must not exceed {MaxRecipientLength} characters.");
+        }
+
+        if (recipient.Any(char.IsWhiteSpace) || !EmailValidator.IsValid(recipient))
+        {
+            return ValidationResult.Failure($"'{recipient}' is not a valid email address.");
+        }
+
+        return ValidationResult.Success;
+    }
+
+    /// <summary>
+    /// Validates the optional packet logo URL: blank is allowed; otherwise an absolute http(s)
+    /// URL of at most 2048 characters. Exposed for the manager settings form (issue #447).
+    /// </summary>
+    /// <param name="logoUrl">The URL to check.</param>
+    public static ValidationResult ValidateLogoUrl(string? logoUrl)
+    {
+        if (string.IsNullOrWhiteSpace(logoUrl))
+        {
+            return ValidationResult.Success;
+        }
+
+        if (logoUrl.Length > MaxLogoUrlLength)
+        {
+            return ValidationResult.Failure(
+                $"Logo URL must not exceed {MaxLogoUrlLength} characters.");
+        }
+
+        if (!Uri.TryCreate(logoUrl, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return ValidationResult.Failure("Logo URL must be an absolute http(s) URL.");
         }
 
         return ValidationResult.Success;
