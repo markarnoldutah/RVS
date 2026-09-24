@@ -20,7 +20,7 @@ There is no target number of these. One authoritative home per fact; a document 
 **Technical detail** lives in [Docs/ASOT/](Docs/ASOT/): [RVS_Architecture.md](Docs/ASOT/RVS_Architecture.md), [RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md), [RVS_Infrastructure.md](Docs/ASOT/RVS_Infrastructure.md), [RVS_Identity.md](Docs/ASOT/RVS_Identity.md), [RVS_FrontEnd.md](Docs/ASOT/RVS_FrontEnd.md), [RVS_PacketComposition.md](Docs/ASOT/RVS_PacketComposition.md). These describe **what is built**; the Spec describes what is intended. Each ASOT doc carries a coverage or gap table where the two differ.
 
 - Infra source of truth: Bicep files in [Docs/ASOT/Infra/Bicep.IaC/](Docs/ASOT/Infra/Bicep.IaC/). Do not trust hand-drawn diagrams or older docs for Azure resource configuration.
-- Brand: [Docs/ASOT/Brand/](Docs/ASOT/Brand/) — the Denim & Rust theme brief (cited in code as **Spec THEME-1**) as handed over in #702, and the logo-kit asset inventory as re-issued September 22 2026, when the lockup was re-cut to badge plus "Intake". They carry the rationale; the palette itself is authoritative in `RVS.UI.Shared/Theme/RvsBrand.cs`.
+- Brand: [Docs/ASOT/Brand/](Docs/ASOT/Brand/) — the Denim & Rust theme brief (cited in code as **Spec THEME-1**) as handed over in #702, and the logo-kit asset inventory as re-issued September 24 2026 with the "Service Tag" mark (THEME-1 revised the same day: text-safe Rust, WCAG-audited semantic colors). They carry the rationale; the palette itself is authoritative in `RVS.UI.Shared/Theme/RvsBrand.cs`.
 - GTM material: [Docs/Marketing/](Docs/Marketing/) — Positioning, GoToMarket, Objections.
 - Customer-facing how-tos: [Docs/Guides/](Docs/Guides/) — per-device guides for sending a channel-tagged intake link (Spec A-13). Written for a non-technical service advisor, not for engineers.
 - [Docs/ARCHIVE/](Docs/ARCHIVE/) and [Docs/Obsolete/](Docs/Obsolete/) are frozen snapshots. **Never cite them as current.**
@@ -332,7 +332,7 @@ All Blazor projects use **MudBlazor 9.x** (Material Design 3). **Do not** use `M
 
 ### Theme
 
-The brand is **"RV Intake" — Denim & Rust** (Spec THEME-1, issue #702). Ink (Denim) `#2F4C6B` carries structure: app bar, drawer, nav, headings. Rust `#C1502E` carries action: primary buttons, links, active nav, focus rings — `#E8956D` where it sits on a dark surface. Paper (Cream) `#F6F1E7` is the Intake page ground; Manager uses `#FAF8F3`, barely tinted, because full cream everywhere reads as a landing page rather than an 8-hour-shift console. Typeface is **Space Grotesk**, self-hosted from `RVS.UI.Shared/wwwroot/fonts/`.
+The brand is **"RV Intake" — Denim & Rust** (Spec THEME-1, issue #702). Ink (Denim) `#2F4C6B` carries structure: app bar, drawer, nav, headings. Rust carries action: primary buttons, links, active nav, focus rings. The UI Rust is the text-safe `#A8431F` (`RvsBrand.Accent`), or `#E8956D` where it sits on a dark surface. The logo Rust `#C1502E` (`RvsBrand.AccentLogo`) fails AA as text on cream and belongs only in the logo files. Paper (Cream) `#F6F1E7` is the Intake page ground; Manager uses `#FAF8F3`, barely tinted, because full cream everywhere reads as a landing page rather than an 8-hour-shift console. Typeface is **Space Grotesk**, self-hosted from `RVS.UI.Shared/wwwroot/fonts/`.
 
 The palette lives in **`RVS.UI.Shared/Theme/`** — one home, so it cannot drift between the apps. `RvsBrand` holds the tokens; `ManagerTheme` and `IntakeTheme` each expose a `Theme` and a `HighContrast` `MudTheme`.
 
@@ -343,11 +343,11 @@ Two things that bite:
 - **Do not put `Color="Color.Primary"` on `MudAppBar`.** That paints the bar Rust; structure is Ink. Leave the color off and the bar takes `AppbarBackground` from the palette, in every mode.
 - **High contrast is deliberately not brand-colored.** Black/yellow/cyan beats anything Denim and Rust can reach, and someone who turns it on asked for legibility over identity. Only the typeface follows the brand there.
 
-Semantic colors are **not** derived from the brand pair, and `Error` stays a true red (`#B3261E`) so it never has to be told apart from Rust by hue alone. `Tertiary` is left at the MudBlazor default: this is a two-color brand.
+Semantic colors are **not** derived from the brand pair, and every pairing is audited to WCAG AA. `Error` is shifted toward crimson (`#A3123F`) to sit apart from Rust, but hue alone is not a reliable signal, so **every error state carries an icon** — never tell error from primary by color alone. In dark mode every fill is light, so every `*ContrastText` is the dark ground `#1B2A3C`. `Tertiary` is left at the MudBlazor default: this is a two-color brand.
 
 Never inline ad-hoc colors. When an external surface needs the brand color — the Auth0 Universal Login page, for instance — read it from `RVS.UI.Shared/Theme/RvsBrand.cs` rather than from a doc; `#1565C0` appeared in this file and in the Auth0 checklist for a while and was never in the code. `wwwroot/css/design-tokens.css` mirrors `RvsBrand.cs` for the plain-CSS components; change both together.
 
-The logo kit's SVG sources are in `RVS.UI.Shared/wwwroot/brand/`, but app chrome uses the `BrandWordmark` component, which **inlines** the mark — an SVG loaded as an image cannot reach the self-hosted font, so its live text would fall back to a system face.
+The logo kit's SVGs are in `RVS.UI.Shared/wwwroot/brand/`, with their text outlined, so they render in brand as plain images. App chrome draws them through the `BrandWordmark` component (`Horizontal`, `Stacked`, `Glyph`, `Wordmark`; `Reversed` for dark surfaces), which picks the file — reference a lockup through it rather than by path.
 
 ### Component Conventions
 

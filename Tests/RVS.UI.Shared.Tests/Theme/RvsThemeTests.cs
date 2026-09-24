@@ -17,10 +17,68 @@ public class RvsThemeTests
     public void Brand_Tokens_ShouldMatchTheSpecifiedHexValues()
     {
         RvsBrand.Ink.Should().Be("#2F4C6B");
-        RvsBrand.Accent.Should().Be("#C1502E");
+        RvsBrand.Accent.Should().Be("#A8431F");
+        RvsBrand.AccentLogo.Should().Be("#C1502E");
         RvsBrand.AccentOnDark.Should().Be("#E8956D");
         RvsBrand.Paper.Should().Be("#F6F1E7");
         RvsBrand.InkDarkSurface.Should().Be("#1B2A3C");
+    }
+
+    [Fact]
+    public void Brand_SemanticTokens_ShouldMatchTheWcagAuditedValues()
+    {
+        // Revised THEME-1: every pairing checked against WCAG 2.1 AA on cream and white.
+        RvsBrand.Success.Should().Be("#36704E");
+        RvsBrand.Warning.Should().Be("#92600F");
+        RvsBrand.Error.Should().Be("#A3123F");
+        RvsBrand.Info.Should().Be("#3B6E91");
+        RvsBrand.SuccessDark.Should().Be("#6DBA88");
+        RvsBrand.WarningDark.Should().Be("#E0A94E");
+        RvsBrand.ErrorDark.Should().Be("#F08A8A");
+        RvsBrand.InfoDark.Should().Be("#7FB2D3");
+    }
+
+    [Theory]
+    [MemberData(nameof(AllThemes))]
+    public void EveryTheme_ShouldNeverUseTheLogoRustInTheUi(string name, MudTheme theme)
+    {
+        // #C1502E is 4.19:1 on cream — fine for a logo, a fail for button and link text.
+        theme.PaletteLight.Primary.Should().NotBeColor(RvsBrand.AccentLogo, name);
+        theme.PaletteDark.Primary.Should().NotBeColor(RvsBrand.AccentLogo, name);
+    }
+
+    [Fact]
+    public void ManagerTheme_Dark_EveryFilledColourShouldCarryDarkText()
+    {
+        // Every dark-mode fill is light, so MudBlazor's default white contrast text would vanish.
+        var palette = ManagerTheme.Theme.PaletteDark;
+
+        foreach (var (role, contrast) in new[]
+                 {
+                     ("primary", palette.PrimaryContrastText),
+                     ("secondary", palette.SecondaryContrastText),
+                     ("success", palette.SuccessContrastText),
+                     ("warning", palette.WarningContrastText),
+                     ("error", palette.ErrorContrastText),
+                     ("info", palette.InfoContrastText)
+                 })
+        {
+            contrast.Should().BeColor(RvsBrand.InkDarkSurface, role);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AllThemes))]
+    public void EveryTheme_Light_SemanticFillsShouldCarryWhiteText(string name, MudTheme theme)
+    {
+        var palette = theme.PaletteLight;
+
+        palette.PrimaryContrastText.Should().BeColor("#FFFFFF", name);
+        palette.SuccessContrastText.Should().BeColor("#FFFFFF", name);
+        palette.WarningContrastText.Should().BeColor("#FFFFFF", name);
+        palette.ErrorContrastText.Should().BeColor("#FFFFFF", name);
+        palette.InfoContrastText.Should().BeColor("#FFFFFF", name);
+        palette.TextSecondary.Should().BeColor("rgba(32,52,74,0.72)", name);
     }
 
     [Fact]
@@ -118,7 +176,8 @@ public class RvsThemeTests
     [MemberData(nameof(AllThemes))]
     public void EveryTheme_ShouldKeepErrorVisuallyDistinctFromTheRustPrimary(string name, MudTheme theme)
     {
-        // Rust and true red must never be told apart by hue alone.
+        // Error is crimson, Primary rust: close in hue, so they must at least never be the same colour.
+        // Hue is not the only signal either — every error state also carries an icon (THEME-1 §1).
         theme.PaletteLight.Error.Should().NotBeColor(theme.PaletteLight.Primary.Value, name);
         theme.PaletteDark.Error.Should().NotBeColor(theme.PaletteDark.Primary.Value, name);
     }
@@ -147,6 +206,12 @@ public class RvsThemeTests
             theme.PaletteLight.Primary.Should().BeColor("#FFFF00", name);
             theme.PaletteLight.Primary.Should().NotBeColor(RvsBrand.Accent, name);
         }
+    }
+
+    [Fact]
+    public void ManagerTheme_Dark_SecondaryShouldBeTheAuditedLightDenim()
+    {
+        ManagerTheme.Theme.PaletteDark.Secondary.Should().BeColor("#8FA9C2");
     }
 
     public static TheoryData<string, MudTheme> AllThemes() => new()

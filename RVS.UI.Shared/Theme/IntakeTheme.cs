@@ -24,11 +24,15 @@ public static class IntakeTheme
         Background = RvsBrand.Paper,
         Surface = "#FFFFFF",
         TextPrimary = RvsBrand.TextOnPaper,
-        TextSecondary = "rgba(32,52,74,0.68)",
+        TextSecondary = RvsBrand.TextSecondaryOnPaper,
         Success = RvsBrand.Success,
+        SuccessContrastText = "#FFFFFF",
         Warning = RvsBrand.Warning,
+        WarningContrastText = "#FFFFFF",
         Error = RvsBrand.Error,
-        Info = RvsBrand.Info
+        ErrorContrastText = "#FFFFFF",
+        Info = RvsBrand.Info,
+        InfoContrastText = "#FFFFFF"
     };
 
     public static readonly MudTheme Theme = new()
@@ -52,9 +56,13 @@ public static class IntakeTheme
             TextPrimary = BrandPalette.TextPrimary,
             TextSecondary = BrandPalette.TextSecondary,
             Success = BrandPalette.Success,
+            SuccessContrastText = BrandPalette.SuccessContrastText,
             Warning = BrandPalette.Warning,
+            WarningContrastText = BrandPalette.WarningContrastText,
             Error = BrandPalette.Error,
-            Info = BrandPalette.Info
+            ErrorContrastText = BrandPalette.ErrorContrastText,
+            Info = BrandPalette.Info,
+            InfoContrastText = BrandPalette.InfoContrastText
         },
 
         // One notch up from MudBlazor's default: this is filled out on a phone, standing up.

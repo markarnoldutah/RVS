@@ -18,21 +18,22 @@
     --rvs-color-ink-dark: #1B2A3C;          /* Denim, dark-mode ground */
     --rvs-color-paper: #F6F1E7;             /* Cream */
     --rvs-color-paper-neutral: #FAF8F3;     /* Cream, barely tinted */
-    --rvs-color-primary: #C1502E;           /* Rust — action */
-    --rvs-color-primary-hover: #A84525;     /* Rust, pressed */
-    --rvs-color-primary-active: #8F3A1E;    /* Rust, active */
+    --rvs-color-primary: #A8431F;           /* Rust, text-safe — action */
+    --rvs-color-primary-hover: #943B1B;     /* Rust, pressed */
+    --rvs-color-primary-active: #803318;    /* Rust, active */
     --rvs-color-primary-on-dark: #E8956D;   /* Rust, on Ink/dark surfaces */
+    --rvs-color-rust-logo: #C1502E;         /* Logo only — fails AA as text on cream */
     --rvs-color-secondary: #2F4C6B;         /* Ink — structure */
     --rvs-color-secondary-hover: #26405A;
 
     /* --------------------------------------------------------
        Colors — Semantic / Status
        -------------------------------------------------------- */
-    --rvs-color-success: #3F7D58;
+    --rvs-color-success: #36704E;
     --rvs-color-success-bg: #E4EFE8;
-    --rvs-color-warning: #C98A2C;
+    --rvs-color-warning: #92600F;
     --rvs-color-warning-bg: #FBF0DC;
-    --rvs-color-error: #B3261E;
+    --rvs-color-error: #A3123F;
     --rvs-color-error-bg: #F9E3E1;
     --rvs-color-info: #3B6E91;
     --rvs-color-info-bg: #E3EDF3;
@@ -58,10 +59,10 @@
     /* --------------------------------------------------------
        Colors — Priority badges
        -------------------------------------------------------- */
-    --rvs-priority-critical-bg: #B3261E;
+    --rvs-priority-critical-bg: #A3123F;
     --rvs-priority-critical-fg: #FFFFFF;
-    --rvs-priority-high-bg: #C98A2C;
-    --rvs-priority-high-fg: #2B2B2B;
+    --rvs-priority-high-bg: #92600F;
+    --rvs-priority-high-fg: #FFFFFF;
     --rvs-priority-medium-bg: #2F4C6B;
     --rvs-priority-medium-fg: #FFFFFF;
     --rvs-priority-low-bg: #E3DDD0;
@@ -76,7 +77,7 @@
     --rvs-color-surface-secondary: #FAF8F3;
     --rvs-color-border: #E3DDD0;
     --rvs-color-text-primary: #20344A;
-    --rvs-color-text-secondary: rgba(32, 52, 74, 0.68);
+    --rvs-color-text-secondary: rgba(32, 52, 74, 0.72);
     --rvs-color-text-disabled: rgba(32, 52, 74, 0.38);
 
     /* --------------------------------------------------------
@@ -128,16 +129,16 @@
     --rvs-image-tetons: url('/_content/RVS.UI.Shared/images/tetons.jpg');
 
     /* --------------------------------------------------------
-       Brand marks — editable SVG sources from the logo kit.
-       In-app chrome uses the inlined <BrandWordmark> component
-       instead: an SVG loaded as an image cannot reach the
-       self-hosted Space Grotesk, so its live text would fall
-       back to a system font. These are for CSS backgrounds and
-       for handing to anyone outside the app.
+       Brand marks — the "Service Tag" logo kit's SVGs. Text is
+       outlined, so they render in brand as images or CSS
+       backgrounds. In markup, prefer the <BrandWordmark>
+       component, which picks the file per variant.
        -------------------------------------------------------- */
     --rvs-mark-icon: url('/_content/RVS.UI.Shared/brand/icon.svg');
-    --rvs-mark-wordmark: url('/_content/RVS.UI.Shared/brand/wordmark-horizontal.svg');
-    --rvs-mark-wordmark-reversed: url('/_content/RVS.UI.Shared/brand/wordmark-horizontal-reversed.svg');
+    --rvs-mark-glyph: url('/_content/RVS.UI.Shared/brand/glyph.svg');
+    --rvs-mark-glyph-reversed: url('/_content/RVS.UI.Shared/brand/glyph-reversed.svg');
+    --rvs-mark-logo: url('/_content/RVS.UI.Shared/brand/logo-horizontal.svg');
+    --rvs-mark-logo-reversed: url('/_content/RVS.UI.Shared/brand/logo-horizontal-reversed.svg');
 }
 
 /* --------------------------------------------------------

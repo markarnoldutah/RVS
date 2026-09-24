@@ -318,18 +318,18 @@ There is no per-application override, and the per-*customer* branded login that 
 
 §7.2 asks for a public HTTPS logo URL. **Issue #702 landed the logo kit, so there is now a real asset** — the previous placeholder problem (both apps shipped byte-identical 32×32 PNGs named `icon-192.png` and `icon-512.png`, which the login page would have rendered as a smudge scaled up) is gone.
 
-Use `https://manager.rvintake.com/icon-512.png`. It is the "RV Intake" badge from the kit — a genuine 512×512, cream `RV` on an Ink `#2F4C6B` rounded square — and Auth0 renders it at roughly 150×150, so there is headroom on retina. The Manager SWA is public and CDN-backed and serves it today, with no route configuration needed to reach it.
+Use `https://manager.rvintake.com/icon-512.png`. It is the "RV Intake" app icon from the kit — a genuine 512×512, the cream "Service Tag" glyph on an Ink `#2F4C6B` rounded square (re-issued September 24 2026; the URL did not change, so Auth0 needs its copy refreshed, see §7.2) — and Auth0 renders it at roughly 150×150, so there is headroom on retina. The Manager SWA is public and CDN-backed and serves it today, with no route configuration needed to reach it.
 
 Verify the exact URL with `curl` before pasting it into Auth0. Auth0 fetches it server-side, stores whatever comes back, and then shows a blank frame with no error — so a bad URL looks exactly like a broken Auth0.
 The Manager SWA makes that easy to hit: any path `navigationFallback` doesn't exclude is rewritten to `index.html` and answers **200 `text/html`** instead of 404.
-The `exclude` list in [`RVS.Blazor.Manager/wwwroot/staticwebapp.config.json`](../../../RVS.Blazor.Manager/wwwroot/staticwebapp.config.json) covers `/icon-*.png`, `/favicon*` and `/apple-touch-icon-*.png`, so a typo *inside* those shapes does 404 — but one that lands outside them (`/icons-512.png`) still does not.
+The `exclude` list in [`RVS.Blazor.Manager/wwwroot/staticwebapp.config.json`](../../../RVS.Blazor.Manager/wwwroot/staticwebapp.config.json) covers `/icon-*.png`, `/favicon.ico`, `/favicon.svg`, `/favicon-*.png` and `/apple-touch-icon.png`, so a typo *inside* those shapes does 404 — but one that lands outside them (`/icons-512.png`) still does not.
 
 ```bash
 curl -sI https://manager.rvintake.com/icon-512.png       | head -3   # expect 200 and image/png, not text/html
 curl -sI https://manager.rvintake.com/favicon-32x32.png  | head -3   # same, for §7.2's favicon
 ```
 
-If a wordmark is ever wanted instead of the badge, `RVS.UI.Shared/wwwroot/brand/wordmark-stacked.svg` is the square lockup — but it carries live `<text>`, so it needs Space Grotesk converted to outlines before anything outside the app renders it correctly. The badge has no text and no such caveat, which is why it is the recommendation here.
+If a wordmark is ever wanted instead of the icon, `RVS.UI.Shared/wwwroot/brand/logo-stacked.svg` is the square lockup, with its text already outlined — but Auth0 wants a raster URL, so it would need exporting to PNG and serving first. The icon needs neither, which is why it is the recommendation here.
 
 Do not point the URL at `manager.rvserviceflow.com`. It was retired on 2026-09-17 and does not resolve; because Auth0 fetches it server-side the failure surfaces as a silently missing logo, not an error you would notice.
 
@@ -341,11 +341,11 @@ Do not point the URL at `manager.rvserviceflow.com`. It was retired on 2026-09-1
    | Field | Value | Source |
    | --- | --- | --- |
    | Logo | the URL decided in §7.1 | — |
-   | Favicon | `https://manager.rvintake.com/favicon-32x32.png` | The same badge at tab size, from the logo kit. Without it the login tab keeps Auth0's own favicon while the app's tab shows the badge |
-   | Primary color | `#C1502E` | Rust — `RvsBrand.Accent`, the action colour the Manager app's buttons use |
+   | Favicon | `https://manager.rvintake.com/favicon-32x32.png` | The same icon at tab size, with the kit's heavier small-size strokes. Manager keeps this one PNG only for Auth0 — the app's own tab uses `favicon.ico` / `favicon.svg`. Without it the login tab keeps Auth0's own favicon while the app's tab shows the tag |
+   | Primary color | `#A8431F` | Text-safe Rust — `RvsBrand.Accent`, the action colour the Manager app's buttons use. Not the logo Rust `#C1502E`, which fails AA under white button text |
    | Page background | `#FAF8F3` | `RvsBrand.PaperNeutral` — Manager's `PaletteLight.Background`, a barely-tinted paper deliberately not competing with the button |
 
-   **These changed with issue #702**, when the brand moved from Material Indigo to Denim & Rust. The old values were `#3F51B5` and `#FAFAFA`; a tenant still carrying them hands off to an app in a completely different palette, which is the specific failure this section exists to avoid. Read the current values from [`RVS.UI.Shared/Theme/RvsBrand.cs`](../../../RVS.UI.Shared/Theme/RvsBrand.cs) — the one authoritative copy — rather than from this table if the two ever disagree.
+   **These changed with issue #702**, when the brand moved from Material Indigo to Denim & Rust, and the primary changed again on September 24 2026, from `#C1502E` to the text-safe `#A8431F`, when THEME-1 was revised. Re-upload the logo and favicon at the same time: Auth0 stores a copy, so the new "Service Tag" artwork does not appear until the URLs are saved again. The original values were `#3F51B5` and `#FAFAFA`; a tenant still carrying them hands off to an app in a completely different palette, which is the specific failure this section exists to avoid. Read the current values from [`RVS.UI.Shared/Theme/RvsBrand.cs`](../../../RVS.UI.Shared/Theme/RvsBrand.cs) — the one authoritative copy — rather than from this table if the two ever disagree.
 
    Note the split: the login **button** takes Rust because it is an action, while the Ink `#2F4C6B` that dominates the app bar is structure and does not belong in either field here.
 

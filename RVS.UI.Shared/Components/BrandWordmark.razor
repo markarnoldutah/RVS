@@ -1,8 +1,13 @@
 @namespace RVS.UI.Shared.Components
 
-@* See BrandWordmarkSvg for why the mark is inlined rather than loaded as an image. *@
+@* The kit's SVGs are outlined, so an <img> renders them in brand without the font (THEME-1 §4).
+   An empty Title marks the mark decorative: alt="" and hidden from assistive tech. *@
 
-<span class="@Class" style="display:inline-flex;align-items:center;">@Markup</span>
+<img src="@BrandMarkAssets.PathFor(Variant, Reversed)"
+     alt="@Title"
+     aria-hidden="@(IsDecorative ? "true" : null)"
+     class="@Class"
+     style="@ImageStyle" />
 
 @code {
     /// <summary>Which lockup to draw.</summary>
@@ -14,12 +19,13 @@
     /// <summary>Rendered height, e.g. <c>"32px"</c>. Width follows the aspect ratio.</summary>
     [Parameter] public string Height { get; set; } = "32px";
 
-    /// <summary>Accessible name, also the SVG <c>&lt;title&gt;</c>.</summary>
+    /// <summary>Accessible name. Pass an empty string where the mark is decorative.</summary>
     [Parameter] public string Title { get; set; } = "RV Intake";
 
-    /// <summary>Extra CSS classes on the wrapper.</summary>
+    /// <summary>Extra CSS classes on the image, e.g. responsive display helpers.</summary>
     [Parameter] public string? Class { get; set; }
 
-    private MarkupString Markup =>
-        (MarkupString)BrandWordmarkSvg.Build(Variant, Reversed, Height, Title);
+    private bool IsDecorative => string.IsNullOrEmpty(Title);
+
+    private string ImageStyle => $"height:{Height};width:auto;display:block;";
 }

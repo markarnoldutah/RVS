@@ -24,23 +24,29 @@ public static class ManagerTheme
             AppbarBackground = RvsBrand.Ink,
             AppbarText = RvsBrand.Paper,
             DrawerBackground = RvsBrand.Ink,
-            DrawerText = "rgba(246,241,231,0.85)",
-            DrawerIcon = "rgba(246,241,231,0.85)",
+            DrawerText = RvsBrand.DrawerTextOnInk,
+            DrawerIcon = RvsBrand.DrawerTextOnInk,
             Background = RvsBrand.PaperNeutral,
             Surface = "#FFFFFF",
             TextPrimary = RvsBrand.TextOnPaper,
-            TextSecondary = "rgba(32,52,74,0.68)",
+            TextSecondary = RvsBrand.TextSecondaryOnPaper,
             Success = RvsBrand.Success,
+            SuccessContrastText = "#FFFFFF",
             Warning = RvsBrand.Warning,
+            WarningContrastText = "#FFFFFF",
             Error = RvsBrand.Error,
-            Info = RvsBrand.Info
+            ErrorContrastText = "#FFFFFF",
+            Info = RvsBrand.Info,
+            InfoContrastText = "#FFFFFF"
         },
         PaletteDark = new PaletteDark
         {
-            // Full-saturation Rust loses contrast on a dark background at small sizes.
+            // Every dark-mode fill is light, so every *ContrastText is the dark ground —
+            // MudBlazor's default white would put white text on light fills.
             Primary = RvsBrand.AccentOnDark,
             PrimaryContrastText = RvsBrand.InkDarkSurface,
-            Secondary = "#8FA9C2",
+            Secondary = RvsBrand.InkOnDark,
+            SecondaryContrastText = RvsBrand.InkDarkSurface,
             AppbarBackground = RvsBrand.InkDarkSurface,
             AppbarText = RvsBrand.Paper,
             DrawerBackground = RvsBrand.InkDarkSurface,
@@ -49,14 +55,18 @@ public static class ManagerTheme
             Background = RvsBrand.InkDarkSurface,
             Surface = RvsBrand.InkDarkElevated,
             TextPrimary = RvsBrand.TextOnInk,
-            TextSecondary = "rgba(240,236,225,0.70)",
+            TextSecondary = RvsBrand.TextSecondaryOnInk,
             Divider = "rgba(240,236,225,0.20)",
             ActionDefault = RvsBrand.TextOnInk,
             ActionDisabled = "rgba(240,236,225,0.35)",
             Success = RvsBrand.SuccessDark,
+            SuccessContrastText = RvsBrand.InkDarkSurface,
             Warning = RvsBrand.WarningDark,
+            WarningContrastText = RvsBrand.InkDarkSurface,
             Error = RvsBrand.ErrorDark,
-            Info = RvsBrand.InfoDark
+            ErrorContrastText = RvsBrand.InkDarkSurface,
+            Info = RvsBrand.InfoDark,
+            InfoContrastText = RvsBrand.InkDarkSurface
         },
         Typography = RvsTypography.Build(),
         LayoutProperties = new LayoutProperties
