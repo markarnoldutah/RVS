@@ -749,7 +749,21 @@ The running app authenticates with its managed identity. A **local API run uses 
 The `app-insights.bicep` module creates:
 
 - **Workspace-based Application Insights** linked to Log Analytics
-- **Standard availability test** on `/health` (URL ping from 3 US locations, every 5 minutes)
+- **Standard availability test** on `/health` (URL ping), only when
+  `deployAvailabilityTest = true` — **off in both environments today** (#674).
+  Frequency (`availabilityTestFrequencySeconds`, 300 or 900) and locations
+  (`availabilityTestLocations`) are parameters, because each location is billed
+  per run. See [Turning the availability test on](#turning-the-availability-test-on).
+
+**Server-side logs without App Insights (#602).** `app-service.bicep` turns on
+App Service file-system logging, so the API's console log (Information and up
+in staging, Warning and up in prod) is kept for 3 days, capped at 35 MB, whatever
+App Insights is doing. Read it live, or pull the files:
+
+```bash
+az webapp log tail     -n app-rvs-api-<env>-wus3 -g rg-rvs-<env>-westus3
+az webapp log download -n app-rvs-api-<env>-wus3 -g rg-rvs-<env>-westus3 --log-file api-logs.zip
+```
 
 ---
 
@@ -791,6 +805,29 @@ exception argument and so lands in `exceptions`, not `traces`.
 | `sqr-rvs-packet-generation-exhausted-<env>-wus3` | 434001 `PacketGenerationExhausted` | Sev 1 — page | 5 min / 5 min | `ServiceRequestId`, `TenantId` |
 | `sqr-rvs-packet-email-oversized-<env>-wus3` | 521001 `PacketEmailOversized` | Sev 1 — page | 5 min / 5 min | `ServiceRequestId`, `TenantId` |
 | `sqr-rvs-packet-recipient-bounced-warn-<env>-wus3` | 439001 `RecipientHardBounced` | Sev 3 — digest | 1 h / 6 h | `LocationId`, `TenantId` |
+| `sqr-rvs-law-daily-cap-reached-<env>-wus3` | — (workspace `OverQuota`) | Sev 2 | 15 min / 1 h | — |
+| `ma-rvs-api-availability-<env>-wus3` ¹ | — (`/health` test failing) | Sev 1 — page | 5 min / one test interval | — |
+| `sqr-rvs-api-telemetry-dark-<env>-wus3` ¹ | — (pings pass, no `requests`) | Sev 2 | 15 min / 1 h | — |
+
+¹ Only exists while `deployAvailabilityTest = true`; off in both environments
+today. See [Turning the availability test on](#turning-the-availability-test-on).
+
+**The alerts cannot see their own blindness on their own.** Every rule above
+reads the workspace, so anything that stops telemetry reaching it silences them
+all, with nothing to say why (#602). Two rules cover the two ways that happens:
+
+- **Workspace stops ingesting** — the daily cap. `sqr-rvs-law-daily-cap-reached`
+  reads `_LogOperation`, which the cap does not block.
+- **The app stops sending** — the SDK dies while the app keeps serving. The
+  availability service writes `availabilityResults` itself, independently of
+  the app, and each passing ping makes a request the SDK should record.
+  `sqr-rvs-api-telemetry-dark` fires when at least two pings passed in the last
+  hour and `requests` is empty. A daily-cap stop empties both tables at once, so
+  it does not fire this rule; the cap alert covers it.
+
+Without the availability test there is nothing to compare against: on an idle
+B1 worker with no Always On, "no requests for an hour" is the normal state.
+**So while the test is off, a repeat of #602 is caught by nothing.**
 
 5 minutes is the practical near-real-time floor for log-search alerts; the four
 Sev 1 rules use it. **439001** (one recipient disabled, others still receive
@@ -840,6 +877,108 @@ union traces, exceptions
           TenantId = tostring(customDimensions.TenantId)
 | order by timestamp desc
 ```
+
+### Turning the availability test on
+
+Off in both environments (#674): each location is billed per run. Turning it on
+creates the test **and** the two alerts that read it, so a failure pages the ops
+action group and dark telemetry is caught. Do it per environment, in its own
+`.bicepparam`, and redeploy:
+
+```bicep
+param deployAvailabilityTest = true
+param availabilityTestFrequencySeconds = 900   // 300 or 900
+param availabilityTestLocations = [
+  'us-ca-sjc-azr'
+]
+```
+
+Scale it with how much a missed outage would cost, not all at once:
+
+| Stage | Frequency | Locations | Runs / month | Detects an outage within |
+|---|---|---|---|---|
+| Staging, or prod pre-traffic | 900 s | 1 (`us-ca-sjc-azr`) | ~2.9K | ~15–20 min |
+| Prod, first paying shops (G-3) | 900 s | 1 | ~2.9K | ~15–20 min |
+| Prod, several shops depending on it | 300 s | 3 (`us-ca-sjc-azr`, `us-tx-sn1-azr`, `us-va-ash-azr`) | ~26K | ~5–10 min |
+
+- With **one location**, one failed run pages. With **several**, the alert waits
+  for all but one to fail, so a single location's own trouble does not page.
+- The dark-telemetry rule needs **two passing pings an hour**. Every row in the
+  table gives at least four, so any of them is enough.
+- Neither setting affects the Log Analytics daily cap in a way that matters:
+  each ping adds one `availabilityResults` row and one `requests` row.
+
+To turn it off again, set `deployAvailabilityTest = false`. The redeploy removes
+nothing on its own, because incremental mode leaves existing resources in place.
+Delete the test and both rules by hand:
+
+```bash
+az monitor app-insights web-test delete -g rg-rvs-<env>-westus3 -n avail-appi-rvs-api-<env>-wus3
+az monitor metrics alert delete        -g rg-rvs-<env>-westus3 -n ma-rvs-api-availability-<env>-wus3
+az monitor scheduled-query delete      -g rg-rvs-<env>-westus3 -n sqr-rvs-api-telemetry-dark-<env>-wus3
+```
+
+### Runbook — telemetry gone dark
+
+`sqr-rvs-api-telemetry-dark` fired, or you noticed App Insights is empty while
+the app works (#602). Run each step in the workspace's **Logs** blade unless
+it says otherwise.
+
+1. **Which side stopped?** Compare what the platform wrote with what the app wrote:
+
+   ```kusto
+   union withsource = Table AppAvailabilityResults, AppRequests, AppTraces, AppExceptions, AppDependencies
+   | where TimeGenerated > ago(2d)
+   | summarize Rows = count(), Last = max(TimeGenerated) by Table
+   ```
+
+   - `AppAvailabilityResults` keeps arriving while the app tables stop: **the app
+     stopped sending**. Go to step 3.
+   - Everything stops at the same instant: **the workspace stopped ingesting**.
+     Go to step 2.
+
+2. **Workspace side.** Check for the cap, and for ingestion errors:
+
+   ```kusto
+   _LogOperation
+   | where TimeGenerated > ago(2d)
+   | project TimeGenerated, Category, Operation, Level, Detail
+   ```
+
+   Also check both caps. The workspace cap is `logAnalyticsDailyCapGb`. The App
+   Insights component has its own legacy cap that Bicep does not set, so it
+   should be the 100 GB default:
+
+   ```bash
+   az monitor log-analytics workspace show -g rg-rvs-<env>-westus3 -n law-rvs-obs-<env>-wus3 --query workspaceCapping
+   az monitor app-insights component billing show -g rg-rvs-<env>-westus3 --app appi-rvs-api-<env>-wus3
+   ```
+
+3. **App side.** Read the file-system log from around the cutoff (see
+   [Application Insights](#application-insights)), looking for a startup after
+   the last good row and for any exception during it. A platform recycle is not
+   in the activity log. Look in the portal instead: App Service → *Diagnose and
+   solve problems* → *Web App Restarted*. Changes that someone made do appear in
+   the activity log:
+
+   ```bash
+   az monitor activity-log list -g rg-rvs-<env>-westus3 \
+     --start-time <cutoff − 1h> --end-time <cutoff + 1h> \
+     --query "[].{t:eventTimestamp, op:operationName.localizedValue, status:status.value, caller:caller}" -o table
+   ```
+
+   The SDK's exporter reports its own failures through OpenTelemetry
+   self-diagnostics, not `ILogger`, so they are not in the console log. To
+   capture them, upload an `OTEL_DIAGNOSTICS.json` to the app's content root
+   (`/home/site/wwwroot`) containing
+   `{"LogDirectory": "/home/LogFiles", "FileSize": 1024, "LogLevel": "Warning"}`,
+   then restart. Remove it afterwards.
+
+4. **Recover.** `az webapp restart`, then request `/health` a few times and
+   confirm new `AppRequests` rows within about 5 minutes. If restarting brings
+   telemetry back, the next recycle might stop it again. To test that, let the
+   worker idle for more than 20 minutes and request `/health` once, so the app
+   cold-starts, then check again.
 
 ---
 

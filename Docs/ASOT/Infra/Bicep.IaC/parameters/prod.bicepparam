@@ -59,9 +59,15 @@ param deployKeyVault = true
 
 // Observability (Log Analytics + Application Insights + /health availability test)
 param deployObservability = true
-// Off until go-live: billed per run and no alert rule reads its results yet.
-// Turn back on at go-live together with an availability alert — Docs/RVS_GoLive_Activities.md (G-3).
+// Off until go-live: billed per run. Turning it on also creates the two alerts
+// that read it (#602) — test failing, and telemetry gone dark (pings pass, App
+// Insights records nothing). Flip at go-live — Docs/RVS_GoLive_Activities.md (G-3).
+// Scale frequency/locations with traffic: README "Turning the availability test on".
 param deployAvailabilityTest = false
+param availabilityTestFrequencySeconds = 900
+param availabilityTestLocations = [
+  'us-ca-sjc-azr'
+]
 // 30 is the lowest the workspace accepts; the first 31 days cost nothing extra.
 param logAnalyticsRetentionInDays = 30
 // Pre-go-live cap. 0.08 GB/day per environment keeps staging + prod together

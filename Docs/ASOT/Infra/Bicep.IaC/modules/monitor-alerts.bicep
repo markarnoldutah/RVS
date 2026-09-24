@@ -21,6 +21,12 @@
 // lands in `exceptions` rather than `traces`; every rule therefore
 // queries `union traces, exceptions` and is robust to a LogCritical
 // gaining an exception argument later.
+//
+// Two further rules watch the monitoring itself rather than the app
+// (#602), and exist only while the /health availability test does:
+// one fires when the test stops passing, the other when the test
+// passes but Application Insights records none of the requests it
+// made — the app is serving, and its telemetry has gone dark.
 // ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
@@ -47,6 +53,20 @@ param tags object = {}
 
 @description('Email receivers for the ops action group. Each item: { name: string, email: string }. Empty = an action group with no receivers. Never rely on adding one via the portal instead: this property is a full-replace PUT, so the next deploy silently deletes any receiver not in this parameter (#639).')
 param opsEmailReceivers array = []
+
+@description('Resource ID of the /health availability test (app-insights.bicep output). Empty = no test deployed, and neither availability-driven rule is created.')
+param availabilityTestId string = ''
+
+@description('Number of locations the availability test runs from. Sets how many must fail before the availability alert fires.')
+@minValue(1)
+param availabilityTestLocationCount int = 1
+
+@description('Seconds between availability test runs. Sets the availability alert window, which must span at least one run.')
+@allowed([
+  300
+  900
+])
+param availabilityTestFrequencySeconds int = 900
 
 // ── Variables ─────────────────────────────────────────────────
 
@@ -81,6 +101,12 @@ var criticalEvents = [
 ]
 
 var actionGroupShortName = environmentName == 'prod' ? 'rvs-ops-prod' : 'rvs-ops-stg'
+
+var deployAvailabilityRules = !empty(availabilityTestId)
+
+// One location fails for reasons of its own now and then, so with several
+// locations wait for all but one to agree. With a single location, it decides.
+var availabilityFailedLocationThreshold = max(1, availabilityTestLocationCount - 1)
 
 // ── Resources ─────────────────────────────────────────────────
 
@@ -260,6 +286,84 @@ resource dailyCapReached 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
   }
 }
 
+// /health availability test failing. Metric alert on the test's own
+// per-location results, which the availability service writes whatever the
+// app's SDK is doing. The window spans at least one run at either frequency.
+resource availabilityFailing 'Microsoft.Insights/metricAlerts@2026-01-01' = if (deployAvailabilityRules) {
+  name: 'ma-rvs-api-availability-${environmentName}-wus3'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'The /health availability test is failing from ${availabilityFailedLocationThreshold} or more of its ${availabilityTestLocationCount} location(s). The API is down or unreachable from outside Azure.'
+    severity: 1
+    enabled: true
+    scopes: [
+      availabilityTestId
+      appInsightsResourceId
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: availabilityTestFrequencySeconds == 900 ? 'PT15M' : 'PT5M'
+    autoMitigate: true
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
+      webTestId: availabilityTestId
+      componentId: appInsightsResourceId
+      failedLocationCount: availabilityFailedLocationThreshold
+    }
+    actions: [
+      {
+        actionGroupId: opsActionGroup.id
+      }
+    ]
+  }
+}
+
+// Telemetry gone dark (#602). The availability service writes its results to
+// availabilityResults independently of the app; the app's SDK writes the
+// request each successful ping made to requests. Pings passing while requests
+// stays empty means the app is serving and its telemetry is not arriving, so
+// every log alert above is blind. A whole-workspace stop (the daily cap)
+// empties both tables at once and does not fire this rule; dailyCapReached
+// covers that case. Two passing pings, not one, so a ping whose request is
+// still in the ingestion pipeline at the window edge cannot fire it alone.
+resource telemetryDark 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = if (deployAvailabilityRules) {
+  name: 'sqr-rvs-api-telemetry-dark-${environmentName}-wus3'
+  location: location
+  tags: tags
+  kind: 'LogAlert'
+  properties: {
+    displayName: '[RVS ${environmentName}] API telemetry gone dark — pings pass, App Insights records no requests'
+    description: 'The /health availability test passed at least twice in the last hour, yet Application Insights recorded no requests at all, so the app is serving but its telemetry is not arriving and every packet-pipeline alert is blind. Runbook: RVS Infra/Bicep.IaC/README.md "Telemetry gone dark".'
+    severity: 2
+    enabled: true
+    scopes: [
+      appInsightsResourceId
+    ]
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT1H'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: 'let pings = toscalar(availabilityResults | where tostring(success) in ("1", "True", "true") | count); let served = toscalar(requests | count); print Pings = pings, Served = served | where Pings >= 2 and Served == 0'
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        opsActionGroup.id
+      ]
+    }
+  }
+}
+
 // ── Outputs ───────────────────────────────────────────────────
 
 @description('Resource ID of the ops action group.')
@@ -276,3 +380,9 @@ output warningRuleName string = recipientBounceWarning.name
 
 @description('Name of the Log Analytics daily-cap-reached alert rule.')
 output dailyCapRuleName string = dailyCapReached.name
+
+@description('Names of the availability-driven alert rules (test failing, telemetry gone dark). Empty when no availability test is deployed.')
+output availabilityRuleNames array = deployAvailabilityRules ? [
+  availabilityFailing.name
+  telemetryDark.name
+] : []
