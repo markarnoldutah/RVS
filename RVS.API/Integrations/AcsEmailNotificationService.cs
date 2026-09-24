@@ -15,7 +15,11 @@ public sealed class AcsEmailNotificationService : INotificationService
     private readonly string _fromAddress;
     private readonly string _senderDisplayName;
 
-    /// <summary>The display name shown as the sender on every outgoing message.</summary>
+    /// <summary>
+    /// The configured sender display name. Not applied to sends: ACS's <see cref="EmailMessage"/>
+    /// takes an address only and shows the display name of the domain's sender username, which
+    /// Bicep sets (<c>communication-services.bicep</c>, issue #710).
+    /// </summary>
     internal string SenderDisplayName => _senderDisplayName;
 
     public AcsEmailNotificationService(

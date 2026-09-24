@@ -51,7 +51,13 @@ internal static class IntakeInviteContent
         return $"Your service request link from {locationName}";
     }
 
-    public static string BuildEmailHtmlBody(string locationName, string firstName, string link, int expiryHours)
+    /// <remarks>
+    /// Wording from issue #710: the customer asked for the link during a call, so the email says
+    /// so, says it comes from RV Intake on the dealer's behalf, and sends questions back to the
+    /// location's phone. A location with no phone on file still gets the dealer's name.
+    /// </remarks>
+    public static string BuildEmailHtmlBody(
+        string locationName, string firstName, string link, int expiryHours, string? locationPhone)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(locationName);
         ArgumentException.ThrowIfNullOrWhiteSpace(firstName);
@@ -60,29 +66,40 @@ internal static class IntakeInviteContent
         var location = WebUtility.HtmlEncode(locationName);
         var name = WebUtility.HtmlEncode(firstName);
         var href = WebUtility.HtmlEncode(link);
+        var phone = string.IsNullOrWhiteSpace(locationPhone) ? null : WebUtility.HtmlEncode(locationPhone.Trim());
 
         return
             $"<p>Hi {name},</p>" +
-            $"<p>Here's the link to start your service request with <strong>{location}</strong>. " +
-            "You can describe the problem and add photos of it.</p>" +
-            $"<p><a href=\"{href}\">Start your service request</a></p>" +
+            $"<p>You've initiated a service request for your RV with <strong>{location}</strong>. " +
+            "Use the link below to provide the service manager with important details about your issue:</p>" +
+            $"<p><a href=\"{href}\">Start your service request</a> with {location}.</p>" +
             $"<p>Or paste this into your browser: {href}</p>" +
-            $"<p>The link works once, for the next {expiryHours} hours. " +
-            $"You're getting this email because you asked {location} to send it.</p>";
+            $"<p>You're receiving this email from RV Intake on behalf of {location} because you initiated a service request. " +
+            $"This link will work once and expires in {expiryHours} hours.</p>" +
+            $"<p>{QuestionsLine(location, phone)}</p>";
     }
 
-    public static string BuildEmailPlainTextBody(string locationName, string firstName, string link, int expiryHours)
+    public static string BuildEmailPlainTextBody(
+        string locationName, string firstName, string link, int expiryHours, string? locationPhone)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(locationName);
         ArgumentException.ThrowIfNullOrWhiteSpace(firstName);
         ArgumentException.ThrowIfNullOrWhiteSpace(link);
 
+        var phone = string.IsNullOrWhiteSpace(locationPhone) ? null : locationPhone.Trim();
+
         return
             $"Hi {firstName},\n\n" +
-            $"Here's the link to start your service request with {locationName}. " +
-            "You can describe the problem and add photos of it.\n\n" +
+            $"You've initiated a service request for your RV with {locationName}. " +
+            "Use the link below to provide the service manager with important details about your issue:\n\n" +
             $"{link}\n\n" +
-            $"The link works once, for the next {expiryHours} hours. " +
-            $"You're getting this email because you asked {locationName} to send it.\n";
+            $"You're receiving this email from RV Intake on behalf of {locationName} because you initiated a service request. " +
+            $"This link will work once and expires in {expiryHours} hours.\n\n" +
+            $"{QuestionsLine(locationName, phone)}\n";
     }
+
+    private static string QuestionsLine(string location, string? phone) =>
+        phone is null
+            ? $"If you have questions, please contact {location} directly."
+            : $"If you have questions, please contact {location} directly at: {phone}";
 }
