@@ -92,7 +92,7 @@ param acsDataLocation string = 'United States'
 @description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in staging (mail-staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the follow-up link deploy (acsCustomDomainVerified) out of band — README "Deploy Production" step 4. (#532)')
 param acsCustomEmailDomain string = ''
 
-@description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. (#532)')
+@description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain and, in prod, the rvintake.com apex. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. If it is outside rvintake.com, the reporting domain must publish an RFC 7489 §7.1 authorization record per policy domain — see the dmarcReportAuthorizationAction output. (#532, #608)')
 param dmarcReportingAddress string = ''
 
 @description('When true, links the custom domain to the ACS account. ACS rejects linking an unverified domain, so this must stay false (the default) on the deploy that first creates a new acsCustomEmailDomain — that deploy only creates the domain and writes its DNS records. Once every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified, set this to true in the .bicepparam file and redeploy to perform the link. Once linked it must stay true — false unlinks the domain on the next deploy. (#579)')
@@ -135,7 +135,7 @@ param deployDns bool = false
 @description('Resource group that owns the DNS zones. Apex zones are shared across environments and owned by the prod RG.')
 param dnsResourceGroupName string = 'rg-rvs-prod-westus3'
 
-@description('Corporate DNS zone. Holds the API origin host (#633) and the DMARC reporting mailbox; no customer-facing hostname lives here. Formerly managerZoneName — the Manager SWA moved to the intake zone in #632.')
+@description('Corporate DNS zone. Holds the API origin host (#633) and a no-mail posture (null MX, SPF -all, DMARC reject); no customer-facing hostname lives here. Formerly managerZoneName — the Manager SWA moved to the intake zone in #632.')
 param apiZoneName string = 'rvserviceflow.com'
 
 @description('DNS zone for every customer-facing host: Intake (apex in prod, subdomain CNAME in non-prod envs), Manager, the channel-tagging redirect, the ACS sending domain and the Auth0 login host.')
@@ -660,7 +660,8 @@ var acsCustomDomainCnameRecords = acsCustomDomainOn ? [
 
 // DMARC is authored here (not taken from ACS) so we control the policy and the
 // reporting address: p=none surfaces failures without dropping mail while the
-// domain warms.
+// domain warms. Reports reach a human only if the reporting domain authorizes
+// them — see "DMARC aggregate-report destination (#608)" below.
 var acsCustomDomainDmarcRecord = {
   name: '_dmarc.${acsCustomDomainSubLabel}'
   values: [ 'v=DMARC1; p=none; rua=mailto:${dmarcReportingAddress}; adkim=r; aspf=r' ]
@@ -680,6 +681,33 @@ var acsCustomDomainOwnershipTxtRecords = acsCustomDomainOn ? [
   }
 ] : []
 var acsCustomDomainTxtRecords = acsCustomDomainOn ? concat(acsCustomDomainOwnershipTxtRecords, [ acsCustomDomainDmarcRecord ]) : []
+
+// ── DMARC aggregate-report destination (#608) ──
+//
+// Reports go to dmarcReportingAddress, which since #608 is
+// support@arnolddigitalsolutions.com, a monitored mailbox on the filing entity's
+// own domain. It is on a different organizational domain from
+// the records that name it, so RFC 7489 §7.1 applies: before sending, a receiver
+// looks up <policy-domain>._report._dmarc.<rua-domain> for a TXT "v=DMARC1", and
+// a conforming one drops the report if it is missing. Those records belong in
+// the arnolddigitalsolutions.com zone, which is at its registrar, not in Azure, so
+// this template cannot declare them. It computes their exact names instead and
+// prints them in the dmarcReportAuthorizationAction output, the same way other
+// out-of-band steps are surfaced. Any policy domain whose record carries this
+// rua needs one: the sending subdomain in every environment and the
+// rvintake.com apex in prod.
+//
+// One explicit record per policy domain, not a *._report._dmarc wildcard. A
+// wildcard would let any domain on the internet send its reports to that mailbox.
+//
+// "Outside rvintake.com" is judged by suffix, which is enough for a single-label
+// TLD like .com. An address inside the intake zone needs no authorization record.
+var dmarcReportingDomain = empty(dmarcReportingAddress) ? '' : toLower(last(split(dmarcReportingAddress, '@')))
+var dmarcReportingIsExternal = !empty(dmarcReportingDomain) && dmarcReportingDomain != intakeZoneName && !endsWith(dmarcReportingDomain, '.${intakeZoneName}')
+var dmarcReportAuthorizationNames = dmarcReportingIsExternal ? concat(
+  acsCustomDomainOn ? [ '${acsCustomEmailDomain}._report._dmarc.${dmarcReportingDomain}' ] : [],
+  (intakeApexIsManaged && deploySwa && deployDns) ? [ '${intakeZoneName}._report._dmarc.${dmarcReportingDomain}' ] : []
+) : []
 
 // ── go.rvintake.com — the channel-tagging redirect (Spec A-13, #599) ──
 //
@@ -748,7 +776,7 @@ var apiTxtRecords = deployAppService ? [
 //
 // In the INTAKE zone, not the corporate one: a service advisor signs in here, so it carries the
 // brand every other host they and their customers touch already carries. The corporate zone
-// keeps the API origin and the DMARC mailbox, neither of which anyone types.
+// keeps the API origin, which nobody types.
 //
 // Unlike the redirect host above, this one binds entirely in-template — it is a subdomain
 // CNAME, so swa-custom-domain.bicep can validate it with cname-delegation once the record
@@ -909,7 +937,8 @@ module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
 // No customer-facing hostname lives here: the Manager SWA moved to the intake
 // zone in #632, so every host a human reads is on rvintake.com. What remains is
 // the API origin (#633) — an XHR target, seen in devtools and a CSP, not on a
-// sticker — plus the DMARC rua mailbox on this domain.
+// sticker. The DMARC rua mailbox is not here either: it has been on
+// arnolddigitalsolutions.com since #608.
 //
 // Only the CNAME and asuid TXT are declared. The hostname binding and managed
 // certificate are out-of-band, one-time, per environment: see the apiCnameRecords
@@ -928,10 +957,11 @@ module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
 //   SPF "-all" with no mechanisms — no host is authorised to send as this domain.
 //   DMARC p=reject — act on that, rather than merely publishing it.
 //
-// No rua on this record, deliberately. A reporting address at rvintake.com would
-// be cross-organizational-domain and would need its own RFC 7489 §7.1
-// authorization record in the intake zone; a policy-only DMARC record is valid,
-// needs no such record, and there is nothing here worth reporting on anyway.
+// No rua on this record, deliberately. The reporting address
+// (dmarcReportingAddress) is on another organizational domain, so a rua here
+// would need one more RFC 7489 §7.1 authorization record at the registrar. A
+// policy-only DMARC record is valid, needs no such record, and there is nothing
+// here worth reporting on anyway.
 var corporateNullMxRecords = [
   {
     name: '@'
@@ -1016,18 +1046,21 @@ module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
 // sp= is written out even though reject is also what it would inherit from p=,
 // so the choice is visible here and not left to a default.
 //
-// No MX and no rua, deliberately. rvintake.com accepts no mail today, which is
-// why dmarc-reports@rvintake.com bounces. Whether the apex gets a null MX
-// (RFC 7505) or a real one that receives DMARC reports is #608's decision, and
-// both belong in the same change. Add rua here when #608 gives reports somewhere
-// to land.
+// Null MX and rua (#608). DMARC reports go to dmarcReportingAddress on another
+// domain, so nothing needs to receive mail at rvintake.com. The null MX (RFC 7505:
+// preference 0, exchange ".") says so, and a sender fails at once instead of
+// retrying for days. The rua lets the apex report forgery attempts, and does the
+// same for any subdomain without its own record. It needs its own §7.1
+// authorization record, which is listed in dmarcReportAuthorizationAction.
+// Replace the null MX with a real exchanger only if mailboxes are ever added at
+// rvintake.com.
 //
 // Prod deploy only, like the apex ALIAS: staging writes into this same zone and
 // never touches "@". The SPF string shares the apex TXT record-set with the SWA
 // validation token, and dns.bicep replaces a record-set wholesale. So the TXT set
 // is declared only when intakeApexValidationToken is supplied, and a deploy that
-// cannot re-assert the token never removes it. DMARC lives at its own name, so it
-// has no such dependency.
+// cannot re-assert the token never removes it. DMARC and MX live in their own
+// record-sets, so they have no such dependency.
 var intakeApexIsManaged = environmentName == 'prod'
 
 var intakeApexSpfTxtRecords = (intakeApexIsManaged && !empty(intakeApexValidationToken)) ? [
@@ -1040,7 +1073,14 @@ var intakeApexSpfTxtRecords = (intakeApexIsManaged && !empty(intakeApexValidatio
 var intakeApexDmarcTxtRecords = intakeApexIsManaged ? [
   {
     name: '_dmarc'
-    values: [ 'v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s' ]
+    values: [ 'v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s${empty(dmarcReportingAddress) ? '' : '; rua=mailto:${dmarcReportingAddress}'}' ]
+  }
+] : []
+
+var intakeApexNullMxRecords = intakeApexIsManaged ? [
+  {
+    name: '@'
+    records: [ { preference: 0, exchange: '.' } ]
   }
 ] : []
 
@@ -1064,6 +1104,7 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
       }
     ] : []
     txtRecords: concat(acsCustomDomainTxtRecords, redirectTxtRecords, intakeApexSpfTxtRecords, intakeApexDmarcTxtRecords)
+    mxRecords: intakeApexNullMxRecords
   }
 }
 
@@ -1265,6 +1306,11 @@ output acsCustomDomainAction string = acsCustomDomainOn
       ? 'Domain linked to the ACS account. If sends fail with DomainNotLinked, confirm every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified. Send quota starts at 30/min, 100/hour; request an increase only when volume warrants it (#603) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.'
       : 'ACTION REQUIRED: run `az communication email domain initiate-verification` for Domain/SPF/DKIM/DKIM2, confirm every record shows Verified, then set acsCustomDomainVerified=true in the parameter file and redeploy to link the domain to the account — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.')
   : ''
+
+@description('Manual DNS step that Bicep cannot do (#608). dmarcReportingAddress is on another organizational domain, so RFC 7489 §7.1 requires that domain to publish a TXT "v=DMARC1" at <policy-domain>._report._dmarc.<rua-domain> for every policy domain naming it, or conforming receivers drop the reports. That zone is at its registrar, outside Azure. Empty when the address is inside the intake zone or unset.')
+output dmarcReportAuthorizationAction string = empty(dmarcReportAuthorizationNames)
+  ? ''
+  : 'MANUAL DNS (outside Azure): in the ${dmarcReportingDomain} zone at its registrar, make sure a TXT record with value "v=DMARC1" exists at each of: ${join(dmarcReportAuthorizationNames, ', ')}. Without them, DMARC aggregate reports for these domains are dropped. See Infra/Bicep.IaC/README.md "DMARC aggregate reports".'
 
 // ── SWA ───────────────────────────────────────────────────────
 

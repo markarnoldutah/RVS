@@ -497,9 +497,13 @@ az webapp config appsettings list \
 #          az communication show -n acs-rvs-notify-prod-wus3-s01-001 -g "$ACS_RG" \
 #            --query linkedDomains -o json
 #
-#     3. Confirm DMARC resolves and the reporting mailbox is monitored (#608):
+#     3. Confirm DMARC resolves and reports are authorized (#608):
 #          dig +short TXT _dmarc.mail.rvintake.com
-#          # → v=DMARC1; p=none; rua=mailto:dmarc-reports@rvintake.com
+#          # → v=DMARC1; p=none; rua=mailto:support@arnolddigitalsolutions.com; adkim=r; aspf=r
+#          dig +short TXT mail.rvintake.com._report._dmarc.arnolddigitalsolutions.com
+#          # → "v=DMARC1". Added by hand at the registrar, not in Azure. The deploy's
+#          #   dmarcReportAuthorizationAction output lists every name needed;
+#          #   README "DMARC aggregate reports".
 #
 #     4. Send quota: NO request at bring-up. A verified domain gets 30/min, 100/hour
 #        automatically, which covers the pilot. File the increase when the #603 volume
