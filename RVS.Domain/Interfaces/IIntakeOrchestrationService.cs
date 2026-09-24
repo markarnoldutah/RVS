@@ -29,11 +29,11 @@ public interface IIntakeOrchestrationService
     /// <param name="request">The service request creation DTO from the intake form.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// A tuple containing the created <see cref="ServiceRequest"/> entity and the magic-link token
-    /// (generated or reused) for checking request status.
+    /// A tuple containing the created <see cref="ServiceRequest"/> entity, the magic-link token
+    /// (generated or reused) for checking request status, and when that token expires.
     /// </returns>
     /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
-    Task<(ServiceRequest ServiceRequest, string? MagicLinkToken)> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default);
+    Task<(ServiceRequest ServiceRequest, string? MagicLinkToken, DateTime? MagicLinkExpiresAtUtc)> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Resolves the location slug and assembles the intake configuration DTO,

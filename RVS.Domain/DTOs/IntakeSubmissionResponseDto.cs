@@ -14,4 +14,11 @@ public sealed record IntakeSubmissionResponseDto
     /// The token is generated or reused during the intake orchestration and has a 90-day expiry.
     /// </summary>
     public string? MagicLinkToken { get; init; }
+
+    /// <summary>
+    /// When <see cref="MagicLinkToken"/> stops working (UTC), or <c>null</c> when it does not expire.
+    /// A reused token keeps its original expiry, so the intake app is told rather than left to
+    /// assume a fresh TTL when it remembers the link on the device (issue #716).
+    /// </summary>
+    public DateTime? MagicLinkExpiresAtUtc { get; init; }
 }

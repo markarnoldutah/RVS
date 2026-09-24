@@ -161,7 +161,7 @@ public class IntakeControllerTests
     {
         var sr = BuildServiceRequest();
         _intakeServiceMock.Setup(s => s.ExecuteAsync("test-slug", It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((sr, "test-magic-token"));
+            .ReturnsAsync((sr, "test-magic-token", new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc)));
 
         var request = new ServiceRequestCreateRequestDto
         {
@@ -177,6 +177,7 @@ public class IntakeControllerTests
         var dto = createdResult.Value.Should().BeOfType<IntakeSubmissionResponseDto>().Subject;
         dto.ServiceRequest.Id.Should().Be(sr.Id);
         dto.MagicLinkToken.Should().Be("test-magic-token");
+        dto.MagicLinkExpiresAtUtc.Should().Be(new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc));
     }
 
     [Theory]

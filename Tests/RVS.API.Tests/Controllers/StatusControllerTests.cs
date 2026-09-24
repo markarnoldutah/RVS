@@ -62,6 +62,23 @@ public class StatusControllerTests
     }
 
     [Fact]
+    public async Task GetStatus_ShouldReturnTheTokenExpirySoTheClientCanRememberTheLink()
+    {
+        ArrangeHappyPath();
+        var expiry = new DateTime(2026, 11, 15, 0, 0, 0, DateTimeKind.Utc);
+        var acct = BuildGlobalCustomerAcct();
+        acct.MagicLinkExpiresAtUtc = expiry;
+        _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
+        dto.MagicLinkExpiresAtUtc.Should().Be(expiry);
+    }
+
+    [Fact]
     public async Task GetStatus_WhenServiceRequestHasStatusNote_ShouldIncludeItOnTheItem()
     {
         _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))

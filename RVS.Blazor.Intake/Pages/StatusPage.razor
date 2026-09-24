@@ -33,7 +33,7 @@ else if (_errorState == ErrorState.InvalidToken)
                            Color="Color.Primary"
                            FullWidth="true"
                            StartIcon="@Icons.Material.Filled.Search"
-                           Href="/status"
+                           Href="/status?manual=true"
                            Style="text-transform: none;">
                     Try a Different Number
                 </MudButton>
@@ -185,13 +185,20 @@ else if (_statusResponse is not null)
             </MudGrid>
         }
 
-        <MudStack AlignItems="AlignItems.Center">
+        <MudStack AlignItems="AlignItems.Center" Spacing="1">
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Home"
                        Href="/"
                        Style="text-transform: none;">
                 Return Home
+            </MudButton>
+            @* The lookup page opens the link this device remembers; this is the way past it. *@
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       Href="/status?manual=true"
+                       Style="text-transform: none;">
+                Look up a different confirmation number
             </MudButton>
         </MudStack>
     </MudStack>
@@ -202,6 +209,7 @@ else if (_statusResponse is not null)
     [Inject] private HttpClient Http { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private ILogger<StatusPage> Logger { get; set; } = default!;
+    [Inject] private StatusLinkStore StatusLinks { get; set; } = default!;
 
     private CustomerStatusResponseDto? _statusResponse;
     private bool _loading = true;
@@ -225,14 +233,20 @@ else if (_statusResponse is not null)
             if (response.IsSuccessStatusCode)
             {
                 _statusResponse = await response.Content.ReadFromJsonAsync<CustomerStatusResponseDto>();
+
+                // Remember the link on this device so "Check Request Status" opens it next time
+                // (issue #716). Re-saved on every load, so a renewed expiry is picked up.
+                await StatusLinks.SaveAsync(Token, _statusResponse?.MagicLinkExpiresAtUtc);
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 _errorState = ErrorState.InvalidToken;
+                await StatusLinks.ForgetIfSavedAsync(Token);
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.Gone)
             {
                 _errorState = ErrorState.ExpiredToken;
+                await StatusLinks.ForgetIfSavedAsync(Token);
             }
             else
             {

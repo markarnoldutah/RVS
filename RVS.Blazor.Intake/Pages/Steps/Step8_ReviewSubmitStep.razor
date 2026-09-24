@@ -234,6 +234,7 @@
     [Parameter, EditorRequired] public EventCallback OnSubmitted { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private StatusLinkStore StatusLinks { get; set; } = default!;
 
     private bool _isSubmitting;
     private string? _submitError;
@@ -270,6 +271,7 @@
             State.CreatedServiceRequestId = result.ServiceRequest.Id;
             State.SubmissionMagicLinkToken = result.MagicLinkToken;
             await State.PersistAsync();
+            await StatusLinks.SaveAsync(result.MagicLinkToken, result.MagicLinkExpiresAtUtc);
 
             var pendingFiles = State.Attachments
                 .Where(a => a.FileData is not null && !a.IsUploaded)
