@@ -103,25 +103,21 @@ param deployAcs = true
 // README "Communication Services — Email". Keep staging recipients to
 // mailboxes we control; that is what keeps rvintake.com's reputation clean.
 param acsCustomEmailDomain = 'mail-staging.rvintake.com'
-// DMARC aggregate-report destination. On the SAME organizational domain as the
-// DMARC record itself (rvintake.com), which is what keeps it standards-clean:
-// RFC 7489 §7.1 requires an authorization record
-// (<domain>._report._dmarc.<rua-domain> TXT "v=DMARC1") whenever the rua address
-// sits outside the publishing domain's org domain, and none existed while this
-// pointed at rvserviceflow.com — so conforming reporters had grounds to drop the
-// reports outright. Same org domain, no authorization record needed, ever.
+// DMARC aggregate-report destination (#608): a monitored mailbox on the filing
+// entity's own domain, the same address the Intake footer shows (SiteIdentity.cs).
 //
-// It previously read dmarc-reports@rvserviceflow.com. That domain's only MX is
-// mail.yourmailprovider.com, a placeholder registered to Domains By Proxy and
-// controlled by a third party, so reports were addressed somewhere nobody here
-// owns. See the note in #634 / #608.
+// It is on a different organizational domain from the DMARC records that name
+// it, so RFC 7489 §7.1 applies. Receivers look up
+// <policy-domain>._report._dmarc.arnolddigitalsolutions.com for TXT "v=DMARC1"
+// and drop the report if it is missing. That zone is at the registrar, not in
+// Azure, so Bicep cannot write those records. The deploy prints the exact names
+// in the dmarcReportAuthorizationAction output, and README "DMARC aggregate
+// reports" has the steps and the dig checks.
 //
-// ⚠ rvintake.com has NO MX record, so reports BOUNCE at the reporter rather than
-// arriving. That is deliberate and strictly better than delivery to a stranger,
-// but it means p=none is still doing nothing useful: nobody reads the reports.
-// #608 tracks giving this a real destination — a monitored mailbox or a DMARC
-// processor address. Until then this is a correctness fix, not a working pipeline.
-param dmarcReportingAddress = 'dmarc-reports@rvintake.com'
+// History: dmarc-reports@rvserviceflow.com, whose only MX was a third party's
+// placeholder, until 2026-09-17. Then dmarc-reports@rvintake.com, which bounced
+// because rvintake.com has no MX. It now has a null MX (prod apex, #608).
+param dmarcReportingAddress = 'support@arnolddigitalsolutions.com'
 // Verified and linked. Must stay true: false unlinks the domain on redeploy.
 //
 // The #634 rename ran the full three-phase sequence on 2026-09-17: deploy with

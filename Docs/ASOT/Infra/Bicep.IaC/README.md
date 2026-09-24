@@ -281,11 +281,7 @@ repeats this. Commands are in `deployment-cmds.azcli` §4e (2)(c).
    Then poll until every entry in `verificationStates` is `Verified` (minutes, since the zone is on Azure DNS). Sends From `mail.rvintake.com` fail until then; the Azure-managed domain stays linked as a fallback.
 
    **Link the verified domain.** ACS rejects linking an unverified domain, so a brand-new custom domain's first deploy runs with `acsCustomDomainVerified = false` — that deploy only creates the domain and writes its DNS records. Once Domain, SPF, DKIM and DKIM2 all read `Verified`, set `acsCustomDomainVerified = true` in the parameter file and redeploy (step 1). `prod.bicepparam` and `staging.bicepparam` already carry `true` for their linked domains; **never set it back to `false`** — the next deploy would unlink the domain. Confirm with `az communication show -n <acs> -g rg-rvs-prod-westus3 --query linkedDomains` (the domain's own `linkedAccount` field reads `null` even when linked).
-3. **Check DMARC resolves:** `dig +short TXT _dmarc.mail.rvintake.com` → `v=DMARC1; p=none; rua=mailto:dmarc-reports@rvintake.com`.
-
-   **The `rua` address must stay on the same organizational domain as the record.** RFC 7489 §7.1 requires an authorization record — `<domain>._report._dmarc.<rua-domain> TXT "v=DMARC1"` — for any rua address outside it, and a conforming reporter is entitled to drop the reports when that record is missing. This pointed at `dmarc-reports@rvserviceflow.com` until 2026-09-17 with no such record, so reports had two reasons to go nowhere: the missing authorization, and `rvserviceflow.com`'s only MX being `mail.yourmailprovider.com`, a placeholder registered to Domains By Proxy — i.e. addressed to a host nobody here controls.
-
-   **`rvintake.com` has no MX, so reports now bounce rather than arrive.** That is deliberate and better than delivery to a stranger, but `p=none` still achieves nothing while nobody reads the reports. Giving this a real destination — a monitored mailbox or a DMARC-processor address — is `#608`.
+3. **Check DMARC resolves and reports are authorized:** `dig +short TXT _dmarc.mail.rvintake.com` → `v=DMARC1; p=none; rua=mailto:support@arnolddigitalsolutions.com; adkim=r; aspf=r`. The reporting address is on another domain, so the authorization records at the registrar must exist too, or receivers drop the reports. Follow the `dmarcReportAuthorizationAction` output and see [DMARC aggregate reports](#dmarc-aggregate-reports-608) below.
 4. **Send quota — no request at bring-up.** Once the domain verifies, ACS applies 30 emails/min, 100/hour automatically, which covers the pilot. Request an increase only when sustained volume approaches that ceiling (`#603` tracks the alert): Portal → ACS → **Email** → **Domains** → `mail.rvintake.com` → quota request. Approval takes **up to 72 hours** and requires a sustained bounce rate **under 1 %**, so file when the alert fires, not at the hard cap.
 5. **Warm the domain.** Let Jay Lyons's real intake traffic (P1, `#525`) send through `mail.rvintake.com` for **2–3 weeks** before any *other* shop's mailbox receives a packet. Ramp volume gradually; watch the ACS delivery / bounce metrics and the DMARC `rua` reports. Sustained ACS failures above ~1 % risk throttling.
 6. **In-room deliverability check (second pilot onward — `FS-7` in `RVS_Plan.md`).** When onboarding a shop after Jay: send a test packet while you are with the service manager, confirm it lands in the inbox and not Junk, and have them mark the sender safe on the spot. Not needed for the first pilot.
@@ -410,23 +406,56 @@ The apex sends no mail. The packet email goes out From `mail.rvintake.com` (prod
 | Record | Value | Why |
 | --- | --- | --- |
 | `TXT @` | `v=spf1 -all`, alongside the SWA apex validation token | no host is authorised to send as the apex |
-| `TXT _dmarc` | `v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s` | act on failures, at the apex and on every subdomain without its own record |
+| `TXT _dmarc` | `v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; rua=mailto:<dmarcReportingAddress>` | act on failures, at the apex and on every subdomain without its own record; report forgery attempts (`#608`) |
+| `MX @` | `0 .` | RFC 7505 null MX: `rvintake.com` accepts no mail (`#608`) |
 
 **Before adding a sending subdomain, read this.** DMARC falls back to the organizational domain's policy for any subdomain that has no record of its own, and `sp=reject` means a new sender (a second ACS domain, a transactional or marketing provider) with no `_dmarc` record has all of its mail rejected from the first message. The sending side sees no useful error, and nobody changed a record. Give it its own `_dmarc` record in the same change that starts it sending. `sp=reject` was chosen over `sp=none` because `mail.rvintake.com` is expected to stay the only sender, and `sp=none` would leave every subdomain spoofable. The reasoning is also in `main.bicep`, next to the record.
 
 **The token has to be in the parameter file.** `intakeApexValidationToken` in `prod.bicepparam` carries the token Azure minted when the apex was registered (Deploy Production, step 2). If it is blank, the deploy does not declare the apex TXT set at all. That means no SPF, but it also means the deploy never deletes a token it cannot re-write. If the apex is re-registered, update the parameter before the next deploy. Staging never writes `@` or `_dmarc`.
 
-**No MX and no `rua`, for now.** `rvintake.com` accepts no mail, which is why `dmarc-reports@rvintake.com` bounces. A null MX (RFC 7505) and a real MX for DMARC reports would conflict, so both are decided in `#608`.
+**Null MX, because the reports go elsewhere (`#608`).** DMARC reports go to `support@arnolddigitalsolutions.com`, so nothing needs to receive mail at `rvintake.com`. The null MX says so and makes senders fail at once. Customer replies to `DoNotReply@mail.rvintake.com` are unaffected: MX is looked up for the exact host, and `mail.rvintake.com` never had one. If mailboxes are ever added at `rvintake.com`, replace the null MX with real exchangers in the same change.
 
 Verify after a prod deploy:
 
 ```bash
 NS=ns1-08.azure-dns.com        # rvintake.com's own NS set, NOT rvserviceflow.com's
 dig @$NS +short TXT rvintake.com                     # token AND "v=spf1 -all"
-dig @$NS +short TXT _dmarc.rvintake.com              # p=reject; sp=reject
-dig @$NS +short TXT _dmarc.mail.rvintake.com         # unchanged, p=none
-dig @$NS +short TXT _dmarc.mail-staging.rvintake.com # unchanged, p=none
+dig @$NS +short TXT _dmarc.rvintake.com              # p=reject; sp=reject; ... rua=mailto:support@arnolddigitalsolutions.com
+dig @$NS +short MX rvintake.com                      # 0 .
+dig @$NS +short TXT _dmarc.mail.rvintake.com         # p=none; rua=mailto:support@arnolddigitalsolutions.com
+dig @$NS +short TXT _dmarc.mail-staging.rvintake.com # p=none; rua=mailto:support@arnolddigitalsolutions.com
 ```
+
+### DMARC aggregate reports (`#608`)
+
+All three DMARC records in `rvintake.com` send aggregate (`rua`) reports to `dmarcReportingAddress`: `_dmarc.mail`, `_dmarc.mail-staging` and, in prod, `_dmarc` at the apex. That address is **`support@arnolddigitalsolutions.com`**, a monitored mailbox on the filing entity's own domain and the same contact address the Intake footer shows. `rvserviceflow.com` has no `rua`; see its section above.
+
+**The authorization records are manual and live outside Azure.** The reporting address is on a different organizational domain from the records that name it. Under RFC 7489 §7.1, a receiver first looks up `<policy-domain>._report._dmarc.<rua-domain>` for a `TXT "v=DMARC1"`, and a conforming one **drops the report if that record is missing**. The `arnolddigitalsolutions.com` zone is hosted at its registrar, not in Azure DNS, so Bicep cannot declare these records. Instead, each deploy prints the exact names it depends on in the `dmarcReportAuthorizationAction` output. Add them once at the registrar:
+
+| Host (FQDN) | Type | Value | Needed by |
+| --- | --- | --- | --- |
+| `mail.rvintake.com._report._dmarc.arnolddigitalsolutions.com` | TXT | `v=DMARC1` | prod sending domain |
+| `rvintake.com._report._dmarc.arnolddigitalsolutions.com` | TXT | `v=DMARC1` | prod apex |
+| `mail-staging.rvintake.com._report._dmarc.arnolddigitalsolutions.com` | TXT | `v=DMARC1` | staging sending domain |
+
+Most registrar UIs want the host **relative to the zone**, so enter `mail.rvintake.com._report._dmarc` and so on without the trailing `.arnolddigitalsolutions.com`. The UI appends the zone name. Enter the full name and the record lands at `…arnolddigitalsolutions.com.arnolddigitalsolutions.com` and authorizes nothing.
+
+**Use one record per policy domain, not a `*._report._dmarc` wildcard.** A wildcard would let any domain on the internet send its reports to this mailbox.
+
+**If the address or a sending domain changes,** the list changes with it. Redeploy, read `dmarcReportAuthorizationAction` again, and add the new names before removing the old ones.
+
+Verify (any resolver; this zone is not on Azure DNS):
+
+```bash
+for d in mail.rvintake.com rvintake.com mail-staging.rvintake.com; do
+  printf '%-28s ' "$d"; dig +short TXT "$d._report._dmarc.arnolddigitalsolutions.com"
+done                                                  # each: "v=DMARC1"
+dig +short MX arnolddigitalsolutions.com              # the mailbox's real exchanger
+```
+
+**What to expect.** Receivers send reports about once a day, as zipped XML attachments, and only for days when mail from the domain reached them. The first `mail.rvintake.com` report arrives a day or two after the first packet email a large receiver (Google, Microsoft, Yahoo) accepts. Check that each `<record>` has `<dkim>pass</dkim>` and `<spf>pass</spf>` under `<policy_evaluated>`. DMARC passes if either one aligns, but `#608` asks for both. If SPF fails alignment while DKIM passes, look at the envelope-from (`<identifiers>` / `<auth_results><spf><domain>`) before blaming the SPF record. A run of clean reports through warming is the evidence for any later move from `p=none` to `quarantine`/`reject`. That move is out of scope for `#608`.
+
+> **History.** `rua` pointed at `dmarc-reports@rvserviceflow.com` until 2026-09-17. It had no authorization record, and that domain's only MX was a third party's placeholder. It then pointed at `dmarc-reports@rvintake.com`, which bounced because `rvintake.com` had no MX. `#608` gave reports a real destination.
 
 ### Bind the `api.<zone>` host (`#633`)
 
@@ -538,8 +567,8 @@ dig +short "manager$SUFFIX.rvserviceflow.com"
 ```
 
 Do **not** delete the `rvserviceflow.com` zone itself. It stays under IaC (the
-`dnsApi` module declares it with no records) because the DMARC `rua` mailbox is
-on that domain and the API origin host binds there next — `#633`.
+`dnsApi` module declares it) because the API origin host binds there (`#633`)
+and its no-mail posture (null MX, SPF, DMARC) has to stay asserted.
 
 ### Pre-Provision Resource Groups (all environments)
 
@@ -660,8 +689,8 @@ Both DNS zones (`rvserviceflow.com`, `rvintake.com`) live in the **prod** RG
 deployment writes CNAME records into those zones (`manager-staging` and
 `staging`, both now in `rvintake.com` — #632), so the staging GitHub Actions
 service principal needs write access to the zones. `rvserviceflow.com` carries
-no records of its own yet; it is kept under IaC because the zone must survive
-for the DMARC rua mailbox and the API origin host (#633).
+no customer-facing records; it is kept under IaC for the API origin host (#633)
+and its no-mail posture.
 
 We grant **DNS Zone Contributor** (`befefa01-2a29-4197-83a8-272ff33ce314`)
 **at the zone scope only** — never at the prod RG scope.
@@ -1036,10 +1065,12 @@ mailboxes we control.
   builds the record-set names from the subdomain label (`mail` / `mail.staging`),
   because ACS returns DKIM names as a bare selector and Domain/SPF names as the
   full FQDN — neither is zone-relative. There is nothing to transcribe.
-- Publishes **DMARC** at `_dmarc.mail` (prod) / `_dmarc.mail.staging` (staging) — `v=DMARC1; p=none; rua=mailto:<dmarcReportingAddress>`
+- Publishes **DMARC** at `_dmarc.mail` (prod) / `_dmarc.mail-staging` (staging) — `v=DMARC1; p=none; rua=mailto:<dmarcReportingAddress>`
   — authored in `main.bicep` (not taken from ACS) so the policy stays `p=none`
   and the reporting mailbox is ours. `p=none` makes alignment failures visible
-  in the aggregate reports without dropping mail while the domain is cold.
+  in the aggregate reports without dropping mail while the domain is cold. The
+  reports only arrive if the registrar-side authorization records exist; see
+  [DMARC aggregate reports](#dmarc-aggregate-reports-608).
 
 **What stays manual** (surfaced by the `acsCustomDomainAction` output — see
 "Deploy Production" step 4): `az communication email domain initiate-verification`
