@@ -2,7 +2,7 @@
   "trailingSlash": "never",
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/appsettings.json", "/appsettings.*.json", "/css/*", "/js/*", "/_framework/*", "/_content/*", "/service-worker.js", "/manifest.webmanifest", "/icon-*.png", "/apple-touch-icon-*.png", "/favicon.ico", "/favicon-*.png"]
+    "exclude": ["/appsettings.json", "/appsettings.*.json", "/css/*", "/js/*", "/_framework/*", "/_content/*", "/service-worker.js", "/manifest.webmanifest", "/icon-*.png", "/apple-touch-icon.png", "/favicon.ico", "/favicon.svg", "/favicon-*.png"]
   },
   "mimeTypes": {
     ".json": "application/json",

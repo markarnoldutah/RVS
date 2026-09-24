@@ -1,257 +1,257 @@
-# RVS Front End — MudBlazor Theme: Denim & Rust
+# Spec THEME-1 — RV Intake brand theme for MudBlazor
 
-> **Status: the brief as handed over (issue #702), kept for its rationale.** Implemented on
-> branch `702-new-ui-theme-and-palette`. Where this file and the code disagree, the code wins:
-> `RVS.UI.Shared/Theme/RvsBrand.cs` is the authoritative copy of the palette, and
-> `Docs/ASOT/RVS_FrontEnd.md` describes what was actually built. Two details here did not
-> survive contact with MudBlazor 9.4.0 — `Typography.*.FontWeight` is typed `string`, not
-> `int`, and the themes live beside a per-app `ThemeService` that selects the mode rather than
-> replacing it. What this file is still worth reading for is the *why*: why Intake gets full
-> cream and Manager does not, why Rust never becomes `Error`, and why the fonts are self-hosted.
+> **Status: the revised THEME-1 brief as handed over September 24 2026 (`rvs-mudblazor-theme-kit`),
+> kept for its rationale.** It supersedes the #702 draft. Where this file and the code disagree,
+> the code wins: `RVS.UI.Shared/Theme/RvsBrand.cs` is the authoritative copy of the palette, and
+> `Docs/ASOT/RVS_FrontEnd.md` describes what was actually built. How the build departs from the
+> text below:
+>
+> - **No `RvsThemes` class.** The palette values in §1 landed as written, but in the structure
+>   #702 already built: `ManagerTheme` and `IntakeTheme`, each with a `Theme` and a `HighContrast`
+>   `MudTheme`, selected by a per-app `ThemeService`. The tokens kept their #702 names: `Denim` is
+>   `RvsBrand.Ink`, `Cream` is `Paper`, the text-safe `Primary` is `Accent`, and `RustLogo` is
+>   `AccentLogo`. High contrast stays black/yellow/cyan and is not brand-coloured.
+> - **Manager app bar (§4).** The reversed horizontal lockup from `md` up and the reversed glyph
+>   below it, as specified, followed by a "Manager" label so the chrome reads *RV Intake Manager*.
+>   Below `md` the label is "Intake Manager", since the glyph does not spell "RV".
+> - **Intake header (§4): not done.** The app bar still carries the reversed horizontal lockup;
+>   the landing page's hero band shows the stacked lockup, and the intake hero shows the glyph. Moving RV Intake to a "Powered by" footer
+>   under the shop's own name and logo is a layout change and is still open.
+> - **Favicons (§4).** Installed as specified, except that Manager also keeps the kit's
+>   `favicon-32x32.png`, because the Auth0 Universal Login page references it by URL.
+> - **Hex sweep (§3), the error-icon rule (§1), and the manual checks in §5 are still open.**
+>   `PriorityBadge`'s Critical pill uses the crimson Error fill without an icon.
+> - **Fonts (§2)** were already in place from #702; the kit's files are byte-identical.
 
-**For:** `RVS.Blazor.Manager` and `RVS.Blazor.Intake` (MudBlazor 9.x, Material Design 3)
-**Purpose:** Roll the "RV Intake" brand (Concept D wordmark, Denim & Rust colorway) into both apps' MudBlazor theme. This file is written to be handed to Claude Code as a work item.
+**Apps:** `RVS.Blazor.Manager`, `RVS.Blazor.Intake`
+**MudBlazor:** 9.x (Material Design 3)
+**Supersedes:** the earlier THEME-1 draft. Changes: text-safe primary color, WCAG-audited semantic colors, `FontWeight` as string, shared token class, and a new logo integration section.
 
-Cite this file as `Spec THEME-1` in any issue/commit that implements it.
+This spec is written as a Claude Code work item. Reference `Spec THEME-1` in commits and issues that implement it.
+
+---
+
+## 0. Before writing any code
+
+1. Read the MudBlazor version from `RVS.Blazor.Manager.csproj` and `RVS.Blazor.Intake.csproj`. The code below targets **MudBlazor 8+ naming**, which carries into 9.x. If either project is on 7.x or earlier, stop and flag it; the type names below will not compile there.
+2. Grep for existing `MudTheme` definitions and `MudThemeProvider` usages. This spec **replaces** any existing theme. Do not merge it with one.
+
+Known API facts for 8+/9.x. Don't "correct" these from older tutorials:
+- The palettes are `PaletteLight` and `PaletteDark`. The single `Palette` property is obsolete.
+- The typography classes are `DefaultTypography`, `H1Typography` … `H6Typography`, `ButtonTypography`, and so on. The 7.x names `Default`, `H1`, etc. no longer exist.
+- `FontWeight`, `FontSize`, `LineHeight` and `LetterSpacing` are **strings** (`FontWeight = "700"`), not ints.
 
 ---
 
 ## 1. Design tokens
 
-| Token | Hex | Role |
+### Brand (used in the logo)
+| Token | Hex | Notes |
 |---|---|---|
-| `Ink` (Denim) | `#2F4C6B` | Structure — app bar, drawer, nav, headings, body text |
-| `Accent` (Rust) | `#C1502E` | Action — primary buttons, links, focus states, active nav |
-| `Accent, on dark` | `#E8956D` | Same accent, used where it sits on a dark/Ink surface |
-| `Paper` (Cream) | `#F6F1E7` | Page/card background in light mode |
-| `Ink, dark-mode surface` | `#1B2A3C` | Slightly deeper than Ink — dark-mode page background |
+| Denim | `#2F4C6B` | Structural color: app bar, drawer, logo |
+| Rust (logo) | `#C1502E` | **Logo and marketing only.** Fails AA as body text on cream (4.19:1) |
+| Cream | `#F6F1E7` | Intake background; text on Denim |
 
-Typeface: **Space Grotesk** (Bold for headings/wordmark weight, Medium for UI labels/buttons, Regular for body text). OFL-licensed, free for commercial use.
+### UI (used in the MudBlazor themes)
+Every pairing below was checked against WCAG 2.1 AA (≥ 4.5:1 for normal text).
 
-Semantic colors are **not** derived from the brand pair — see §4. Do not let anyone reuse Rust for `Error`; the two need to stay visually distinct (see the note in §4).
+**Light palette** (Manager light mode and Intake)
+| Role | Hex | Checked against | Ratio |
+|---|---|---|---|
+| Primary (text-safe rust) | `#A8431F` | Cream / Manager bg / white text on it | 5.35 / 5.67 / 6.02 |
+| Secondary (Denim) | `#2F4C6B` | Cream text on it | 7.88 |
+| TextPrimary | `#20344A` | Cream | 11.30 |
+| TextSecondary | `rgba(32,52,74,0.72)` | Cream / white | 4.99 / 5.30 |
+| Drawer text/icons | `rgba(246,241,231,0.85)` | Denim | 6.21 |
+| Success | `#36704E` | Cream / white text on it | 5.20 / 5.86 |
+| Warning | `#92600F` | Cream / white text on it | 4.78 / 5.38 |
+| Error | `#A3123F` | Cream / white text on it | 6.87 / 7.73 |
+| Info | `#3B6E91` | Cream / white text on it | 4.88 / 5.49 |
+
+**Dark palette** (Manager only)
+| Role | Hex | Checked against | Ratio |
+|---|---|---|---|
+| Background | `#1B2A3C` | — | — |
+| Surface | `#243B54` | — | — |
+| Primary | `#E8956D` | Surface / dark text on it | 4.89 / 6.20 |
+| Secondary | `#8FA9C2` | Surface / dark text on it | 4.72 / 5.97 |
+| TextPrimary | `#F0ECE1` | Surface | 9.73 |
+| TextSecondary | `rgba(240,236,225,0.70)` | Surface | 5.67 |
+| Success | `#6DBA88` | Surface / dark text on it | 4.94 / 6.26 |
+| Warning | `#E0A94E` | Surface / dark text on it | 5.44 / 6.90 |
+| Error | `#F08A8A` | Surface / dark text on it | 4.76 / 6.03 |
+| Info | `#7FB2D3` | Surface / dark text on it | 5.04 / 6.38 |
+
+In dark mode every filled color is light, so **every `*ContrastText` in `PaletteDark` must be dark (`#1B2A3C`)**. MudBlazor's default is white, which would put white text on light fills.
+
+### Error vs. Primary: a rule, not just a color
+Primary is a rust red, so any red error color sits close to it in hue. Error is shifted toward crimson (`#A3123F`) to help, but hue alone is not a reliable signal, especially for color-blind users. The rule:
+
+> **Every error state carries an icon.** `MudAlert` does this by default; don't turn it off. For `MudChip`, `StatusBadge`, validation text, and table-row states that mean error, add `Icons.Material.Filled.ErrorOutline` (or similar). Never distinguish error from primary by color alone.
 
 ---
 
-## 2. Font hosting — self-host, do not link Google Fonts CDN
+## 2. Fonts: self-hosted
 
-`RVS.Blazor.Intake` is a PWA aimed at customers with "poor bay connectivity" (per `RVS_FrontEnd_Solution.md`) — a Google Fonts CDN `<link>` is a network dependency that can fail exactly when the app needs to work offline-first from cache. Self-host instead.
+The Intake app is a PWA used on poor connections, so the Google Fonts CDN is not allowed.
 
 **Acceptance criteria**
-- [ ] Three WOFF2 files (`SpaceGrotesk-Bold.woff2`, `SpaceGrotesk-Medium.woff2`, `SpaceGrotesk-Regular.woff2` — provided alongside this spec) are placed in `RVS.UI.Shared/wwwroot/fonts/` so both apps reference one copy via the RCL static-asset path (`_content/RVS.UI.Shared/fonts/...`).
-- [ ] A `fonts.css` in the same shared location declares:
-
-```css
-@font-face {
-  font-family: 'Space Grotesk';
-  src: url('SpaceGrotesk-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Space Grotesk';
-  src: url('SpaceGrotesk-Medium.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Space Grotesk';
-  src: url('SpaceGrotesk-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-```
-
-- [ ] Both `RVS.Blazor.Manager/wwwroot/index.html` and `RVS.Blazor.Intake/wwwroot/index.html` add, in `<head>`:
-```html
-<link rel="stylesheet" href="_content/RVS.UI.Shared/fonts/fonts.css">
-```
-- [ ] Both apps' service-worker asset manifest (`service-worker.published.js` / the PWA precache list) picks up the font files automatically since they're under `wwwroot` of the referenced RCL — confirm they show up in the generated `service-worker-assets.js` after a publish build, not just at dev time.
-- [ ] Both `index.html` files get `<meta name="theme-color" content="#2F4C6B">` in `<head>` (brand ink in mobile browser chrome).
+- [ ] Copy everything in `fonts/` (three `.woff2` files, `fonts.css`, `OFL.txt`) into `RVS.UI.Shared/wwwroot/fonts/`. **Keep `OFL.txt`.** The font license requires it to ship with the font files.
+- [ ] Both apps' `wwwroot/index.html` `<head>` includes `<link rel="stylesheet" href="_content/RVS.UI.Shared/fonts/fonts.css">`.
+- [ ] After a publish build, confirm the `.woff2` files appear in `service-worker-assets.js`, so they're precached for offline use.
 
 ---
 
-## 3. Where the theme lives
+## 3. Shared tokens and themes
 
-Put a shared base theme in `RVS.UI.Shared` (it's already the shared home for "CSS / design tokens" per the front-end architecture table), then let each app take it as-is or override narrowly. Do **not** duplicate the palette definition in both apps — one drifts, then nobody trusts either.
-
-```
-RVS.UI.Shared/
-  Theme/
-    RvsTheme.cs        <- shared base: fonts, layout, semantic colors, light+dark palettes
-    ManagerTheme.cs     <- static MudTheme ManagerTheme, built from RvsTheme
-    IntakeTheme.cs       <- static MudTheme IntakeTheme, built from RvsTheme
-```
-
-`MudBlazor 9.x` note: `MudTheme.Palette` is **obsolete** in v9 — it will not compile against a `Palette` property assignment in some 9.x point releases and is deprecated in all of them. Use `PaletteLight` and `PaletteDark`, both typed `PaletteLight` / `PaletteDark` (subclasses of the base `Palette`). Don't let Claude Code reach for `Palette = new Palette { ... }` from an older tutorial it might have memorized — check this repo's actual installed MudBlazor version in the `.csproj` before writing code, since property names have moved between major versions.
-
----
-
-## 4. Manager app theme (`RVS.Blazor.Manager`)
-
-Manager is an authenticated, dense, hours-at-a-time tool — advisors and admins live in the SR queue and Service Board all day. It should feel closer to a well-made B2B ops console than a marketing page: brand shows up in the app bar, the accent color, and typography — not in big cream hero blocks.
-
-- **App bar / drawer:** Ink (`#2F4C6B`), cream/near-white text
-- **Page background (light):** a very light neutral, *not* full cream — cream everywhere reads more "consumer landing page" than "8-hour-shift dashboard." Use `#FAF8F3` (a paper tone barely tinted, closer to typical Material surface) for the page background, and reserve full cream (`#F6F1E7`) for cards/panels that want to feel warmer, e.g. the AI-suggestion chips.
-- **Primary:** Rust `#C1502E` — buttons, links, active tab/nav indicator, focus rings
-- **Dark mode:** Manager should support the existing `MudThemeProvider @bind-IsDarkMode` toggle pattern already used in this codebase. Dark palette: background `#1B2A3C`, surface a step lighter (`#243B54`), Primary becomes the on-dark accent `#E8956D` (full-saturation Rust loses contrast on a dark background at small sizes — check this in a real browser, not just computed contrast ratio, since MudBlazor's button fill vs. text-on-fill combination matters more than the raw token-to-background ratio).
+All of this lives in `RVS.UI.Shared/Theme/`. Colors are defined once in `RvsBrand`, and neither theme file contains a hex literal.
 
 ```csharp
-// RVS.UI.Shared/Theme/ManagerTheme.cs
+// RVS.UI.Shared/Theme/RvsBrand.cs
+namespace RVS.UI.Shared.Theme;
+
+/// <summary>RV Intake brand + UI color tokens. Spec THEME-1. Every UI pairing audited to WCAG AA.</summary>
+public static class RvsBrand
+{
+    // Brand (logo / marketing)
+    public const string Denim = "#2F4C6B";
+    public const string RustLogo = "#C1502E";   // logo only — fails AA as text on cream
+    public const string Cream = "#F6F1E7";
+
+    // Light UI
+    public const string Primary = "#A8431F";    // text-safe rust
+    public const string TextPrimary = "#20344A";
+    public const string TextSecondary = "rgba(32,52,74,0.72)";
+    public const string ManagerBackground = "#FAF8F3";
+    public const string Success = "#36704E";
+    public const string Warning = "#92600F";
+    public const string Error = "#A3123F";
+    public const string Info = "#3B6E91";
+
+    // Dark UI (Manager)
+    public const string DarkBackground = "#1B2A3C";
+    public const string DarkSurface = "#243B54";
+    public const string DarkPrimary = "#E8956D";
+    public const string DarkSecondary = "#8FA9C2";
+    public const string DarkTextPrimary = "#F0ECE1";
+    public const string DarkTextSecondary = "rgba(240,236,225,0.70)";
+    public const string DarkSuccess = "#6DBA88";
+    public const string DarkWarning = "#E0A94E";
+    public const string DarkError = "#F08A8A";
+    public const string DarkInfo = "#7FB2D3";
+
+    public static readonly string[] FontStack = { "Space Grotesk", "Roboto", "Helvetica", "Arial", "sans-serif" };
+}
+```
+
+```csharp
+// RVS.UI.Shared/Theme/RvsThemes.cs
 using MudBlazor;
 
 namespace RVS.UI.Shared.Theme;
 
-public static class ManagerTheme
+public static class RvsThemes
 {
-    public static readonly MudTheme Theme = new()
+    private static PaletteLight Light(string background) => new()
     {
-        PaletteLight = new PaletteLight
-        {
-            Primary = "#C1502E",
-            Secondary = "#2F4C6B",
-            AppbarBackground = "#2F4C6B",
-            AppbarText = "#F6F1E7",
-            DrawerBackground = "#2F4C6B",
-            DrawerText = "rgba(246,241,231,0.85)",
-            DrawerIcon = "rgba(246,241,231,0.85)",
-            Background = "#FAF8F3",
-            Surface = "#FFFFFF",
-            TextPrimary = "#20344A",
-            TextSecondary = "rgba(32,52,74,0.68)",
-            Success = "#3F7D58",
-            Warning = "#C98A2C",
-            Error = "#B3261E",
-            Info = "#3B6E91",
-        },
+        Primary = RvsBrand.Primary,           PrimaryContrastText = "#FFFFFF",
+        Secondary = RvsBrand.Denim,           SecondaryContrastText = RvsBrand.Cream,
+        AppbarBackground = RvsBrand.Denim,    AppbarText = RvsBrand.Cream,
+        DrawerBackground = RvsBrand.Denim,
+        DrawerText = "rgba(246,241,231,0.85)", DrawerIcon = "rgba(246,241,231,0.85)",
+        Background = background,
+        Surface = "#FFFFFF",
+        TextPrimary = RvsBrand.TextPrimary,
+        TextSecondary = RvsBrand.TextSecondary,
+        Success = RvsBrand.Success,           SuccessContrastText = "#FFFFFF",
+        Warning = RvsBrand.Warning,           WarningContrastText = "#FFFFFF",
+        Error = RvsBrand.Error,               ErrorContrastText = "#FFFFFF",
+        Info = RvsBrand.Info,                 InfoContrastText = "#FFFFFF",
+    };
+
+    private static Typography BuildTypography(string baseSize, string buttonWeight) => new()
+    {
+        Default = new DefaultTypography { FontFamily = RvsBrand.FontStack, FontWeight = "400", FontSize = baseSize },
+        H1 = new H1Typography { FontFamily = RvsBrand.FontStack, FontWeight = "700" },
+        H2 = new H2Typography { FontFamily = RvsBrand.FontStack, FontWeight = "700" },
+        H3 = new H3Typography { FontFamily = RvsBrand.FontStack, FontWeight = "700" },
+        H4 = new H4Typography { FontFamily = RvsBrand.FontStack, FontWeight = "500" },
+        H5 = new H5Typography { FontFamily = RvsBrand.FontStack, FontWeight = "500" },
+        H6 = new H6Typography { FontFamily = RvsBrand.FontStack, FontWeight = "500" },
+        Button = new ButtonTypography { FontFamily = RvsBrand.FontStack, FontWeight = buttonWeight },
+    };
+
+    /// <summary>Manager: dense all-day ops console. Light + dark.</summary>
+    public static readonly MudTheme Manager = new()
+    {
+        PaletteLight = Light(RvsBrand.ManagerBackground),
         PaletteDark = new PaletteDark
         {
-            Primary = "#E8956D",
-            Secondary = "#8FA9C2",
-            AppbarBackground = "#1B2A3C",
-            AppbarText = "#F6F1E7",
-            DrawerBackground = "#1B2A3C",
-            Background = "#1B2A3C",
-            Surface = "#243B54",
-            TextPrimary = "#F0ECE1",
-            TextSecondary = "rgba(240,236,225,0.70)",
-            Success = "#5FA97A",
-            Warning = "#E0A94E",
-            Error = "#E5766A",
-            Info = "#6FA3C4",
+            Primary = RvsBrand.DarkPrimary,         PrimaryContrastText = RvsBrand.DarkBackground,
+            Secondary = RvsBrand.DarkSecondary,     SecondaryContrastText = RvsBrand.DarkBackground,
+            AppbarBackground = RvsBrand.DarkBackground, AppbarText = RvsBrand.Cream,
+            DrawerBackground = RvsBrand.DarkBackground,
+            Background = RvsBrand.DarkBackground,
+            Surface = RvsBrand.DarkSurface,
+            TextPrimary = RvsBrand.DarkTextPrimary,
+            TextSecondary = RvsBrand.DarkTextSecondary,
+            Success = RvsBrand.DarkSuccess,         SuccessContrastText = RvsBrand.DarkBackground,
+            Warning = RvsBrand.DarkWarning,         WarningContrastText = RvsBrand.DarkBackground,
+            Error = RvsBrand.DarkError,             ErrorContrastText = RvsBrand.DarkBackground,
+            Info = RvsBrand.DarkInfo,               InfoContrastText = RvsBrand.DarkBackground,
         },
-        Typography = new Typography
-        {
-            Default = new DefaultTypography
-            {
-                FontFamily = new[] { "Space Grotesk", "Roboto", "Helvetica", "Arial", "sans-serif" },
-                FontWeight = 400,
-            },
-            H1 = new H1Typography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 700 },
-            H2 = new H2Typography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 700 },
-            H3 = new H3Typography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 700 },
-            H4 = new H4Typography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 500 },
-            H5 = new H5Typography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 500 },
-            H6 = new H6Typography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 500 },
-            Button = new ButtonTypography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 500 },
-        },
-        LayoutProperties = new LayoutProperties
-        {
-            DefaultBorderRadius = "10px",
-            DrawerWidthLeft = "260px",
-        },
+        Typography = BuildTypography(baseSize: "0.875rem", buttonWeight: "500"),
+        LayoutProperties = new LayoutProperties { DefaultBorderRadius = "10px", DrawerWidthLeft = "260px" },
     };
-}
-```
 
-> **Verify the exact `Typography` sub-type names** (`DefaultTypography`, `H1Typography`, etc.) against the installed MudBlazor version — these have been renamed at least once across major versions (some releases use `Default`, `H1`...`H6` as the type names directly, without the `Typography` suffix). Run `dotnet build` after pasting this and fix any `CS0246` on the type names before touching anything else — that's a version-naming mismatch, not a logic error.
-
-**Acceptance criteria**
-- [ ] `ManagerTheme.Theme` compiles against the version of MudBlazor actually referenced in `RVS.Blazor.Manager.csproj`
-- [ ] `MainLayout.razor` passes `Theme="ManagerTheme.Theme"` to `MudThemeProvider`, and the existing (or newly added) `IsDarkMode` toggle switches palettes correctly
-- [ ] App bar and drawer render Ink background with legible text in both modes
-- [ ] Primary buttons, active `MudNavLink`, and focus rings render Rust (light) / light-Rust (dark)
-- [ ] `StatusBadge` and `PriorityBadge` (in `RVS.UI.Shared`) are reviewed by hand once this lands — confirm no badge relies on `Color.Primary` (Rust) *and* `Color.Error` (true red) being told apart by color alone at a glance. If any do, add an icon or bump one of them to a `Severity`/`Color` combination that doesn't rely on hue discrimination
-
----
-
-## 5. Intake app theme (`RVS.Blazor.Intake`)
-
-Intake is anonymous, mobile-first, filled out once by a stressed customer standing next to a broken RV — not a tool anyone lives in. Brand should show up more, not less: full cream background, bigger touch targets, warmer feel. No dark-mode toggle — a one-time form doesn't need one, and skipping it is one less thing to build and test.
-
-```csharp
-// RVS.UI.Shared/Theme/IntakeTheme.cs
-using MudBlazor;
-
-namespace RVS.UI.Shared.Theme;
-
-public static class IntakeTheme
-{
-    public static readonly MudTheme Theme = new()
+    /// <summary>Intake: anonymous, mobile, one-time form. Light only, larger type, softer corners.</summary>
+    public static readonly MudTheme Intake = new()
     {
-        PaletteLight = new PaletteLight
-        {
-            Primary = "#C1502E",
-            Secondary = "#2F4C6B",
-            AppbarBackground = "#2F4C6B",
-            AppbarText = "#F6F1E7",
-            Background = "#F6F1E7",
-            Surface = "#FFFFFF",
-            TextPrimary = "#20344A",
-            TextSecondary = "rgba(32,52,74,0.68)",
-            Success = "#3F7D58",
-            Warning = "#C98A2C",
-            Error = "#B3261E",
-            Info = "#3B6E91",
-        },
-        // PaletteDark intentionally omitted — no dark-mode toggle in this app.
-        // If MudThemeProvider still requires one to be set, copy PaletteLight verbatim
-        // rather than leaving MudBlazor's stock dark palette to clash with the brand.
-        Typography = new Typography
-        {
-            Default = new DefaultTypography
-            {
-                FontFamily = new[] { "Space Grotesk", "Roboto", "Helvetica", "Arial", "sans-serif" },
-                FontWeight = 400,
-                FontSize = "1rem", // one notch up from MudBlazor's default — this is filled out on a phone, standing up
-            },
-            H1 = new H1Typography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 700 },
-            H2 = new H2Typography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 700 },
-            H6 = new H6Typography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 500 },
-            Button = new ButtonTypography { FontFamily = new[] { "Space Grotesk" }, FontWeight = 700, FontSize = "1rem" },
-        },
-        LayoutProperties = new LayoutProperties
-        {
-            DefaultBorderRadius = "14px", // rounder than Manager — softer, less "console"
-        },
+        PaletteLight = Light(RvsBrand.Cream),
+        Typography = BuildTypography(baseSize: "1rem", buttonWeight: "700"),
+        LayoutProperties = new LayoutProperties { DefaultBorderRadius = "14px" },
     };
 }
 ```
 
 **Acceptance criteria**
-- [ ] `IntakeTheme.Theme` compiles against the installed MudBlazor version
-- [ ] Wizard shell (`IntakeWizard.razor`) passes `Theme="IntakeTheme.Theme"` to `MudThemeProvider`
-- [ ] Primary CTA buttons (step "Continue" / final "Submit") render Rust at a size/weight that's obviously tappable — check actual rendered button height against the 44px touch-target minimum on a real phone viewport, not just the theme's `FontSize`
-- [ ] Background is full cream (`#F6F1E7`), step cards are white `Surface`
-- [ ] No dark-mode toggle is exposed anywhere in this app's UI
+- [ ] `dotnet build` passes for both apps with zero new warnings. If a `*ContrastText` property doesn't exist in the installed version, remove that line and note it in the PR. Don't substitute a guess.
+- [ ] Manager `MainLayout.razor`: `<MudThemeProvider Theme="RvsThemes.Manager" @bind-IsDarkMode="_isDarkMode" />`, with a working toggle.
+- [ ] Intake layout: `<MudThemeProvider Theme="RvsThemes.Intake" />` with **no** `IsDarkMode` binding and no toggle. The app stays light even when the OS is in dark mode.
+- [ ] `grep -rn "#[0-9A-Fa-f]\{6\}" --include=*.razor --include=*.cs` shows no hex colors outside `RvsBrand.cs`. Existing inline colors in components get replaced with `Color.*` enums or theme CSS variables (`var(--mud-palette-primary)`).
+- [ ] Rust `#C1502E` appears **nowhere** in app UI code. It exists only in `RvsBrand.RustLogo` and the logo files.
 
 ---
 
-## 6. What Claude Code should NOT do without asking first
+## 4. Logo in the apps
 
-- Don't touch `RVS.MAUI.Tech` — it's not in the repo (`build-mobile.yml` already fails for this reason per the known-gaps list); there's nothing to theme yet.
-- Don't change `RVS.UI.Shared`'s existing component markup while doing this — this is a theme/token pass, not a redesign of `StatusBadge`, job cards, etc. Flag anything that looks broken under the new palette instead of silently restyling it.
-- Don't invent a `Tertiary` color use case. MudBlazor 9.x's `Palette` has a `Tertiary` slot; leave it unset (falls back to MudBlazor default) unless a real third-accent need shows up later — this spec deliberately stays to a two-color brand.
+Assets come from `rv-intake-logo-kit` (delivered separately). All text in the logo SVGs is outlined, so they don't depend on the font loading.
+
+**Acceptance criteria**
+- [ ] Copy the kit's `svg/logo-horizontal-reversed.svg`, `svg/glyph-reversed.svg`, `svg/logo-horizontal.svg` and `svg/logo-stacked.svg` into `RVS.UI.Shared/wwwroot/brand/`.
+- [ ] **Manager app bar:** `logo-horizontal-reversed.svg` at 28–32px tall (cream on Denim). Below the `md` breakpoint, swap to `glyph-reversed.svg` alone.
+- [ ] **Intake header:** the shop's name and logo are the primary branding, because this is the shop's form. RV Intake appears only as a small "Powered by" footer: `logo-horizontal.svg` at about 20px tall, `TextSecondary` label. Don't put RV Intake's logo above the shop's.
+- [ ] Both logos get `alt="RV Intake"`. Decorative-only glyph uses get `alt=""` and `aria-hidden="true"`.
+- [ ] **Favicons, per app:** copy `favicon/favicon.ico`, `favicon/favicon.svg`, `apple/apple-touch-icon.png` and the four `android-pwa/*.png` files into each app's `wwwroot/`, replacing the template placeholders. Merge `android-pwa/manifest-icons-snippet.json` into each `manifest.json`.
+- [ ] Each `index.html` `<head>` contains:
+```html
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#2F4C6B">
+```
 
 ---
 
-## 7. Files provided alongside this spec
+## 5. Manual checks after it builds
 
-- `fonts/SpaceGrotesk-Regular.woff2`
-- `fonts/SpaceGrotesk-Medium.woff2`
-- `fonts/SpaceGrotesk-Bold.woff2`
-- `fonts/fonts.css` (the `@font-face` block from §2, ready to drop in)
+- [ ] **Intake on a real phone** (or a 390px DevTools viewport): the Continue and Submit buttons are at least 44px tall, the cream background shows, and the step cards are white.
+- [ ] **Manager, both modes:** the app bar, drawer, active nav item, primary buttons and focus rings all look correct. In dark mode, primary buttons have **dark** text on light-rust fills.
+- [ ] **`StatusBadge` / `PriorityBadge` review:** every error-type status shows an icon, per §1. List any badge changed in the PR description.
+- [ ] Run Lighthouse accessibility on one Intake page and one Manager page, and paste the scores into the PR. Any contrast failure there is a bug in this spec. Report it back rather than hand-tuning a color in a component.
 
-Drop the `fonts/` folder's contents into `RVS.UI.Shared/wwwroot/fonts/` as-is.
+## 6. Out of scope — ask before doing
+
+- `RVS.MAUI.Tech` is not in the repo yet.
+- Redesigning `RVS.UI.Shared` components. This is a token and theme pass; flag anything that looks wrong under the new palette.
+- `Tertiary`. Leave it unset; the brand is two colors.

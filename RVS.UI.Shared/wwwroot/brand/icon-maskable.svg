@@ -1,4 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" fill="#2F4C6B"/>
-  <text x="154.5" y="314.0" font-family="Space Grotesk, Roboto, Helvetica, Arial, sans-serif" font-weight="700" font-size="164" fill="#F6F1E7">RV</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100.0 100.0" width="100.0" height="100.0"><rect width="100" height="100" fill="#2F4C6B"/><g transform="translate(27.00 27.00) scale(0.46)"><g transform="rotate(-8 50 50)" fill="none" stroke="#F6F1E7" stroke-linecap="round" stroke-linejoin="round"><rect x="18" y="20" width="64" height="56" rx="14" stroke-width="7.0"/><circle cx="32" cy="34" r="6" stroke-width="6.0"/><path d="M34 56 L46 68 L70 40" stroke-width="8.0"/></g></g></svg>

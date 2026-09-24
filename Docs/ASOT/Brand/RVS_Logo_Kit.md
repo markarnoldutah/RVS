@@ -1,73 +1,89 @@
-# RV Intake — Logo Asset Kit
+# RV Intake — Logo Kit
 
 > **Status: the logo kit's README as shipped, kept as the asset inventory. Re-issued
-> September 22 2026 with the revised lockup** — the badge already reads "RV", so the text
-> beside it now says only "Intake"; the full two-tone "RV Intake" survives only in the
-> text-only files, which have no badge to repeat. Only the SVG lockups changed; the favicon,
-> Apple touch and Android/PWA rasters are byte-identical to the first issue (#702) and were
-> left alone.
+> September 24 2026 with a new mark:** Concept A, "Service Tag", replaces the Concept D "RV"
+> badge. Because the glyph no longer spells "RV", every lockup now sets the full two-tone
+> "RV Intake". Every raster was replaced along with the SVGs.
 >
-> The SVG sources live in `RVS.UI.Shared/wwwroot/brand/`; the raster icons were dropped into
-> each app's `wwwroot/`. Two departures from the advice below. App chrome does **not**
-> reference the SVGs by URL: they carry live `<text>`, and a browser will not load an external
-> `@font-face` into an SVG used as an image, so the wordmark would render in a system font —
-> the `BrandWordmark` component inlines the mark instead. And the repo's copies name the
-> typeface as a CSS font stack with `font-weight="700"` rather than the kit's
-> `font-family="Space Grotesk Bold"`, which no browser resolves: the family is
-> "Space Grotesk", the boldness is a weight. The `email/`, `print/` and `social/` assets are
-> not wired up yet — packet letterhead was left to its own issue.
+> Where the files went:
+>
+> - **`svg/`**: everything except `og-image.svg` is in `RVS.UI.Shared/wwwroot/brand/`. Unlike the
+>   previous kit, the text is outlined, so app chrome now loads these files directly: the
+>   `BrandWordmark` component renders an `<img>` of the lockup it is asked for
+>   (`BrandMarkAssets.PathFor`), and no inlined copy of the geometry remains.
+> - **`favicon/`, `apple/`, `android-pwa/`**: in each app's `wwwroot/`, with the `<head>` tags
+>   below. The separate 16/32/48 PNGs were dropped, since `favicon.ico` carries all three, except
+>   that Manager keeps `favicon-32x32.png` because the Auth0 login page references it by URL.
+>   The manifests already matched the snippet; they only gained `"purpose": "any"`.
+> - **`email/`, `print/`, `social/`: not in the repo.** Nothing consumes them yet. The packet
+>   masthead carries the *dealer's* logo (`PacketBranding.LogoDataUri`), not RV Intake's, and no
+>   page emits `og:image`. Take them from the kit zip when a consumer appears.
+>
+> "Rust `#C1502E` is the logo color" below is `RvsBrand.AccentLogo`; the text-safe `#A8431F` is
+> `RvsBrand.Accent`.
 
-Concept: Confident Wordmark (Concept D). Colorway: **Denim & Rust**.
+**Mark:** Concept A, "Service Tag". A check-in tag with a checkmark, meaning "checked in, verified, ready."
+**Palette:** Denim & Rust.
 
-| Token | Hex | Use |
+| Token | Hex | Where it's used in the logo |
 |---|---|---|
-| Ink (Denim) | `#2F4C6B` | Wordmark, icon background, primary UI ink |
-| Accent (Rust) | `#C1502E` | The "RV" in the wordmark, on light backgrounds |
-| Accent, on dark | `#E8956D` | The "RV" in the wordmark, on dark/navy backgrounds |
-| Paper (Cream) | `#F6F1E7` | Background, icon glyph on dark badge |
+| Denim | `#2F4C6B` | App-icon background, glyph and "Intake" on light backgrounds |
+| Rust | `#C1502E` | "RV" in the wordmark on light backgrounds |
+| Light rust | `#E8956D` | "RV" in the wordmark on dark backgrounds |
+| Cream | `#F6F1E7` | Glyph and "Intake" on dark backgrounds; page background |
 
-Font: **Space Grotesk**, Bold weight for all lockups (Google Fonts, OFL-licensed — free for commercial use). Medium weight used for the OG-image tagline only.
+Rust `#C1502E` is the **logo** color. In app UI text and buttons, use the darker `#A8431F` from the theme spec, because `#C1502E` fails contrast as body text on cream.
 
----
-
-## What's in each folder
-
-### `svg/` — vector sources, edit these first
-- `icon.svg` — square badge, rounded corners baked in. Use for favicons, touch icons, anywhere a "classic" square icon is wanted.
-- `icon-maskable.svg` — same mark, full-bleed square background, content kept inside Android's safe zone. Use **only** for Android/PWA maskable icons — the OS applies its own mask shape.
-- `wordmark-horizontal.svg` / `wordmark-horizontal-reversed.svg` — badge + "Intake" (the badge already reads "RV," so the text completes it rather than repeating it), for light and dark backgrounds respectively.
-- `wordmark-text-only.svg` / `wordmark-text-only-reversed.svg` — no badge, just the wordmark. Use in narrow headers, letterhead, print, anywhere a square badge doesn't fit.
-- `wordmark-stacked.svg` — badge above "Intake" (same reasoning as the horizontal lockup), centered. Use for square placements (splash screens, social profile pictures if you ever want text baked in).
-- `wordmark-text-only.svg` / `wordmark-text-only-reversed.svg` — the only files that still show the full two-tone "RV Intake" — there's no badge alongside them, so no repetition. Use these wherever you want the full name spelled out in text.
-
-All are plain SVG with hex colors — no external font dependency at render time (text is live, not outlined, so if you edit these in another tool you'll need Space Grotesk Bold installed, or convert text to paths first).
-
-### `favicon/`
-- `favicon.ico` — multi-resolution (16/32/48px). Drop in `wwwroot/favicon.ico`; referenced by the default Blazor template's `<link rel="icon" href="favicon.ico"/>`.
-- `favicon-16x16.png`, `favicon-32x32.png`, `favicon-48x48.png` — standalone PNGs if you want explicit `<link rel="icon" sizes="32x32" type="image/png">` tags instead of/alongside the `.ico`.
-
-### `apple/`
-- `apple-touch-icon-180x180.png` — opaque (iOS fills transparent pixels with black otherwise). Drop in `wwwroot/`, reference with `<link rel="apple-touch-icon" href="apple-touch-icon-180x180.png">` in `index.html`'s `<head>`. iOS scales this down for older devices — one size is enough today.
-
-### `android-pwa/`
-Matches the filenames the default **Blazor WASM PWA template** already expects in `manifest.json` — you can drop these straight over the placeholder `icon-192.png` / `icon-512.png` in `wwwroot/`.
-- `icon-192.png`, `icon-512.png` — standard install icons.
-- `icon-192-maskable.png`, `icon-512-maskable.png` — for adaptive/maskable display (Android applies a circle, squircle, or other shape mask — these keep the "RV" safely inside).
-- `manifest-icons-snippet.json` — the `icons` array (plus suggested `theme_color`/`background_color`) to merge into your existing `wwwroot/manifest.json`.
-
-### `social/`
-- `og-image-1200x630.png` — Open Graph / Twitter card image. Reference with `<meta property="og:image" content="...">` and `<meta name="twitter:image" content="...">` on marketing pages. Includes the positioning line so it reads standalone in a link preview.
-
-### `email/`
-- `logo-horizontal@1x.png` (300px wide), `logo-horizontal@2x.png` (600px wide) — transparent background, for the header of transactional emails (submission confirmations, status-change notices) sent via ACS. Use the `@2x` file with `width="300"` set in the `<img>` tag's HTML/CSS attribute for a crisp look on retina screens without bloating the HTML email payload — email clients generally don't support `srcset`.
-
-### `print/`
-- `logo-horizontal-print.png` (2400px wide), `wordmark-text-only-print.png` (2000px wide) — transparent background, high-resolution for the printed/PDF service-packet letterhead (`PacketPdfRenderer` / `PacketHtmlRenderer`). At 2400px wide this holds up sharp at roughly 8 inches wide and 300dpi — scale down, not up.
+All text in these SVGs is **converted to outlines**. The files render identically on any machine, whether or not Space Grotesk is installed. To change the wording, regenerate the file; don't edit the paths.
 
 ---
 
-## Things you'll still want to do
+## `svg/` — vector masters
 
-- **Convert text to outlines** if you ever hand these SVGs to a print shop or a designer without Space Grotesk installed — right now the SVGs have live `<text>` elements, which is convenient to edit but will fall back to a default font on a machine that doesn't have Space Grotesk.
-- **Trademark check** before you get attached: a basic USPTO/state search on "RV Intake" hasn't been done here — worth 20 minutes before you sink real money into signage or paid ads under the name.
-- **`theme-color` meta tag**: add `<meta name="theme-color" content="#2F4C6B">` to `index.html` so mobile browser chrome (Android's address bar, iOS status bar area) picks up the brand ink color when someone has the site open.
+| File | Use |
+|---|---|
+| `icon.svg` | App icon: glyph on a rounded Denim square. Use at 180px and larger. |
+| `icon-small.svg` | The same icon with heavier strokes, tuned for 16–48px. Use **only** for favicons. The standard stroke weight blurs at those sizes. |
+| `icon-maskable.svg` | Full-bleed square with the glyph inside Android's safe zone. Use only for PWA maskable icons. |
+| `glyph.svg` / `glyph-reversed.svg` | The bare tag mark with no background, in Denim or Cream. |
+| `logo-horizontal.svg` / `-reversed.svg` | Glyph + "RV Intake". Primary logo for headers and email. |
+| `logo-stacked.svg` / `-reversed.svg` | Glyph above "RV Intake". For square spaces, splash screens, and print. |
+| `wordmark.svg` / `-reversed.svg` | "RV Intake" alone, with no glyph. For narrow spaces and inline use. |
+| `og-image.svg` | Source for the social card. |
+
+The glyph no longer spells "RV", so the full two-tone "RV Intake" name can sit next to it without repetition.
+
+## `favicon/`
+
+Drop these files into each app's `wwwroot/`:
+
+```html
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#2F4C6B">
+```
+
+`favicon.ico` contains the 16, 32, and 48px sizes. Modern browsers prefer `favicon.svg`. Both use the heavier small-size strokes. The icon was tested against Chrome's dark tab color: the Denim square blends into it, but the cream glyph stays clearly visible.
+
+## `apple/`
+`apple-touch-icon.png` is 180×180 and fully opaque, because iOS fills transparent pixels with black.
+
+## `android-pwa/`
+The filenames match the Blazor WASM PWA template's defaults, so these files replace `icon-192.png` and `icon-512.png` directly in `wwwroot/`. Merge `manifest-icons-snippet.json` into `wwwroot/manifest.json`; it adds the two maskable icons plus `theme_color` and `background_color`.
+
+## `social/`
+`og-image-1200x630.png` is for `og:image` and `twitter:image` on marketing pages.
+
+## `email/`
+Transparent PNGs for ACS transactional email headers. Use the `@2x` file with `width="300"` set on the `<img>`. Email clients don't reliably support `srcset`. `logo-horizontal-reversed@2x.png` is for dark header bands.
+
+## `print/`
+High-resolution transparent PNGs for the service-packet letterhead (`PacketPdfRenderer` / `PacketHtmlRenderer`). If the renderer accepts SVG, use `svg/logo-horizontal.svg` instead; it stays sharp at any size.
+
+---
+
+## Still open
+
+- **Trademark.** "RV Intake" is likely to be treated as *merely descriptive* by the USPTO. Spend an hour with a trademark attorney before investing in signage or paid ads. Also have them check whether a similar tag-plus-checkmark logo is already registered in software.
+- **Physical key tags.** A tag-shaped key tag printed with the shop's intake QR code would match the mark. Worth pricing once dealers are onboard.
