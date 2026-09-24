@@ -29,3 +29,11 @@ Unlike the infrastructure items above, these apply to **staging as well as prod*
 | # | Action | Setting | Why it is parked until go-live |
 |---|---|---|---|
 | G-4 | Turn outbound SMS on for an environment once its toll-free number is verified | `acsSmsEnabled = true` in that environment's `.bicepparam`, alongside a real `acsSmsFromPhoneNumber` | Carriers block an unverified toll-free number's traffic, so sending before verification just fails, and the API refuses to start with SMS enabled and no number. While it is off, a `Text` customer's confirmation falls back to email and the A-14 send action refuses with a clear message (`Spec A-2`, `A-14`). Staging today has `+18662319618` with its status unrecorded; prod owns no number at all (#659). Flip each environment on its own, not both together. |
+
+---
+
+## Data (prod)
+
+| # | Action | Setting | Why it is parked until go-live |
+|---|---|---|---|
+| G-5 | Clear prod Cosmos of demo data and recreate Nova RV Services only | No Bicep flag — a data operation against `rvs-db`, run once | Prod was seeded for hands-on testing with Jay Lyons from a one-off seeder change that was never committed (the seeder deliberately refuses `--environment Production`). It currently holds the full demo seed — Blue Compass RV and Happy Trails RV tenants, demo locations and slugs, fake customer profiles, service requests and asset-ledger entries — alongside Nova RV Services. The demo customer accounts carry magic-link tokens hard-coded in the public seed source, and `GET /api/status/{token}` accepts them, so anyone reading the repo can open those status pages on prod today. Demo locations also carry `.example.com` packet recipients, which hard-bounce and would cost the sending domain's reputation if a demo slug were ever used. At go-live, prod Cosmos must contain only Nova RV Services plus global reference data, with no token from the repo working against prod. See #609. |
