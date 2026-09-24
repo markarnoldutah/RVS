@@ -12,6 +12,8 @@ public class IntakeInviteContentTests
 {
     private const string Link = "https://go.rvintake.com/nova-hurricane?src=advisor&inv=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
+    private const string Phone = "(801) 555-0100";
+
     /// <summary>
     /// The compliance tail, spelled out rather than read from the production constant: this
     /// wording is submitted verbatim in the toll-free verification application (#659), so the
@@ -89,7 +91,7 @@ public class IntakeInviteContentTests
     [Fact]
     public void BuildEmailHtmlBody_ShouldGreetByNameNameTheLocationAndLinkTheInvite()
     {
-        var html = IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72);
+        var html = IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: Phone);
 
         html.Should().Contain("Hi Jane,");
         html.Should().Contain("Nova RV");
@@ -101,7 +103,7 @@ public class IntakeInviteContentTests
     public void BuildEmailHtmlBody_ShouldEncodeWhatTheAdvisorTyped()
     {
         // The first name and location name are free text; the email is HTML.
-        var html = IntakeInviteContent.BuildEmailHtmlBody("Smith & Sons RV", "Jo\"e", Link, expiryHours: 72);
+        var html = IntakeInviteContent.BuildEmailHtmlBody("Smith & Sons RV", "Jo\"e", Link, expiryHours: 72, locationPhone: Phone);
 
         html.Should().Contain("Smith &amp; Sons RV");
         html.Should().NotContain("Jo\"e");
@@ -111,17 +113,72 @@ public class IntakeInviteContentTests
     public void BuildEmailHtmlBody_ShouldCarryNoTextingComplianceTail()
     {
         // STOP/HELP are carrier keywords; they mean nothing in an email.
-        IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72).Should().NotContain("STOP");
+        IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: Phone).Should().NotContain("STOP");
     }
 
     [Fact]
     public void BuildEmailPlainTextBody_ShouldCarryTheRawLinkAndTheGreeting()
     {
-        var text = IntakeInviteContent.BuildEmailPlainTextBody("Nova RV", "Jane", Link, expiryHours: 72);
+        var text = IntakeInviteContent.BuildEmailPlainTextBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: Phone);
 
         text.Should().Contain("Hi Jane,");
         text.Should().Contain(Link);
         text.Should().NotContain("<");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_ShouldSayWhoItIsFromAndWhy()
+    {
+        // Issue #710: the customer asked for this during a call, so the email says so, says it
+        // comes from RV Intake on the dealer's behalf, and points questions back at the dealer.
+        var html = IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: Phone);
+
+        html.Should().Contain("You've initiated a service request for your RV with <strong>Nova RV</strong>.");
+        html.Should().Contain("provide the service manager with important details about your issue");
+        html.Should().Contain("Start your service request</a> with Nova RV.");
+        html.Should().Contain("You're receiving this email from RV Intake on behalf of Nova RV because you initiated a service request.");
+        html.Should().Contain("This link will work once and expires in 72 hours.");
+        html.Should().Contain("If you have questions, please contact Nova RV directly at: (801) 555-0100");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void BuildEmailHtmlBody_WhenTheLocationHasNoPhone_ShouldStillPointQuestionsAtTheDealer(string? phone)
+    {
+        var html = IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: phone);
+
+        html.Should().Contain("If you have questions, please contact Nova RV directly.");
+        html.Should().NotContain("directly at:");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_ShouldEncodeThePhone()
+    {
+        var html = IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: "<801>");
+
+        html.Should().Contain("&lt;801&gt;").And.NotContain("<801>");
+    }
+
+    [Fact]
+    public void BuildEmailPlainTextBody_ShouldCarryTheSameWording()
+    {
+        var text = IntakeInviteContent.BuildEmailPlainTextBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: Phone);
+
+        text.Should().Contain("You've initiated a service request for your RV with Nova RV.");
+        text.Should().Contain("You're receiving this email from RV Intake on behalf of Nova RV because you initiated a service request.");
+        text.Should().Contain("This link will work once and expires in 72 hours.");
+        text.Should().Contain("If you have questions, please contact Nova RV directly at: (801) 555-0100");
+    }
+
+    [Fact]
+    public void BuildEmailPlainTextBody_WhenTheLocationHasNoPhone_ShouldStillPointQuestionsAtTheDealer()
+    {
+        var text = IntakeInviteContent.BuildEmailPlainTextBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: null);
+
+        text.Should().Contain("If you have questions, please contact Nova RV directly.");
+        text.Should().NotContain("directly at:");
     }
 
     [Theory]
@@ -130,7 +187,7 @@ public class IntakeInviteContentTests
     [InlineData("Nova RV", "Jane", null)]
     public void BuildEmailHtmlBody_WhenAnArgumentIsBlank_ShouldThrowArgumentException(string? location, string? firstName, string? link)
     {
-        var act = () => IntakeInviteContent.BuildEmailHtmlBody(location!, firstName!, link!, expiryHours: 72);
+        var act = () => IntakeInviteContent.BuildEmailHtmlBody(location!, firstName!, link!, expiryHours: 72, locationPhone: Phone);
 
         act.Should().Throw<ArgumentException>();
     }

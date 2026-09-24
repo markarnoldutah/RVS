@@ -55,6 +55,9 @@ param customDomainName string = ''
 @description('When true, adds the custom domain to the ACS account\'s linkedDomains. ACS rejects linking an unverified domain, so this must stay false on the deploy that first creates the domain and only flip to true once every verificationRecords entry shows Verified. Ignored when customDomainName is empty.')
 param linkCustomDomain bool = false
 
+@description('Display name recipients see on mail From DoNotReply@ on the custom domain. ACS takes it from the sender username resource, not from the send call — the SDK\'s EmailMessage carries an address only. (#710)')
+param senderDisplayName string = 'RV Intake'
+
 // ── Variables ─────────────────────────────────────────────────
 
 // Email service name follows the ACS resource name with an '-email' suffix.
@@ -138,6 +141,22 @@ resource customDomain 'Microsoft.Communication/emailServices/domains@2023-04-01'
   properties: {
     domainManagement: 'CustomerManaged'
     userEngagementTracking: 'Disabled'
+  }
+}
+
+// ── DoNotReply sender username on the custom domain — #710 ─────
+// ACS creates DoNotReply@ on every domain with the display name
+// "DoNotReply", which is what the inbox showed. Declaring the username
+// here renames it. Custom domain only: an Azure-managed domain's sender
+// is fixed, and neither staging nor prod sends from it.
+
+#disable-next-line use-recent-api-versions
+resource customDomainDoNotReply 'Microsoft.Communication/emailServices/domains/senderUsernames@2023-04-01' = if (!empty(customDomainName)) {
+  parent: customDomain
+  name: 'DoNotReply'
+  properties: {
+    username: 'DoNotReply'
+    displayName: senderDisplayName
   }
 }
 

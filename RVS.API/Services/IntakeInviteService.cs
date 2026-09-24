@@ -248,8 +248,8 @@ public sealed class IntakeInviteService : IIntakeInviteService
         var operationId = await _emailService.SendTransactionalEmailAsync(
             email,
             IntakeInviteContent.BuildEmailSubject(location.Name),
-            IntakeInviteContent.BuildEmailHtmlBody(location.Name, firstName, link, _options.ExpiryHours),
-            IntakeInviteContent.BuildEmailPlainTextBody(location.Name, firstName, link, _options.ExpiryHours),
+            IntakeInviteContent.BuildEmailHtmlBody(location.Name, firstName, link, _options.ExpiryHours, location.Phone),
+            IntakeInviteContent.BuildEmailPlainTextBody(location.Name, firstName, link, _options.ExpiryHours, location.Phone),
             cancellationToken);
 
         await RecordSendAsync(invite, advisorUserId, operationId, cancellationToken);

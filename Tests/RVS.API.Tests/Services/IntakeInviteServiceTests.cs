@@ -49,7 +49,7 @@ public class IntakeInviteServiceTests
         _userContextMock.Setup(u => u.UserId).Returns(AdvisorId);
 
         _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, LocationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Location { Id = LocationId, TenantId = TenantId, Name = "Nova RV Hurricane", Slug = Slug });
+            .ReturnsAsync(new Location { Id = LocationId, TenantId = TenantId, Name = "Nova RV Hurricane", Slug = Slug, Phone = "(801) 555-0100" });
 
         _profileRepoMock.Setup(r => r.ListSmsOptedOutPhonesAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
@@ -562,6 +562,15 @@ public class IntakeInviteServiceTests
         InviteToken.IsWellFormed(token).Should().BeTrue();
         _created!.Id.Should().Be(InviteToken.Hash(token));
         _sentEmailText.Should().Contain($"{RedirectBaseUrl}/{Slug}?src=advisor&inv={token}");
+    }
+
+    [Fact]
+    public async Task CreateAsync_Email_ShouldGiveTheLocationPhoneForQuestions()
+    {
+        await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
+
+        _sentEmailHtml.Should().Contain("contact Nova RV Hurricane directly at: (801) 555-0100");
+        _sentEmailText.Should().Contain("contact Nova RV Hurricane directly at: (801) 555-0100");
     }
 
     [Fact]
