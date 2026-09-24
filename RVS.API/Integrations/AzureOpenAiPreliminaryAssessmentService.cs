@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Validation;
@@ -21,6 +22,14 @@ public sealed class AzureOpenAiPreliminaryAssessmentService : IPreliminaryAssess
 
     // Azure reserves max_tokens against the deployment's TPM quota up front, so keep it tight.
     private const int MaxTokens = 600;
+
+    // Reasoning-model shape (gpt-5, the dedicated assessment deployment from #584). Reasoning
+    // tokens count against max_completion_tokens, so it sits well above MaxTokens; Azure reserves
+    // it against TPM quota the same way, so assessmentDeploymentCapacity must cover it.
+    // reasoning_effort needs a newer api-version than the GA one above.
+    private const string ReasoningApiVersion = "2025-04-01-preview";
+    private const int MaxCompletionTokens = 2000;
+    private const string ReasoningEffort = "low";
     private const int MaxPossibleFixes = 3;
     private const int MaxLikelyParts = 5;
 
@@ -75,16 +84,20 @@ public sealed class AzureOpenAiPreliminaryAssessmentService : IPreliminaryAssess
 
     private readonly HttpClient _httpClient;
     private readonly RuleBasedPreliminaryAssessmentService _fallback;
+    private readonly bool _useReasoningModelRequest;
     private readonly ILogger<AzureOpenAiPreliminaryAssessmentService> _logger;
 
     /// <summary>Creates the service over a typed Azure OpenAI client, with the rule-based fallback.</summary>
     public AzureOpenAiPreliminaryAssessmentService(
         HttpClient httpClient,
         RuleBasedPreliminaryAssessmentService fallback,
+        IOptions<AzureOpenAiAssessmentOptions> options,
         ILogger<AzureOpenAiPreliminaryAssessmentService> logger)
     {
+        ArgumentNullException.ThrowIfNull(options);
         _httpClient = httpClient;
         _fallback = fallback;
+        _useReasoningModelRequest = options.Value.UseReasoningModelRequest;
         _logger = logger;
     }
 
@@ -95,9 +108,10 @@ public sealed class AzureOpenAiPreliminaryAssessmentService : IPreliminaryAssess
 
         try
         {
-            var requestBody = BuildChatRequestBody(BuildUserMessage(serviceRequest));
+            var requestBody = BuildChatRequestBody(BuildUserMessage(serviceRequest), _useReasoningModelRequest);
+            var apiVersion = _useReasoningModelRequest ? ReasoningApiVersion : ApiVersion;
             var response = await _httpClient.PostAsJsonAsync(
-                $"chat/completions?api-version={ApiVersion}", requestBody, cancellationToken);
+                $"chat/completions?api-version={apiVersion}", requestBody, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -203,15 +217,31 @@ public sealed class AzureOpenAiPreliminaryAssessmentService : IPreliminaryAssess
         return sb.ToString();
     }
 
-    private static JsonObject BuildChatRequestBody(string userMessage) => new()
+    // A reasoning model rejects "max_tokens" and any non-default "temperature" with a 400; gpt-4o
+    // rejects "reasoning_effort". Either mismatch lands in the rule-based fallback on every call.
+    private static JsonObject BuildChatRequestBody(string userMessage, bool reasoningModel)
     {
-        ["messages"] = new JsonArray(
-            new JsonObject { ["role"] = "system", ["content"] = SystemPrompt },
-            new JsonObject { ["role"] = "user", ["content"] = userMessage }),
-        ["max_tokens"] = MaxTokens,
-        ["temperature"] = 0.2,
-        ["response_format"] = new JsonObject { ["type"] = "json_object" },
-    };
+        var body = new JsonObject
+        {
+            ["messages"] = new JsonArray(
+                new JsonObject { ["role"] = "system", ["content"] = SystemPrompt },
+                new JsonObject { ["role"] = "user", ["content"] = userMessage }),
+            ["response_format"] = new JsonObject { ["type"] = "json_object" },
+        };
+
+        if (reasoningModel)
+        {
+            body["max_completion_tokens"] = MaxCompletionTokens;
+            body["reasoning_effort"] = ReasoningEffort;
+        }
+        else
+        {
+            body["max_tokens"] = MaxTokens;
+            body["temperature"] = 0.2;
+        }
+
+        return body;
+    }
 
     // ── Private response types ───────────────────────────────────────────
 

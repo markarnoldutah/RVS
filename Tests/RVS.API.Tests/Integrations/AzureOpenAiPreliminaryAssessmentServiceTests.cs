@@ -53,7 +53,7 @@ public class AzureOpenAiPreliminaryAssessmentServiceTests
         };
     }
 
-    private AzureOpenAiPreliminaryAssessmentService CreateService(HttpResponseMessage response)
+    private AzureOpenAiPreliminaryAssessmentService CreateService(HttpResponseMessage response, bool reasoningModel = false)
     {
         var handler = new Mock<HttpMessageHandler>();
         handler.Protected()
@@ -65,14 +65,15 @@ public class AzureOpenAiPreliminaryAssessmentServiceTests
                 return response;
             });
 
-        return CreateService(handler);
+        return CreateService(handler, reasoningModel);
     }
 
-    private AzureOpenAiPreliminaryAssessmentService CreateService(Mock<HttpMessageHandler> handler)
+    private AzureOpenAiPreliminaryAssessmentService CreateService(Mock<HttpMessageHandler> handler, bool reasoningModel = false)
     {
         var httpClient = new HttpClient(handler.Object) { BaseAddress = new Uri("https://openai.example.com/openai/deployments/gpt-4o/") };
+        var options = Microsoft.Extensions.Options.Options.Create(new AzureOpenAiAssessmentOptions { UseReasoningModelRequest = reasoningModel });
         return new AzureOpenAiPreliminaryAssessmentService(
-            httpClient, _fallback, Mock.Of<ILogger<AzureOpenAiPreliminaryAssessmentService>>());
+            httpClient, _fallback, options, Mock.Of<ILogger<AzureOpenAiPreliminaryAssessmentService>>());
     }
 
     private AzureOpenAiPreliminaryAssessmentService CreateThrowingService(Exception exception)
@@ -129,7 +130,6 @@ public class AzureOpenAiPreliminaryAssessmentServiceTests
         _capturedRequestUri!.AbsoluteUri.Should().Contain("/chat/completions?api-version=");
         var body = JsonNode.Parse(_capturedRequestBody!)!;
         body["response_format"]!["type"]!.GetValue<string>().Should().Be("json_object");
-        body["max_tokens"]!.GetValue<int>().Should().BeLessThanOrEqualTo(600);
 
         var userMessage = body["messages"]!.AsArray()
             .Single(m => m!["role"]!.GetValue<string>() == "user")!["content"]!.GetValue<string>();
@@ -139,6 +139,41 @@ public class AzureOpenAiPreliminaryAssessmentServiceTests
         userMessage.Should().Contain("Does the slide move at all when you operate the switch?");
         userMessage.Should().Contain("Motor hums or clicks but nothing moves");
         userMessage.Should().Contain("Started after a storm");
+    }
+
+    [Fact]
+    public async Task AssessAsync_WhenReasoningModel_ShouldSendMaxCompletionTokensAndReasoningEffort_NotTemperatureOrMaxTokens()
+    {
+        // The dedicated assessment deployment (gpt-5, #584) is a reasoning model: it rejects
+        // "max_tokens" and any non-default "temperature" with a 400, which this service treats as
+        // an ordinary failure and silently answers with the rule-based fallback.
+        var sut = CreateService(ChatResponse(new { probable_cause = "x", possible_fixes = new[] { "y" }, likely_parts = Array.Empty<string>(), confidence = "low" }), reasoningModel: true);
+
+        await sut.AssessAsync(Request());
+
+        var body = JsonNode.Parse(_capturedRequestBody!)!.AsObject();
+        body.ContainsKey("temperature").Should().BeFalse();
+        body.ContainsKey("max_tokens").Should().BeFalse();
+        body["max_completion_tokens"]!.GetValue<int>().Should().BeGreaterThan(600);
+        body["reasoning_effort"]!.GetValue<string>().Should().Be("low");
+        _capturedRequestUri!.Query.Should().Contain("api-version=2025-04-01-preview");
+    }
+
+    [Fact]
+    public async Task AssessAsync_WhenNotReasoningModel_ShouldKeepTheGpt4oRequestShape()
+    {
+        // Dev, and the documented revert path (blank assessmentModelName), send the assessment to
+        // the gpt-4o text deployment, which rejects "reasoning_effort".
+        var sut = CreateService(ChatResponse(new { probable_cause = "x", possible_fixes = new[] { "y" }, likely_parts = Array.Empty<string>(), confidence = "low" }));
+
+        await sut.AssessAsync(Request());
+
+        var body = JsonNode.Parse(_capturedRequestBody!)!.AsObject();
+        body.ContainsKey("reasoning_effort").Should().BeFalse();
+        body.ContainsKey("max_completion_tokens").Should().BeFalse();
+        body["max_tokens"]!.GetValue<int>().Should().BeLessThanOrEqualTo(600);
+        body["temperature"]!.GetValue<double>().Should().Be(0.2);
+        _capturedRequestUri!.Query.Should().Contain("api-version=2024-10-21");
     }
 
     [Fact]

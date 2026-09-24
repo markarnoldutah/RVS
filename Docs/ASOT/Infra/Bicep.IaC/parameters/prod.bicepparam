@@ -29,7 +29,10 @@ param whisperCapacity = 2
 // application-code changes. DataZoneStandard (US) SKU — gpt-5 isn't offered
 // under the regional Standard SKU textDeploymentName uses.
 param assessmentModelName = 'gpt-5'
-param assessmentDeploymentCapacity = 2
+// Capacity 10 (10K TPM). Each call reserves ~3K tokens against TPM up front
+// (~1K prompt + max_completion_tokens 2000, reasoning included), so at 2 every
+// call was refused. Check DataZoneStandard gpt-5 quota in westus3 first.
+param assessmentDeploymentCapacity = 10
 
 // App Service (API) — Basic B1 for the pilot: no Always On, no deployment slot.
 // Upgrade path: 'S1' adds Always On and a staging slot (README "SKU Upgrade Paths").

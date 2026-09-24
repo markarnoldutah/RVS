@@ -630,6 +630,11 @@ if (!useMockIntegrations && !string.IsNullOrWhiteSpace(assessmentEndpoint))
             ?? "gpt-4o";
     var assessmentApiKey = builder.Configuration["AzureOpenAi:ApiKey"];
 
+    // The dedicated deployment is a reasoning model (gpt-5); the gpt-4o fallback is not. The two
+    // take different request shapes, and each rejects the other's.
+    builder.Services.Configure<AzureOpenAiAssessmentOptions>(o =>
+        o.UseReasoningModelRequest = !string.IsNullOrWhiteSpace(configuredAssessmentDeployment));
+
     builder.Services.AddHttpClient<IPreliminaryAssessmentService, AzureOpenAiPreliminaryAssessmentService>(client =>
     {
         client.BaseAddress = new Uri(assessmentEndpoint.TrimEnd('/') + $"/openai/deployments/{assessmentDeploymentName}/");
