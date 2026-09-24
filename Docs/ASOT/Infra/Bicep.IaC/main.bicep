@@ -246,6 +246,19 @@ param deployObservability bool = false
 @description('When true and deployObservability + deployAppService are both true, creates a standard availability test on the API /health endpoint.')
 param deployAvailabilityTest bool = false
 
+@description('Seconds between availability test runs, per location. 900 = every 15 minutes (the cheap setting), 300 = every 5. Only used when the test is deployed.')
+@allowed([
+  300
+  900
+])
+param availabilityTestFrequencySeconds int = 900
+
+@description('Availability test location IDs. Each location is billed per run: one location at 900 s is ~2.9K runs/month, three at 300 s ~26K. Add locations as traffic grows; the availability alert waits for all but one to fail. Only used when the test is deployed.')
+@minLength(1)
+param availabilityTestLocations array = [
+  'us-ca-sjc-azr'
+]
+
 @description('Log Analytics workspace retention in days. 30 is the floor the PerGB2018 SKU accepts, and the first 31 days are included in the ingestion price, so values below 31 do not lower the bill. Ingestion volume is what drives cost.')
 @minValue(30)
 @maxValue(730)
@@ -372,10 +385,12 @@ module appInsights 'modules/app-insights.bicep' = if (deployObservability) {
     logAnalyticsWorkspaceId: deployObservability ? logAnalytics.outputs.resourceId : ''
     deployAvailabilityTest: deployAvailabilityTest && deployAppService
     healthCheckUrl: (deployAvailabilityTest && deployAppService) ? healthCheckUrl : ''
+    availabilityTestFrequencySeconds: availabilityTestFrequencySeconds
+    availabilityTestLocations: availabilityTestLocations
   }
 }
 
-// ── Monitor Alerts (packet-pipeline critical events, #494) ────
+// ── Monitor Alerts (packet-pipeline critical events #494; availability + telemetry-dark #602) ──
 
 module monitorAlerts 'modules/monitor-alerts.bicep' = if (deployObservability) {
   name: 'deploy-alerts-${environmentName}'
@@ -389,6 +404,10 @@ module monitorAlerts 'modules/monitor-alerts.bicep' = if (deployObservability) {
     environmentName: environmentName
     tags: sharedTags
     opsEmailReceivers: opsAlertEmailReceivers
+    #disable-next-line BCP318
+    availabilityTestId: deployObservability ? appInsights.outputs.availabilityTestId : ''
+    availabilityTestLocationCount: length(availabilityTestLocations)
+    availabilityTestFrequencySeconds: availabilityTestFrequencySeconds
   }
 }
 

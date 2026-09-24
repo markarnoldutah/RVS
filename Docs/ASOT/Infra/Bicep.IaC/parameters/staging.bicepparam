@@ -55,9 +55,17 @@ param deployKeyVault = true
 
 // Observability (Log Analytics + Application Insights + /health availability test)
 param deployObservability = true
-// Off permanently: billed per run (3 locations × every 5 min ≈ 26K runs/month)
-// and no alert rule reads its results, so nobody would learn it had failed.
+// Off: billed per run. While it is off, nothing detects staging telemetry going
+// dark (#602) — the dark-telemetry alert compares the test's pings against App
+// Insights requests and exists only alongside the test. Turning it on creates
+// that alert and a test-failing alert. Cheapest useful setting is below
+// (1 location × every 15 min ≈ 2.9K runs/month): README "Turning the
+// availability test on".
 param deployAvailabilityTest = false
+param availabilityTestFrequencySeconds = 900
+param availabilityTestLocations = [
+  'us-ca-sjc-azr'
+]
 // 30 is the lowest the workspace accepts; the first 31 days cost nothing extra.
 param logAnalyticsRetentionInDays = 30
 // 0.08 GB/day per environment keeps staging + prod together inside the 5 GB/month

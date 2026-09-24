@@ -53,6 +53,26 @@ var createSlot = deployStagingSlot && slotSupported
 // Health checks are not supported on the Free (F1) tier
 var enableHealthCheck = skuName != 'F1'
 
+// File-system logging (#602): a server-side log path that does not depend on
+// Application Insights. On Linux, httpLogs.fileSystem is what captures the
+// container's stdout/stderr, so the ASP.NET Core console logger lands in
+// /home/LogFiles and in `az webapp log tail`. Capped by size and age, so it
+// cannot fill the plan's storage.
+var fileSystemLogs = {
+  applicationLogs: {
+    fileSystem: {
+      level: 'Information'
+    }
+  }
+  httpLogs: {
+    fileSystem: {
+      enabled: true
+      retentionInMb: 35
+      retentionInDays: 3
+    }
+  }
+}
+
 // ── Resources ─────────────────────────────────────────────────
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
@@ -92,6 +112,12 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
   }
 }
 
+resource webAppLogs 'Microsoft.Web/sites/config@2024-11-01' = {
+  parent: webApp
+  name: 'logs'
+  properties: fileSystemLogs
+}
+
 // ── Staging Deployment Slot
 
 resource stagingSlot 'Microsoft.Web/sites/slots@2024-11-01' = if (createSlot) {
@@ -116,6 +142,12 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2024-11-01' = if (createSlot) {
       healthCheckPath: '/health'
     }
   }
+}
+
+resource stagingSlotLogs 'Microsoft.Web/sites/slots/config@2024-11-01' = if (createSlot) {
+  parent: stagingSlot
+  name: 'logs'
+  properties: fileSystemLogs
 }
 
 // Mark ASPNETCORE_ENVIRONMENT as slot-sticky so it does NOT swap with code
