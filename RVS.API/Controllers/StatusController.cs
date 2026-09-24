@@ -73,7 +73,8 @@ public class StatusController : ControllerBase
 
         return Ok(new CustomerStatusResponseDto
         {
-            ServiceRequests = serviceRequests
+            ServiceRequests = serviceRequests,
+            MagicLinkExpiresAtUtc = acct.MagicLinkExpiresAtUtc
         });
     }
 

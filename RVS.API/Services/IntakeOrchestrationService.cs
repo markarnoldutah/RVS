@@ -67,7 +67,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     }
 
     /// <inheritdoc />
-    public async Task<(ServiceRequest ServiceRequest, string? MagicLinkToken)> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<(ServiceRequest ServiceRequest, string? MagicLinkToken, DateTime? MagicLinkExpiresAtUtc)> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
         ArgumentNullException.ThrowIfNull(request);
@@ -397,7 +397,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             _logger.LogWarning(ex, "Intake Step 8: failed to enqueue packet generation for SR {ServiceRequestId}", serviceRequest.Id);
         }
 
-        return (serviceRequest, globalAcct.MagicLinkToken);
+        return (serviceRequest, globalAcct.MagicLinkToken, globalAcct.MagicLinkExpiresAtUtc);
     }
 
     /// <summary>

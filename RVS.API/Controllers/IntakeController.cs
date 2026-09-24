@@ -588,12 +588,13 @@ public class IntakeController : ControllerBase
             return UnprocessableEntity(ModelState);
         }
 
-        var (serviceRequest, magicLinkToken) = await _intakeService.ExecuteAsync(locationSlug, request, ct);
+        var (serviceRequest, magicLinkToken, magicLinkExpiresAtUtc) = await _intakeService.ExecuteAsync(locationSlug, request, ct);
 
         var response = new IntakeSubmissionResponseDto
         {
             ServiceRequest = serviceRequest.ToDetailDto(),
-            MagicLinkToken = magicLinkToken
+            MagicLinkToken = magicLinkToken,
+            MagicLinkExpiresAtUtc = magicLinkExpiresAtUtc
         };
 
         return CreatedAtAction(nameof(GetConfig), new { locationSlug }, response);

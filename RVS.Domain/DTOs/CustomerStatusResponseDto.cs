@@ -13,6 +13,13 @@ public sealed record CustomerStatusResponseDto
 {
     /// <summary>One entry per service request linked to the status token.</summary>
     public List<CustomerStatusItemResponseDto> ServiceRequests { get; init; } = [];
+
+    /// <summary>
+    /// When the status token used for this request stops working (UTC), or <c>null</c> when it does
+    /// not expire. Lets the intake app remember a link opened from an email for exactly as long as
+    /// it will resolve (issue #716).
+    /// </summary>
+    public DateTime? MagicLinkExpiresAtUtc { get; init; }
 }
 
 /// <summary>

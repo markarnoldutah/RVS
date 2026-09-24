@@ -14,5 +14,5 @@ public static class SiteIdentity
     public const string ContactMailto = "mailto:" + ContactEmail;
 
     /// <summary>Shown on the privacy policy and terms. Bump it whenever either page's wording changes.</summary>
-    public const string PoliciesLastUpdated = "September 21, 2026";
+    public const string PoliciesLastUpdated = "September 24, 2026";
 }

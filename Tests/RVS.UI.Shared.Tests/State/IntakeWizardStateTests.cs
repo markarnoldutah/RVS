@@ -273,7 +273,7 @@ public class IntakeWizardStateTests
     {
         // The invite is spent on submission, so losing the token on a reload mid-wizard would
         // cost the request its advisor attribution.
-        var jsRuntime = new InMemorySessionStorageJSRuntime();
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
         var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug", InviteToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" };
         before.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
         await before.PersistAsync();

@@ -35,6 +35,10 @@ builder.Services.AddScoped<AttachmentApiClient>();
 // Intake wizard shared state — scoped (one per browser tab lifetime)
 builder.Services.AddScoped<IntakeWizardState>();
 
+// The customer's status link, remembered on this device across visits (issue #716)
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<StatusLinkStore>();
+
 // Theme switcher — scoped (one per browser tab lifetime)
 builder.Services.AddScoped<ThemeService>();
 

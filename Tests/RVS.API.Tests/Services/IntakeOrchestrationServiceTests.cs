@@ -233,7 +233,7 @@ public class IntakeOrchestrationServiceTests
         _globalAcctRepoMock.Setup(r => r.CreateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ConflictException("exists"));
 
-        var (serviceRequest, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+        var (serviceRequest, _, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         serviceRequest.Should().NotBeNull();
         _globalAcctRepoMock.Verify(r => r.UpdateAsync(
@@ -265,7 +265,7 @@ public class IntakeOrchestrationServiceTests
         _profileRepoMock.Setup(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ConflictException("exists"));
 
-        var (serviceRequest, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+        var (serviceRequest, _, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         serviceRequest.CustomerProfileId.Should().Be("cp_winner");
     }
@@ -803,6 +803,42 @@ public class IntakeOrchestrationServiceTests
                 a.MagicLinkToken == existingToken &&
                 a.MagicLinkExpiresAtUtc == existingExpiry),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTokenIsReused_ShouldReturnTheExistingExpiry()
+    {
+        SetupFullHappyPath();
+
+        // A reused token keeps its original expiry, so the client cannot infer it from "now + TTL"
+        // and has to be told (issue #716).
+        var existingExpiry = DateTime.UtcNow.AddDays(12);
+        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlobalCustomerAcct
+            {
+                Id = "gca_test",
+                Email = "jane@example.com",
+                FirstName = "Jane",
+                LastName = "Doe",
+                CreatedByUserId = "intake",
+                MagicLinkToken = "existing:token",
+                MagicLinkExpiresAtUtc = existingExpiry,
+            });
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.MagicLinkToken.Should().Be("existing:token");
+        result.MagicLinkExpiresAtUtc.Should().Be(existingExpiry);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTokenIsGenerated_ShouldReturnItsNewExpiry()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.MagicLinkExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddDays(90), TimeSpan.FromSeconds(5));
     }
 
     [Fact]
