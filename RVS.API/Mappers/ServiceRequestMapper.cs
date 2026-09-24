@@ -50,6 +50,14 @@ public static class ServiceRequestMapper
             CustomerStatusNote = entity.CustomerStatusNote is { } note
                 ? new CustomerStatusNoteDto { Text = note.Text, UpdatedAtUtc = note.UpdatedAtUtc }
                 : null,
+            Disposition = entity.Disposition is { } disposition
+                ? new ServiceRequestDispositionDto
+                {
+                    ReasonCode = disposition.ReasonCode,
+                    ReasonLabel = DispositionReasons.GetLabel(disposition.ReasonCode),
+                    DisposedAtUtc = disposition.DisposedAtUtc
+                }
+                : null,
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
@@ -67,6 +75,7 @@ public static class ServiceRequestMapper
             Id = entity.Id,
             LocationId = entity.LocationId,
             Status = entity.Status,
+            DispositionReasonCode = entity.Disposition?.ReasonCode,
             CustomerFullName = $"{entity.CustomerSnapshot.FirstName} {entity.CustomerSnapshot.LastName}".Trim(),
             AssetDisplay = ComposeAssetDisplay(entity.AssetInfo),
             IssueCategory = entity.IssueCategory ?? string.Empty,
@@ -184,6 +193,7 @@ public static class ServiceRequestMapper
         ArgumentNullException.ThrowIfNull(dto);
 
         entity.Status = dto.Status.Trim();
+        entity.ClearDispositionIfReopened();
         entity.IssueDescription = dto.IssueDescription.Trim();
         entity.IssueCategory = dto.IssueCategory?.Trim();
         entity.TechnicianSummary = dto.TechnicianSummary?.Trim();

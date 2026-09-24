@@ -152,6 +152,35 @@ public class ServiceRequestsController : ControllerBase
     }
 
     /// <summary>
+    /// Closes a service request without work (<c>Spec C-4</c>): sets it to <c>Cancelled</c> and
+    /// stores the reason code, which distinguishes it from a plain cancel in the list. An unknown
+    /// reason returns <c>422</c>. The reason is manager-only — the customer status page shows
+    /// <c>Cancelled</c> and nothing more. Moving the request off <c>Cancelled</c> clears it.
+    /// </summary>
+    /// <param name="dealershipId">Dealership identifier (route segment).</param>
+    /// <param name="srId">Service request identifier.</param>
+    /// <param name="request">The disposition payload.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpPut("{srId}/disposition")]
+    [Authorize(Policy = "CanUpdateServiceRequests")]
+    public async Task<ActionResult<ServiceRequestDetailResponseDto>> SetDisposition(
+        string dealershipId, string srId, [FromBody] ServiceRequestDispositionRequestDto request, CancellationToken ct)
+    {
+        var tenantId = _claimsService.GetTenantIdOrThrow();
+
+        if (!DispositionReasons.IsValid(request.ReasonCode))
+        {
+            ModelState.AddModelError(nameof(request.ReasonCode),
+                $"Reason must be one of: {string.Join(", ", DispositionReasons.All)}.");
+            return UnprocessableEntity(ModelState);
+        }
+
+        var updated = await _service.CloseWithDispositionAsync(tenantId, srId, request.ReasonCode, ct);
+
+        return Ok(updated.ToDetailDto());
+    }
+
+    /// <summary>
     /// Regenerates the request's service packet on demand (<c>Spec B-1</c>, issue #434). Resets
     /// packet-generation state to <c>Pending</c> and enqueues a fresh generation job; returns
     /// <c>202 Accepted</c> immediately — generation runs in the background.

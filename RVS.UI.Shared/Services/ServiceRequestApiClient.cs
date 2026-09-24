@@ -132,6 +132,32 @@ public sealed class ServiceRequestApiClient
     }
 
     /// <summary>
+    /// Closes a service request without work (<c>Spec C-4</c>) with one of the fixed reason codes
+    /// (<c>DispositionReasons.All</c>). The request moves to <c>Cancelled</c>; an unknown reason
+    /// is rejected with <c>422</c>.
+    /// </summary>
+    public async Task<ServiceRequestDetailResponseDto> SetDispositionAsync(
+        string dealershipId,
+        string serviceRequestId,
+        string reasonCode,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reasonCode);
+
+        var response = await _httpClient.PutAsJsonAsync(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/disposition",
+            new ServiceRequestDispositionRequestDto { ReasonCode = reasonCode },
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<ServiceRequestDetailResponseDto>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize disposition response.");
+    }
+
+    /// <summary>
     /// Deletes a service request.
     /// </summary>
     public async Task DeleteAsync(

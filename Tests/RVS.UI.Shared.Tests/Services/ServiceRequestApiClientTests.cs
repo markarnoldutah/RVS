@@ -102,6 +102,61 @@ public class ServiceRequestApiClientTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    // ── SetDispositionAsync (Spec C-4) ───────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SetDispositionAsync_WhenAnyArgumentIsBlank_ShouldThrowArgumentException(string? blank)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        await sut.Invoking(c => c.SetDispositionAsync(blank!, "sr-1", "Spam")).Should().ThrowAsync<ArgumentException>();
+        await sut.Invoking(c => c.SetDispositionAsync("dlr-1", blank!, "Spam")).Should().ThrowAsync<ArgumentException>();
+        await sut.Invoking(c => c.SetDispositionAsync("dlr-1", "sr-1", blank!)).Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task SetDispositionAsync_ShouldPutToDispositionRouteWithReasonBody_AndDeserializeResponse()
+    {
+        var expected = new ServiceRequestDetailResponseDto
+        {
+            Id = "sr-1",
+            TenantId = "ten-1",
+            Status = "Cancelled",
+            LocationId = "loc-1",
+            Disposition = new ServiceRequestDispositionDto
+            {
+                ReasonCode = "Duplicate",
+                ReasonLabel = "Duplicate",
+                DisposedAtUtc = DateTime.UtcNow
+            }
+        };
+        var handler = new CapturingHandler(HttpStatusCode.OK, expected);
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var result = await sut.SetDispositionAsync("dlr 1", "sr/1", "Duplicate");
+
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Put);
+        handler.LastRequest.RequestUri!.AbsolutePath
+            .Should().Be("/api/dealerships/dlr%201/service-requests/sr%2F1/disposition");
+        handler.LastRequestBody.Should().Contain("\"reasonCode\":\"Duplicate\"");
+        result.Status.Should().Be("Cancelled");
+        result.Disposition!.ReasonCode.Should().Be("Duplicate");
+    }
+
+    [Fact]
+    public async Task SetDispositionAsync_WhenApiReturns422_ShouldThrow()
+    {
+        var handler = new CapturingHandler(HttpStatusCode.UnprocessableEntity, new { message = "invalid" });
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.SetDispositionAsync("dlr-1", "sr-1", "Other");
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
     private sealed class CapturingHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _statusCode;

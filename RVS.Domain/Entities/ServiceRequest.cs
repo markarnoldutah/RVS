@@ -240,6 +240,72 @@ public class ServiceRequest : EntityBase
 
         MarkAsUpdated(userId);
     }
+
+    /// <summary>
+    /// How the request was closed without work (<c>Spec C-4</c>), or <c>null</c> when it was not.
+    /// Set together with <see cref="Status"/> <c>Cancelled</c> by <see cref="CloseWithDisposition"/>,
+    /// and cleared by <see cref="ClearDispositionIfReopened"/> when the status later moves off
+    /// <c>Cancelled</c>. Internal to the dealership: never shown on the customer status page.
+    /// </summary>
+    [JsonProperty("disposition")]
+    public DispositionEmbedded? Disposition { get; set; }
+
+    /// <summary>
+    /// Closes the request without work (<c>Spec C-4</c>): sets <see cref="Status"/> to
+    /// <c>Cancelled</c> and records the reason with an audit stamp, overwriting any earlier
+    /// disposition. Allowed from any status — every status may already move to <c>Cancelled</c>.
+    /// Callers are responsible for validating the code first
+    /// (<see cref="Validation.DispositionReasons.IsValid"/>).
+    /// </summary>
+    /// <param name="reasonCode">One of <see cref="Validation.DispositionReasons.All"/>.</param>
+    /// <param name="userId">The manager making the change (audit identity).</param>
+    public void CloseWithDisposition(string reasonCode, string? userId)
+    {
+        Status = "Cancelled";
+        Disposition = new DispositionEmbedded
+        {
+            ReasonCode = reasonCode,
+            DisposedAtUtc = DateTime.UtcNow,
+            DisposedByUserId = userId
+        };
+
+        MarkAsUpdated(userId);
+    }
+
+    /// <summary>
+    /// Drops the <see cref="Disposition"/> once <see cref="Status"/> is no longer <c>Cancelled</c>,
+    /// so a reopened request does not carry a stale "closed as duplicate" reason. Call after any
+    /// status change that does not go through <see cref="CloseWithDisposition"/>.
+    /// </summary>
+    public void ClearDispositionIfReopened()
+    {
+        if (!string.Equals(Status, "Cancelled", StringComparison.Ordinal))
+        {
+            Disposition = null;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: DispositionEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// The reason a <see cref="ServiceRequest"/> was closed without work (<c>Spec C-4</c>).
+/// </summary>
+public class DispositionEmbedded
+{
+    /// <summary>One of <see cref="Validation.DispositionReasons.All"/>.</summary>
+    [JsonProperty("reasonCode")]
+    public string ReasonCode { get; set; } = string.Empty;
+
+    /// <summary>UTC time the request was dispositioned.</summary>
+    [JsonProperty("disposedAtUtc")]
+    public DateTime DisposedAtUtc { get; set; }
+
+    /// <summary>The manager who dispositioned it. Null only for legacy/system writes.</summary>
+    [JsonProperty("disposedByUserId")]
+    public string? DisposedByUserId { get; set; }
 }
 
 // ---------------------------------------------------------------------------

@@ -145,7 +145,7 @@ This is the honest state of `../RVS_Spec.md`.
 | C-1 list, filter | **Built** | Far heavier than specced — 10 search fields |
 | C-2 detail + status + resend | **Partial** | Detail and status exist. **No resend** |
 | C-3 set status | **Built** | Vocabulary matches Spec C-3 / C-8 (aligned to code in issue #428) |
-| C-4 disposition + reason code | **Not built** | Only status → Cancelled |
+| C-4 disposition + reason code | **Built** | Issue #445. `PUT api/dealerships/{id}/service-requests/{srId}/disposition` (`CanUpdateServiceRequests`) with a `reasonCode` from the fixed `DispositionReasons` set (`Duplicate`, `Spam`, `WrongLocation`, `CustomerWithdrew`; anything else → 422). Sets status `Cancelled` and stores `ServiceRequest.Disposition`, allowed from any status. Moving the status off `Cancelled` (update or board drag) clears it. The reason is on the detail and summary DTOs so the list and board can tell it apart from a plain cancel. It is manager-only: the customer status page still shows just `Cancelled` |
 | C-5 resend packet | **Not built** | |
 | C-6 per-location settings | **Partial** | Location CRUD + capabilities + B-6 `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo) read/written via `api/locations` (#435). No manager-app settings UI yet |
 | C-7 one-click email status links | **Not built** | |

@@ -545,6 +545,126 @@ public class ServiceRequestServiceTests
         _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // ── CloseWithDispositionAsync (Spec C-4) ─────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task CloseWithDispositionAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.CloseWithDispositionAsync(tenantId!, "sr_1", "Duplicate");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task CloseWithDispositionAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.CloseWithDispositionAsync("ten_1", id!, "Duplicate");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Other")]
+    [InlineData("duplicate")]
+    public async Task CloseWithDispositionAsync_WhenReasonCodeIsUnknownOrBlank_ShouldThrowArgumentExceptionWithoutWriting(string? reasonCode)
+    {
+        var act = () => _sut.CloseWithDispositionAsync("ten_1", "sr_1", reasonCode!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CloseWithDispositionAsync_WhenNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest?)null);
+
+        var act = () => _sut.CloseWithDispositionAsync("ten_1", "sr_missing", "Spam");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Theory]
+    [InlineData("New")]
+    [InlineData("InProgress")]
+    [InlineData("WaitingOnParts")]
+    [InlineData("WaitingOnCustomer")]
+    [InlineData("Completed")]
+    [InlineData("Cancelled")]
+    public async Task CloseWithDispositionAsync_FromAnyStatus_ShouldCancelAndStoreReasonWithAuditIdentity(string fromStatus)
+    {
+        var existing = BuildServiceRequest();
+        existing.Status = fromStatus;
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.CloseWithDispositionAsync("ten_1", existing.Id, "WrongLocation");
+
+        result.Status.Should().Be("Cancelled");
+        result.Disposition.Should().NotBeNull();
+        result.Disposition!.ReasonCode.Should().Be("WrongLocation");
+        result.Disposition.DisposedByUserId.Should().Be("usr_test");
+        result.UpdatedByUserId.Should().Be("usr_test");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenReopeningADisposedRequest_ShouldClearDisposition()
+    {
+        var existing = BuildServiceRequest();
+        existing.CloseWithDisposition("Duplicate", "usr_prev");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, BuildUpdateRequest() with { Status = "InProgress" });
+
+        result.Status.Should().Be("InProgress");
+        result.Disposition.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenDisposedRequestStaysCancelled_ShouldKeepDisposition()
+    {
+        var existing = BuildServiceRequest();
+        existing.CloseWithDisposition("Spam", "usr_prev");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, BuildUpdateRequest() with { Status = "Cancelled" });
+
+        result.Disposition!.ReasonCode.Should().Be("Spam");
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_WhenReopeningADisposedRequest_ShouldClearDisposition()
+    {
+        var existing = BuildServiceRequest();
+        existing.CloseWithDisposition("CustomerWithdrew", "usr_prev");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateStatusAsync("ten_1", existing.Id, "New");
+
+        result.Disposition.Should().BeNull();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static ServiceRequest BuildServiceRequest(string? id = null, string tenantId = "ten_1") => new()
