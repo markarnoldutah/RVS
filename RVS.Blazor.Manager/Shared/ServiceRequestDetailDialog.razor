@@ -14,8 +14,8 @@
            Elevation="0"
            Width="min(1000px, 100vw)"
            Overlay="true"
-           Style="@($"border-left: 1px solid {DrawerBorderColor};")">
-    <div class="d-flex flex-column" style="@($"height: 100vh; background: {ColumnBackground};")">
+           Style="@FlyoutStyles.DrawerStyle(ThemeService.Mode)">
+    <div class="d-flex flex-column" style="@FlyoutStyles.ColumnStyle(ThemeService.Mode)">
         @* Sticky title header — full width *@
         <MudPaper Elevation="0" Square="true" Class="px-4 py-3"
                   Style="@HeaderFooterStyle">
@@ -1157,17 +1157,6 @@
 
     private void HandleThemeChanged() => InvokeAsync(StateHasChanged);
 
-    private string ColumnBackground => ThemeService.Mode == ThemeMode.Dark
-        ? "#181818"
-        : "var(--mud-palette-background)";
-
-    private string DrawerBorderColor => ThemeService.Mode switch
-    {
-        ThemeMode.Dark          => "rgba(255,255,255,0.12)",
-        ThemeMode.HighContrast  => "#FFFF00",
-        _                       => "rgba(0,0,0,0.12)"
-    };
-
     private string LabelColor => ThemeService.Mode == ThemeMode.HighContrast
         ? "#FFFF00"
         : "#9198A1";
@@ -1189,11 +1178,9 @@
 
     private string StatusNoteValueStyle => $"white-space: pre-wrap; color: {ValueColor};";
 
-    private string HeaderFooterStyle =>
-        $"position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--mud-palette-divider); background: {ColumnBackground};";
+    private string HeaderFooterStyle => FlyoutStyles.HeaderStyle(ThemeService.Mode);
 
-    private string FooterStyle =>
-        $"position: sticky; bottom: 0; z-index: 2; border-top: 1px solid var(--mud-palette-divider); background: {ColumnBackground};";
+    private string FooterStyle => FlyoutStyles.FooterStyle(ThemeService.Mode);
 
     private string LabelStyle => $"font-weight: 700; color: {LabelColor};";
 

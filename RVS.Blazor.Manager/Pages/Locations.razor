@@ -2,6 +2,8 @@
 @inject LookupApiClient LookupClient
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
+@inject ThemeService ThemeService
+@implements IDisposable
 @using RVS.UI.Shared.Validation
 
 <PageTitle>RV Intake Manager — Locations</PageTitle>
@@ -106,124 +108,171 @@
                           LocationId="@_sendLinkLocationId"
                           LocationName="@_sendLinkLocationName" />
 
-    @* Create / Edit Drawer *@
+    @* Location flyout — follows the service request flyout's shell and form styling (issue #724):
+       theme-aware edge and background, sticky header and footer, one card per field with a bold
+       label above an outlined input. *@
     <MudDrawer @bind-Open="_dialogOpen"
                Anchor="Anchor.End"
-               Variant="DrawerVariant.Temporary"
-               Width="480px"
+               Variant="@DrawerVariant.Temporary"
+               Fixed="true"
                Elevation="0"
-               Style="border-left: 4px solid var(--mud-palette-primary);">
-        <MudDrawerHeader Style="border-bottom: 1px solid var(--mud-palette-divider);">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width: 100%;">
-                <MudText Typo="Typo.h6">@(_editingLocationId is null ? "Create Location" : "Edit Location")</MudText>
-                <MudIconButton Icon="@Icons.Material.Filled.Close"
-                               aria-label="Close"
-                               OnClick="CloseDialog" />
-            </MudStack>
-        </MudDrawerHeader>
-
-        <MudStack Style="flex: 1; overflow-y: auto; min-height: 0;" Class="pa-4" Spacing="0">
-            <MudForm @ref="_form2">
-                <MudStack Spacing="3">
-                    <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">How this location appears to staff and customers</MudText>
-                        <MudTextField T="string" @bind-Value="_form.Name"
-                                      Validation="@(new Func<string?, string?>(ValidateName))"
-                                      Label="Name"
-                                      Variant="Variant.Filled"
-                                      Margin="Margin.Dense"
-                                      Placeholder="e.g., Salt Lake City"
-                                      autocomplete="off" />
-                    </MudStack>
-
-                    <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional — shown on intake landing page</MudText>
-                        <MudTextField T="string" @bind-Value="_form.Phone"
-                                      InputType="InputType.Telephone"
-                                      Label="Phone"
-                                      Variant="Variant.Filled"
-                                      Margin="Margin.Dense"
-                                      Placeholder="(555) 123-4567"
-                                      autocomplete="tel" />
-                    </MudStack>
-
-                    <MudStack Spacing="1">
-                        <MudTextField T="string" @bind-Value="_form.Address1"
-                                      Label="Address line 1"
-                                      Variant="Variant.Filled"
-                                      Margin="Margin.Dense"
-                                      Placeholder="123 Main St"
-                                      autocomplete="address-line1" />
-                    </MudStack>
-
-                    <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Apartment, suite, or unit (optional)</MudText>
-                        <MudTextField T="string" @bind-Value="_form.Address2"
-                                      Label="Address line 2"
-                                      Variant="Variant.Filled"
-                                      Margin="Margin.Dense"
-                                      Placeholder="Suite 200"
-                                      autocomplete="address-line2" />
-                    </MudStack>
-
-                    <MudGrid Spacing="2">
-                        <MudItem xs="12" sm="5">
-                            <MudStack Spacing="1">
-                                <MudTextField T="string" @bind-Value="_form.City"
-                                              Label="City"
-                                              Variant="Variant.Filled"
-                                              Margin="Margin.Dense"
-                                              Placeholder="Salt Lake City"
-                                              autocomplete="address-level2" />
-                            </MudStack>
-                        </MudItem>
-                        <MudItem xs="6" sm="3">
-                            <MudStack Spacing="1">
-                                <MudTextField T="string" @bind-Value="_form.State"
-                                              Label="State"
-                                              Variant="Variant.Filled"
-                                              Margin="Margin.Dense"
-                                              Placeholder="UT"
-                                              autocomplete="address-level1" />
-                            </MudStack>
-                        </MudItem>
-                        <MudItem xs="6" sm="4">
-                            <MudStack Spacing="1">
-                                <MudTextField T="string" @bind-Value="_form.PostalCode"
-                                              Label="Postal code"
-                                              Variant="Variant.Filled"
-                                              Margin="Margin.Dense"
-                                              Placeholder="84101"
-                                              autocomplete="postal-code" />
-                            </MudStack>
-                        </MudItem>
-                    </MudGrid>
-
-                    @* Time zone — follows from the address; drives the packet Received line (issue #506) *@
-                    <MudStack Spacing="1">
-                        <MudSelect T="string" @bind-Value="_form.TimeZoneId"
-                                   Label="Time zone"
-                                   Variant="Variant.Filled"
-                                   Margin="Margin.Dense"
-                                   Clearable="true"
-                                   HelperText="Sets the Received time shown on service packets. Leave blank to show UTC."
-                                   HelperTextOnFocus="false">
-                            @foreach (var tz in DealershipTimeZones.All)
-                            {
-                                <MudSelectItem T="string" Value="@tz.IanaId">@tz.DisplayName</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudStack>
-
-                    @* Capabilities Section *@
-                    @if (_tenantCapabilities.Count > 0)
+               Width="min(640px, 100vw)"
+               Overlay="true"
+               Style="@FlyoutStyles.DrawerStyle(ThemeService.Mode)">
+        <div class="d-flex flex-column" style="@FlyoutStyles.ColumnStyle(ThemeService.Mode)">
+            @* Sticky title header *@
+            <MudPaper Elevation="0" Square="true" Class="px-4 py-3"
+                      Style="@FlyoutStyles.HeaderStyle(ThemeService.Mode)">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="width: 100%;">
+                    @if (_editingLocationId is null)
                     {
+                        <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Primary" />
+                        <MudText Typo="Typo.h5" Style="font-weight: 600;">New Location</MudText>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
+                        <MudText Typo="Typo.h5" Style="font-weight: 600;">Edit Location</MudText>
+                    }
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                   Class="section-icon-btn"
+                                   aria-label="Close"
+                                   OnClick="CloseDialog" />
+                </MudStack>
+            </MudPaper>
+
+            @* Scrollable body *@
+            <div class="flex-grow-1 px-4 py-4" style="overflow-y: auto;">
+                <MudForm @ref="_form2">
+                    <MudStack Spacing="4">
                         <MudStack Spacing="1">
-                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Service Capabilities</MudText>
+                            <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Location</MudText>
                             <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                                Select which services this location offers. Managed at the tenant level in Settings.
+                                How this location appears to staff and customers
                             </MudText>
-                            <MudPaper Elevation="0" Outlined="true" Class="pa-2">
+                        </MudStack>
+
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Name</MudText>
+                                <MudTextField T="string" @bind-Value="_form.Name"
+                                              Validation="@(new Func<string?, string?>(ValidateName))"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Placeholder="e.g., Salt Lake City"
+                                              autocomplete="off" />
+                            </MudStack>
+                        </MudPaper>
+
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Phone</MudText>
+                                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Optional — shown on intake landing page</MudText>
+                                <MudTextField T="string" @bind-Value="_form.Phone"
+                                              InputType="InputType.Telephone"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Placeholder="(555) 123-4567"
+                                              autocomplete="tel" />
+                            </MudStack>
+                        </MudPaper>
+
+                        <MudStack Spacing="1" Class="mt-2">
+                            <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Address</MudText>
+                        </MudStack>
+
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Address line 1</MudText>
+                                <MudTextField T="string" @bind-Value="_form.Address1"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Placeholder="123 Main St"
+                                              autocomplete="address-line1" />
+                            </MudStack>
+                        </MudPaper>
+
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Address line 2</MudText>
+                                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Apartment, suite, or unit (optional)</MudText>
+                                <MudTextField T="string" @bind-Value="_form.Address2"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Placeholder="Suite 200"
+                                              autocomplete="address-line2" />
+                            </MudStack>
+                        </MudPaper>
+
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" sm="5">
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">City</MudText>
+                                        <MudTextField T="string" @bind-Value="_form.City"
+                                                      Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense"
+                                                      Placeholder="Salt Lake City"
+                                                      autocomplete="address-level2" />
+                                    </MudStack>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">State</MudText>
+                                        <MudTextField T="string" @bind-Value="_form.State"
+                                                      Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense"
+                                                      Placeholder="UT"
+                                                      autocomplete="address-level1" />
+                                    </MudStack>
+                                </MudItem>
+                                <MudItem xs="6" sm="4">
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Postal code</MudText>
+                                        <MudTextField T="string" @bind-Value="_form.PostalCode"
+                                                      Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense"
+                                                      Placeholder="84101"
+                                                      autocomplete="postal-code" />
+                                    </MudStack>
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+
+                        @* Time zone — follows from the address; drives the packet Received line (issue #506) *@
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Time zone</MudText>
+                                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                    Sets the Received time shown on service packets. Leave blank to show UTC.
+                                </MudText>
+                                <MudSelect T="string" @bind-Value="_form.TimeZoneId"
+                                           Variant="Variant.Outlined"
+                                           Margin="Margin.Dense"
+                                           Placeholder="UTC"
+                                           Clearable="true"
+                                           AnchorOrigin="Origin.BottomCenter"
+                                           TransformOrigin="Origin.TopCenter">
+                                    @foreach (var tz in DealershipTimeZones.All)
+                                    {
+                                        <MudSelectItem T="string" Value="@tz.IanaId">@tz.DisplayName</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudStack>
+                        </MudPaper>
+
+                        @* Capabilities Section *@
+                        @if (_tenantCapabilities.Count > 0)
+                        {
+                            <MudStack Spacing="1" Class="mt-2">
+                                <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Service Capabilities</MudText>
+                                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                    Select which services this location offers. Managed at the tenant level in Settings.
+                                </MudText>
+                            </MudStack>
+
+                            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                                 <MudStack Spacing="0">
                                     @foreach (var cap in _tenantCapabilities.Where(c => c.IsActive))
                                     {
@@ -237,25 +286,32 @@
                                     }
                                 </MudStack>
                             </MudPaper>
+                        }
+
+                        @* Service packet email — Spec B-6 / C-6 (issue #447). Defaults work as they
+                           come, so the only thing a new location needs here is a recipient. *@
+                        <MudStack Spacing="1" Class="mt-2">
+                            <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Service Packet Email</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                Each new service request is emailed to these addresses as a one-page packet.
+                            </MudText>
                         </MudStack>
-                    }
 
-                    @* Service packet email — Spec B-6 / C-6 (issue #447). Defaults work as they
-                       come, so the only thing a new location needs here is a recipient. *@
-                    <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Service Packet Email</MudText>
-                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                            Each new service request is emailed to these addresses as a one-page packet.
-                        </MudText>
-                        <MudSwitch T="bool" @bind-Value="_form.PacketEnabled"
-                                   Color="Color.Primary"
-                                   Label="@(_form.PacketEnabled ? "Packet email on" : "Packet email off")" />
-
-                        <MudPaper Elevation="0" Outlined="true" Class="pa-2">
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                             <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Packet email</MudText>
+                                <MudSwitch T="bool" @bind-Value="_form.PacketEnabled"
+                                           Color="Color.Primary"
+                                           Label="@(_form.PacketEnabled ? "Packet email on" : "Packet email off")" />
+                            </MudStack>
+                        </MudPaper>
+
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Recipients</MudText>
                                 @if (_form.Recipients.Count == 0)
                                 {
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">No recipients yet.</MudText>
+                                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">No recipients yet.</MudText>
                                 }
                                 @foreach (var recipient in _form.Recipients)
                                 {
@@ -264,14 +320,14 @@
                                         <MudText Typo="Typo.body2" Style="word-break: break-all;">@address</MudText>
                                         <MudIconButton Icon="@Icons.Material.Filled.Close"
                                                        Size="Size.Small"
+                                                       Class="section-icon-btn"
                                                        aria-label="@($"Remove {address}")"
                                                        OnClick="@(() => RemoveRecipient(address))" />
                                     </MudStack>
                                 }
-                                <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="1">
+                                <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
                                     <MudTextField T="string" @bind-Value="_newRecipient"
-                                                  Label="Add recipient email"
-                                                  Variant="Variant.Filled"
+                                                  Variant="Variant.Outlined"
                                                   Margin="Margin.Dense"
                                                   InputType="InputType.Email"
                                                   Placeholder="service@yourdealership.com"
@@ -281,80 +337,101 @@
                                                   Immediate="true"
                                                   OnKeyDown="OnRecipientKeyDown"
                                                   Disabled="@(_form.Recipients.Count >= MaxRecipients)"
+                                                  aria-label="Add recipient email"
                                                   autocomplete="off" />
                                     <MudButton Variant="Variant.Outlined" Color="Color.Primary"
-                                               Class="mt-2"
+                                               Class="mt-1"
+                                               StartIcon="@Icons.Material.Filled.Add"
                                                OnClick="@(() => AddRecipient())"
-                                               Disabled="@(_form.Recipients.Count >= MaxRecipients)"
-                                               Style="text-transform: none;">
+                                               Disabled="@(_form.Recipients.Count >= MaxRecipients)">
                                         Add
                                     </MudButton>
                                 </MudStack>
+
+                                @if (_packetError is not null)
+                                {
+                                    <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@_packetError</MudAlert>
+                                }
                             </MudStack>
                         </MudPaper>
 
-                        @if (_packetError is not null)
-                        {
-                            <MudAlert Severity="Severity.Error" Dense="true">@_packetError</MudAlert>
-                        }
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Attachments</MudText>
+                                <MudCheckBox T="bool" @bind-Value="_form.AttachPdf"
+                                             Label="Attach the packet as a PDF"
+                                             Color="Color.Primary"
+                                             Dense="true" />
+                                <MudCheckBox T="bool" @bind-Value="_form.IncludePhotos"
+                                             Label="Attach the customer's original photos"
+                                             Color="Color.Primary"
+                                             Dense="true" />
+                            </MudStack>
+                        </MudPaper>
 
-                        <MudCheckBox T="bool" @bind-Value="_form.AttachPdf"
-                                     Label="Attach the packet as a PDF"
-                                     Color="Color.Primary"
-                                     Dense="true" />
-                        <MudCheckBox T="bool" @bind-Value="_form.IncludePhotos"
-                                     Label="Attach the customer's original photos"
-                                     Color="Color.Primary"
-                                     Dense="true" />
-
-                        <MudExpansionPanels Elevation="0" Outlined="true" Dense="true">
-                            <MudExpansionPanel Text="More packet options" Dense="true">
-                                <MudStack Spacing="3">
-                                    <MudNumericField T="int" @bind-Value="_form.PasteBlockCharacterCap"
-                                                     Label="Paste block length (characters)"
-                                                     Variant="Variant.Filled"
-                                                     Margin="Margin.Dense"
-                                                     Min="MinPasteBlockCharacterCap"
-                                                     Max="MaxPasteBlockCharacterCap"
-                                                     HelperText="@($"Longest the DMS paste block may be. {MinPasteBlockCharacterCap}–{MaxPasteBlockCharacterCap}.")" />
-                                    <MudNumericField T="int" @bind-Value="_form.StatusLinkTtlDays"
-                                                     Label="Customer status link lasts (days)"
-                                                     Variant="Variant.Filled"
-                                                     Margin="Margin.Dense"
-                                                     Min="1"
-                                                     Max="MaxStatusLinkTtlDays"
-                                                     HelperText="@($"1–{MaxStatusLinkTtlDays} days.")" />
-                                    <MudTextField T="string" @bind-Value="_form.LogoUrl"
-                                                  Validation="@(new Func<string?, string?>(ValidateLogoUrl))"
-                                                  Label="Logo URL (optional)"
-                                                  Variant="Variant.Filled"
-                                                  Margin="Margin.Dense"
-                                                  InputType="InputType.Url"
-                                                  Placeholder="https://yourdealership.com/logo.png"
-                                                  HelperText="Shown at the top of this location's packets."
-                                                  autocomplete="off" />
+                        <MudExpansionPanels Elevation="1" Dense="true">
+                            <MudExpansionPanel Text="More packet options" Dense="true"
+                                               Style="background: var(--mud-palette-background);">
+                                <MudStack Spacing="4">
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Paste block length (characters)</MudText>
+                                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                            Longest the DMS paste block may be. @MinPasteBlockCharacterCap–@MaxPasteBlockCharacterCap.
+                                        </MudText>
+                                        <MudNumericField T="int" @bind-Value="_form.PasteBlockCharacterCap"
+                                                         Variant="Variant.Outlined"
+                                                         Margin="Margin.Dense"
+                                                         InputMode="InputMode.numeric"
+                                                         Min="MinPasteBlockCharacterCap"
+                                                         Max="MaxPasteBlockCharacterCap" />
+                                    </MudStack>
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Customer status link lasts (days)</MudText>
+                                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">1–@MaxStatusLinkTtlDays days.</MudText>
+                                        <MudNumericField T="int" @bind-Value="_form.StatusLinkTtlDays"
+                                                         Variant="Variant.Outlined"
+                                                         Margin="Margin.Dense"
+                                                         InputMode="InputMode.numeric"
+                                                         Min="1"
+                                                         Max="MaxStatusLinkTtlDays" />
+                                    </MudStack>
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Logo URL</MudText>
+                                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                            Optional — shown at the top of this location's packets.
+                                        </MudText>
+                                        <MudTextField T="string" @bind-Value="_form.LogoUrl"
+                                                      Validation="@(new Func<string?, string?>(ValidateLogoUrl))"
+                                                      Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense"
+                                                      InputType="InputType.Url"
+                                                      Placeholder="https://yourdealership.com/logo.png"
+                                                      autocomplete="off" />
+                                    </MudStack>
                                 </MudStack>
                             </MudExpansionPanel>
                         </MudExpansionPanels>
                     </MudStack>
-                </MudStack>
-            </MudForm>
-        </MudStack>
+                </MudForm>
+            </div>
 
-        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2"
-                  Class="pa-4"
-                  Style="border-top: 1px solid var(--mud-palette-divider);">
-            <MudButton OnClick="CloseDialog" Style="text-transform: none;">Cancel</MudButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                       OnClick="SaveLocationAsync" Disabled="_saving"
-                       Style="text-transform: none;">
-                @if (_saving)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                }
-                Save location
-            </MudButton>
-        </MudStack>
+            @* Sticky footer *@
+            <MudPaper Elevation="0" Square="true" Class="pa-3"
+                      Style="@FlyoutStyles.FooterStyle(ThemeService.Mode)">
+                <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
+                    <MudButton OnClick="CloseDialog">Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="SaveLocationAsync" Disabled="_saving">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Save location
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </div>
     </MudDrawer>
 </MudStack>
 
@@ -460,8 +537,16 @@
 
     protected override async Task OnInitializedAsync()
     {
+        ThemeService.OnThemeChanged += HandleThemeChanged;
         await Task.WhenAll(LoadLocationsAsync(), LoadTenantCapabilitiesAsync());
     }
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
+    }
+
+    private void HandleThemeChanged() => InvokeAsync(StateHasChanged);
 
     private async Task LoadLocationsAsync()
     {

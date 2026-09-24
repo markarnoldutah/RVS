@@ -1,0 +1,9 @@
+/* Matches the service request flyout (ServiceRequestDetailDialog.razor.css) — issue #724. */
+::deep .section-icon-btn {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+}
