@@ -111,7 +111,7 @@ A-7 prefill is deferred (Spec A-7, #673). These tests check that it stays off.
 - [ ] Deny microphone permission when the browser asks. You can still type, and no blocking error appears.
 - [ ] Speak a VIN aloud with the voice control near a VIN field. Spoken punctuation and spacing ("one two three, dash, A") are cleaned up sensibly, or at least the field does not break.
 - [ ] Cause a transcription failure (airplane mode while recording, or gibberish). The field is left unchanged and no blocking error appears.
-- [ ] Dictate a rambling description, then continue. Note your exact words: the packet's **Complaint** must show them verbatim, not the cleaned-up version (see 2.2).
+- [ ] Dictate a rambling description, then continue. Note your exact words: the packet's **Reported issue** must show them verbatim, not the cleaned-up version (see 2.2).
 
 ### 1.5 AI assistance (A-4, A-5, A-11, A-12)
 
@@ -208,9 +208,9 @@ Create the invites from the manager app (3.6) first.
 
 Open the packet inline in the email body, not the PDF, and check from top to bottom:
 
-- [ ] A small action bar above the masthead offers **In Progress**, **Waiting on Parts**, **Completed** and **Open in manager app** (see 3.3 for what they do).
-- [ ] The letterhead reads **RV Intake**. The top right shows `RVS #` with the reference code (the first hyphen-separated segment of the request id, upper-cased) and the Received time.
-- [ ] The Received time is in the location's own time zone with a short zone name (e.g. `2026-09-24 08:30 MDT`). For a location with no time zone set, it shows `… UTC`.
+- [ ] A small action bar above the masthead offers **In Progress**, **Waiting on Parts** and **Completed** as filled Rust buttons, with an outlined **Open Manager** button on the line below (see 3.3 for what they do).
+- [ ] The letterhead reads **RV Intake**. The top right shows `Intake #` with the reference code (the first hyphen-separated segment of the request id, upper-cased) and the Received time.
+- [ ] The Received time is in the location's own time zone with a short zone name on a 12-hour clock (e.g. `2026-09-24 8:30 AM MDT`). For a location with no time zone set, it shows `… UTC`.
 - [ ] One bold title line reads `Last, First : Year Make Model`.
 - [ ] A three-column Customer / Location / Unit band shows name, phone, email and preferred contact; the location; and year, manufacturer and `Serial# (VIN)`. With no VIN, only the Serial# line is dropped.
 - [ ] Issue category is shown and matches what was chosen at intake.
@@ -218,9 +218,12 @@ Open the packet inline in the email body, not the PDF, and check from top to bot
 - [ ] A **Preliminary assessment** section is tagged **AI-generated** and says it is advisory. When the model offers one, it has a probable cause, a confidence (high / medium / low), **possible fixes** (plural, most likely first, never one "recommended" fix) and likely parts as generic names.
 - [ ] Likely parts never include a part number or a price.
 - [ ] Submit a deliberately vague description ("it's broken"). The assessment either abstains and shows the summary only, or falls back to a low-confidence answer. It does not invent specifics.
-- [ ] The **Complaint** section shows the customer's words **verbatim**, including a dictated description exactly as spoken (from 1.4), not the tidied version.
+- [ ] The customer's phone is a tappable call link and their email a mail link.
+- [ ] The **Reported issue — customer's words verbatim** section shows the customer's words **verbatim**, including a dictated description exactly as spoken (from 1.4), not the tidied version.
 - [ ] The diagnostic Q&A shows the actual questions and answers from intake.
-- [ ] The Photos section lists each photo by name (`image {file name} attached`) and embeds no images. The photos themselves are the email's attachments.
+- [ ] The reported issue and the diagnostic Q&A are both in a typewriter (Courier) face.
+- [ ] No photo file names are listed and no images are embedded: the photos are the email's attachments. A **Photos** section appears only for a video link or the "Some images can only be shown in the manager app" note.
+- [ ] One click in the **Copy & paste into your DMS** box selects the whole block, fenced by `----- RV INTAKE -----`. This works in Apple Mail and a browser; some webmail clients ignore it and need a click-drag.
 - [ ] A paste block is present (2.5).
 - [ ] A status link and QR code are present near the end.
 - [ ] The packet **never** shows pricing, quotes, labor rates or any other customer's data.
@@ -301,7 +304,7 @@ In the manager app, open **Locations** and edit a location. The drawer has a **S
 
 ### 3.3 Status links from the packet email (C-7)
 
-- [ ] In a packet email, tap **Open in manager app**. It opens the board with that request's detail drawer open.
+- [ ] In a packet email, tap **Open Manager**. It opens the board with that request's detail drawer open.
 - [ ] Tap **In Progress**. A confirmation page appears, and **nothing changes until you tap to confirm**. After you confirm, the status is In Progress, and the activity timeline credits you.
 - [ ] Repeat with **Waiting on Parts** and **Completed**.
 - [ ] Open an action link in a signed-out private window. You are asked to sign in, and nothing changes until you sign in and confirm.

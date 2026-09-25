@@ -334,7 +334,10 @@ public class PacketPdfRendererTests
         var html = PacketHtmlRenderer.Render(packet);
         var pdf = Layout(packet).ToPlainText();
 
-        var htmlOrder = SectionIdsInB2Order.Select(id => Order(html, $"section:{id}")).ToList();
+        // The HTML drops its Photos section when every photo is an attached image — the mail
+        // client's thumbnails stand in for it (issue #735) — so it is compared without one.
+        var htmlOrder = SectionIdsInB2Order.Where(id => id != "photos")
+            .Select(id => Order(html, $"section:{id}")).ToList();
         var pdfOrder = SectionIdsInB2Order.Select(id => Order(pdf, $"[section:{id}]")).ToList();
 
         htmlOrder.Should().BeInAscendingOrder();
@@ -411,20 +414,21 @@ public class PacketPdfRendererTests
     // ── 3. Origin ────────────────────────────────────────────────────────
 
     [Fact]
-    public void Build_TheOriginSection_ShouldBeHeadedLocation_CarryLocationAndRvsNumber_AndNoReceivedRow()
+    public void Build_TheOriginSection_ShouldBeHeadedLocation_CarryLocationAndIntakeNumber_AndNoReceivedRow()
     {
         var section = Section(FullPacket(), "origin");
 
         section.Heading.Should().Be("Location", "the Received line moved to the top of the masthead (issue #492 item 5)");
         section.Rows.Should().Contain(r => r.Label == "Location" && r.Value == "Salt Lake Service Center");
-        section.Rows.Should().Contain(r => r.Label == "RVS #" && r.Value == "A1B2C3D4");
+        section.Rows.Should().Contain(r => r.Label == "Intake #" && r.Value == "A1B2C3D4");
+        Layout(FullPacket()).ToPlainText().Should().NotContain("RVS #", "the tracking number is labelled Intake # (issue #735)");
         section.Rows.Should().NotContain(r => r.Label == "Received");
     }
 
     [Fact]
     public void Build_ShouldExposeAnInvariantReceivedDisplayForTheTopOfTheMasthead()
     {
-        Layout(FullPacket()).ReceivedDisplay.Should().Be("2026-09-05 08:30 MDT");
+        Layout(FullPacket()).ReceivedDisplay.Should().Be("2026-09-05 8:30 AM MDT");
     }
 
     [Fact]
@@ -440,13 +444,13 @@ public class PacketPdfRendererTests
             },
         };
 
-        Layout(packet).ReceivedDisplay.Should().Be("2026-09-05 08:30 MDT");
+        Layout(packet).ReceivedDisplay.Should().Be("2026-09-05 8:30 AM MDT");
     }
 
     [Fact]
     public void Build_WhenTheLocationHasNoTimeZone_ShouldFallBackToTheUtcReceivedDisplay()
     {
-        Layout(MinimalPacket()).ReceivedDisplay.Should().Be("2026-09-05 14:30 UTC");
+        Layout(MinimalPacket()).ReceivedDisplay.Should().Be("2026-09-05 2:30 PM UTC");
     }
 
     [Fact]
@@ -470,7 +474,7 @@ public class PacketPdfRendererTests
     {
         var text = Layout(FullPacket()).ToPlainText();
 
-        Order(text, "Received: 2026-09-05 08:30 MDT").Should().BeLessThan(Order(text, "Gribble, Dale"));
+        Order(text, "Received: 2026-09-05 8:30 AM MDT").Should().BeLessThan(Order(text, "Gribble, Dale"));
         Order(text, "Gribble, Dale").Should().BeLessThan(Order(text, "[section:unit]"));
     }
 
@@ -526,9 +530,16 @@ public class PacketPdfRendererTests
     }
 
     [Fact]
+    public void Build_TheDescriptionSection_ShouldBeHeadedReportedIssue_LikeTheHtml()
+    {
+        // Issue #735 renamed the HTML's "Complaint"; the PDF heading follows it.
+        Section(FullPacket(), "description").Heading.Should().Be("Reported issue — customer's words verbatim");
+    }
+
+    [Fact]
     public void Build_TheDescriptionSection_ShouldNotBeFramed()
     {
-        // Issue #580: the Complaint block reads as plain text, no bordered frame.
+        // Issue #580: the reported-issue block reads as plain text, no bordered frame.
         Section(FullPacket(), "description").Framed.Should().BeFalse();
     }
 
@@ -806,7 +817,7 @@ public class PacketPdfRendererTests
 
         string[] values =
         [
-            "2026-09-05 08:30 MDT",
+            "2026-09-05 8:30 AM MDT",
             "Gribble, Dale",
             "2021 Winnebago View",
             "1FDXE45S12HB00001",
@@ -819,7 +830,8 @@ public class PacketPdfRendererTests
             "Generator quits after ten minutes. Smells hot.",
             "Does the generator start at all?",
             "Dies after about 10 minutes",
-            "generator.jpg",
+            // No "generator.jpg": the HTML no longer names attached images (issue #735) — the
+            // mail client's thumbnails show them — while the PDF still prints its photo grid.
             "https://rvintake.com/status/abc123",
         ];
 

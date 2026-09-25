@@ -148,7 +148,7 @@ public static class PacketPdfRenderer
                 {
                     right.Item().AlignRight().Text(t =>
                     {
-                        t.Span("RVS #: ").FontSize(11f);
+                        t.Span($"{PacketPdfLayout.ReferenceLabel}: ").FontSize(11f);
                         t.Span(packet.Origin.ReferenceCode).Bold().FontSize(12f);
                     });
                     // Full timestamp in the location's own zone, UTC when it has none
@@ -225,7 +225,7 @@ public static class PacketPdfRenderer
                 col.Item().Text(section.Body).SemiBold().FontSize(9.5f);
             }
 
-            var rows = section.Rows.Where(r => r.Label != "RVS #").ToList();
+            var rows = section.Rows.Where(r => r.Label != PacketPdfLayout.ReferenceLabel).ToList();
             foreach (var row in rows)
             {
                 col.Item().Text(t =>

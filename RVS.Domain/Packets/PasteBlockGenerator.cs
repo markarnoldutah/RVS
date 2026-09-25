@@ -35,7 +35,7 @@ public static class PasteBlockGenerator
     public const int DefaultCharacterCap = 1000;
 
     /// <summary>The fence line placed above and below the block for clean selection.</summary>
-    public const string Delimiter = "----- RV SERVICE FLOW -----";
+    public const string Delimiter = "----- RV INTAKE -----";
 
     /// <summary>Placeholder used when no category was classified.</summary>
     private const string UncategorizedLabel = "UNCATEGORIZED";

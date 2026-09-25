@@ -50,6 +50,14 @@ public class PasteBlockGeneratorTests
     }
 
     [Fact]
+    public void Delimiter_ShouldCarryTheProductName()
+    {
+        // The fence is the product name an advisor sees in the DMS, so it follows the
+        // "RV Intake" rebrand rather than the retired "RV Service Flow" (issue #735).
+        PasteBlockGenerator.Delimiter.Should().Be("----- RV INTAKE -----");
+    }
+
+    [Fact]
     public void Generate_ShouldUpperCaseTheCategory()
     {
         var block = PasteBlockGenerator.Generate("Slide System", Description, StatusUrl);

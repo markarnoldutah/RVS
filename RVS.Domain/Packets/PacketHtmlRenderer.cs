@@ -11,16 +11,17 @@ namespace RVS.Domain.Packets;
 ///
 /// It is a pure transform: string in, string out. It reads the composed
 /// <see cref="ServicePacket"/> in <c>Spec B-2</c> order and never inspects a
-/// <c>ServiceRequest</c>. It performs no I/O. Photos are listed by file name only, never
-/// embedded — they travel as the email's own attachments, which mail clients already show as
-/// clickable thumbnails (issue <c>#580</c>). The only embedded asset is the optional masthead
-/// logo, supplied pre-encoded as a <c>data:</c> URI on <see cref="PacketBranding"/>.
+/// <c>ServiceRequest</c>. It performs no I/O. Images are neither embedded nor named — they
+/// travel as the email's own attachments, which mail clients already show as clickable
+/// thumbnails (issues <c>#580</c>, <c>#735</c>); only videos, which are never attached, get a
+/// link. The only embedded asset is the optional masthead logo, supplied pre-encoded as a
+/// <c>data:</c> URI on <see cref="PacketBranding"/>.
 ///
 /// Layout follows the Integrated Dealer Systems (IDS) work-order idiom so a service
 /// manager reads it on daily muscle memory: a right-aligned tracking number in the
-/// masthead (<c>RVS #</c>, mirroring IDS <c>W/O #</c>), a three-column Customer / Location
+/// masthead (<c>Intake #</c>, mirroring IDS <c>W/O #</c>), a three-column Customer / Location
 /// / Unit band, then the curated <c>Issue</c> and the AI <c>Preliminary assessment</c> above
-/// <c>COMPLAINT</c> (the verbatim customer text, pre-curation) so the concise problem
+/// <c>Reported issue</c> (the verbatim customer text, pre-curation) so the concise problem
 /// recreation is read first and can be checked against the customer's own words, and a running
 /// page footer carrying the reference and page count. It deliberately omits everything IDS
 /// uses for the repair-authorization contract — pricing, parts/labour tables, signatures,
@@ -104,6 +105,23 @@ public static class PacketHtmlRenderer
     // plain navigations into the signed-in manager app — they carry no token and write nothing,
     // so a mail-security scanner fetching them changes no state. A presentational <table> with
     // inline styles, never flex/grid, for the same email-client reason as the masthead.
+    //
+    // The links are styled as brand buttons (Spec THEME-1, issue #735): status actions are
+    // filled Rust, primary; "Open Manager" is outlined Rust, secondary, on its own line below.
+    // Styles are inline because a mail client may strip the <style> block. The Domain cannot
+    // reference RVS.UI.Shared, so the hex values mirror RvsBrand — change them together.
+
+    /// <summary>Text-safe Rust, <c>RvsBrand.Accent</c> — 6.02:1 under white button text.</summary>
+    private const string BrandAccent = "#A8431F";
+
+    private const string ButtonBaseStyle =
+        "display:inline-block;padding:2mm 4mm;border-radius:4px;font-weight:700;text-decoration:none;";
+
+    private const string PrimaryButtonStyle =
+        ButtonBaseStyle + "margin:1mm 2mm 1mm 0;background-color:" + BrandAccent + ";color:#ffffff;border:1px solid " + BrandAccent + ";";
+
+    private const string SecondaryButtonStyle =
+        ButtonBaseStyle + "background-color:#ffffff;color:" + BrandAccent + ";border:1px solid " + BrandAccent + ";";
 
     private static void AppendManagerActions(StringBuilder sb, PacketManagerLinks? links)
     {
@@ -112,28 +130,25 @@ public static class PacketHtmlRenderer
             return;
         }
 
-        const string buttonStyle =
-            "display:inline-block;margin:1mm 2mm 1mm 0;padding:1.5mm 3mm;border:1px solid #000;color:#000;text-decoration:none;font-weight:700;";
-
         sb.Append("<!-- section:manager-actions -->\n");
         sb.Append("<table role=\"presentation\" class=\"manager-actions\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin:0 0 5mm;border:1px solid #000;\">\n<tr>\n");
         sb.Append("<td style=\"padding:2mm 3mm;font-size:9.5pt;\">\n");
         sb.Append("<p style=\"margin:0 0 1mm;font-weight:700;\">Set status</p>\n");
         foreach (var action in links.Actions.Where(a => IsHttpUrl(a.Url)))
         {
-            sb.Append("<a href=\"").Append(Attr(action.Url)).Append("\" style=\"").Append(buttonStyle).Append("\">")
+            sb.Append("<a href=\"").Append(Attr(action.Url)).Append("\" style=\"").Append(PrimaryButtonStyle).Append("\">")
                 .Append(Text(action.Label)).Append("</a>\n");
         }
 
-        sb.Append("<p style=\"margin:1mm 0 0;\"><a href=\"").Append(Attr(links.RequestUrl))
-            .Append("\" style=\"color:#000;\">Open in manager app</a></p>\n");
+        sb.Append("<p style=\"margin:2mm 0 0;\"><a href=\"").Append(Attr(links.RequestUrl))
+            .Append("\" style=\"").Append(SecondaryButtonStyle).Append("\">Open Manager</a></p>\n");
         sb.Append("</td>\n</tr>\n</table>\n");
     }
 
     // ── Masthead: sections 1 (unit), 2 (customer), 3 (origin) ──────────────
     //
     // IDS puts the tracking number top-right and identifies the job in a three-column
-    // Customer / Dates / Unit band. We mirror that: RVS # + full received timestamp in the
+    // Customer / Dates / Unit band. We mirror that: Intake # + full received timestamp in the
     // refbox, the customer name (Last, First) above the year/make/model headline, then a
     // Customer | Location | Unit band. The band and the refbox row are presentational
     // <table>s, not flex/grid — mail clients drop those and the columns would stack. The
@@ -168,7 +183,7 @@ public static class PacketHtmlRenderer
             .Append("<span class=\"doctype\" style=\"display:block;font-size:8.5pt;font-weight:400;text-transform:uppercase;letter-spacing:0.06em;\">Service intake packet</span></div>\n");
         sb.Append("</td>\n");
         sb.Append("<td class=\"refbox\" style=\"vertical-align:top;text-align:right;white-space:nowrap;\">\n");
-        sb.Append("<p class=\"rvsno\" style=\"margin:0;font-size:12pt;\">RVS #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
+        sb.Append("<p class=\"rvsno\" style=\"margin:0;font-size:12pt;\">Intake #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
         // Received line carries the full timestamp — date + time in the dealership's own
         // zone when the location sets one, UTC otherwise (issue #506). It is the one Received
         // line on the packet (the Location column no longer repeats it).
@@ -195,8 +210,10 @@ public static class PacketHtmlRenderer
         sb.Append("<!-- section:customer -->\n");
         sb.Append("<td class=\"col customer\" style=\"vertical-align:top;width:34%;padding-right:6mm;font-size:9.5pt;\">\n<h2>Customer</h2>\n");
         sb.Append("<p class=\"name\" style=\"font-weight:700;margin:0 0 1mm;\">").Append(Text(customer.FullName)).Append("</p>\n");
-        AppendRow(sb, "Phone", customer.Phone);
-        AppendRow(sb, "Email", customer.Email);
+        // The customer's phone and email are links so the manager can call or reply in one tap
+        // (issue #735). The location's own phone is not: nobody calls their own front desk.
+        AppendLinkRow(sb, "Phone", customer.Phone, TelHref(customer.Phone));
+        AppendLinkRow(sb, "Email", customer.Email, MailtoHref(customer.Email));
         AppendRow(sb, "Preferred contact", customer.PreferredContact);
         sb.Append("</td>\n");
 
@@ -261,13 +278,13 @@ public static class PacketHtmlRenderer
         sb.Append("</section>\n");
     }
 
-    // ── 6. Complaint — the customer's words, verbatim (IDS "COMPLAINT") ────
+    // ── 6. Reported issue — the customer's words, verbatim (IDS "COMPLAINT") ──
 
     private static void AppendDescription(StringBuilder sb, string description)
     {
         sb.Append("<!-- section:description -->\n");
         sb.Append("<section class=\"description\">\n");
-        sb.Append("<h2>Complaint <span class=\"sub\">— customer's words, verbatim</span></h2>\n");
+        sb.Append("<h2>Reported issue <span class=\"sub\">— customer's words verbatim</span></h2>\n");
         sb.Append("<pre class=\"verbatim\">").Append(Text(description)).Append("</pre>\n");
         sb.Append("</section>\n");
     }
@@ -360,11 +377,17 @@ public static class PacketHtmlRenderer
     }
 
     // ── 8. Photos ─────────────────────────────────────────────────────────
+    //
+    // Images are not listed at all: they are sent as email attachments, which the mail client
+    // already shows as clickable thumbnails, so neither an <img> (issue #580) nor a line naming
+    // the file (issue #735) adds anything. The section survives only for what the thumbnails
+    // cannot show — a video, or a note that some images were left off the email.
 
     private static void AppendPhotos(StringBuilder sb, IReadOnlyList<PacketPhoto> photos, string? managerAppServiceRequestUrl)
     {
-        var renderable = photos.Where(p => IsHttpUrl(p.Url)).ToList();
-        if (renderable.Count == 0)
+        var videos = photos.Where(p => p.IsVideo && IsHttpUrl(p.Url)).ToList();
+        var hasDroppedImageNote = !string.IsNullOrWhiteSpace(managerAppServiceRequestUrl);
+        if (videos.Count == 0 && !hasDroppedImageNote)
         {
             return;
         }
@@ -372,30 +395,21 @@ public static class PacketHtmlRenderer
         sb.Append("<!-- section:photos -->\n");
         sb.Append("<section class=\"photos\">\n");
         sb.Append("<h2>Photos</h2>\n");
-        // Text only: the photos are sent as email attachments, which the mail client
-        // already shows as clickable thumbnails, so no <img> is embedded here (issue #580).
         // Videos are never attached to the email (too large) and never render as a thumbnail
         // either, so they get a plain hyperlink to the resolved read URL instead (issue #583).
-        foreach (var photo in renderable)
+        foreach (var video in videos)
         {
-            if (photo.IsVideo)
-            {
-                sb.Append("<p class=\"photo-line\">video ").Append(Text(photo.FileName))
-                    .Append(" — <a href=\"").Append(Attr(photo.Url)).Append("\">view video</a></p>\n");
-            }
-            else
-            {
-                sb.Append("<p class=\"photo-line\">image ").Append(Text(photo.FileName)).Append(" attached</p>\n");
-            }
+            sb.Append("<p class=\"photo-line\">video ").Append(Text(video.FileName))
+                .Append(" — <a href=\"").Append(Attr(video.Url)).Append("\">view video</a></p>\n");
         }
 
         // One or more photo attachments did not fit the ACS size budget (PacketEmailSizeFitter,
         // issue #521) and were left off this email — point the reader at the Manager app instead
         // of silently dropping them (issue #580).
-        if (!string.IsNullOrWhiteSpace(managerAppServiceRequestUrl))
+        if (hasDroppedImageNote)
         {
             sb.Append("<p class=\"photo-note\">Some images can only be shown in the manager app. <a href=\"")
-                .Append(Attr(managerAppServiceRequestUrl)).Append("\">Click here to view</a>.</p>\n");
+                .Append(Attr(managerAppServiceRequestUrl!)).Append("\">Click here to view</a>.</p>\n");
         }
 
         sb.Append("</section>\n");
@@ -413,7 +427,12 @@ public static class PacketHtmlRenderer
         sb.Append("<!-- section:paste-block -->\n");
         sb.Append("<section class=\"paste-block\">\n");
         sb.Append("<h2>Copy &amp; paste into your DMS</h2>\n");
-        sb.Append("<pre class=\"dms-text\">").Append(Text(pasteBlock)).Append("</pre>\n");
+        // No mail client runs script, so a real copy-to-clipboard button cannot work here
+        // (issue #735). user-select: all is the next best thing: one click selects the whole
+        // block, fences included, ready for Ctrl/Cmd-C. Inline, so a stripped <style> keeps it;
+        // a client that ignores it still allows an ordinary click-drag selection.
+        sb.Append("<pre class=\"dms-text\" style=\"-webkit-user-select:all;user-select:all;\">")
+            .Append(Text(pasteBlock)).Append("</pre>\n");
         sb.Append("</section>\n");
     }
 
@@ -452,7 +471,7 @@ public static class PacketHtmlRenderer
         // printed page where supported. A presentational <table> so the two ends stay on
         // one line in a mail client (no flexbox).
         sb.Append("<table role=\"presentation\" class=\"packet-foot\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:8mm;border-top:1px solid #000;font-size:8pt;\">\n<tr>\n");
-        sb.Append("<td style=\"padding-top:2mm;vertical-align:top;\">RVS #").Append(Text(referenceCode)).Append(" · ").Append(Text(received)).Append("</td>\n");
+        sb.Append("<td style=\"padding-top:2mm;vertical-align:top;\">Intake #").Append(Text(referenceCode)).Append(" · ").Append(Text(received)).Append("</td>\n");
         sb.Append("<td style=\"padding-top:2mm;vertical-align:top;text-align:right;\">").Append(Text(brandName)).Append(" — service intake packet</td>\n");
         sb.Append("</tr>\n</table>\n");
     }
@@ -473,6 +492,51 @@ public static class PacketHtmlRenderer
     }
 
     /// <summary>
+    /// Appends a <c>Label: value</c> row whose value is a link to <paramref name="href"/>, or a
+    /// plain row when <paramref name="href"/> is <c>null</c>; appends nothing when the value is blank.
+    /// </summary>
+    private static void AppendLinkRow(StringBuilder sb, string label, string? value, string? href)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (href is null)
+        {
+            AppendRow(sb, label, value);
+            return;
+        }
+
+        sb.Append("<p class=\"row\" style=\"margin:0 0 1mm;\">").Append(label).Append(": <span><a href=\"")
+            .Append(Attr(href)).Append("\">").Append(Text(value)).Append("</a></span></p>\n");
+    }
+
+    /// <summary>
+    /// A <c>tel:</c> URI for <paramref name="phone"/>: its digits, keeping a leading <c>+</c>,
+    /// with the display formatting dropped. <c>null</c> when there are no digits to dial.
+    /// </summary>
+    private static string? TelHref(string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone))
+        {
+            return null;
+        }
+
+        var digits = new string(phone.Where(char.IsAsciiDigit).ToArray());
+        if (digits.Length == 0)
+        {
+            return null;
+        }
+
+        return phone.TrimStart().StartsWith('+') ? $"tel:+{digits}" : $"tel:{digits}";
+    }
+
+    /// <summary>A <c>mailto:</c> URI for <paramref name="email"/>, or <c>null</c> when it is blank.</summary>
+    private static string? MailtoHref(string? email) =>
+        string.IsNullOrWhiteSpace(email) ? null : $"mailto:{email.Trim()}";
+
+    /// <summary>
     /// The running-footer text baked into the <c>@page</c> margin box. CSS
     /// <c>content:</c> is a quoted string, so it must be ASCII and carry no <c>"</c> or
     /// <c>\</c>; the reference code and timestamp are already in that alphabet. The
@@ -482,7 +546,7 @@ public static class PacketHtmlRenderer
     /// </summary>
     private static string RunningFooterText(string referenceCode, string received, string brandName)
     {
-        var raw = $"RVS #{referenceCode} / {received} / {brandName}";
+        var raw = $"Intake #{referenceCode} / {received} / {brandName}";
         var sb = new StringBuilder(raw.Length);
         foreach (var ch in raw)
         {
@@ -592,7 +656,7 @@ public static class PacketHtmlRenderer
         }
 
         /* Copy & paste block keeps a frame — it is meant to be lifted into a DMS field,
-           and the border marks its boundaries. The Complaint block (issue #580) does not. */
+           and the border marks its boundaries. The reported-issue block (issue #580) does not. */
         pre.dms-text {
           border: 1px solid #000;
           padding: 3mm;
@@ -601,7 +665,13 @@ public static class PacketHtmlRenderer
         /* The diagnostic Q&A is the block that must read as expert: bold questions and a
            left-rule accent per answer. Emphasis survives greyscale without a frame. */
         .diagnostics { margin-bottom: 8mm; }
-        .diagnostics dl { margin: 0; }
+        /* The answers are the customer's own words, so the Q&A shares the verbatim
+           description's typewriter face (issue #735). Face only: the pre-wrap of the shared
+           rule above would render the newlines between the <dt>/<dd> tags as blank lines. */
+        .diagnostics dl {
+          margin: 0;
+          font-family: "Courier New", "Liberation Mono", monospace;
+        }
         .diagnostics dt {
           font-weight: 700;
           margin: 3mm 0 1mm;

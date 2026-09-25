@@ -332,7 +332,7 @@ public class PacketComposerTests
         var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
 
         // 14:30 UTC is 08:30 in Denver on 5 September, during daylight saving.
-        packet.Origin.ReceivedDisplay.Should().Be("2026-09-05 08:30 MDT");
+        packet.Origin.ReceivedDisplay.Should().Be("2026-09-05 8:30 AM MDT");
     }
 
     [Fact]
@@ -342,7 +342,7 @@ public class PacketComposerTests
 
         var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
 
-        packet.Origin.ReceivedDisplay.Should().Be("2026-09-05 14:30 UTC");
+        packet.Origin.ReceivedDisplay.Should().Be("2026-09-05 2:30 PM UTC");
     }
 
     // ── Branding (issue #492 items 1–2) ──────────────────────────────────

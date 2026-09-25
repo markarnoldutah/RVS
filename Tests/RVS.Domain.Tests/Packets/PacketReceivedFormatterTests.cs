@@ -33,7 +33,7 @@ public class PacketReceivedFormatterTests
     public void Format_WhenTimeZoneIdIsNull_ShouldReturnTodaysUtcString()
     {
         PacketReceivedFormatter.Format(September, null)
-            .Should().Be("2026-09-05 14:30 UTC");
+            .Should().Be("2026-09-05 2:30 PM UTC");
     }
 
     [Theory]
@@ -42,20 +42,34 @@ public class PacketReceivedFormatterTests
     public void Format_WhenTimeZoneIdIsBlank_ShouldReturnTheUtcString(string timeZoneId)
     {
         PacketReceivedFormatter.Format(September, timeZoneId)
-            .Should().Be("2026-09-05 14:30 UTC");
+            .Should().Be("2026-09-05 2:30 PM UTC");
     }
 
     [Fact]
     public void Format_WhenTimeZoneIdIsUnresolvable_ShouldReturnTheUtcString()
     {
         PacketReceivedFormatter.Format(September, "Mars/Olympus_Mons")
-            .Should().Be("2026-09-05 14:30 UTC");
+            .Should().Be("2026-09-05 2:30 PM UTC");
     }
 
     [Fact]
     public void FormatUtc_ShouldRenderTheInvariantUtcForm()
     {
-        PacketReceivedFormatter.FormatUtc(September).Should().Be("2026-09-05 14:30 UTC");
+        PacketReceivedFormatter.FormatUtc(September).Should().Be("2026-09-05 2:30 PM UTC");
+    }
+
+    // ── 12-hour clock with an AM/PM suffix (issue #735) ──────────────────
+
+    [Theory]
+    [InlineData(0, 5, "2026-09-05 12:05 AM UTC")]
+    [InlineData(9, 0, "2026-09-05 9:00 AM UTC")]
+    [InlineData(12, 0, "2026-09-05 12:00 PM UTC")]
+    [InlineData(23, 59, "2026-09-05 11:59 PM UTC")]
+    public void FormatUtc_ShouldUseATwelveHourClockWithAnAmPmSuffix(int hour, int minute, string expected)
+    {
+        var instant = new DateTimeOffset(2026, 9, 5, hour, minute, 0, TimeSpan.Zero);
+
+        PacketReceivedFormatter.FormatUtc(instant).Should().Be(expected);
     }
 
     // ── Curated zones: abbreviation from our own table ───────────────────
@@ -64,14 +78,14 @@ public class PacketReceivedFormatterTests
     public void Format_ForAmericaDenverInSeptember_ShouldRenderMountainDaylightTime()
     {
         PacketReceivedFormatter.Format(September, "America/Denver")
-            .Should().Be("2026-09-05 08:30 MDT");
+            .Should().Be("2026-09-05 8:30 AM MDT");
     }
 
     [Fact]
     public void Format_ForAmericaDenverInJanuary_ShouldRenderMountainStandardTime()
     {
         PacketReceivedFormatter.Format(January, "America/Denver")
-            .Should().Be("2026-01-15 07:30 MST");
+            .Should().Be("2026-01-15 7:30 AM MST");
     }
 
     [Fact]
@@ -79,42 +93,42 @@ public class PacketReceivedFormatterTests
     {
         // Arizona does not observe DST, so the offset and the spelling never move.
         PacketReceivedFormatter.Format(September, "America/Phoenix")
-            .Should().Be("2026-09-05 07:30 MST");
+            .Should().Be("2026-09-05 7:30 AM MST");
     }
 
     [Fact]
     public void Format_ForAmericaPhoenixInJanuary_ShouldAlsoRenderMst()
     {
         PacketReceivedFormatter.Format(January, "America/Phoenix")
-            .Should().Be("2026-01-15 07:30 MST");
+            .Should().Be("2026-01-15 7:30 AM MST");
     }
 
     [Fact]
     public void Format_ForPacificHonolulu_ShouldRenderHst()
     {
         PacketReceivedFormatter.Format(September, "Pacific/Honolulu")
-            .Should().Be("2026-09-05 04:30 HST");
+            .Should().Be("2026-09-05 4:30 AM HST");
     }
 
     [Fact]
     public void Format_ForAmericaAnchorageInSeptember_ShouldRenderAkdt()
     {
         PacketReceivedFormatter.Format(September, "America/Anchorage")
-            .Should().Be("2026-09-05 06:30 AKDT");
+            .Should().Be("2026-09-05 6:30 AM AKDT");
     }
 
     [Fact]
     public void Format_ForAmericaNewYorkInSeptember_ShouldRenderEdt()
     {
         PacketReceivedFormatter.Format(September, "America/New_York")
-            .Should().Be("2026-09-05 10:30 EDT");
+            .Should().Be("2026-09-05 10:30 AM EDT");
     }
 
     [Fact]
     public void Format_ShouldMatchTheIdCaseInsensitively()
     {
         PacketReceivedFormatter.Format(September, "america/denver")
-            .Should().Be("2026-09-05 08:30 MDT");
+            .Should().Be("2026-09-05 8:30 AM MDT");
     }
 
     // ── Resolvable but uncurated: numeric offset ─────────────────────────
@@ -123,21 +137,21 @@ public class PacketReceivedFormatterTests
     public void Format_ForAnUncuratedButResolvableZone_ShouldRenderANumericOffset()
     {
         PacketReceivedFormatter.Format(September, "Europe/Berlin")
-            .Should().Be("2026-09-05 16:30 (UTC+02:00)");
+            .Should().Be("2026-09-05 4:30 PM (UTC+02:00)");
     }
 
     [Fact]
     public void Format_ForAnUncuratedZoneWithAHalfHourOffset_ShouldRenderTheMinutes()
     {
         PacketReceivedFormatter.Format(September, "Asia/Kolkata")
-            .Should().Be("2026-09-05 20:00 (UTC+05:30)");
+            .Should().Be("2026-09-05 8:00 PM (UTC+05:30)");
     }
 
     [Fact]
     public void Format_ForAnUncuratedZoneAtZeroOffset_ShouldRenderPlusZero()
     {
         PacketReceivedFormatter.Format(January, "Europe/London")
-            .Should().Be("2026-01-15 14:30 (UTC+00:00)");
+            .Should().Be("2026-01-15 2:30 PM (UTC+00:00)");
     }
 
     // ── Instant handling ─────────────────────────────────────────────────
@@ -149,7 +163,7 @@ public class PacketReceivedFormatterTests
         var sameInstant = new DateTimeOffset(2026, 9, 5, 9, 30, 0, TimeSpan.FromHours(-5));
 
         PacketReceivedFormatter.Format(sameInstant, "America/Denver")
-            .Should().Be("2026-09-05 08:30 MDT");
+            .Should().Be("2026-09-05 8:30 AM MDT");
     }
 
     [Fact]
@@ -158,7 +172,7 @@ public class PacketReceivedFormatterTests
         var sameInstant = new DateTimeOffset(2026, 9, 5, 9, 30, 0, TimeSpan.FromHours(-5));
 
         PacketReceivedFormatter.Format(sameInstant, null)
-            .Should().Be("2026-09-05 14:30 UTC");
+            .Should().Be("2026-09-05 2:30 PM UTC");
     }
 
     [Fact]
@@ -171,9 +185,9 @@ public class PacketReceivedFormatterTests
         var afterFallBack = new DateTimeOffset(2026, 11, 1, 8, 30, 0, TimeSpan.Zero);
 
         PacketReceivedFormatter.Format(beforeFallBack, "America/Denver")
-            .Should().Be("2026-11-01 01:30 MDT");
+            .Should().Be("2026-11-01 1:30 AM MDT");
         PacketReceivedFormatter.Format(afterFallBack, "America/Denver")
-            .Should().Be("2026-11-01 01:30 MST");
+            .Should().Be("2026-11-01 1:30 AM MST");
     }
 
     // ── The CSS running-footer guard ─────────────────────────────────────

@@ -21,12 +21,18 @@ internal sealed record PacketPdfLayout
     /// <summary>Photo thumbnails on the first page; the rest go to an appendix page.</summary>
     private const int PhotosOnFirstPageLimit = 6;
 
+    /// <summary>
+    /// The tracking-number label, as the HTML masthead spells it (issue <c>#735</c>). Shared
+    /// with the painter, which lifts that row out of the Location column into the refbox.
+    /// </summary>
+    public const string ReferenceLabel = "Intake #";
+
     public required IReadOnlyList<PacketPdfLayoutSection> Sections { get; init; }
 
     /// <summary>
     /// The submission timestamp for the top-of-masthead <c>Received</c> line, formatted
-    /// <c>yyyy-MM-dd HH:mm</c> plus a zone: the location's own zone when it sets one
-    /// (<c>… 08:30 MDT</c>), UTC otherwise (issue #506). Taken straight from
+    /// <c>yyyy-MM-dd h:mm tt</c> plus a zone: the location's own zone when it sets one
+    /// (<c>… 8:30 AM MDT</c>), UTC otherwise (issues #506, #735). Taken straight from
     /// <see cref="PacketOrigin.ReceivedDisplay"/> so it matches the HTML rendering exactly.
     /// This is the one Received line on the packet — the Location column no longer repeats
     /// it (issue #492 items 4–5).
@@ -155,9 +161,9 @@ internal sealed record PacketPdfLayout
         AddRow(rows, "Location phone", origin.LocationPhone);
 
         // The Received line moved to the top of the masthead (issue #492 items 4–5); the
-        // RVS # row is kept for the layout's plain-text projection but the painter draws
+        // Intake # row is kept for the layout's plain-text projection but the painter draws
         // it in the top refbox, not this column.
-        rows.Add(new PacketPdfLayoutRow("RVS #", origin.ReferenceCode));
+        rows.Add(new PacketPdfLayoutRow(ReferenceLabel, origin.ReferenceCode));
 
         return new PacketPdfLayoutSection
         {
@@ -188,14 +194,15 @@ internal sealed record PacketPdfLayout
                 Body = curatedIssue,
             };
 
-    // ── 6. Complaint — the customer's words, verbatim ───────────────────
+    // ── 6. Reported issue — the customer's words, verbatim ──────────────
 
     private static PacketPdfLayoutSection BuildDescription(string description) => new()
     {
         Id = "description",
-        Heading = "Complaint",
+        // The HTML's heading and sub-heading on one line (issue #735).
+        Heading = "Reported issue — customer's words verbatim",
         Verbatim = description,
-        // Issue #580: the Complaint block reads as plain text, no bordered frame.
+        // Issue #580: the reported-issue block reads as plain text, no bordered frame.
         Framed = false,
     };
 
@@ -450,7 +457,7 @@ internal sealed record PacketPdfLayoutSection
     public string? Verbatim { get; init; }
 
     /// <summary>When <c>true</c> (the default), <see cref="Verbatim"/> renders in a bordered
-    /// block. The Complaint section (issue <c>#580</c>) opts out so it reads as plain text.</summary>
+    /// block. The reported-issue section (issue <c>#580</c>) opts out so it reads as plain text.</summary>
     public bool Framed { get; init; } = true;
 
     /// <summary>Diagnostic question/answer entries.</summary>
