@@ -33,6 +33,15 @@ public sealed class IntakeWizardState
     /// <summary>Current wizard step index (1-based, range 1–8).</summary>
     public int CurrentStep { get; private set; } = 1;
 
+    /// <summary>
+    /// The furthest step the customer has legitimately reached, which is the highest step the URL
+    /// is allowed to ask for. The step rides in the <c>step</c> query parameter so the browser's
+    /// Back button walks the wizard, and that makes it something a customer can type; without
+    /// this ceiling, <c>?step=8</c> would jump straight to Review and skip every validation in
+    /// between. Never falls: going back leaves the steps already completed reachable.
+    /// </summary>
+    public int MaxStepReached { get; private set; } = 1;
+
     /// <summary>Total number of wizard steps.</summary>
     public int TotalSteps => TotalStepCount;
 
@@ -265,6 +274,7 @@ public sealed class IntakeWizardState
         {
             ReturnToStepAfterEdit = null;
             CurrentStep = returnStep;
+            RaiseMaxStepReached();
             NotifyStateChanged();
             await PersistAsync();
             return;
@@ -273,6 +283,7 @@ public sealed class IntakeWizardState
         if (CurrentStep < TotalStepCount)
         {
             CurrentStep++;
+            RaiseMaxStepReached();
             NotifyStateChanged();
             await PersistAsync();
         }
@@ -288,6 +299,7 @@ public sealed class IntakeWizardState
         {
             ReturnToStepAfterEdit = null;
             CurrentStep = returnStep;
+            RaiseMaxStepReached();
             NotifyStateChanged();
             await PersistAsync();
             return;
@@ -309,10 +321,34 @@ public sealed class IntakeWizardState
         if (step >= 1 && step <= TotalStepCount)
         {
             CurrentStep = step;
+            RaiseMaxStepReached();
             NotifyStateChanged();
             await PersistAsync();
         }
     }
+
+    /// <summary>
+    /// Moves to the step the browser's history — or the address bar — asks for, clamped to the
+    /// range the customer has already reached. Unlike <see cref="GoToStepAsync"/> this never
+    /// raises <see cref="MaxStepReached"/>: arriving somewhere by pressing Back is not progress.
+    /// <para>
+    /// Any pending <see cref="ReturnToStepAfterEdit"/> is dropped. That promise belonged to the
+    /// Continue button of the step Review sent them to edit; a customer who pressed Back instead
+    /// has overridden it, and honouring it would fling them forward to Review unasked.
+    /// </para>
+    /// </summary>
+    public async Task GoToStepFromHistoryAsync(int step)
+    {
+        var target = Math.Clamp(step, 1, Math.Max(1, MaxStepReached));
+
+        ReturnToStepAfterEdit = null;
+        CurrentStep = target;
+        NotifyStateChanged();
+        await PersistAsync();
+    }
+
+    /// <summary>Records <see cref="CurrentStep"/> as reached, if it is further than before.</summary>
+    private void RaiseMaxStepReached() => MaxStepReached = Math.Max(MaxStepReached, CurrentStep);
 
     /// <summary>
     /// Applies customer prefill data from the intake config (magic-link token).
@@ -462,6 +498,7 @@ public sealed class IntakeWizardState
         var data = new IntakeWizardStateData
         {
             CurrentStep = CurrentStep,
+            MaxStepReached = MaxStepReached,
             Slug = Slug,
             IntakeSource = IntakeSource,
             InviteToken = InviteToken,
@@ -513,6 +550,9 @@ public sealed class IntakeWizardState
             if (data is null) return;
 
             CurrentStep = data.CurrentStep;
+            // A session persisted before the step was tracked has no maxStepReached; reading it
+            // as 0 would clamp the customer back to Step 1 and lose their place.
+            MaxStepReached = Math.Max(data.MaxStepReached, data.CurrentStep);
             Slug = data.Slug;
             IntakeSource = data.IntakeSource;
             InviteToken = data.InviteToken;
@@ -592,6 +632,7 @@ public sealed class IntakeWizardState
     public async Task ClearAsync()
     {
         CurrentStep = 1;
+        MaxStepReached = 1;
         Slug = string.Empty;
         IntakeSource = null;
         InviteToken = null;
@@ -862,6 +903,14 @@ public sealed class AttachmentFileInfo
 internal sealed class IntakeWizardStateData
 {
     public int CurrentStep { get; set; } = 1;
+
+    /// <summary>
+    /// The furthest step reached. Absent — and so 0 — in a session persisted before the step
+    /// was carried in the URL; <see cref="IntakeWizardState.RestoreAsync"/> falls back to
+    /// <see cref="CurrentStep"/> in that case.
+    /// </summary>
+    public int MaxStepReached { get; set; }
+
     public string Slug { get; set; } = string.Empty;
 
     /// <summary>Distribution channel the intake URL carried (<c>Spec A-13</c>).</summary>

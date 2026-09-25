@@ -1240,4 +1240,164 @@ public class IntakeWizardStateTests
         state.SelectableIssueCategories.Select(c => c.Name).Should()
             .Equal("appliances", "Electrical", "Slide-outs");
     }
+
+    // ---- Furthest step reached, and history-driven step changes -----------------------------
+    // The step now rides in the URL so the browser's Back button walks the wizard. That makes
+    // the step something a customer can ask for directly, so the state has to know which steps
+    // they have legitimately reached.
+
+    [Fact]
+    public void MaxStepReached_OnAFreshWizard_ShouldBeStepOne()
+    {
+        CreateState().MaxStepReached.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GoToNextStepAsync_ShouldRaiseMaxStepReached()
+    {
+        var state = CreateState();
+
+        await state.GoToNextStepAsync();
+        await state.GoToNextStepAsync();
+
+        state.MaxStepReached.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GoToPreviousStepAsync_ShouldNotLowerMaxStepReached()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(4);
+
+        await state.GoToPreviousStepAsync();
+
+        state.CurrentStep.Should().Be(3);
+        state.MaxStepReached.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task GoToStepAsync_ShouldRaiseMaxStepReached()
+    {
+        var state = CreateState();
+
+        await state.GoToStepAsync(6);
+
+        state.MaxStepReached.Should().Be(6);
+    }
+
+    [Fact]
+    public async Task GoToStepAsync_WhenRejected_ShouldLeaveMaxStepReachedAlone()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+
+        await state.GoToStepAsync(9);
+
+        state.MaxStepReached.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GoToStepFromHistoryAsync_ShouldMoveToTheStep()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(5);
+
+        await state.GoToStepFromHistoryAsync(2);
+
+        state.CurrentStep.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GoToStepFromHistoryAsync_ShouldNotGoPastTheStepReached()
+    {
+        // A hand-typed ?step=8 must not skip the steps in between.
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+        await state.GoToStepFromHistoryAsync(1);
+
+        await state.GoToStepFromHistoryAsync(8);
+
+        state.CurrentStep.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GoToStepFromHistoryAsync_ShouldNotRaiseMaxStepReached()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+
+        await state.GoToStepFromHistoryAsync(3);
+
+        state.MaxStepReached.Should().Be(3);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task GoToStepFromHistoryAsync_BelowStepOne_ShouldLandOnStepOne(int step)
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(4);
+
+        await state.GoToStepFromHistoryAsync(step);
+
+        state.CurrentStep.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GoToStepFromHistoryAsync_ShouldCancelAPendingEditReturn()
+    {
+        // Review sent them to Step 3 to edit, then they pressed Back instead of Continue. The
+        // promise to return to Review belonged to that Continue, and the customer overrode it.
+        var state = CreateState();
+        await state.GoToStepAsync(8);
+        state.ReturnToStepAfterEdit = 8;
+
+        await state.GoToStepFromHistoryAsync(3);
+
+        state.ReturnToStepAfterEdit.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepTheStepReachedAcrossAReload()
+    {
+        var js = new InMemoryWebStorageJSRuntime();
+        var state = new IntakeWizardState(js);
+        state.Slug = "acme-rv";
+        await state.GoToStepAsync(6);
+        await state.GoToStepFromHistoryAsync(2);
+
+        var restored = new IntakeWizardState(js);
+        await restored.RestoreAsync();
+
+        restored.CurrentStep.Should().Be(2);
+        restored.MaxStepReached.Should().Be(6);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_ForASessionSavedBeforeTheStepWasTracked_ShouldTrustTheCurrentStep()
+    {
+        // A session persisted by the previous build has no maxStepReached. Reading it as 0 would
+        // clamp a customer on Step 5 back to Step 1 and lose their place.
+        var js = new InMemoryWebStorageJSRuntime();
+        js.Items["rvs_intake_wizard_state"] =
+            """{"CurrentStep":5,"Slug":"acme-rv","FirstName":"Dana"}""";
+        var state = new IntakeWizardState(js);
+
+        await state.RestoreAsync();
+
+        state.CurrentStep.Should().Be(5);
+        state.MaxStepReached.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetTheStepReached()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(7);
+
+        await state.ClearAsync();
+
+        state.MaxStepReached.Should().Be(1);
+    }
 }
