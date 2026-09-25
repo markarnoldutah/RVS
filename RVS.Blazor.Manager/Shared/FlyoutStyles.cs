@@ -24,8 +24,14 @@ public static class FlyoutStyles
     /// <summary><c>Style</c> for the <c>MudDrawer</c> itself.</summary>
     public static string DrawerStyle(ThemeMode mode) => $"border-left: 1px solid {BorderColor(mode)};";
 
-    /// <summary><c>style</c> for the full-height column inside the drawer.</summary>
-    public static string ColumnStyle(ThemeMode mode) => $"height: 100vh; background: {ColumnBackground(mode)};";
+    /// <summary>
+    /// <c>style</c> for the full-height column inside the drawer. <c>MudDrawer</c> sets its
+    /// text to <c>--mud-palette-drawer-text</c> — near-white, for the Ink nav drawer — but this
+    /// column is page-coloured, so it resets the text to the page's, or every label without
+    /// an explicit colour reads white on cream (issue #742).
+    /// </summary>
+    public static string ColumnStyle(ThemeMode mode) =>
+        $"height: 100vh; background: {ColumnBackground(mode)}; color: var(--mud-palette-text-primary);";
 
     /// <summary>Sticky title header.</summary>
     public static string HeaderStyle(ThemeMode mode) =>
