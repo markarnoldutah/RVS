@@ -1144,4 +1144,100 @@ public class IntakeWizardStateTests
 
         act.Should().Throw<ArgumentException>();
     }
+
+    // ── Issue #740: the config survives a refresh, and the category list is alphabetized ──
+
+    private static IntakeConfigResponseDto ConfigWithCategories(params LookupItemDto[] categories) => new()
+    {
+        LocationName = "Test", LocationSlug = "test-slug", DealershipName = "Test",
+        IssueCategories = [.. categories]
+    };
+
+    [Fact]
+    public async Task EnsureConfigAsync_WhenARestoredSessionIsPastStepOne_ShouldFetchTheConfig()
+    {
+        // Config is not persisted, so a refresh on Step 5 comes back with none — and Step 1,
+        // the only step that fetched it, is never shown again.
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug" };
+        await before.GoToStepAsync(5);
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+        var config = ConfigWithCategories(new LookupItemDto("slides", "Slide-outs", null, 1, true));
+
+        await after.EnsureConfigAsync(_ => Task.FromResult(config));
+
+        after.Config.Should().BeSameAs(config);
+        after.SelectableIssueCategories.Should().ContainSingle(c => c.Code == "slides");
+    }
+
+    [Fact]
+    public async Task EnsureConfigAsync_WhenTheConfigIsAlreadyLoaded_ShouldNotFetchAgain()
+    {
+        var state = CreateState();
+        var loaded = ConfigWithCategories();
+        state.Config = loaded;
+        await state.GoToStepAsync(5);
+        var fetches = 0;
+
+        await state.EnsureConfigAsync(_ => { fetches++; return Task.FromResult(ConfigWithCategories()); });
+
+        fetches.Should().Be(0);
+        state.Config.Should().BeSameAs(loaded);
+    }
+
+    [Fact]
+    public async Task EnsureConfigAsync_OnStepOne_ShouldLeaveTheFetchToTheLandingStep()
+    {
+        // Step 1 fetches the config itself and applies the prefills that come with it.
+        var state = CreateState();
+        var fetches = 0;
+
+        await state.EnsureConfigAsync(_ => { fetches++; return Task.FromResult(ConfigWithCategories()); });
+
+        fetches.Should().Be(0);
+        state.Config.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EnsureConfigAsync_WhenTheFetchFails_ShouldLeaveTheConfigUnset()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(5);
+
+        await state.EnsureConfigAsync(_ => Task.FromException<IntakeConfigResponseDto>(new HttpRequestException("offline")));
+
+        state.Config.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EnsureConfigAsync_WhenFetchConfigIsNull_ShouldThrowArgumentNullException()
+    {
+        var state = CreateState();
+
+        var act = () => state.EnsureConfigAsync(null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void SelectableIssueCategories_WithNoConfig_ShouldBeEmpty()
+    {
+        CreateState().SelectableIssueCategories.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SelectableIssueCategories_ShouldBeAlphabetizedByNameAndOmitUnselectableItems()
+    {
+        var state = CreateState();
+        state.Config = ConfigWithCategories(
+            new LookupItemDto("slides", "Slide-outs", null, 1, true),
+            new LookupItemDto("appliances", "appliances", null, 2, true),
+            new LookupItemDto("other", "Other", null, 3, false),
+            new LookupItemDto("electrical", "Electrical", null, 4, true));
+
+        state.SelectableIssueCategories.Select(c => c.Name).Should()
+            .Equal("appliances", "Electrical", "Slide-outs");
+    }
 }

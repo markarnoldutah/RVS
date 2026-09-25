@@ -101,6 +101,7 @@ else
     [SupplyParameterFromQuery(Name = "inv")] public string? Inv { get; set; }
 
     [Inject] private IntakeWizardState _state { get; set; } = default!;
+    [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
@@ -149,6 +150,9 @@ else
             _state.InviteToken = Inv;
             _state.IsInvitePrefilled = false;
         }
+
+        // Issue #740: a refresh past Step 1 restores the session but not the config.
+        await _state.EnsureConfigAsync(ct => IntakeApi.GetConfigAsync(_state.Slug, _state.Token, ct));
 
         _initializing = false;
     }
