@@ -374,7 +374,33 @@ public class ServiceRequestMapperTests
         var serialized = System.Text.Json.JsonSerializer.Serialize(dto);
         serialized.Should().NotContain(secret);
         serialized.Should().NotContain("Jane");
-        serialized.Should().NotContain("Electrical");
+    }
+
+    [Theory]
+    [InlineData("Plumbing", "Plumbing & Water")]
+    [InlineData("Electrical", "Electrical")]
+    [InlineData("Structural", "Other")]
+    public void ToCustomerStatusItemDto_ShouldCarryIssueCategoryDisplayName(string code, string expected)
+    {
+        // Issue #741: the category is a controlled-vocabulary label, not customer free text.
+        var entity = new ServiceRequest { Status = "New", IssueCategory = code };
+
+        var dto = entity.ToCustomerStatusItemDto("555-0100");
+
+        dto.IssueCategory.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToCustomerStatusItemDto_WhenIssueCategoryMissing_ShouldBeNull(string? code)
+    {
+        var entity = new ServiceRequest { Status = "New", IssueCategory = code };
+
+        var dto = entity.ToCustomerStatusItemDto("555-0100");
+
+        dto.IssueCategory.Should().BeNull();
     }
 
     [Fact]

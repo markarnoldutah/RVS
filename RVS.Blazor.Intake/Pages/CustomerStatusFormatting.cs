@@ -1,10 +1,12 @@
 using System.Text;
+using MudBlazor;
 
 namespace RVS.Blazor.Intake.Pages;
 
 /// <summary>
 /// Pure presentation helpers for the customer status page (<c>Spec X-1</c>): turning a
-/// stored service-request status into a short customer-facing sentence, and a free-form
+/// stored service-request status into a short customer-facing sentence and a status chip
+/// (label, color, icon — issue #741), and a free-form
 /// location phone string into a display form and a <c>tel:</c> dial target.
 /// No customer identity, issue text, or conversation is involved — this is formatting only.
 /// </summary>
@@ -28,6 +30,50 @@ public static class CustomerStatusFormatting
         "completed" => "Your service has been completed. Please contact the dealership for pickup details.",
         "cancelled" => "This service request has been cancelled.",
         _ => GenericStatusDescription
+    };
+
+    /// <summary>
+    /// Short label for the status chip. Recognised statuses get a spaced, customer-facing form
+    /// (<c>WaitingOnCustomer</c> reads "Waiting on You"); an unrecognised value is shown as
+    /// stored, and a null or blank one as "Processing".
+    /// </summary>
+    public static string GetStatusLabel(string? status) => Canonicalize(status) switch
+    {
+        "new" => "New",
+        "inprogress" => "In Progress",
+        "waitingonparts" => "Waiting on Parts",
+        "waitingoncustomer" => "Waiting on You",
+        "completed" => "Completed",
+        "cancelled" => "Cancelled",
+        "" => "Processing",
+        _ => status!.Trim()
+    };
+
+    /// <summary>
+    /// Chip color for a status — the same colors the manager service board uses for its
+    /// columns, so a status reads the same on both sides of the counter.
+    /// </summary>
+    public static Color GetStatusColor(string? status) => Canonicalize(status) switch
+    {
+        "new" => Color.Info,
+        "inprogress" or "waitingonparts" or "waitingoncustomer" => Color.Warning,
+        "completed" => Color.Success,
+        _ => Color.Default
+    };
+
+    /// <summary>
+    /// Chip icon for a status. Several statuses share a color, so the icon (and the label) is
+    /// what tells them apart — never color alone.
+    /// </summary>
+    public static string GetStatusIcon(string? status) => Canonicalize(status) switch
+    {
+        "new" => Icons.Material.Filled.FiberNew,
+        "inprogress" => Icons.Material.Filled.Autorenew,
+        "waitingonparts" => Icons.Material.Filled.HourglassEmpty,
+        "waitingoncustomer" => Icons.Material.Filled.ContactPhone,
+        "completed" => Icons.Material.Filled.CheckCircle,
+        "cancelled" => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.Info
     };
 
     /// <summary>

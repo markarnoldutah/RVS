@@ -130,7 +130,15 @@ else if (_statusResponse is not null)
                             <MudCardContent>
                                 <MudStack Spacing="3">
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-                                        <StatusBadge Status="@sr.Status" />
+                                        <MudChip T="string"
+                                                 Label="true"
+                                                 Variant="Variant.Filled"
+                                                 Color="@CustomerStatusFormatting.GetStatusColor(sr.Status)"
+                                                 Icon="@CustomerStatusFormatting.GetStatusIcon(sr.Status)"
+                                                 Class="ma-0"
+                                                 Style="font-weight: 600;">
+                                            @CustomerStatusFormatting.GetStatusLabel(sr.Status)
+                                        </MudChip>
                                     </MudStack>
 
                                     <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
@@ -154,6 +162,13 @@ else if (_statusResponse is not null)
                                                 <td><strong>Unit</strong></td>
                                                 <td>@(string.IsNullOrWhiteSpace(sr.Unit) ? "—" : sr.Unit)</td>
                                             </tr>
+                                            @if (!string.IsNullOrWhiteSpace(sr.IssueCategory))
+                                            {
+                                                <tr>
+                                                    <td><strong>Issue Category</strong></td>
+                                                    <td>@sr.IssueCategory</td>
+                                                </tr>
+                                            }
                                             <tr>
                                                 <td><strong>Submitted</strong></td>
                                                 <td>@sr.SubmittedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>

@@ -44,6 +44,9 @@ public static class IssueCategoryVocabulary
     private static readonly IReadOnlyDictionary<string, string> CanonicalByCode =
         All.ToDictionary(e => e.Code, e => e.Code, StringComparer.OrdinalIgnoreCase);
 
+    private static readonly IReadOnlyDictionary<string, string> NameByCode =
+        All.ToDictionary(e => e.Code, e => e.Name, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>All valid category codes, in display order.</summary>
     public static IReadOnlyList<string> Codes { get; } = [.. All.Select(e => e.Code)];
 
@@ -63,4 +66,12 @@ public static class IssueCategoryVocabulary
         !string.IsNullOrWhiteSpace(code) && CanonicalByCode.TryGetValue(code.Trim(), out var canonical)
             ? canonical
             : FallbackCode;
+
+    /// <summary>
+    /// Returns the customer-facing <see cref="Entry.Name"/> for <paramref name="code"/> — the
+    /// fallback's name when the code is not in the vocabulary — or <see langword="null"/> when
+    /// it is null or blank, so a surface can omit the category rather than show a guess.
+    /// </summary>
+    public static string? GetName(string? code) =>
+        string.IsNullOrWhiteSpace(code) ? null : NameByCode[Normalize(code)];
 }
