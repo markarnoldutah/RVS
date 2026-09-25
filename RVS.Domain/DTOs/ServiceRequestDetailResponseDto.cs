@@ -37,7 +37,7 @@ public sealed record ServiceRequestDetailResponseDto
 
     /// <summary>
     /// Distribution channel the customer arrived through (<c>Spec A-13</c>) — <c>qr</c>,
-    /// <c>textrepl</c>, <c>quickreply</c>, <c>print</c>, or an ad-hoc tag. Null on requests
+    /// <c>textrepl</c>, <c>quickreply</c>, <c>mgrapp</c>, <c>print</c>, or an ad-hoc tag. Null on requests
     /// created before channel tagging existed.
     /// </summary>
     public string? IntakeSource { get; init; }

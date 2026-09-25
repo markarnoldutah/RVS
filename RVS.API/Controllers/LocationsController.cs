@@ -162,7 +162,8 @@ public class LocationsController : ControllerBase
             PrintUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug),
             QrUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug, IntakeSourceVocabulary.Qr),
             TextReplacementUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug, IntakeSourceVocabulary.TextReplacement),
-            QuickReplyUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug, IntakeSourceVocabulary.QuickReply)
+            QuickReplyUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug, IntakeSourceVocabulary.QuickReply),
+            ManagerAppUrl = IntakeLinkBuilder.ShortLink(baseUrl, entity.Slug, IntakeSourceVocabulary.ManagerApp)
         });
     }
 }

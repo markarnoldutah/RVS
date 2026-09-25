@@ -1,5 +1,6 @@
 @using RVS.Domain.Entities
 @inject IntakeInviteApiClient InviteClient
+@inject LookupApiClient LookupClient
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
 @implements IAsyncDisposable
@@ -209,6 +210,18 @@
                         }
                     }
                 }
+
+                @if (_locationLink is not null)
+                {
+                    @* The link itself, for the advisor who is not sending it from here: pasting it
+                       into their own text, a chat, a work order note. It carries src=mgrapp, so a
+                       hand-pasted link is still counted as the channel it actually went out on —
+                       which a link typed from memory never is. *@
+                    <MudDivider />
+                    <CopyField Label="Link for this location"
+                               Value="@_locationLink"
+                               Hint="The same form the QR sticker opens. Paste it anywhere you send it yourself." />
+                }
             }
         </MudStack>
     </DialogContent>
@@ -286,6 +299,7 @@
     private string? _error;
     private string? _permissionDenied;
     private string? _selfEntryUrl;
+    private string? _locationLink;
     private List<IntakeInviteSummaryResponseDto> _recent = [];
 
     private bool _wasVisible;
@@ -373,6 +387,8 @@
         _permissionDenied = null;
         _loadingCapability = true;
 
+        await LoadLocationLinkAsync();
+
         try
         {
             var capability = await InviteClient.GetCapabilityAsync(LocationId!);
@@ -403,6 +419,25 @@
         }
 
         await RefreshRecentAsync();
+    }
+
+    /// <summary>
+    /// Reads the location's channel-tagged link (<c>Spec A-13</c>, issue #756). It is read on its
+    /// own, before the capability call, because it is governed by a different permission: an
+    /// advisor who cannot send invites can still copy the link, and a location whose links cannot
+    /// be read simply shows none rather than failing the dialog.
+    /// </summary>
+    private async Task LoadLocationLinkAsync()
+    {
+        try
+        {
+            var links = await LookupClient.GetLocationIntakeLinksAsync(LocationId!);
+            _locationLink = links.ManagerAppUrl;
+        }
+        catch (Exception)
+        {
+            _locationLink = null;
+        }
     }
 
     private async Task RefreshRecentAsync()
