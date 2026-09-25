@@ -61,6 +61,7 @@ Docs/ASOT/Infra/Bicep.IaC/
 ├── main.bicep                              # Orchestration template (subscription scope)
 ├── rg-scaffold.bicep                       # Pre-provision all resource groups
 ├── bicepconfig.json                        # Linter rules
+├── verify-alert-rules.sh                   # Fires each packet-pipeline alert with a synthetic record (#732)
 ├── modules/
 │   ├── app-service.bicep                   # App Service Plan + Web App (Managed Identity)
 │   ├── app-service-config.bicep            # Post-deploy app settings (App Insights, Key Vault)
@@ -906,6 +907,68 @@ union traces, exceptions
           TenantId = tostring(customDimensions.TenantId)
 | order by timestamp desc
 ```
+
+### Verifying the alert rules
+
+Deploy-time checks only prove the rules are *valid*. They do not prove the rules
+*fire* (#602, #732). Re-run both steps after anything that could break the
+chain: a change to `monitor-alerts.bicep` or the action group, an App Insights
+SDK upgrade, or a telemetry outage like #602. Before you start, confirm that
+telemetry is flowing. Step 1 of [Runbook — telemetry gone dark](#runbook--telemetry-gone-dark)
+should show `AppTraces` rows from the last hour.
+
+**1. Synthetic: all five rules, end to end.** From this folder:
+
+```bash
+./verify-alert-rules.sh staging
+```
+
+The script posts one record per alerted EventId to the component's ingestion
+endpoint, shaped as the app's exporter writes them. That means `EventId`,
+`EventName` and the template arguments go into `customDimensions`, and 434001
+goes in as an exception. The IDs are obviously fake (`ten_alertcheck`,
+`loc_alertcheck_*`, `sr_alertcheck_*`). It then prints the KQL and the `az rest`
+command for checking the result. Pass when:
+
+- all five rows are in `traces` / `exceptions`;
+- the four Sev 1 rules fire within ~15 minutes, and
+  `recipient-bounced-warn` fires on its next hourly run;
+- the ops mailbox gets one email per rule, and each names `TenantId` plus the
+  `LocationId` or `ServiceRequestId`;
+- every alert auto-resolves after one clean window.
+
+Against `prod` the same script pages the prod on-call.
+
+**2. Real: prove the app emits that shape (staging only).** Step 1 bypasses the
+app. The one alerted event staging can produce on demand is 438001, so break
+email sending on purpose:
+
+```bash
+rg=rg-rvs-staging-westus3; app=app-rvs-api-staging-wus3
+orig=$(az webapp config appsettings list -g $rg -n $app \
+  --query "[?name=='AzureCommunicationServices__Email__FromAddress'].value" -o tsv); echo "$orig"
+az webapp config appsettings set -g $rg -n $app \
+  --settings AzureCommunicationServices__Email__FromAddress=DoNotReply@unlinked.invalid
+# Submit one intake at staging.rvintake.com. ACS rejects each send, the three
+# delivery attempts fail (backoff RetryBaseDelay × 1, × 2), and the third logs 438001.
+az webapp config appsettings set -g $rg -n $app \
+  --settings AzureCommunicationServices__Email__FromAddress="$orig"
+```
+
+Changing the setting restarts the app, so the first request cold-starts. The
+email alert should name the real `ServiceRequestId` and tenant. The next Bicep
+deploy would also restore the sender, but do not wait for it: until you restore
+it, staging sends no email at all.
+
+What neither step can show from live traffic:
+
+- **439001 / 439002.** Nothing calls `LocationService.DisableRecipientForBounceAsync`
+  yet, because the inbound bounce signal was left out of #494. Both rules are
+  covered by step 1 only. The log calls use the same `LocationId`/`TenantId`
+  template shape as 438001, so step 2 proves that shape transitively.
+- **434001 / 521001.** Neither can be triggered safely: generation has
+  rule-based fallbacks, and startup validation keeps the email budget out of
+  reach. Step 1 covers both, and 434001's `exceptions` path with it.
 
 ### Turning the availability test on
 
