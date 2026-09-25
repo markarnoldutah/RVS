@@ -71,7 +71,7 @@ Per-tenant customer record. Contact fields, email/SMS opt-out flags, `assetsOwne
 
 ### GlobalCustomerAcct — `global-customer-accounts`
 
-Cross-tenant, partitioned by email. Contact, opt-outs (no longer written — see below), `linkedProfiles[]`, `allKnownAssetIds[]`, `auth0UserId`, and `magicLinkToken` / expiry.
+Cross-tenant, partitioned by email. Contact, `linkedProfiles[]`, `allKnownAssetIds[]`, `auth0UserId`, and `magicLinkToken` / expiry.
 
 ### Customer identity: email is the key, phone is not
 
@@ -93,7 +93,7 @@ Both validators live in `RVS.Domain/Validation`, and the wizard calls the same o
 
 ### Notification opt-outs
 
-`smsOptOut` / `emailOptOut` (each with an `…AtUtc` stamp, set on first opt-out and cleared on opt-in) live on `CustomerProfile`, **not** on `ServiceRequest`. **Intake only sets them (#673):** a ticked box sets the flag and stamps `…AtUtc` if unset (`CustomerProfile.ApplyIntakeOptOuts`); an unticked box leaves the stored value alone, because with A-7 deferred the form never shows it. Only an inbound `START` / `UNSTOP` clears `smsOptOut`; nothing clears `emailOptOut` yet. `GlobalCustomerAcct` still has the fields, but they are no longer written — nothing read them. Older accounts may still carry values. They are a **hard veto** over `customerSnapshot.preferredContact` (`Spec A-2`, `#577` / `#662`): RVS never sends on an opted-out channel, whatever the preference says.
+`smsOptOut` / `emailOptOut` (each with an `…AtUtc` stamp, set on first opt-out and cleared on opt-in) live on `CustomerProfile`, **not** on `ServiceRequest`. **Intake only sets them (#673):** a ticked box sets the flag and stamps `…AtUtc` if unset (`CustomerProfile.ApplyIntakeOptOuts`); an unticked box leaves the stored value alone, because with A-7 deferred the form never shows it. Only an inbound `START` / `UNSTOP` clears `smsOptOut`; nothing clears `emailOptOut` yet. `GlobalCustomerAcct` does not carry them: #673 stopped writing them there, and the properties themselves were later removed, because nothing read that copy. An account written before then keeps the stale fields until intake next replaces the document, and nothing reads them. They are a **hard veto** over `customerSnapshot.preferredContact` (`Spec A-2`, `#577` / `#662`): RVS never sends on an opted-out channel, whatever the preference says.
 
 - **An opted-out channel is never the preference — within one submission.** `NotificationPreferenceValidator` (Domain) rejects `Text` + `smsOptOut` and `Email` + `emailOptOut` as ticked in that request. A stored opt-out is not checked: the customer can't see it, so the submission is accepted and routing falls back. The intake wizard disables the vetoed radio and clears a conflicting selection; `POST api/intake/{slug}/service-requests` returns **422** for a hand-built request that pairs them. `Phone` is always allowed.
 - **Routing.** Intake passes the profile's opt-outs *after* the write, not the submission's boxes. `NotificationOrchestrator` sends exactly one confirmation: SMS when the preference is `Text` and SMS is permitted (enabled, phone present, not opted out); otherwise email when permitted, with a Warning logged when a `Text` preference fell back; otherwise SMS when permitted; otherwise nothing, logged at Warning. `Phone` and a null preference confirm by email.

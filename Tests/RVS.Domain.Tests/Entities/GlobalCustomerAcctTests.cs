@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Newtonsoft.Json.Linq;
 using RVS.Domain.Entities;
 
 namespace RVS.Domain.Tests.Entities;
@@ -30,6 +31,23 @@ public class GlobalCustomerAcctTests
         var acct = new GlobalCustomerAcct();
 
         acct.AllKnownAssetIds.Should().NotBeNull().And.BeEmpty();
+    }
+
+    // ── Opt-outs live on CustomerProfile only ────────────────────────────────
+    // #673 stopped writing them here; the properties stayed and still serialized their defaults,
+    // so every new account carried a second, never-read copy of the opt-out fields.
+
+    [Theory]
+    [InlineData("smsOptOut")]
+    [InlineData("emailOptOut")]
+    [InlineData("smsOptInAtUtc")]
+    [InlineData("smsOptOutAtUtc")]
+    [InlineData("emailOptOutAtUtc")]
+    public void Serialize_ShouldNotWriteOptOutFields(string field)
+    {
+        var json = JObject.FromObject(new GlobalCustomerAcct { Email = "jane@example.com" });
+
+        json.Properties().Select(p => p.Name).Should().NotContain(field);
     }
 
     // ── IdForEmail (issue #679) ──────────────────────────────────────────────
