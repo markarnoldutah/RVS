@@ -10,7 +10,7 @@ namespace RVS.API.Controllers;
 /// <summary>
 /// Customer-facing status page accessed via magic-link token (<c>Spec X-1</c>).
 /// All routes are anonymous — no authentication required — and rate-limited per IP.
-/// The response carries the unit, submission date, current status, the servicing location's
+/// The response carries the unit, issue category, submission date, current status, the servicing location's
 /// phone number, and any manager-authored status note (<c>Spec C-9</c>). It is display-only for
 /// the customer: there is no inbound path here — no reply, no message, no file upload.
 /// </summary>
@@ -43,7 +43,7 @@ public class StatusController : ControllerBase
     /// <summary>
     /// Returns the customer's service request status across all dealerships.
     /// Validates the magic-link token and retrieves one minimal summary per request:
-    /// unit, submission date, current status, and the servicing location's phone number
+    /// unit, issue category, submission date, current status, and the servicing location's phone number
     /// (<c>Spec X-1</c>). Free-text problem descriptions are never included, nor logged.
     /// </summary>
     /// <param name="token">Magic-link token for customer identification.</param>

@@ -53,12 +53,12 @@ public class StatusControllerTests
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
 
-        // Spec X-1: nothing beyond the four permitted fields — no name, no issue text.
+        // Spec X-1: no name and no issue text. The category's display name is shown (issue #741).
         typeof(CustomerStatusResponseDto).GetProperty("FirstName").Should().BeNull();
         var serialized = System.Text.Json.JsonSerializer.Serialize(dto);
         serialized.Should().NotContain("Jane");
         serialized.Should().NotContain("Battery not charging");
-        serialized.Should().NotContain("Electrical");
+        dto.ServiceRequests.Should().ContainSingle().Which.IssueCategory.Should().Be("Electrical");
     }
 
     [Fact]

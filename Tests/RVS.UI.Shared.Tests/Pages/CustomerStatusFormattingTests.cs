@@ -1,4 +1,5 @@
 using FluentAssertions;
+using MudBlazor;
 using RVS.Blazor.Intake.Pages;
 
 namespace RVS.UI.Shared.Tests.Pages;
@@ -67,6 +68,62 @@ public class CustomerStatusFormattingTests
     {
         CustomerStatusFormatting.DescribeStatus(status)
             .Should().Be("Your request is being processed.");
+    }
+
+    // ---- Status chip (issue #741) -------------------------------------------------
+
+    [Theory]
+    [InlineData("New", "New")]
+    [InlineData("InProgress", "In Progress")]
+    [InlineData("in-progress", "In Progress")]
+    [InlineData("WaitingOnParts", "Waiting on Parts")]
+    [InlineData("WaitingOnCustomer", "Waiting on You")]
+    [InlineData("Completed", "Completed")]
+    [InlineData("Cancelled", "Cancelled")]
+    public void GetStatusLabel_KnownStatus_ReturnsCustomerFacingLabel(string status, string expected)
+    {
+        CustomerStatusFormatting.GetStatusLabel(status).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(null, "Processing")]
+    [InlineData("", "Processing")]
+    [InlineData("  ", "Processing")]
+    [InlineData("SomethingElse", "SomethingElse")]
+    public void GetStatusLabel_UnknownOrEmpty_ReturnsRawValueOrGenericLabel(string? status, string expected)
+    {
+        CustomerStatusFormatting.GetStatusLabel(status).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("New", Color.Info)]
+    [InlineData("InProgress", Color.Warning)]
+    [InlineData("WaitingOnParts", Color.Warning)]
+    [InlineData("WaitingOnCustomer", Color.Warning)]
+    [InlineData("Completed", Color.Success)]
+    [InlineData("Cancelled", Color.Default)]
+    [InlineData("SomethingElse", Color.Default)]
+    [InlineData(null, Color.Default)]
+    public void GetStatusColor_MatchesManagerBoardColors(string? status, Color expected)
+    {
+        CustomerStatusFormatting.GetStatusColor(status).Should().Be(expected);
+    }
+
+    [Fact]
+    public void GetStatusIcon_EachKnownStatus_HasDistinctIcon()
+    {
+        string[] statuses = ["New", "InProgress", "WaitingOnParts", "WaitingOnCustomer", "Completed", "Cancelled"];
+
+        var icons = statuses.Select(CustomerStatusFormatting.GetStatusIcon).ToList();
+
+        icons.Should().OnlyContain(i => !string.IsNullOrWhiteSpace(i));
+        icons.Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void GetStatusIcon_UnknownStatus_ReturnsIcon()
+    {
+        CustomerStatusFormatting.GetStatusIcon("SomethingElse").Should().NotBeNullOrWhiteSpace();
     }
 
     // ---- FormatPhoneForDisplay ---------------------------------------------------

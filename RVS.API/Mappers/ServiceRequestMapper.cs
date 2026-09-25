@@ -91,9 +91,10 @@ public static class ServiceRequestMapper
 
     /// <summary>
     /// Maps a <see cref="ServiceRequest"/> to the customer-facing status view
-    /// (<c>Spec X-1</c> / <c>C-9</c>): the unit, the submission date, the current status, the
-    /// servicing location's phone number, and any manager-authored status note. No customer
-    /// identity and no free-text problem description are carried across this boundary.
+    /// (<c>Spec X-1</c> / <c>C-9</c>): the unit, the issue category's display name, the submission
+    /// date, the current status, the servicing location's phone number, and any manager-authored
+    /// status note. No customer identity and no free-text problem description are carried across
+    /// this boundary.
     /// </summary>
     /// <param name="entity">The service request.</param>
     /// <param name="locationPhone">Phone number of the servicing location, if known.</param>
@@ -104,6 +105,7 @@ public static class ServiceRequestMapper
         return new CustomerStatusItemResponseDto
         {
             Unit = ComposeAssetDisplay(entity.AssetInfo),
+            IssueCategory = IssueCategoryVocabulary.GetName(entity.IssueCategory),
             SubmittedAtUtc = entity.CreatedAtUtc,
             Status = entity.Status,
             LocationPhone = string.IsNullOrWhiteSpace(locationPhone) ? null : locationPhone.Trim(),

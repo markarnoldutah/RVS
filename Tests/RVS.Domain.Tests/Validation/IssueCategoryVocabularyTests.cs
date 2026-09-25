@@ -95,4 +95,30 @@ public class IssueCategoryVocabularyTests
     {
         IssueCategoryVocabulary.Normalize(input).Should().Be(IssueCategoryVocabulary.FallbackCode);
     }
+
+    [Theory]
+    [InlineData("Plumbing", "Plumbing & Water")]
+    [InlineData("  lpgas ", "LP / Propane")]
+    [InlineData("Other", "Other")]
+    public void GetName_KnownCode_ReturnsCustomerFacingName(string code, string expected)
+    {
+        IssueCategoryVocabulary.GetName(code).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("Structural")]
+    [InlineData("something the AI invented")]
+    public void GetName_UnknownCode_ReturnsFallbackName(string code)
+    {
+        IssueCategoryVocabulary.GetName(code).Should().Be("Other");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void GetName_MissingCode_ReturnsNull(string? code)
+    {
+        IssueCategoryVocabulary.GetName(code).Should().BeNull();
+    }
 }
