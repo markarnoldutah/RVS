@@ -26,8 +26,12 @@ public interface INotificationOrchestrator
     /// <param name="toEmail">Recipient email address.</param>
     /// <param name="toPhoneNumber">Recipient phone number in E.164 format.</param>
     /// <param name="serviceRequestId">Identifier of the confirmed service request.</param>
+    /// <param name="customerFirstName">The customer's first name, for the email greeting; <c>null</c> greets without a name.</param>
     /// <param name="dealershipName">Display name of the dealership for message context.</param>
     /// <param name="statusUrl">The full URL of the customer's status page.</param>
+    /// <param name="statusLinkExpiresInDays">
+    /// Whole days until the status link's token expires, or <c>null</c> when it has no expiry on record.
+    /// </param>
     /// <param name="dealerPhone">The dealer's contact phone number, when known.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task SendServiceRequestConfirmationAsync(
@@ -39,8 +43,10 @@ public interface INotificationOrchestrator
         string? toEmail,
         string? toPhoneNumber,
         string serviceRequestId,
+        string? customerFirstName,
         string dealershipName,
         string statusUrl,
+        int? statusLinkExpiresInDays,
         string? dealerPhone,
         CancellationToken cancellationToken = default);
 }

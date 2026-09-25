@@ -34,8 +34,10 @@ public sealed class NotificationOrchestrator : INotificationOrchestrator
         string? toEmail,
         string? toPhoneNumber,
         string serviceRequestId,
+        string? customerFirstName,
         string dealershipName,
         string statusUrl,
+        int? statusLinkExpiresInDays,
         string? dealerPhone,
         CancellationToken cancellationToken = default)
     {
@@ -67,7 +69,8 @@ public sealed class NotificationOrchestrator : INotificationOrchestrator
 
             _logger.LogInformation("Sending SR confirmation via email for SR {ServiceRequestId}", serviceRequestId);
             var subject = ServiceRequestConfirmationContent.BuildEmailSubject(dealershipName);
-            var htmlBody = ServiceRequestConfirmationContent.BuildEmailHtmlBody(dealershipName, statusUrl, dealerPhone);
+            var htmlBody = ServiceRequestConfirmationContent.BuildEmailHtmlBody(
+                dealershipName, customerFirstName, statusUrl, statusLinkExpiresInDays, dealerPhone);
             await _emailService.SendEmailAsync(toEmail!, subject, htmlBody, cancellationToken);
             return;
         }

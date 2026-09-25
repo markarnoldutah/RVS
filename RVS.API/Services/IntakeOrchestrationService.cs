@@ -362,6 +362,12 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         var location = await _locationRepository.GetByIdAsync(tenantId, locationId, cancellationToken);
         var statusUrl = $"{_intakeUrlOptions.BaseUrl.TrimEnd('/')}/status/{globalAcct.MagicLinkToken}";
 
+        // A reused token keeps its original expiry (#716), so the email states what is left of it,
+        // not the 90-day lifetime of a new one (issue #737).
+        int? statusLinkExpiresInDays = globalAcct.MagicLinkExpiresAtUtc is { } expiresAtUtc
+            ? (int)Math.Ceiling((expiresAtUtc - DateTime.UtcNow).TotalDays)
+            : null;
+
         // ACS only accepts E.164 (issue #661). A number that doesn't normalise is dropped from the
         // notification rather than sent raw; the profile keeps it as entered.
         // The preference chooses the channel; the opt-outs veto it (Spec A-2, issue #662). They are
@@ -376,8 +382,10 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             request.Customer.Email.Trim(),
             PhoneNumberNormalizer.Normalize(request.Customer.Phone),
             serviceRequest.Id,
+            request.Customer.FirstName.Trim(),
             slugLookup.DealershipName,
             statusUrl,
+            statusLinkExpiresInDays,
             location?.Phone);
 
         // ── Step 8: Enqueue packet generation (never blocks the 201) ─────────
@@ -485,8 +493,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     private async Task FireAndForgetNotificationAsync(
         string tenantId, string locationId, string? preferredContact,
         bool smsOptOut, bool emailOptOut,
-        string email, string? phone, string serviceRequestId, string dealershipName,
-        string statusUrl, string? dealerPhone)
+        string email, string? phone, string serviceRequestId, string customerFirstName,
+        string dealershipName, string statusUrl, int? statusLinkExpiresInDays, string? dealerPhone)
     {
         try
         {
@@ -499,8 +507,10 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 email,
                 phone,
                 serviceRequestId,
+                customerFirstName,
                 dealershipName,
                 statusUrl,
+                statusLinkExpiresInDays,
                 dealerPhone,
                 CancellationToken.None);
         }

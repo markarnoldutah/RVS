@@ -8,6 +8,7 @@ public class ServiceRequestConfirmationContentTests
     private const string DealershipName = "Blue Compass RV";
     private const string StatusUrl = "https://rvintake.com/status/abc123token";
     private const string DealerPhone = "(801) 555-1234";
+    private const string FirstName = "Jane";
 
     /// <summary>
     /// The compliance tail, spelled out rather than read from the production constant: this
@@ -25,35 +26,111 @@ public class ServiceRequestConfirmationContentTests
     }
 
     [Fact]
+    public void BuildEmailHtmlBody_ShouldGreetTheCustomerByFirstName()
+    {
+        var body = BuildEmailHtmlBody();
+
+        body.Should().Contain($"<p>Hi {FirstName},</p>");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void BuildEmailHtmlBody_WhenFirstNameIsMissing_ShouldGreetWithoutAName(string? firstName)
+    {
+        var body = BuildEmailHtmlBody(firstName: firstName);
+
+        body.Should().StartWith("<p>Hi,</p>");
+    }
+
+    [Fact]
     public void BuildEmailHtmlBody_ShouldThankCustomerByDealershipName()
     {
-        var body = ServiceRequestConfirmationContent.BuildEmailHtmlBody(DealershipName, StatusUrl, DealerPhone);
+        var body = BuildEmailHtmlBody();
 
-        body.Should().Contain("Thank you").And.Contain(DealershipName);
+        body.Should().Contain(
+            $"Thank you for submitting a service request for your RV to <strong>{DealershipName}</strong>. " +
+            "Use the link below to check your request status at any time:");
     }
 
     [Fact]
-    public void BuildEmailHtmlBody_ShouldContainStatusPageLink()
+    public void BuildEmailHtmlBody_ShouldLinkTheStatusPageWithACallToAction()
     {
-        var body = ServiceRequestConfirmationContent.BuildEmailHtmlBody(DealershipName, StatusUrl, DealerPhone);
+        var body = BuildEmailHtmlBody();
 
-        body.Should().Contain($"href=\"{StatusUrl}\"").And.Contain(StatusUrl);
+        body.Should().Contain($"<a href=\"{StatusUrl}\">Check request status</a>");
     }
 
     [Fact]
-    public void BuildEmailHtmlBody_ShouldContainDealerPhone()
+    public void BuildEmailHtmlBody_ShouldSayItIsSentByRvIntakeOnTheDealersBehalf()
     {
-        var body = ServiceRequestConfirmationContent.BuildEmailHtmlBody(DealershipName, StatusUrl, DealerPhone);
+        var body = BuildEmailHtmlBody();
 
-        body.Should().Contain(DealerPhone);
+        body.Should().Contain(
+            $"You're receiving this email from RV Intake on behalf of {DealershipName} because you submitted a service request.");
     }
 
     [Fact]
-    public void BuildEmailHtmlBody_WhenDealerPhoneIsMissing_ShouldOmitPhoneButKeepRestOfContent()
+    public void BuildEmailHtmlBody_ShouldSayWhenTheLinkExpires()
     {
-        var body = ServiceRequestConfirmationContent.BuildEmailHtmlBody(DealershipName, StatusUrl, null);
+        var body = BuildEmailHtmlBody(expiresInDays: 90);
 
-        body.Should().Contain(DealershipName).And.Contain(StatusUrl);
+        body.Should().Contain("This link expires in 90 days.");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_ShouldNotClaimTheLinkIsSingleUse()
+    {
+        // The status link is the customer's standing status page and is reused across requests;
+        // unlike the intake invite (#710) it does not stop working once opened.
+        var body = BuildEmailHtmlBody();
+
+        body.Should().NotContain("work once");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_WhenOneDayRemains_ShouldUseTheSingular()
+    {
+        var body = BuildEmailHtmlBody(expiresInDays: 1);
+
+        body.Should().Contain("This link expires in 1 day.");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_WhenExpiryIsUnknown_ShouldOmitTheExpirySentence()
+    {
+        var body = BuildEmailHtmlBody(expiresInDays: null);
+
+        body.Should().NotContain("expires");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_ShouldSendQuestionsToTheDealerPhone()
+    {
+        var body = BuildEmailHtmlBody();
+
+        body.Should().Contain($"If you have questions, please contact {DealershipName} directly at {DealerPhone}.");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_WhenDealerPhoneIsMissing_ShouldStillSendQuestionsToTheDealer()
+    {
+        var body = BuildEmailHtmlBody(dealerPhone: null);
+
+        body.Should().Contain($"If you have questions, please contact {DealershipName} directly.")
+            .And.Contain(StatusUrl);
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_ShouldHtmlEncodeCustomerAndDealerText()
+    {
+        var body = ServiceRequestConfirmationContent.BuildEmailHtmlBody(
+            "Tom & Jerry's RV", "<b>Jane</b>", StatusUrl, 90, DealerPhone);
+
+        body.Should().Contain("Tom &amp; Jerry&#39;s RV")
+            .And.Contain("&lt;b&gt;Jane&lt;/b&gt;")
+            .And.NotContain("<b>Jane</b>");
     }
 
     [Fact]
@@ -134,4 +211,8 @@ public class ServiceRequestConfirmationContentTests
         // carries the full compliance tail — which no longer fits one 153-char GSM-7 segment.
         ServiceRequestConfirmationContent.SmsMaxLength.Should().Be(306);
     }
+
+    private static string BuildEmailHtmlBody(
+        string? firstName = FirstName, int? expiresInDays = 90, string? dealerPhone = DealerPhone) =>
+        ServiceRequestConfirmationContent.BuildEmailHtmlBody(DealershipName, firstName, StatusUrl, expiresInDays, dealerPhone);
 }
