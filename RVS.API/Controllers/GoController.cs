@@ -51,7 +51,7 @@ public class GoController : ControllerBase
     /// failure all still send the customer on.
     /// </summary>
     /// <param name="locationSlug">Location slug from the short link path.</param>
-    /// <param name="src">Channel tag — <c>qr</c>, <c>textrepl</c>, <c>quickreply</c>, or any other. Optional; absent means print.</param>
+    /// <param name="src">Channel tag — <c>qr</c>, <c>textrepl</c>, <c>quickreply</c>, <c>mgrapp</c>, or any other. Optional; absent means print.</param>
     /// <param name="inv">A-14 advisor invite token, passed through to the intake app (issue #663). Optional.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <example>

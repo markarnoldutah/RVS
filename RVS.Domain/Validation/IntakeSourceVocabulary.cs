@@ -37,6 +37,14 @@ public static class IntakeSourceVocabulary
     public const string Advisor = "advisor";
 
     /// <summary>
+    /// The location's link copied out of the manager app's <i>Send intake link</i> dialog
+    /// (issue #756) and pasted wherever the advisor sends it — their own text, a chat, an email.
+    /// Not <see cref="TextReplacement"/>: that is a tech texting the link back from their phone.
+    /// Not <see cref="Advisor"/> either: this is the shared location link, not a single-use invite.
+    /// </summary>
+    public const string ManagerApp = "mgrapp";
+
+    /// <summary>
     /// Bucket for a supplied <c>src</c> that is not a usable token — too long, or carrying
     /// characters that have no business in a channel tag. Never fails the redirect; the hit is
     /// simply recorded here.
@@ -46,8 +54,11 @@ public static class IntakeSourceVocabulary
     /// <summary>Maximum length of a stored source value.</summary>
     public const int MaxLength = 32;
 
-    /// <summary>The tabled channels, in <c>Spec A-13</c> order, then A-14's advisor invite.</summary>
-    public static readonly IReadOnlyList<string> KnownValues = [TextReplacement, QuickReply, Qr, Print, Advisor];
+    /// <summary>
+    /// The tabled channels, in <c>Spec A-13</c> order, then A-14's advisor invite, then the link
+    /// copied from the manager app.
+    /// </summary>
+    public static readonly IReadOnlyList<string> KnownValues = [TextReplacement, QuickReply, Qr, Print, Advisor, ManagerApp];
 
     /// <summary>
     /// Canonicalises a raw <c>src</c> query value into a storable channel tag: trimmed and

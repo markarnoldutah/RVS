@@ -27,4 +27,10 @@ public sealed record LocationIntakeLinksResponseDto
 
     /// <summary>For the canned "Respond with Text" / Quick Response message sent from an incoming call.</summary>
     public required string QuickReplyUrl { get; init; }
+
+    /// <summary>
+    /// Shown in the manager app's Send intake link dialog for the advisor to copy and paste
+    /// wherever they send it themselves (issue #756).
+    /// </summary>
+    public required string ManagerAppUrl { get; init; }
 }

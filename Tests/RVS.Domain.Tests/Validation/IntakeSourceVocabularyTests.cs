@@ -10,10 +10,19 @@ namespace RVS.Domain.Tests.Validation;
 public class IntakeSourceVocabularyTests
 {
     [Fact]
-    public void KnownValues_ShouldBeTheA13ChannelsInTableOrderThenAdvisor()
+    public void KnownValues_ShouldBeTheA13ChannelsInTableOrderThenAdvisorThenManagerApp()
     {
         IntakeSourceVocabulary.KnownValues
-            .Should().Equal("textrepl", "quickreply", "qr", "print", "advisor");
+            .Should().Equal("textrepl", "quickreply", "qr", "print", "advisor", "mgrapp");
+    }
+
+    [Fact]
+    public void ManagerApp_ShouldBeTheLinkCopiedFromTheManagerApp()
+    {
+        // Issue #756: the location link copied out of the Send intake link dialog is tagged
+        // src=mgrapp — distinct from textrepl, which a tech sends from their own phone.
+        IntakeSourceVocabulary.ManagerApp.Should().Be("mgrapp");
+        IntakeSourceVocabulary.IsKnown("mgrapp").Should().BeTrue();
     }
 
     [Fact]
@@ -30,6 +39,7 @@ public class IntakeSourceVocabularyTests
     [InlineData("qr")]
     [InlineData("print")]
     [InlineData("advisor")]
+    [InlineData("mgrapp")]
     public void Normalize_WhenKnownValue_ShouldReturnItUnchanged(string value)
     {
         IntakeSourceVocabulary.Normalize(value).Should().Be(value);

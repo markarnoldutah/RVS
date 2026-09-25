@@ -203,6 +203,7 @@ public class LocationsControllerTests
         dto.QrUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=qr");
         dto.TextReplacementUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=textrepl");
         dto.QuickReplyUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=quickreply");
+        dto.ManagerAppUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=mgrapp");
     }
 
     [Fact]
