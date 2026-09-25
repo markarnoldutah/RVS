@@ -77,12 +77,12 @@ param logAnalyticsDailyCapGb = '0.08'
 // here rather than left empty — the Action Groups resource provider does a
 // full-replace PUT, so an empty array here deletes any receiver added by hand
 // in the portal on every deploy (#639); the portal is not a safe place to set
-// this. markarnoldutah@gmail.com is a personal address, tracked as a known gap
-// — replace with a real ops alias once one exists (#648).
+// this. Real ops alias, replacing the personal address that was a stopgap for
+// #639 (#648).
 param opsAlertEmailReceivers = [
   {
     name: 'oncall'
-    email: 'markarnoldutah@gmail.com'
+    email: 'ops@arnolddigitalsolutions.com'
   }
 ]
 
