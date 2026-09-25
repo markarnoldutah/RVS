@@ -1157,9 +1157,12 @@
 
     private void HandleThemeChanged() => InvokeAsync(StateHasChanged);
 
-    private string LabelColor => ThemeService.Mode == ThemeMode.HighContrast
-        ? "#FFFF00"
-        : "#9198A1";
+    private string LabelColor => ThemeService.Mode switch
+    {
+        ThemeMode.Dark => "#9198A1",
+        ThemeMode.HighContrast => "#FFFF00",
+        _ => "var(--mud-palette-text-secondary)"
+    };
 
     private string ValueColor => ThemeService.Mode switch
     {
