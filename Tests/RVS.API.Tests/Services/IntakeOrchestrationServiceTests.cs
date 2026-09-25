@@ -890,7 +890,7 @@ public class IntakeOrchestrationServiceTests
             "ten_test", "loc_test", It.IsAny<string?>(),
             It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(),
             "+18015551234",
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -907,7 +907,7 @@ public class IntakeOrchestrationServiceTests
         _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
             It.IsAny<string>(), It.IsAny<string>(), "Text",
             false, true, It.IsAny<string?>(), It.IsAny<string?>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -927,7 +927,7 @@ public class IntakeOrchestrationServiceTests
         _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
             true, false, It.IsAny<string?>(), It.IsAny<string?>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -946,7 +946,7 @@ public class IntakeOrchestrationServiceTests
         _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
             false, true, It.IsAny<string?>(), It.IsAny<string?>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -970,7 +970,7 @@ public class IntakeOrchestrationServiceTests
         _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
             It.IsAny<string>(), It.IsAny<string>(), "Text",
             true, false, "jane@example.com", It.IsAny<string?>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -987,7 +987,49 @@ public class IntakeOrchestrationServiceTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
             It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(),
             null,
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldNotifyWithTheCustomersFirstNameAndAFullTokenLifetime()
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        // A freshly generated status token lives 90 days; the email says so (issue #737).
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string>(), "Jane", It.IsAny<string>(), It.IsAny<string>(), 90, It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTokenIsReused_ShouldNotifyWithTheDaysItHasLeft()
+    {
+        SetupFullHappyPath();
+
+        // A reused token keeps its original expiry (#716), so "90 days" would overstate it.
+        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlobalCustomerAcct
+            {
+                Id = "gca_test",
+                Email = "jane@example.com",
+                FirstName = "Jane",
+                LastName = "Doe",
+                CreatedByUserId = "intake",
+                MagicLinkToken = "existing:token",
+                MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(12).AddHours(-1),
+            });
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), 12, It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -199,9 +199,9 @@ public class NotificationOrchestratorTests
         SmsEnabled();
 
         await _sut.SendServiceRequestConfirmationAsync(
-            TenantId, LocationId, "Email", false, false, Email, Phone, "sr_001", "Blue Compass RV", StatusUrl, null);
+            TenantId, LocationId, "Email", false, false, Email, Phone, "sr_001", "Jane", "Blue Compass RV", StatusUrl, 90, null);
         await _sut.SendServiceRequestConfirmationAsync(
-            TenantId, LocationId, "Text", false, false, Email, Phone, "sr_001", "Blue Compass RV", StatusUrl, null);
+            TenantId, LocationId, "Text", false, false, Email, Phone, "sr_001", "Jane", "Blue Compass RV", StatusUrl, 90, null);
 
         _emailMock.Verify(
             e => e.SendEmailAsync(
@@ -215,6 +215,23 @@ public class NotificationOrchestratorTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task SendServiceRequestConfirmationAsync_ByEmail_ShouldGreetByFirstNameAndStateTheExpiry()
+    {
+        SmsDisabled();
+
+        await SendAsync("Email", smsOptOut: false, emailOptOut: false, Email, Phone);
+
+        // Wording from issue #737.
+        _emailMock.Verify(
+            e => e.SendEmailAsync(
+                Email,
+                It.IsAny<string>(),
+                It.Is<string>(b => b.Contains("Hi Jane,") && b.Contains("This link expires in 90 days.")),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -222,7 +239,7 @@ public class NotificationOrchestratorTests
     public async Task SendServiceRequestConfirmationAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
     {
         var act = () => _sut.SendServiceRequestConfirmationAsync(
-            tenantId!, LocationId, "Email", false, false, "user@example.com", null, "sr_001", "Blue Compass RV", StatusUrl, DealerPhone);
+            tenantId!, LocationId, "Email", false, false, "user@example.com", null, "sr_001", "Jane", "Blue Compass RV", StatusUrl, 90, DealerPhone);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -234,7 +251,7 @@ public class NotificationOrchestratorTests
     public async Task SendServiceRequestConfirmationAsync_WhenLocationIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? locationId)
     {
         var act = () => _sut.SendServiceRequestConfirmationAsync(
-            TenantId, locationId!, "Email", false, false, "user@example.com", null, "sr_001", "Blue Compass RV", StatusUrl, DealerPhone);
+            TenantId, locationId!, "Email", false, false, "user@example.com", null, "sr_001", "Jane", "Blue Compass RV", StatusUrl, 90, DealerPhone);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -246,7 +263,7 @@ public class NotificationOrchestratorTests
     public async Task SendServiceRequestConfirmationAsync_WhenServiceRequestIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? srId)
     {
         var act = () => _sut.SendServiceRequestConfirmationAsync(
-            TenantId, LocationId, "Email", false, false, "user@example.com", null, srId!, "Blue Compass RV", StatusUrl, DealerPhone);
+            TenantId, LocationId, "Email", false, false, "user@example.com", null, srId!, "Jane", "Blue Compass RV", StatusUrl, 90, DealerPhone);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -258,7 +275,7 @@ public class NotificationOrchestratorTests
     public async Task SendServiceRequestConfirmationAsync_WhenDealershipNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? dealer)
     {
         var act = () => _sut.SendServiceRequestConfirmationAsync(
-            TenantId, LocationId, "Email", false, false, "user@example.com", null, "sr_001", dealer!, StatusUrl, DealerPhone);
+            TenantId, LocationId, "Email", false, false, "user@example.com", null, "sr_001", "Jane", dealer!, StatusUrl, 90, DealerPhone);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -270,7 +287,7 @@ public class NotificationOrchestratorTests
     public async Task SendServiceRequestConfirmationAsync_WhenStatusUrlIsNullOrWhiteSpace_ShouldThrowArgumentException(string? statusUrl)
     {
         var act = () => _sut.SendServiceRequestConfirmationAsync(
-            TenantId, LocationId, "Email", false, false, "user@example.com", null, "sr_001", "Blue Compass RV", statusUrl!, DealerPhone);
+            TenantId, LocationId, "Email", false, false, "user@example.com", null, "sr_001", "Jane", "Blue Compass RV", statusUrl!, 90, DealerPhone);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -284,7 +301,7 @@ public class NotificationOrchestratorTests
     private Task SendAsync(string? preferredContact, bool smsOptOut, bool emailOptOut, string? toEmail, string? toPhone) =>
         _sut.SendServiceRequestConfirmationAsync(
             TenantId, LocationId, preferredContact, smsOptOut, emailOptOut, toEmail, toPhone,
-            "sr_001", "Blue Compass RV", StatusUrl, DealerPhone);
+            "sr_001", "Jane", "Blue Compass RV", StatusUrl, 90, DealerPhone);
 
     private void VerifyEmailSentTo(string toEmail) =>
         _emailMock.Verify(
