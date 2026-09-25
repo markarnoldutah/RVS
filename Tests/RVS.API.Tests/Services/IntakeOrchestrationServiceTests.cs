@@ -124,61 +124,6 @@ public class IntakeOrchestrationServiceTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── Step 2: Opt-outs are not written to GlobalCustomerAcct (issue #673) ──
-    // Nothing reads that copy — the invite check and confirmations both use CustomerProfile.
-
-    [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public async Task ExecuteAsync_WhenNewGlobalAcct_ShouldNotWriteOptOuts(bool smsOptOut, bool emailOptOut)
-    {
-        SetupFullHappyPath(globalAcctExists: false);
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: smsOptOut, emailOptOut: emailOptOut));
-
-        _globalAcctRepoMock.Verify(r => r.CreateAsync(
-            It.Is<GlobalCustomerAcct>(a => !a.SmsOptOut && !a.SmsOptOutAtUtc.HasValue
-                                           && !a.EmailOptOut && !a.EmailOptOutAtUtc.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenBoxesTicked_ShouldNotWriteOptOuts()
-    {
-        SetupFullHappyPath(globalAcctExists: true);
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true, emailOptOut: true));
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => !a.SmsOptOut && !a.SmsOptOutAtUtc.HasValue
-                                           && !a.EmailOptOut && !a.EmailOptOutAtUtc.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenBoxesUnticked_ShouldLeaveLegacyOptOutsUnchanged()
-    {
-        // Accounts written before #673 may still carry opt-outs; a submission leaves them alone.
-        var smsAt = DateTime.UtcNow.AddDays(-30);
-        var emailAt = DateTime.UtcNow.AddDays(-10);
-        SetupFullHappyPath(globalAcctExists: true);
-        var existing = BuildGlobalAcct();
-        existing.SmsOptOut = true;
-        existing.SmsOptOutAtUtc = smsAt;
-        existing.EmailOptOut = true;
-        existing.EmailOptOutAtUtc = emailAt;
-        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existing);
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: false, emailOptOut: false));
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.SmsOptOut && a.SmsOptOutAtUtc == smsAt
-                                           && a.EmailOptOut && a.EmailOptOutAtUtc == emailAt),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
     // ── Step 3: CustomerProfile Resolution + Asset Ownership ─────────────────
 
     [Fact]

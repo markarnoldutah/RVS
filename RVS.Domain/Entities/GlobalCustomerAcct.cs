@@ -8,6 +8,7 @@ namespace RVS.Domain.Entities;
 /// Global customer account — one record per real human (by email).
 /// Cross-tenant. Links all dealership-scoped profiles.
 /// Email is always stored in normalized form (trimmed, lowercased).
+/// Notification opt-outs are per dealership and live on <see cref="CustomerProfile"/> only.
 ///
 /// Cosmos DB partition key: /email
 /// </summary>
@@ -28,41 +29,6 @@ public class GlobalCustomerAcct : EntityBase
 
     [JsonProperty("phone")]
     public string? Phone { get; set; }
-
-    /// <summary>
-    /// When <c>true</c>, the customer has opted out of SMS notifications.
-    /// Default is <c>false</c> (both email and SMS are sent).
-    /// </summary>
-    [JsonProperty("smsOptOut")]
-    public bool SmsOptOut { get; set; }
-
-    /// <summary>
-    /// When <c>true</c>, the customer has opted out of email notifications.
-    /// Default is <c>false</c> (both email and SMS are sent).
-    /// </summary>
-    [JsonProperty("emailOptOut")]
-    public bool EmailOptOut { get; set; }
-
-    /// <summary>
-    /// UTC timestamp when the customer explicitly opted in to SMS notifications.
-    /// Null if the customer has never opted in to SMS. Required for TCPA compliance.
-    /// </summary>
-    [JsonProperty("smsOptInAtUtc")]
-    public DateTime? SmsOptInAtUtc { get; set; }
-
-    /// <summary>
-    /// UTC timestamp when the customer opted out of SMS notifications (replied STOP).
-    /// Null if the customer has not opted out. When set, no outbound SMS is allowed.
-    /// </summary>
-    [JsonProperty("smsOptOutAtUtc")]
-    public DateTime? SmsOptOutAtUtc { get; set; }
-
-    /// <summary>
-    /// UTC timestamp when the customer opted out of email notifications.
-    /// Null if the customer has not opted out. When set, no outbound email is sent.
-    /// </summary>
-    [JsonProperty("emailOptOutAtUtc")]
-    public DateTime? EmailOptOutAtUtc { get; set; }
 
     /// <summary>
     /// All dealership-scoped profiles linked to this identity.
