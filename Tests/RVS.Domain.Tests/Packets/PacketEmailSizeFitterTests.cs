@@ -20,7 +20,7 @@ namespace RVS.Domain.Tests.Packets;
 public class PacketEmailSizeFitterTests
 {
     private const string Html = "<!DOCTYPE html><html><body><h1>Packet</h1></body></html>";
-    private const string PlainText = "----- RV SERVICE FLOW -----\nCATEGORY: SLIDE SYSTEM\n----- RV SERVICE FLOW -----";
+    private const string PlainText = "----- RV INTAKE -----\nCATEGORY: SLIDE SYSTEM\n----- RV INTAKE -----";
 
     private static PacketEmailAttachment Pdf(int bytes) => new()
     {

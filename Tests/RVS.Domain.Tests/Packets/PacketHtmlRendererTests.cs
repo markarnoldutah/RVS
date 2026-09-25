@@ -161,12 +161,20 @@ public class PacketHtmlRendererTests
             Order(html, "section:ai-summary"),
             Order(html, "section:description"),
             Order(html, "section:diagnostics"),
-            Order(html, "section:photos"),
             Order(html, "section:paste-block"),
             Order(html, "section:status-link"),
         };
 
         order.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void Render_WhenAVideoIsPresent_ShouldPlaceThePhotosSectionBetweenDiagnosticsAndThePasteBlock()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket() with { Photos = [Video()] });
+
+        Order(html, "section:diagnostics").Should().BeLessThan(Order(html, "section:photos"));
+        Order(html, "section:photos").Should().BeLessThan(Order(html, "section:paste-block"));
     }
 
     [Fact]
@@ -274,6 +282,57 @@ public class PacketHtmlRendererTests
     }
 
     [Fact]
+    public void Render_ShouldRenderTheCustomerPhoneAsATelLink()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var customerBlock = html[Order(html, "section:customer")..Order(html, "section:origin")];
+        customerBlock.Should().Contain("<a href=\"tel:5550101\"");
+        customerBlock.Should().Contain(">555-0101</a>");
+    }
+
+    [Fact]
+    public void Render_ShouldKeepALeadingPlusAndDropFormattingInTheTelLink()
+    {
+        var packet = FullPacket() with { Customer = FullPacket().Customer with { Phone = "+1 (801) 555-0101" } };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().Contain("href=\"tel:+18015550101\"");
+        html.Should().Contain(">+1 (801) 555-0101</a>");
+    }
+
+    [Fact]
+    public void Render_WhenThePhoneHasNoDigits_ShouldRenderItAsPlainText_NotATelLink()
+    {
+        var packet = FullPacket() with { Customer = FullPacket().Customer with { Phone = "\"><script>x</script>" } };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("href=\"tel:");
+        html.Should().NotContain("<script>x");
+        html.Should().Contain("&lt;script&gt;x");
+    }
+
+    [Fact]
+    public void Render_ShouldRenderTheCustomerEmailAsAMailtoLink()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var customerBlock = html[Order(html, "section:customer")..Order(html, "section:origin")];
+        customerBlock.Should().Contain("<a href=\"mailto:dale@example.com\"");
+        customerBlock.Should().Contain(">dale@example.com</a>");
+    }
+
+    [Fact]
+    public void Render_ShouldNotLinkTheLocationPhone()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("tel:5550199", "only the customer's number is a call-back target");
+    }
+
+    [Fact]
     public void Render_ShouldRenderPreferredContact_WhenPresent()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
@@ -289,24 +348,25 @@ public class PacketHtmlRendererTests
         var html = PacketHtmlRenderer.Render(FullPacket());
 
         html.Should().Contain("A1B2C3D4");
-        html.Should().Contain("2026-09-05 08:30 MDT");
+        html.Should().Contain("2026-09-05 8:30 AM MDT");
         html.Should().Contain("Salt Lake Service Center");
     }
 
     // ── IDS work-order alignment (issue #431, Blue Compass / Integrated Dealer Systems) ──
 
     [Fact]
-    public void Render_ShouldPlaceTheReferenceCodeInTheMastheadAsRvsNumber()
+    public void Render_ShouldPlaceTheReferenceCodeInTheMastheadAsIntakeNumber()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        html.Should().Contain("RVS #:");
+        html.Should().Contain("Intake #:");
+        html.Should().NotContain("RVS #", "the tracking number is labelled Intake # (issue #735)");
         // Mirrors IDS "W/O #" top-right: the tracking number comes before any section body.
         html.IndexOf("A1B2C3D4", StringComparison.Ordinal)
             .Should().BeLessThan(Order(html, "section:customer"));
         // The top-of-packet Received line carries the full timestamp, date + time, in the
         // dealership's own zone (issue #492 item 4, finished by #506).
-        html.Should().Contain("Received: 2026-09-05 08:30 MDT");
+        html.Should().Contain("Received: 2026-09-05 8:30 AM MDT");
     }
 
     // ── Masthead: brand, logo, customer headline, received line (issue #492) ──
@@ -373,7 +433,7 @@ public class PacketHtmlRendererTests
         html.Should().Contain(">Gribble, Dale : 2021 Winnebago View<");
         // Below the top refbox.
         html.IndexOf("Gribble, Dale", StringComparison.Ordinal)
-            .Should().BeGreaterThan(html.IndexOf("RVS #:", StringComparison.Ordinal));
+            .Should().BeGreaterThan(html.IndexOf("Intake #:", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -465,7 +525,8 @@ public class PacketHtmlRendererTests
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        html.Should().Contain("Complaint");          // not "In the customer's words"
+        html.Should().Contain("Reported issue");     // not "Complaint" (issue #735)
+        html.Should().NotContain("Complaint");
         html.Should().Contain("Manufacturer:");      // not "Make"
         html.Should().Contain("Serial# (VIN):");     // not "VIN"
         html.Should().Contain("Preliminary assessment");
@@ -481,11 +542,11 @@ public class PacketHtmlRendererTests
         html.Should().Contain("@bottom-right")
             .And.Contain("counter(page)")
             .And.Contain("counter(pages)");
-        html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*RVS #A1B2C3D4");
+        html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*Intake #A1B2C3D4");
         // …and a static end-of-flow footer for engines that don't (Safari).
         html.Should().Contain("class=\"packet-foot\"");
         html[Order(html, "section:status-link")..]
-            .Should().Contain("RVS #A1B2C3D4");
+            .Should().Contain("Intake #A1B2C3D4");
     }
 
     [Fact]
@@ -517,7 +578,7 @@ public class PacketHtmlRendererTests
         var html = PacketHtmlRenderer.Render(FullPacket());
 
         var slice = html[Order(html, "@bottom-left")..Order(html, "@bottom-right")];
-        slice.Should().Contain("2026-09-05 08:30 MDT");
+        slice.Should().Contain("2026-09-05 8:30 AM MDT");
     }
 
     [Fact]
@@ -530,7 +591,7 @@ public class PacketHtmlRendererTests
         var html = PacketHtmlRenderer.Render(packet);
         var received = packet.Origin.ReceivedDisplay;
 
-        received.Should().Be("2026-09-05 08:30 MDT");
+        received.Should().Be("2026-09-05 8:30 AM MDT");
 
         var runningFooter = html[Order(html, "@bottom-left")..Order(html, "@bottom-right")];
         var masthead = html[Order(html, "class=\"received\"")..Order(html, "section:category")];
@@ -547,7 +608,7 @@ public class PacketHtmlRendererTests
         // The fallback that every packet rendered before #506, still exact.
         var html = PacketHtmlRenderer.Render(MinimalPacket());
 
-        html.Should().Contain("Received: 2026-09-05 14:30 UTC");
+        html.Should().Contain("Received: 2026-09-05 2:30 PM UTC");
     }
 
     // ── 4. Category ────────────────────────────────────────────────────────
@@ -573,6 +634,15 @@ public class PacketHtmlRendererTests
     }
 
     // ── 5. Description, verbatim + encoded ─────────────────────────────────
+
+    [Fact]
+    public void Render_ShouldHeadTheDescriptionReportedIssue_CustomersWordsVerbatim()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var block = html[Order(html, "section:description")..Order(html, "section:diagnostics")];
+        block.Should().Contain("<h2>Reported issue <span class=\"sub\">— customer's words verbatim</span></h2>");
+    }
 
     [Fact]
     public void Render_ShouldRenderTheCustomerDescriptionVerbatim_HtmlEncoded_PreservingWhitespace()
@@ -615,6 +685,17 @@ public class PacketHtmlRendererTests
         // and a left-rule accent per answer, legible in greyscale.
         html.Should().MatchRegex(@"\.diagnostics\s+dt\s*\{[^}]*font-weight:\s*700");
         html.Should().MatchRegex(@"\.diagnostics\s+dd\s*\{[^}]*border-left[^}]*}");
+    }
+
+    [Fact]
+    public void Render_TheDiagnosticsQandA_ShouldUseTheSameMonospaceAsTheVerbatimDescription()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        // The customer's own answers read as their words, like the verbatim description
+        // (issue #735) — the same Courier stack, not the body sans-serif.
+        html.Should().MatchRegex(@"\.description \.verbatim,[^{]*\{[^}]*""Courier New""");
+        html.Should().MatchRegex(@"\.diagnostics\s+dl\s*\{[^}]*font-family:\s*""Courier New"", ""Liberation Mono"", monospace");
     }
 
     [Fact]
@@ -806,30 +887,51 @@ public class PacketHtmlRendererTests
 
     // ── 8. Photos ─────────────────────────────────────────────────────────
 
-    [Fact]
-    public void Render_WhenPhotosPresent_ShouldRenderATextOnlyAttachedLine_NeverAnImgTag()
+    private static PacketPhoto Video(string fileName = "walkaround.mp4") => new()
     {
+        Url = $"https://blob/{fileName}?sas=read",
+        FileName = fileName,
+        ContentType = "video/mp4",
+    };
+
+    [Fact]
+    public void Render_WhenOnlyImagesPresent_ShouldOmitThePhotosSection_TheAttachmentThumbnailsSuffice()
+    {
+        // The images travel as email attachments, which the mail client shows as thumbnails;
+        // a list of their file names above them added nothing (issue #735).
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        var block = html[Order(html, "section:photos")..Order(html, "section:paste-block")];
-        block.Should().Contain("image generator.jpg attached");
-        block.Should().NotContain("<img");
+        html.Should().NotContain("section:photos");
+        html.Should().NotContain("generator.jpg");
+        html.Should().NotContain("<img");
         html.ToLowerInvariant().Should().NotContain("data:image");
         html.ToLowerInvariant().Should().NotContain("base64");
     }
 
     [Fact]
-    public void Render_ShouldHtmlEncodeThePhotoFileNameInTheAttachedLine()
+    public void Render_WhenImagesAndAVideoArePresent_ShouldListOnlyTheVideo()
     {
         var packet = FullPacket() with
         {
-            Photos = [new PacketPhoto { Url = "https://blob/x.jpg", FileName = "<b>x</b>.jpg" }],
+            Photos = [new PacketPhoto { Url = "https://blob/generator.jpg?sas=read", FileName = "generator.jpg" }, Video()],
         };
 
         var html = PacketHtmlRenderer.Render(packet);
 
-        html.Should().Contain("image &lt;b&gt;x&lt;/b&gt;.jpg attached");
-        html.Should().NotContain("<b>x</b>.jpg");
+        var block = html[Order(html, "section:photos")..Order(html, "section:paste-block")];
+        block.Should().Contain("video walkaround.mp4");
+        block.Should().NotContain("generator.jpg");
+    }
+
+    [Fact]
+    public void Render_ShouldHtmlEncodeTheVideoFileName()
+    {
+        var packet = FullPacket() with { Photos = [Video("<b>x</b>.mp4")] };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().Contain("video &lt;b&gt;x&lt;/b&gt;.mp4");
+        html.Should().NotContain("<b>x</b>.mp4");
     }
 
     [Fact]
@@ -869,8 +971,10 @@ public class PacketHtmlRendererTests
     [Fact]
     public void Render_WhenAManagerAppUrlIsGiven_ShouldAddANoteWithADeepLink()
     {
+        // FullPacket carries images only: the note alone still earns the section.
         var html = PacketHtmlRenderer.Render(FullPacket(), "https://manager.example/sr/sr_1");
 
+        html.Should().Contain("section:photos");
         html.Should().Contain("Some images can only be shown in the manager app");
         html.Should().Contain("href=\"https://manager.example/sr/sr_1\"");
     }
@@ -888,6 +992,14 @@ public class PacketHtmlRendererTests
     private static ServicePacket PacketWithManagerLinks() =>
         FullPacket() with { ManagerLinks = ManagerDeepLinks.Build("https://manager.example", "sr_1") };
 
+    /// <summary>The inline <c>style</c> of the anchor whose <c>href</c> is exactly <paramref name="href"/>.</summary>
+    private static string AnchorStyle(string html, string href)
+    {
+        var match = Regex.Match(html, $@"<a href=""{Regex.Escape(href)}"" style=""([^""]*)""");
+        match.Success.Should().BeTrue("an anchor to '{0}' with an inline style should be present", href);
+        return match.Groups[1].Value;
+    }
+
     [Fact]
     public void Render_WhenManagerLinksPresent_ShouldLinkEachStatusActionAndTheRequest()
     {
@@ -901,6 +1013,36 @@ public class PacketHtmlRendererTests
         html.Should().Contain(">In Progress<");
         html.Should().Contain(">Waiting on Parts<");
         html.Should().Contain(">Completed<");
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldStyleEachStatusActionAsABrandButton_Inline()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        // Filled text-safe Rust (RvsBrand.Accent) with white label, carried inline so the
+        // buttons survive a stripped <style> block (issue #735).
+        foreach (var action in new[] { "in-progress", "waiting-on-parts", "completed" })
+        {
+            var style = AnchorStyle(html, $"https://manager.example/sr/sr_1?action={action}");
+            style.Should().Contain("background-color:#A8431F;")
+                .And.Contain("color:#ffffff;")
+                .And.Contain("border-radius:");
+        }
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldRenderOpenManagerAsAButtonBelowTheStatusButtons()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        html.Should().NotContain("Open in manager app");
+        html.Should().MatchRegex(@"<a href=""https://manager\.example/sr/sr_1"" style=""[^""]*"">Open Manager</a>");
+        AnchorStyle(html, "https://manager.example/sr/sr_1").Should()
+            .Contain("border:1px solid #A8431F;").And.Contain("border-radius:");
+        Order(html, ">Open Manager<").Should().BeGreaterThan(Order(html, ">Completed<"));
+        // On its own line, not in the status-button row.
+        html[Order(html, ">Completed<")..Order(html, ">Open Manager<")].Should().Contain("<p");
     }
 
     [Fact]
@@ -956,7 +1098,7 @@ public class PacketHtmlRendererTests
     }
 
     [Fact]
-    public void Render_WhenManyPhotosPresent_ShouldListEveryOneAsATextLine()
+    public void Render_WhenManyImagesPresent_ShouldNameNoneOfThem()
     {
         var photos = Enumerable.Range(1, 8)
             .Select(i => new PacketPhoto { Url = $"https://blob/p{i}.jpg", FileName = $"p{i}.jpg" })
@@ -965,9 +1107,10 @@ public class PacketHtmlRendererTests
 
         var html = PacketHtmlRenderer.Render(packet);
 
+        html.Should().NotContain("section:photos");
         foreach (var photo in photos)
         {
-            html.Should().Contain($"image {photo.FileName} attached");
+            html.Should().NotContain(photo.FileName);
         }
     }
 
@@ -982,6 +1125,16 @@ public class PacketHtmlRendererTests
         block.Should().Contain("<pre");
         block.Should().Contain("ELECTRICAL");
         block.Should().MatchRegex(@"Generator quits after ten minutes\.\r?\nhttps://rvintake\.com/status/abc123");
+    }
+
+    [Fact]
+    public void Render_ThePasteBlock_ShouldSelectWholeOnOneClick_InlineSoAStrippedStyleBlockKeepsIt()
+    {
+        // No mail client runs script, so a real copy button is impossible (issue #735).
+        // user-select: all makes one click select the whole block, ready for Ctrl/Cmd-C.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().MatchRegex(@"<pre class=""dms-text"" style=""[^""]*-webkit-user-select:\s*all;[^""]*\buser-select:\s*all");
     }
 
     [Fact]

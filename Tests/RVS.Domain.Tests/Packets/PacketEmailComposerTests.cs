@@ -24,7 +24,7 @@ public class PacketEmailComposerTests
         int? year = 2021,
         string? make = "Jayco",
         string? model = "Eagle",
-        string? pasteBlock = "----- RV SERVICE FLOW -----\nCATEGORY: SLIDE SYSTEM\nCOMPLAINT: Slide will not retract\n----- RV SERVICE FLOW -----",
+        string? pasteBlock = "----- RV INTAKE -----\nCATEGORY: SLIDE SYSTEM\nCOMPLAINT: Slide will not retract\n----- RV INTAKE -----",
         string? statusLinkUrl = null) => new()
     {
         Unit = new PacketUnitHeader { Year = year, Make = make, Model = model, Vin = "1HGBH41JXMN109186" },
@@ -158,7 +158,7 @@ public class PacketEmailComposerTests
     [Fact]
     public void Compose_WhenThePacketHasAPasteBlock_ShouldUseItAsThePlainTextBody()
     {
-        var packet = BuildPacket(pasteBlock: "----- RV SERVICE FLOW -----\nCATEGORY: SLIDE SYSTEM\nCOMPLAINT: Slide will not retract\n----- RV SERVICE FLOW -----");
+        var packet = BuildPacket(pasteBlock: "----- RV INTAKE -----\nCATEGORY: SLIDE SYSTEM\nCOMPLAINT: Slide will not retract\n----- RV INTAKE -----");
 
         var message = PacketEmailComposer.Compose(packet, Html, "Doe", OneRecipient);
 

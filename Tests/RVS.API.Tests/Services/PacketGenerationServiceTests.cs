@@ -1256,7 +1256,7 @@ public class PacketGenerationServiceTests
         var sent = await GenerateAndCaptureEmailAsync(sr, location);
 
         sent.Should().NotBeNull();
-        sent!.HtmlBody.Should().Contain("Received: 2026-09-05 08:30 MDT");
+        sent!.HtmlBody.Should().Contain("Received: 2026-09-05 8:30 AM MDT");
     }
 
     [Fact]
@@ -1267,7 +1267,7 @@ public class PacketGenerationServiceTests
         var sent = await GenerateAndCaptureEmailAsync(sr, LocationWithRecipients());
 
         sent.Should().NotBeNull();
-        sent!.HtmlBody.Should().Contain("Received: 2026-09-05 14:30 UTC");
+        sent!.HtmlBody.Should().Contain("Received: 2026-09-05 2:30 PM UTC");
     }
 
     [Fact]
@@ -1285,6 +1285,6 @@ public class PacketGenerationServiceTests
         var sent = await GenerateAndCaptureEmailAsync(sr, location);
 
         sent.Should().NotBeNull();
-        sent!.HtmlBody.Should().Contain("Received: 2026-09-05 08:30 MDT");
+        sent!.HtmlBody.Should().Contain("Received: 2026-09-05 8:30 AM MDT");
     }
 }

@@ -16,7 +16,11 @@ namespace RVS.Domain.Packets;
 /// </summary>
 public static class PacketReceivedFormatter
 {
-    private const string Pattern = "yyyy-MM-dd HH:mm";
+    /// <summary>
+    /// A 12-hour clock with an AM/PM suffix — how a US service department reads a time
+    /// (issue #735). Invariant culture keeps the designator ASCII <c>AM</c>/<c>PM</c>.
+    /// </summary>
+    private const string Pattern = "yyyy-MM-dd h:mm tt";
 
     /// <summary>
     /// The Received string for a packet masthead. Never throws: an unset, unrecognised, or
@@ -68,8 +72,8 @@ public static class PacketReceivedFormatter
     }
 
     /// <summary>
-    /// The always-UTC form, <c>yyyy-MM-dd HH:mm UTC</c> — the documented fallback, and the
-    /// exact string every packet carried before issue #506.
+    /// The always-UTC form, <c>yyyy-MM-dd h:mm tt UTC</c> — the documented fallback when a
+    /// location has no time zone (issue #506), on the 12-hour clock since issue #735.
     /// </summary>
     public static string FormatUtc(DateTimeOffset submittedAtUtc) =>
         submittedAtUtc.ToUniversalTime().ToString(Pattern, CultureInfo.InvariantCulture) + " UTC";
