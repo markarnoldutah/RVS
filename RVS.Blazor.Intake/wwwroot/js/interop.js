@@ -186,3 +186,14 @@ window.rvs_enterWizardStep = function (stepElement) {
 
     (field || stepElement).focus({ preventScroll: true });
 };
+
+/**
+ * Steps one entry back in the browser's session history — what the browser's own Back button
+ * does. The intake wizard's Back button calls this so the two are the same action: the wizard
+ * step it lands on comes from the history entry, and the entry left behind stays available to
+ * the Forward button. The host only calls this when it knows it pushed an entry of its own in
+ * this page's lifetime, so this cannot walk the customer off the form.
+ */
+window.rvs_historyBack = function () {
+    window.history.back();
+};
