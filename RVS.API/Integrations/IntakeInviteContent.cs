@@ -52,9 +52,10 @@ internal static class IntakeInviteContent
     }
 
     /// <remarks>
-    /// Wording from issue #710: the customer asked for the link during a call, so the email says
-    /// so, says it comes from RV Intake on the dealer's behalf, and sends questions back to the
-    /// location's phone. A location with no phone on file still gets the dealer's name.
+    /// Wording from issues #710 and #738: the customer asked for the link during a call, so the
+    /// email thanks them for it, says it comes from RV Intake on the dealer's behalf, and sends
+    /// questions back to the location's phone. A location with no phone on file still gets the
+    /// dealer's name.
     /// </remarks>
     public static string BuildEmailHtmlBody(
         string locationName, string firstName, string link, int expiryHours, string? locationPhone)
@@ -70,10 +71,9 @@ internal static class IntakeInviteContent
 
         return
             $"<p>Hi {name},</p>" +
-            $"<p>You've initiated a service request for your RV with <strong>{location}</strong>. " +
+            $"<p>Thank you for initiating a service request for your RV with {location}. " +
             "Use the link below to provide the service manager with important details about your issue:</p>" +
-            $"<p><a href=\"{href}\">Start your service request</a> with {location}.</p>" +
-            $"<p>Or paste this into your browser: {href}</p>" +
+            $"<p><a href=\"{href}\">Start your service request</a></p>" +
             $"<p>You're receiving this email from RV Intake on behalf of {location} because you initiated a service request. " +
             $"This link will work once and expires in {expiryHours} hours.</p>" +
             $"<p>{QuestionsLine(location, phone)}</p>";
@@ -90,9 +90,9 @@ internal static class IntakeInviteContent
 
         return
             $"Hi {firstName},\n\n" +
-            $"You've initiated a service request for your RV with {locationName}. " +
+            $"Thank you for initiating a service request for your RV with {locationName}. " +
             "Use the link below to provide the service manager with important details about your issue:\n\n" +
-            $"{link}\n\n" +
+            $"Start your service request: {link}\n\n" +
             $"You're receiving this email from RV Intake on behalf of {locationName} because you initiated a service request. " +
             $"This link will work once and expires in {expiryHours} hours.\n\n" +
             $"{QuestionsLine(locationName, phone)}\n";
@@ -101,5 +101,5 @@ internal static class IntakeInviteContent
     private static string QuestionsLine(string location, string? phone) =>
         phone is null
             ? $"If you have questions, please contact {location} directly."
-            : $"If you have questions, please contact {location} directly at: {phone}";
+            : $"If you have questions, please contact {location} directly at {phone}.";
 }
