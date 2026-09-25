@@ -31,8 +31,13 @@ public static class ProvisioningStepNames
 /// <param name="Message">Why the step failed; null otherwise.</param>
 public sealed record ProvisioningStep(string Name, string Status, string? Message = null);
 
-/// <summary>A tenant as the admin list shows it: commercial record, access gate and locations.</summary>
-public sealed record TenantOverview(Tenant Tenant, TenantAccessGateEmbedded AccessGate, IReadOnlyList<Location> Locations);
+/// <summary>A tenant as the admin list shows it: commercial record, access gate, locations and the
+/// tenant's master capability list (issue #757).</summary>
+public sealed record TenantOverview(
+    Tenant Tenant,
+    TenantAccessGateEmbedded AccessGate,
+    IReadOnlyList<Location> Locations,
+    IReadOnlyList<TenantCapabilityEmbedded> AvailableCapabilities);
 
 /// <summary>Outcome of a create-tenant run (Spec P-1 / P-6).</summary>
 /// <param name="TenantId">The tenant id used, derived or supplied.</param>

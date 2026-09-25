@@ -95,7 +95,16 @@ public static class TenantProvisioningMapper
                 LocationId = l.Id,
                 Name = l.Name,
                 Slug = l.Slug,
-                IntakeUrl = IntakeUrl(intakeBaseUrl, l.Slug)
+                IntakeUrl = IntakeUrl(intakeBaseUrl, l.Slug),
+                EnabledCapabilities = [.. l.EnabledCapabilities]
+            })],
+            AvailableCapabilities = [.. overview.AvailableCapabilities.Select(c => new TenantCapabilityDto
+            {
+                Code = c.Code,
+                Name = c.Name,
+                Description = c.Description,
+                SortOrder = c.SortOrder,
+                IsActive = c.IsActive
             })]
         };
     }

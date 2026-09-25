@@ -930,10 +930,16 @@ public sealed class TenantProvisioningServiceTests
         var zeta = new Tenant { Id = "ten_zeta", Name = "Zeta RV", Status = "Active", Plan = "location" };
         var alpha = new Tenant { Id = "ten_alpha", Name = "Alpha RV", Status = "Pilot", Plan = "mobile" };
         _tenantRepoMock.Setup(r => r.ListAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([zeta, alpha]);
-        _tenantConfigServiceMock.Setup(s => s.GetAccessGateAsync("ten_zeta", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TenantAccessGateEmbedded { LoginsEnabled = false });
-        _tenantConfigServiceMock.Setup(s => s.GetAccessGateAsync("ten_alpha", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TenantAccessGateEmbedded { LoginsEnabled = true });
+        _tenantConfigServiceMock.Setup(s => s.GetTenantConfigAsync("ten_zeta", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantConfig { Id = "ten_zeta_config", TenantId = "ten_zeta", AccessGate = new TenantAccessGateEmbedded { LoginsEnabled = false } });
+        _tenantConfigServiceMock.Setup(s => s.GetTenantConfigAsync("ten_alpha", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantConfig
+            {
+                Id = "ten_alpha_config",
+                TenantId = "ten_alpha",
+                AccessGate = new TenantAccessGateEmbedded { LoginsEnabled = true },
+                AvailableCapabilities = [new TenantCapabilityEmbedded { Code = "oil-change", Name = "Oil Change", SortOrder = 1, IsActive = true }]
+            });
         _locationServiceMock.Setup(s => s.ListByTenantAsync("ten_zeta", It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _locationServiceMock.Setup(s => s.ListByTenantAsync("ten_alpha", It.IsAny<CancellationToken>()))
@@ -944,6 +950,7 @@ public sealed class TenantProvisioningServiceTests
         result.Select(o => o.Tenant.Id).Should().Equal("ten_alpha", "ten_zeta");
         result[0].AccessGate.LoginsEnabled.Should().BeTrue();
         result[0].Locations.Should().ContainSingle();
+        result[0].AvailableCapabilities.Should().ContainSingle(c => c.Code == "oil-change");
         result[1].AccessGate.LoginsEnabled.Should().BeFalse();
     }
 
@@ -1002,8 +1009,21 @@ public sealed class TenantProvisioningServiceTests
         location.Slug.Should().Be("nova-st-george");
         location.Phone.Should().Be("(435) 555-0101");
         location.PacketConfig.Recipients.Should().Equal("svc@nova.example.com", "jay@nova.example.com");
+        location.EnabledCapabilities.Should().BeEmpty();
         location.CreatedByUserId.Should().Be(AdminUserId);
         VerifyLoggedContaining(TenantId, AdminUserId);
+    }
+
+    [Fact]
+    public async Task AddLocationAsync_WhenEnabledCapabilitiesGiven_ShouldPassThemThrough()
+    {
+        SetupExistingTenant();
+        _locationServiceMock.Setup(s => s.CreateAsync(TenantId, It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, Location l, CancellationToken _) => l);
+
+        var location = await _sut.AddLocationAsync(TenantId, ValidLocation() with { EnabledCapabilities = ["oil-change", "tire-rotation"] });
+
+        location.EnabledCapabilities.Should().Equal("oil-change", "tire-rotation");
     }
 
     [Fact]
@@ -1089,8 +1109,14 @@ public sealed class TenantProvisioningServiceTests
     {
         var tenant = BuildTenant();
         _tenantRepoMock.Setup(r => r.GetAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(tenant);
-        _tenantConfigServiceMock.Setup(s => s.GetAccessGateAsync(TenantId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TenantAccessGateEmbedded { LoginsEnabled = true });
+        _tenantConfigServiceMock.Setup(s => s.GetTenantConfigAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantConfig
+            {
+                Id = $"{TenantId}_config",
+                TenantId = TenantId,
+                AccessGate = new TenantAccessGateEmbedded { LoginsEnabled = true },
+                AvailableCapabilities = [new TenantCapabilityEmbedded { Code = "oil-change", Name = "Oil Change", SortOrder = 1, IsActive = true }]
+            });
         _locationServiceMock.Setup(s => s.ListByTenantAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([BuildFirstLocation()]);
         return tenant;

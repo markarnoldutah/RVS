@@ -76,9 +76,9 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         var overviews = new List<TenantOverview>(tenants.Count);
         foreach (var tenant in tenants.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var gate = await _tenantConfigService.GetAccessGateAsync(tenant.Id, cancellationToken);
+            var config = await _tenantConfigService.GetTenantConfigAsync(tenant.Id, cancellationToken);
             var locations = await _locationService.ListByTenantAsync(tenant.Id, cancellationToken);
-            overviews.Add(new TenantOverview(tenant, gate, locations));
+            overviews.Add(new TenantOverview(tenant, config.AccessGate, locations, config.AvailableCapabilities));
         }
 
         return overviews;
@@ -101,9 +101,9 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             "Platform admin {AdminUserId} updated tenant {TenantId}: status {Status}, plan {Plan}",
             _userContext.UserId, tenantId, saved.Status, saved.Plan);
 
-        var gate = await _tenantConfigService.GetAccessGateAsync(tenantId, cancellationToken);
+        var config = await _tenantConfigService.GetTenantConfigAsync(tenantId, cancellationToken);
         var locations = await _locationService.ListByTenantAsync(tenantId, cancellationToken);
-        return new TenantOverview(saved, gate, locations);
+        return new TenantOverview(saved, config.AccessGate, locations, config.AvailableCapabilities);
     }
 
     /// <inheritdoc />
@@ -422,7 +422,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             _userContext.UserId, request.LoginsEnabled ? "enabled" : "disabled", tenantId, reason ?? "none");
 
         var locations = await _locationService.ListByTenantAsync(tenantId, cancellationToken);
-        return new TenantOverview(tenant, config.AccessGate, locations);
+        return new TenantOverview(tenant, config.AccessGate, locations, config.AvailableCapabilities);
     }
 
     /// <inheritdoc />
@@ -442,6 +442,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             Slug = string.IsNullOrWhiteSpace(request.Slug) ? string.Empty : request.Slug.Trim(),
             Phone = TrimToNull(request.Phone),
             PacketConfig = new PacketConfigEmbedded { Recipients = [.. request.Recipients.Select(r => r.Trim())] },
+            EnabledCapabilities = request.EnabledCapabilities is not null ? [.. request.EnabledCapabilities] : [],
             CreatedByUserId = _userContext.UserId
         }, cancellationToken);
 
