@@ -471,6 +471,87 @@ public class ServiceRequestMapperTests
         dto.Disposition.Should().BeNull();
     }
 
+    // ── Packet generation (Spec B-1 / C-2, issue #443) ──────────────────────
+
+    [Fact]
+    public void ToDetailDto_WhenPacketNeverGenerated_ShouldMapPendingState()
+    {
+        var dto = new ServiceRequest { Priority = "Medium" }.ToDetailDto();
+
+        dto.PacketGeneration.Should().NotBeNull();
+        dto.PacketGeneration.Status.Should().Be("Pending");
+        dto.PacketGeneration.AttemptCount.Should().Be(0);
+        dto.PacketGeneration.MaxAttempts.Should().Be(PacketGenerationEmbedded.MaxAttempts);
+        dto.PacketGeneration.PacketVersion.Should().Be(0);
+        dto.PacketGeneration.GeneratedAtUtc.Should().BeNull();
+        dto.PacketGeneration.RetriesExhausted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenPacketSucceeded_ShouldMapVersionAndTimestamps()
+    {
+        var generatedAt = new DateTime(2026, 9, 20, 14, 30, 0, DateTimeKind.Utc);
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.PacketGeneration.MarkGenerating();
+        entity.PacketGeneration.MarkSucceeded("packets/sr_1/v1.pdf", generatedAt);
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketGeneration.Status.Should().Be("Succeeded");
+        dto.PacketGeneration.AttemptCount.Should().Be(1);
+        dto.PacketGeneration.PacketVersion.Should().Be(1);
+        dto.PacketGeneration.GeneratedAtUtc.Should().Be(generatedAt);
+        dto.PacketGeneration.LastAttemptAtUtc.Should().Be(entity.PacketGeneration.LastAttemptAtUtc);
+        dto.PacketGeneration.RetriesExhausted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenPacketFailedWithRetriesLeft_ShouldNotReportExhausted()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.PacketGeneration.MarkGenerating();
+        entity.PacketGeneration.MarkFailed("TimeoutException: render timed out");
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketGeneration.Status.Should().Be("Failed");
+        dto.PacketGeneration.AttemptCount.Should().Be(1);
+        dto.PacketGeneration.RetriesExhausted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenPacketFailedAfterMaxAttempts_ShouldReportExhausted()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+        for (var i = 0; i < PacketGenerationEmbedded.MaxAttempts; i++)
+        {
+            entity.PacketGeneration.MarkGenerating();
+            entity.PacketGeneration.MarkFailed("TimeoutException: render timed out");
+        }
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketGeneration.Status.Should().Be("Failed");
+        dto.PacketGeneration.AttemptCount.Should().Be(PacketGenerationEmbedded.MaxAttempts);
+        dto.PacketGeneration.RetriesExhausted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ToDetailDto_ShouldNotExposePacketErrorTextOrBlobPath()
+    {
+        // The error is an exception type + message and the blob path is storage layout —
+        // both internal. The manager app gets the state, not the internals.
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.PacketGeneration.MarkGenerating();
+        entity.PacketGeneration.MarkSucceeded("packets/sr_secret/v1.pdf", DateTime.UtcNow);
+        entity.PacketGeneration.MarkGenerating();
+        entity.PacketGeneration.MarkFailed("CosmosException: https://internal-host/failure");
+
+        var json = System.Text.Json.JsonSerializer.Serialize(entity.ToDetailDto());
+
+        json.Should().NotContain("internal-host").And.NotContain("sr_secret");
+    }
+
     [Fact]
     public void ToSummaryDto_WhenDisposed_ShouldCarryReasonCode()
     {

@@ -552,6 +552,34 @@
                                 }
                             </MudGrid>
                         }
+
+                        @* Service packet PDF — the latest good version (Spec C-2, issue #443). A real
+                           link when the read URL is pre-fetched, so the new tab opens inside the click
+                           (issue #699); otherwise fetch on click. *@
+                        @if (PacketStatusDisplay.HasPdf(_sr.PacketGeneration))
+                        {
+                            <MudDivider Class="my-5" />
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.PictureAsPdf" Color="Color.Primary" />
+                                @if (_packetPdfUrl is not null)
+                                {
+                                    <MudLink Href="@_packetPdfUrl" Target="_blank" rel="noopener noreferrer"
+                                             Typo="Typo.body2" Style="font-weight: 700;">
+                                        View service packet (PDF)
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    <MudLink Typo="Typo.body2" Style="font-weight: 700;"
+                                             OnClick="OpenPacketPdfInNewTabAsync">
+                                        View service packet (PDF)
+                                    </MudLink>
+                                }
+                                <MudText Typo="Typo.caption" Style="@IssueLabelStyle">
+                                    v@(_sr.PacketGeneration.PacketVersion)
+                                </MudText>
+                            </MudStack>
+                        }
                     </MudStack>
                 </MudItem>
 
@@ -646,6 +674,48 @@
                             }
                             <MudDivider Class="my-4" />
                         }
+
+                        @* Service packet — generation state and Regenerate (Spec C-2, issue #443) *@
+                        @{ var packet = _sr.PacketGeneration; }
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Packet</MudText>
+                            @if (_packetRegenerating)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                        </MudStack>
+                        <MudAlert Severity="@PacketStatusDisplay.GetSeverity(packet)" Dense="true">
+                            <strong>@PacketStatusDisplay.GetLabel(packet)</strong>
+                            @if (PacketStatusDisplay.IsFailedExhausted(packet))
+                            {
+                                <div>
+                                    Generation failed after @packet.AttemptCount attempts and will not retry
+                                    on its own. Regenerate to try again.
+                                </div>
+                            }
+                            @if (packet.PacketVersion > 0 && packet.GeneratedAtUtc is { } generatedAt)
+                            {
+                                <div>
+                                    @(packet.Status == "Succeeded" ? "Version" : "Last good version")
+                                    @packet.PacketVersion · @generatedAt.ToLocalTime().ToString("g")
+                                </div>
+                            }
+                        </MudAlert>
+                        @if (PacketStatusDisplay.CanRegenerate(packet))
+                        {
+                            <MudButton Variant="@(PacketStatusDisplay.IsFailedExhausted(packet) ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" Size="Size.Small" Class="mt-2"
+                                       StartIcon="@Icons.Material.Filled.Refresh"
+                                       OnClick="RegeneratePacketAsync"
+                                       Disabled="@_packetRegenerating">
+                                Regenerate packet
+                            </MudButton>
+                        }
+                        @if (_packetError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_packetError</MudAlert>
+                        }
+                        <MudDivider Class="my-4" />
 
                         @* Priority — the retired ServiceRequestEdit page was the only other editor (#713). *@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
@@ -1073,6 +1143,9 @@
     private string? _dispositionReason;
     private bool _dispositionSaving;
     private string? _dispositionError;
+    private bool _packetRegenerating;
+    private string? _packetError;
+    private string? _packetPdfUrl;
     private static readonly string[] _priorities = ["Critical", "High", "Medium", "Low"];
     private string? _selectedPriority;
     private bool _priorityUpdating;
@@ -1239,6 +1312,9 @@
         _statusError = null;
         _selectedStatus = null;
         CancelDisposition();
+        _packetRegenerating = false;
+        _packetError = null;
+        _packetPdfUrl = null;
         _priorityError = null;
         _selectedPriority = null;
 
@@ -1282,11 +1358,11 @@
             _loading = false;
         }
 
-        // Show the request first; thumbnails fill in when their read URLs arrive.
-        if (_sr is not null && _sr.Attachments.Count > 0)
+        // Show the request first; thumbnails and the packet link fill in when their read URLs arrive.
+        if (_sr is not null && (_sr.Attachments.Count > 0 || PacketStatusDisplay.HasPdf(_sr.PacketGeneration)))
         {
             StateHasChanged();
-            await LoadAttachmentUrlsAsync();
+            await Task.WhenAll(LoadAttachmentUrlsAsync(), LoadPacketPdfUrlAsync());
         }
     }
 
@@ -1380,6 +1456,35 @@
         finally
         {
             _statusUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Asks the API to regenerate the packet (Spec B-1 / C-2). The endpoint answers 202 with no
+    /// body, so the dialog reflects the Pending state the API has just stored rather than
+    /// re-fetching a request that is about to change again under the worker.
+    /// </summary>
+    private async Task RegeneratePacketAsync()
+    {
+        if (_sr is null || _dealershipId is null) return;
+
+        _packetRegenerating = true;
+        _packetError = null;
+        StateHasChanged();
+
+        try
+        {
+            await SrClient.RegeneratePacketAsync(_dealershipId, _sr.Id);
+            _sr = _sr with { PacketGeneration = PacketStatusDisplay.AsPendingRegeneration(_sr.PacketGeneration) };
+            Snackbar.Add("Packet regeneration queued.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _packetError = $"Could not regenerate the packet: {ex.Message}";
+        }
+        finally
+        {
+            _packetRegenerating = false;
         }
     }
 
@@ -1892,6 +1997,49 @@
         {
             if (url is not null) _attachmentUrls[id] = url;
         }
+    }
+
+    /// <summary>
+    /// Pre-fetches the packet PDF's read URL so the link at the bottom of the detail is a real
+    /// <c>target="_blank"</c> anchor (issue #443, same reasoning as #699). A failure leaves the
+    /// link on its click-to-fetch fallback.
+    /// </summary>
+    private async Task LoadPacketPdfUrlAsync()
+    {
+        _packetPdfUrl = null;
+
+        if (_dealershipId is null || _sr is null || !PacketStatusDisplay.HasPdf(_sr.PacketGeneration)) return;
+
+        var srId = _sr.Id;
+        try
+        {
+            var link = await SrClient.GetPacketPdfLinkAsync(_dealershipId, srId);
+
+            // The drawer may have moved on to another request while this was in flight.
+            if (_sr?.Id == srId) _packetPdfUrl = link.SasUrl;
+        }
+        catch (Exception)
+        {
+            // Fall back to fetch-on-click.
+        }
+    }
+
+    private async Task OpenPacketPdfInNewTabAsync()
+    {
+        if (_dealershipId is null || _sr is null) return;
+
+        try
+        {
+            var link = await SrClient.GetPacketPdfLinkAsync(_dealershipId, _sr.Id);
+            _packetPdfUrl = link.SasUrl;
+            await JS.InvokeVoidAsync("open", link.SasUrl, "_blank", "noopener");
+        }
+        catch (Exception ex)
+        {
+            _packetError = $"Could not open the packet: {ex.Message}";
+        }
+
+        StateHasChanged();
     }
 
     private string? ReadUrlFor(AttachmentDto attachment) =>

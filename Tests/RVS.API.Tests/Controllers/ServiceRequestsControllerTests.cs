@@ -105,6 +105,24 @@ public class ServiceRequestsControllerTests
     }
 
     [Fact]
+    public async Task GetPacketPdfLink_ShouldReturnOkWithLinkAndDelegateWithTenantFromClaims()
+    {
+        var link = new PacketPdfLinkDto
+        {
+            SasUrl = "https://blob/packet.pdf?sig=x",
+            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(15),
+            PacketVersion = 2
+        };
+        _serviceMock.Setup(s => s.GetPacketPdfLinkAsync(TenantId, "sr_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(link);
+
+        var result = await _sut.GetPacketPdfLink("dlr_1", "sr_1", CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().Be(link);
+    }
+
+    [Fact]
     public async Task SetStatusNote_WithValidNote_ShouldReturnOkAndDelegateWithTenantFromClaims()
     {
         var sr = BuildServiceRequest();

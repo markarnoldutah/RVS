@@ -171,4 +171,13 @@ public sealed class ServiceRequestService : IServiceRequestService
 
         return _packetGenerationService.RequestRegenerationAsync(tenantId, id, cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task<PacketPdfLinkDto> GetPacketPdfLinkAsync(string tenantId, string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        return _packetGenerationService.GetPdfLinkAsync(tenantId, id, cancellationToken);
+    }
 }

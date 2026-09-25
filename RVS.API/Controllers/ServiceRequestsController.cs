@@ -198,4 +198,22 @@ public class ServiceRequestsController : ControllerBase
 
         return Accepted();
     }
+
+    /// <summary>
+    /// Returns a short-lived read link to the request's latest generated packet PDF
+    /// (<c>Spec C-2</c>, issue #443). <c>404</c> when no packet has been generated yet.
+    /// </summary>
+    /// <param name="dealershipId">Dealership identifier (route segment).</param>
+    /// <param name="srId">Service request identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpGet("{srId}/packet/pdf")]
+    [Authorize(Policy = "CanReadServiceRequests")]
+    public async Task<ActionResult<PacketPdfLinkDto>> GetPacketPdfLink(string dealershipId, string srId, CancellationToken ct)
+    {
+        var tenantId = _claimsService.GetTenantIdOrThrow();
+
+        var link = await _service.GetPacketPdfLinkAsync(tenantId, srId, ct);
+
+        return Ok(link);
+    }
 }

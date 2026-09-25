@@ -64,6 +64,12 @@ public sealed record ServiceRequestDetailResponseDto
     /// </summary>
     public ServiceRequestDispositionDto? Disposition { get; init; }
 
+    /// <summary>
+    /// Service-packet generation state (<c>Spec B-1</c>) for the manager detail view
+    /// (<c>Spec C-2</c>, issue #443). Always present; <c>Pending</c> before the first attempt.
+    /// </summary>
+    public PacketGenerationDto PacketGeneration { get; init; } = new();
+
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
 }
@@ -93,4 +99,36 @@ public sealed record CustomerStatusNoteDto
 
     /// <summary>UTC time the note was last set or edited.</summary>
     public DateTime UpdatedAtUtc { get; init; }
+}
+
+/// <summary>
+/// A request's service-packet generation state (<c>Spec B-1</c>) as returned to the manager app
+/// (<c>Spec C-2</c>, issue #443). Carries the state only — the failure text and the PDF's blob
+/// path are internal and stay on the entity.
+/// </summary>
+public sealed record PacketGenerationDto
+{
+    /// <summary><c>Pending</c>, <c>Generating</c>, <c>Succeeded</c>, or <c>Failed</c>.</summary>
+    public string Status { get; init; } = "Pending";
+
+    /// <summary>Attempts made in the current run; reset to <c>0</c> by a regeneration.</summary>
+    public int AttemptCount { get; init; }
+
+    /// <summary>Attempts allowed before generation gives up and alerts.</summary>
+    public int MaxAttempts { get; init; }
+
+    /// <summary>
+    /// True when <see cref="Status"/> is <c>Failed</c> and every attempt has been used — the
+    /// worker will not retry, so only a manual regeneration will produce a packet.
+    /// </summary>
+    public bool RetriesExhausted { get; init; }
+
+    /// <summary>UTC time the most recent attempt started. Null before the first attempt.</summary>
+    public DateTime? LastAttemptAtUtc { get; init; }
+
+    /// <summary>UTC time of the most recent successful generation. Null until the first success.</summary>
+    public DateTime? GeneratedAtUtc { get; init; }
+
+    /// <summary>Version of the last good packet; <c>0</c> until the first success.</summary>
+    public int PacketVersion { get; init; }
 }

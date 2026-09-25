@@ -432,6 +432,42 @@ public class ServiceRequestServiceTests
             p => p.RequestRegenerationAsync("ten_1", "sr_42", It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // ── GetPacketPdfLinkAsync (Spec C-2, issue #443) ─────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetPacketPdfLinkAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.GetPacketPdfLinkAsync(tenantId!, "sr_1");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetPacketPdfLinkAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.GetPacketPdfLinkAsync("ten_1", id!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetPacketPdfLinkAsync_ShouldDelegateToPacketGenerationService()
+    {
+        var link = new PacketPdfLinkDto { SasUrl = "https://blob/p.pdf", PacketVersion = 1 };
+        _packetGenerationMock.Setup(p => p.GetPdfLinkAsync("ten_1", "sr_42", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(link);
+
+        var result = await _sut.GetPacketPdfLinkAsync("ten_1", "sr_42");
+
+        result.Should().Be(link);
+    }
+
     // ── SetCustomerStatusNoteAsync (Spec C-9) ────────────────────────────────
 
     [Theory]
