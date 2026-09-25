@@ -569,8 +569,8 @@ public class IntakeInviteServiceTests
     {
         await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
 
-        _sentEmailHtml.Should().Contain("contact Nova RV Hurricane directly at: (801) 555-0100");
-        _sentEmailText.Should().Contain("contact Nova RV Hurricane directly at: (801) 555-0100");
+        _sentEmailHtml.Should().Contain("contact Nova RV Hurricane directly at (801) 555-0100.");
+        _sentEmailText.Should().Contain("contact Nova RV Hurricane directly at (801) 555-0100.");
     }
 
     [Fact]

@@ -129,16 +129,30 @@ public class IntakeInviteContentTests
     [Fact]
     public void BuildEmailHtmlBody_ShouldSayWhoItIsFromAndWhy()
     {
-        // Issue #710: the customer asked for this during a call, so the email says so, says it
-        // comes from RV Intake on the dealer's behalf, and points questions back at the dealer.
+        // Issues #710 and #738: the customer asked for this during a call, so the email thanks them
+        // for it, says it comes from RV Intake on the dealer's behalf, and points questions back at
+        // the dealer.
         var html = IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: Phone);
 
-        html.Should().Contain("You've initiated a service request for your RV with <strong>Nova RV</strong>.");
-        html.Should().Contain("provide the service manager with important details about your issue");
-        html.Should().Contain("Start your service request</a> with Nova RV.");
+        html.Should().Contain("<p>Thank you for initiating a service request for your RV with Nova RV. " +
+            "Use the link below to provide the service manager with important details about your issue:</p>");
+        html.Should().Contain("Start your service request</a></p>");
         html.Should().Contain("You're receiving this email from RV Intake on behalf of Nova RV because you initiated a service request.");
         html.Should().Contain("This link will work once and expires in 72 hours.");
-        html.Should().Contain("If you have questions, please contact Nova RV directly at: (801) 555-0100");
+        html.Should().Contain("If you have questions, please contact Nova RV directly at (801) 555-0100.");
+    }
+
+    [Fact]
+    public void BuildEmailHtmlBody_ShouldCarryOnlyTheWordingInIssue738()
+    {
+        // #738 settled the whole body: no bolded dealer name, no trailing "with {dealer}" on the
+        // link, no paste-this-into-your-browser fallback.
+        var html = IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: Phone);
+
+        html.Should().NotContain("<strong>");
+        html.Should().NotContain("You've initiated");
+        html.Should().NotContain("paste this into your browser");
+        html.Should().NotContain("</a> with");
     }
 
     [Theory]
@@ -150,7 +164,7 @@ public class IntakeInviteContentTests
         var html = IntakeInviteContent.BuildEmailHtmlBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: phone);
 
         html.Should().Contain("If you have questions, please contact Nova RV directly.");
-        html.Should().NotContain("directly at:");
+        html.Should().NotContain("directly at");
     }
 
     [Fact]
@@ -166,10 +180,12 @@ public class IntakeInviteContentTests
     {
         var text = IntakeInviteContent.BuildEmailPlainTextBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: Phone);
 
-        text.Should().Contain("You've initiated a service request for your RV with Nova RV.");
+        text.Should().Contain("Thank you for initiating a service request for your RV with Nova RV. " +
+            "Use the link below to provide the service manager with important details about your issue:");
+        text.Should().Contain($"Start your service request: {Link}");
         text.Should().Contain("You're receiving this email from RV Intake on behalf of Nova RV because you initiated a service request.");
         text.Should().Contain("This link will work once and expires in 72 hours.");
-        text.Should().Contain("If you have questions, please contact Nova RV directly at: (801) 555-0100");
+        text.Should().Contain("If you have questions, please contact Nova RV directly at (801) 555-0100.");
     }
 
     [Fact]
@@ -178,7 +194,7 @@ public class IntakeInviteContentTests
         var text = IntakeInviteContent.BuildEmailPlainTextBody("Nova RV", "Jane", Link, expiryHours: 72, locationPhone: null);
 
         text.Should().Contain("If you have questions, please contact Nova RV directly.");
-        text.Should().NotContain("directly at:");
+        text.Should().NotContain("directly at");
     }
 
     [Theory]
