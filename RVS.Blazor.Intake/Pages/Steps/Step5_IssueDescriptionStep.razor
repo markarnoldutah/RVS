@@ -85,7 +85,7 @@
                                AnchorOrigin="Origin.BottomCenter"
                                TransformOrigin="Origin.TopCenter"
                                RelativeWidth="DropdownWidth.Adaptive">
-                        @foreach (var category in _categories)
+                        @foreach (var category in State.SelectableIssueCategories)
                         {
                             <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
                         }
@@ -180,7 +180,6 @@
 
     private MudForm _form = default!;
     private bool _submitted;
-    private List<LookupItemDto> _categories = [];
     private bool _isRecording;
     private bool _isTranscribing;
     private bool _isRefining;
@@ -192,17 +191,6 @@
     private RecordingTimer? _recordingTimer;
     private int _recordingElapsedSeconds;
     private string _recordingAnnouncement = string.Empty;
-
-    protected override void OnInitialized()
-    {
-        if (State.Config?.IssueCategories is { Count: > 0 } categories)
-        {
-            _categories = categories
-                .Where(c => c.IsSelectable)
-                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-    }
 
     private async Task ToggleRecording()
     {

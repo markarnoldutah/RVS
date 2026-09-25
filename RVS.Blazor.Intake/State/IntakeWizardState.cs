@@ -60,6 +60,19 @@ public sealed class IntakeWizardState
     /// <summary>Location configuration fetched from the API.</summary>
     public IntakeConfigResponseDto? Config { get; set; }
 
+    /// <summary>
+    /// The issue categories a customer can pick on Step 5, alphabetized by name (issue #740).
+    /// Derived from <see cref="Config"/> on every read, so the list fills in whenever the
+    /// config arrives. Empty until then.
+    /// </summary>
+    public IReadOnlyList<LookupItemDto> SelectableIssueCategories =>
+        Config?.IssueCategories is { Count: > 0 } categories
+            ? categories
+                .Where(c => c.IsSelectable)
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            : [];
+
     /// <summary>Customer contact information (Step 2).</summary>
     public string FirstName { get; set; } = string.Empty;
 
@@ -538,6 +551,38 @@ public sealed class IntakeWizardState
         {
             // Corrupted data — start fresh
             await ClearAsync();
+        }
+    }
+
+    /// <summary>
+    /// Re-fetches <see cref="Config"/> for a session restored past Step 1 (issue #740).
+    /// Config is not persisted, and Step 1 — the only step that fetches it — is not shown
+    /// again after a refresh, so without this Step 5 has no issue categories and Steps 6–7
+    /// lose the location phone and attachment limits. Prefills are not re-applied: what they
+    /// set was restored with the rest of the session. Best-effort — a failed fetch leaves
+    /// <see cref="Config"/> unset rather than blocking the wizard.
+    /// </summary>
+    public async Task EnsureConfigAsync(
+        Func<CancellationToken, Task<IntakeConfigResponseDto>> fetchConfig,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fetchConfig);
+
+        if (Config is not null || CurrentStep <= 1)
+        {
+            return;
+        }
+
+        try
+        {
+            Config = await fetchConfig(cancellationToken);
+            NotifyStateChanged();
+        }
+        catch (HttpRequestException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
         }
     }
 
