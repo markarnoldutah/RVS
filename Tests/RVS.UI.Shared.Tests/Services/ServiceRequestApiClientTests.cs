@@ -157,6 +157,90 @@ public class ServiceRequestApiClientTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    // ── RegeneratePacketAsync (Spec B-1 / C-2, issue #443) ──────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RegeneratePacketAsync_WhenAnyArgumentIsBlank_ShouldThrowArgumentException(string? blank)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        await sut.Invoking(c => c.RegeneratePacketAsync(blank!, "sr-1")).Should().ThrowAsync<ArgumentException>();
+        await sut.Invoking(c => c.RegeneratePacketAsync("dlr-1", blank!)).Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task RegeneratePacketAsync_ShouldPostToRegenerateRoute()
+    {
+        var handler = new CapturingHandler(HttpStatusCode.Accepted, new { });
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        await sut.RegeneratePacketAsync("dlr 1", "sr/1");
+
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
+        handler.LastRequest.RequestUri!.AbsolutePath
+            .Should().Be("/api/dealerships/dlr%201/service-requests/sr%2F1/packet/regenerate");
+    }
+
+    [Fact]
+    public async Task RegeneratePacketAsync_WhenApiReturns404_ShouldThrow()
+    {
+        var handler = new CapturingHandler(HttpStatusCode.NotFound, new { message = "not found" });
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.RegeneratePacketAsync("dlr-1", "sr-1");
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    // ── GetPacketPdfLinkAsync (Spec C-2, issue #443) ─────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetPacketPdfLinkAsync_WhenAnyArgumentIsBlank_ShouldThrowArgumentException(string? blank)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        await sut.Invoking(c => c.GetPacketPdfLinkAsync(blank!, "sr-1")).Should().ThrowAsync<ArgumentException>();
+        await sut.Invoking(c => c.GetPacketPdfLinkAsync("dlr-1", blank!)).Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetPacketPdfLinkAsync_ShouldGetPdfRoute_AndDeserializeLink()
+    {
+        var expected = new PacketPdfLinkDto
+        {
+            SasUrl = "https://blob/v2.pdf?sig=abc",
+            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(15),
+            PacketVersion = 2
+        };
+        var handler = new CapturingHandler(HttpStatusCode.OK, expected);
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var result = await sut.GetPacketPdfLinkAsync("dlr 1", "sr/1");
+
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Get);
+        handler.LastRequest.RequestUri!.AbsolutePath
+            .Should().Be("/api/dealerships/dlr%201/service-requests/sr%2F1/packet/pdf");
+        result.SasUrl.Should().Be("https://blob/v2.pdf?sig=abc");
+        result.PacketVersion.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetPacketPdfLinkAsync_WhenApiReturns404_ShouldThrow()
+    {
+        var handler = new CapturingHandler(HttpStatusCode.NotFound, new { message = "not found" });
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.GetPacketPdfLinkAsync("dlr-1", "sr-1");
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
     private sealed class CapturingHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _statusCode;

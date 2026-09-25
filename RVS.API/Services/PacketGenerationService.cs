@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using RVS.API.Options;
 using RVS.API.Packets;
+using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
@@ -25,6 +26,12 @@ public sealed class PacketGenerationService : IPacketGenerationService
 {
     /// <summary>Blob container holding service-request attachments and generated packet PDFs.</summary>
     private const string AttachmentsContainer = "rvs-attachments";
+
+    /// <summary>
+    /// Lifetime of the manager app's packet PDF link (issue #443). The detail dialog pre-fetches
+    /// it on load, so it matches the 1-hour attachment read links shown alongside it.
+    /// </summary>
+    private static readonly TimeSpan PdfLinkLifetime = TimeSpan.FromHours(1);
 
     /// <summary>Event id for the exhausted-retries alert (<c>Spec B-1</c>).</summary>
     private static readonly EventId PacketGenerationExhausted = new(434_001, nameof(PacketGenerationExhausted));
@@ -228,6 +235,32 @@ public sealed class PacketGenerationService : IPacketGenerationService
                 "Packet regeneration for SR {ServiceRequestId} could not be enqueued; it stays Pending and will need another regenerate request",
                 request.Id);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<PacketPdfLinkDto> GetPdfLinkAsync(string tenantId, string serviceRequestId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+
+        var request = await _serviceRequestRepository.GetByIdAsync(tenantId, serviceRequestId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Service request '{serviceRequestId}' not found.");
+
+        var packet = request.PacketGeneration;
+        if (packet.PacketVersion == 0 || string.IsNullOrEmpty(packet.PdfBlobPath))
+        {
+            throw new KeyNotFoundException($"No packet has been generated for service request '{serviceRequestId}' yet.");
+        }
+
+        var sasUrl = await _blobStorage.GenerateReadSasUrlAsync(
+            AttachmentsContainer, packet.PdfBlobPath, PdfLinkLifetime, cancellationToken);
+
+        return new PacketPdfLinkDto
+        {
+            SasUrl = sasUrl,
+            ExpiresAtUtc = DateTime.UtcNow.Add(PdfLinkLifetime),
+            PacketVersion = packet.PacketVersion
+        };
     }
 
     /// <summary>

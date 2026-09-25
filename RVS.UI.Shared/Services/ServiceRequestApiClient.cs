@@ -158,6 +158,44 @@ public sealed class ServiceRequestApiClient
     }
 
     /// <summary>
+    /// Regenerates the request's service packet (<c>Spec B-1</c>, issue #434). The API resets
+    /// packet generation to <c>Pending</c>, enqueues a fresh job, and answers <c>202 Accepted</c>
+    /// with no body — generation runs in the background.
+    /// </summary>
+    public async Task RegeneratePacketAsync(
+        string dealershipId,
+        string serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+
+        var response = await _httpClient.PostAsync(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/packet/regenerate",
+            content: null,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>
+    /// Gets a short-lived read link to the request's latest generated packet PDF
+    /// (<c>Spec C-2</c>, issue #443). The API answers <c>404</c> when no packet exists yet.
+    /// </summary>
+    public async Task<PacketPdfLinkDto> GetPacketPdfLinkAsync(
+        string dealershipId,
+        string serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+
+        return await _httpClient.GetFromJsonAsync<PacketPdfLinkDto>(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/packet/pdf",
+            cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize packet PDF link response.");
+    }
+
+    /// <summary>
     /// Deletes a service request.
     /// </summary>
     public async Task DeleteAsync(

@@ -1,3 +1,5 @@
+using RVS.Domain.DTOs;
+
 namespace RVS.Domain.Interfaces;
 
 /// <summary>
@@ -48,4 +50,13 @@ public interface IPacketGenerationService
     /// <exception cref="ArgumentException"><paramref name="tenantId"/> or <paramref name="serviceRequestId"/> is null/whitespace.</exception>
     /// <exception cref="KeyNotFoundException">No service request exists with that id in the tenant.</exception>
     Task RequestRegenerationAsync(string tenantId, string serviceRequestId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Issues a short-lived read link to the request's latest successfully generated packet PDF
+    /// (<c>Spec C-2</c>, issue #443). A failed or in-flight regeneration still links the last
+    /// good version.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="tenantId"/> or <paramref name="serviceRequestId"/> is null/whitespace.</exception>
+    /// <exception cref="KeyNotFoundException">No such request, or no packet has been generated for it yet.</exception>
+    Task<PacketPdfLinkDto> GetPdfLinkAsync(string tenantId, string serviceRequestId, CancellationToken cancellationToken = default);
 }

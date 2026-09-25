@@ -58,8 +58,31 @@ public static class ServiceRequestMapper
                     DisposedAtUtc = disposition.DisposedAtUtc
                 }
                 : null,
+            PacketGeneration = entity.PacketGeneration.ToDto(),
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
+        };
+    }
+
+    /// <summary>
+    /// Maps packet-generation state to a <see cref="PacketGenerationDto"/> (<c>Spec C-2</c>,
+    /// issue #443). <see cref="PacketGenerationEmbedded.LastError"/> and
+    /// <see cref="PacketGenerationEmbedded.PdfBlobPath"/> are deliberately not carried.
+    /// </summary>
+    public static PacketGenerationDto ToDto(this PacketGenerationEmbedded packet)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        return new PacketGenerationDto
+        {
+            Status = packet.Status,
+            AttemptCount = packet.AttemptCount,
+            MaxAttempts = PacketGenerationEmbedded.MaxAttempts,
+            RetriesExhausted = packet.Status == "Failed"
+                && packet.AttemptCount >= PacketGenerationEmbedded.MaxAttempts,
+            LastAttemptAtUtc = packet.LastAttemptAtUtc,
+            GeneratedAtUtc = packet.GeneratedAtUtc,
+            PacketVersion = packet.PacketVersion
         };
     }
 

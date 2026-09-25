@@ -991,6 +991,83 @@ public class PacketGenerationServiceTests
             Times.Once);
     }
 
+    // ── GetPdfLinkAsync (Spec C-2, issue #443) ─────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetPdfLinkAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.GetPdfLinkAsync(tenantId!, SrId);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetPdfLinkAsync_WhenRequestNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _srRepoMock.Setup(r => r.GetByIdAsync(TenantId, SrId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest?)null);
+
+        var act = () => _sut.GetPdfLinkAsync(TenantId, SrId);
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task GetPdfLinkAsync_WhenNoPacketGeneratedYet_ShouldThrowKeyNotFoundException()
+    {
+        SetupRequest(BuildRequest());
+
+        var act = () => _sut.GetPdfLinkAsync(TenantId, SrId);
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+        _blobMock.Verify(b => b.GenerateReadSasUrlAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetPdfLinkAsync_WhenPacketExists_ShouldSignTheLatestPdfForReading()
+    {
+        var sr = BuildRequest();
+        sr.PacketGeneration.MarkGenerating();
+        sr.PacketGeneration.MarkSucceeded($"packets/{TenantId}/{SrId}/v1.pdf", DateTime.UtcNow);
+        sr.PacketGeneration.MarkGenerating();
+        sr.PacketGeneration.MarkSucceeded($"packets/{TenantId}/{SrId}/v2.pdf", DateTime.UtcNow);
+        SetupRequest(sr);
+        _blobMock.Setup(b => b.GenerateReadSasUrlAsync(
+                AttachmentsContainer, $"packets/{TenantId}/{SrId}/v2.pdf", It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("https://blob/v2.pdf?sig=abc");
+
+        var before = DateTime.UtcNow;
+        var link = await _sut.GetPdfLinkAsync(TenantId, SrId);
+
+        link.SasUrl.Should().Be("https://blob/v2.pdf?sig=abc");
+        link.PacketVersion.Should().Be(2);
+        link.ExpiresAtUtc.Should().BeAfter(before);
+    }
+
+    [Fact]
+    public async Task GetPdfLinkAsync_AfterAFailedRegeneration_ShouldStillLinkTheLastGoodPdf()
+    {
+        var sr = BuildRequest();
+        sr.PacketGeneration.MarkGenerating();
+        sr.PacketGeneration.MarkSucceeded($"packets/{TenantId}/{SrId}/v1.pdf", DateTime.UtcNow);
+        sr.PacketGeneration.ResetForRegeneration();
+        sr.PacketGeneration.MarkGenerating();
+        sr.PacketGeneration.MarkFailed("boom");
+        SetupRequest(sr);
+        _blobMock.Setup(b => b.GenerateReadSasUrlAsync(
+                AttachmentsContainer, $"packets/{TenantId}/{SrId}/v1.pdf", It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("https://blob/v1.pdf?sig=abc");
+
+        var link = await _sut.GetPdfLinkAsync(TenantId, SrId);
+
+        link.SasUrl.Should().Be("https://blob/v1.pdf?sig=abc");
+        link.PacketVersion.Should().Be(1);
+    }
+
     // ── Email size budget (Spec B-4, issue #521) ───────────────────────────
     //
     // ACS rejects a send whose whole request exceeds 10 MB with attachments base64 encoded.

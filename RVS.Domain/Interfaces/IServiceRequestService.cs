@@ -109,4 +109,14 @@ public interface IServiceRequestService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
     Task RegeneratePacketAsync(string tenantId, string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns a short-lived read link to the request's latest generated packet PDF
+    /// (<c>Spec C-2</c>, issue #443).
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the request is not found or has no packet yet.</exception>
+    Task<PacketPdfLinkDto> GetPacketPdfLinkAsync(string tenantId, string id, CancellationToken cancellationToken = default);
 }

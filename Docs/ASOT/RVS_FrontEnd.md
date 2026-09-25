@@ -107,7 +107,7 @@ Deleting these is the front-end half of aligning the code to the Overview.
 
 Packet work is mostly server-side, but three front-end items fall out of it:
 
-1. A packet preview in the manager detail view (C-2).
+1. The packet in the manager detail view (C-2) — **done** (#443): the dialog shows generation state, offers Regenerate (`PacketStatusDisplay`), and links the latest packet PDF at the bottom of the detail, opened in a new tab. There is no inline preview.
 2. A resend control, to configured recipients or an ad-hoc address (C-5).
 3. Per-location packet settings in `Locations` — recipients, attach-PDF, include-photos, paste-block cap, status-link TTL, logo (B-6, C-6).
 
