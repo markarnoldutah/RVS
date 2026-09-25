@@ -100,7 +100,8 @@ public class TenantProvisioningMapperTests
         var overview = new TenantOverview(
             BuildTenant(),
             new TenantAccessGateEmbedded { LoginsEnabled = false, DisabledReason = "PastDue", DisabledAtUtc = disabledAt },
-            [new Location { Id = "loc_nova_1", TenantId = "ten_nova", Name = "Hurricane", Slug = "nova-hurricane" }]);
+            [new Location { Id = "loc_nova_1", TenantId = "ten_nova", Name = "Hurricane", Slug = "nova-hurricane", EnabledCapabilities = ["oil-change"] }],
+            [new TenantCapabilityEmbedded { Code = "oil-change", Name = "Oil Change", SortOrder = 1, IsActive = true }]);
 
         var dto = overview.ToSummaryDto(IntakeBaseUrl);
 
@@ -117,6 +118,10 @@ public class TenantProvisioningMapperTests
         dto.Locations[0].LocationId.Should().Be("loc_nova_1");
         dto.Locations[0].Name.Should().Be("Hurricane");
         dto.Locations[0].Slug.Should().Be("nova-hurricane");
+        dto.Locations[0].EnabledCapabilities.Should().Equal("oil-change");
+        dto.AvailableCapabilities.Should().ContainSingle();
+        dto.AvailableCapabilities[0].Code.Should().Be("oil-change");
+        dto.AvailableCapabilities[0].Name.Should().Be("Oil Change");
         dto.Locations[0].IntakeUrl.Should().Be("https://rvintake.com/nova-hurricane");
     }
 

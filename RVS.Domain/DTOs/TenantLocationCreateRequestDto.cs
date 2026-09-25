@@ -14,4 +14,10 @@ public sealed record TenantLocationCreateRequestDto
 
     /// <summary>1–10 packet-email recipients.</summary>
     public List<string> Recipients { get; init; } = [];
+
+    /// <summary>
+    /// Capability codes (from the tenant's available capabilities) enabled for this location.
+    /// Omit or pass null to leave the location with no capabilities enabled (issue #757).
+    /// </summary>
+    public List<string>? EnabledCapabilities { get; init; }
 }

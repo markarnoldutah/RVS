@@ -18,6 +18,10 @@ public sealed record TenantSummaryResponseDto
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
     public List<TenantLocationSummaryDto> Locations { get; init; } = [];
+
+    /// <summary>The tenant's master list of service capabilities (issue #757), for rendering the
+    /// per-location capability checkboxes in the admin tool.</summary>
+    public List<TenantCapabilityDto> AvailableCapabilities { get; init; } = [];
 }
 
 /// <summary>A location as shown in the platform-admin tenant list.</summary>
@@ -30,4 +34,7 @@ public sealed record TenantLocationSummaryDto
     /// <summary>Public intake link to hand out, e.g. <c>https://go.rvintake.com/{slug}</c> — the
     /// channel-tagging redirect (<c>Spec A-13</c>), not the intake app directly.</summary>
     public string IntakeUrl { get; init; } = string.Empty;
+
+    /// <summary>Capability codes enabled for this location (issue #757).</summary>
+    public List<string> EnabledCapabilities { get; init; } = [];
 }

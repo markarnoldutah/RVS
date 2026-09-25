@@ -54,6 +54,23 @@ else
                                   Lines="4" Variant="Variant.Outlined"
                                   HelperText="One email per line, 1 to 10." />
 
+                    @if (_tenantCapabilities.Count > 0)
+                    {
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.subtitle2">Service capabilities</MudText>
+                            @foreach (var cap in _tenantCapabilities.Where(c => c.IsActive))
+                            {
+                                var code = cap.Code;
+                                <MudCheckBox T="bool"
+                                             Value="@_form.EnabledCapabilities.Contains(code)"
+                                             ValueChanged="@(v => ToggleCapability(code, v))"
+                                             Label="@cap.Name"
+                                             Color="Color.Primary"
+                                             Dense="true" />
+                            }
+                        </MudStack>
+                    }
+
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
                                OnClick="SubmitAsync" Disabled="_saving">
                         @if (_saving)
@@ -72,10 +89,43 @@ else
     [Parameter] public string TenantId { get; set; } = string.Empty;
 
     private LocationForm _form = new();
+    private List<TenantCapabilityDto> _tenantCapabilities = [];
     private TenantLocationProvisioningResponseDto? _result;
     private bool _saving;
     private bool _forbidden;
     private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var tenants = await AdminApi.ListTenantsAsync();
+            _tenantCapabilities = tenants.FirstOrDefault(t => t.TenantId == TenantId)?.AvailableCapabilities ?? [];
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (AdminApiException ex) when (ex.IsForbidden)
+        {
+            _forbidden = true;
+        }
+    }
+
+    private void ToggleCapability(string code, bool enabled)
+    {
+        if (enabled)
+        {
+            if (!_form.EnabledCapabilities.Contains(code))
+            {
+                _form.EnabledCapabilities.Add(code);
+            }
+        }
+        else
+        {
+            _form.EnabledCapabilities.Remove(code);
+        }
+    }
 
     private async Task SubmitAsync()
     {
@@ -90,7 +140,8 @@ else
                 Slug = _form.Slug,
                 Phone = _form.Phone,
                 Recipients = [.. (_form.Recipients ?? string.Empty)
-                    .Split(['\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)]
+                    .Split(['\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)],
+                EnabledCapabilities = [.. _form.EnabledCapabilities]
             });
         }
         catch (AccessTokenNotAvailableException ex)
@@ -124,5 +175,6 @@ else
         public string? Slug { get; set; }
         public string? Phone { get; set; }
         public string? Recipients { get; set; }
+        public List<string> EnabledCapabilities { get; set; } = [];
     }
 }
