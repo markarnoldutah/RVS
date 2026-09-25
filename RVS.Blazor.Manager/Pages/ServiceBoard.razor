@@ -266,7 +266,17 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _dealershipId = await ResolveDealershipIdAsync();
+        try
+        {
+            _dealershipId = await ResolveDealershipIdAsync();
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            // A packet-email link opened in a fresh tab on a device that doesn't keep the sign-in
+            // (issue #753): send the user to sign in, then back here with ?sr= intact.
+            ex.Redirect();
+            return;
+        }
 
         AppState.OnLocationChanged += HandleLocationChangedAsync;
         ThemeService.OnThemeChanged += HandleThemeChanged;
