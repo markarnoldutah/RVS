@@ -2,6 +2,7 @@ using RVS.API.Mappers;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Services;
 
@@ -69,6 +70,17 @@ public sealed class DealershipService : IDealershipService
             ?? throw new KeyNotFoundException($"Dealership '{id}' not found.");
 
         existing.ApplyUpdate(request, _userContext.UserId);
+
+        // Only a config the caller sent is checked, so a record still carrying a pre-#777 cap
+        // can be renamed without first being corrected.
+        if (request.IntakeConfig is not null)
+        {
+            var result = IntakeConfigValidator.Validate(existing.IntakeConfig);
+            if (!result.IsValid)
+            {
+                throw new ArgumentException(result.ErrorMessage, nameof(request));
+            }
+        }
 
         return await _repository.UpdateAsync(existing, cancellationToken);
     }

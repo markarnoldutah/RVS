@@ -15,6 +15,7 @@ public class AttachmentServiceTests
     private readonly Mock<IBlobStorageService> _blobMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
     private readonly Mock<IImageTranscoder> _transcoderMock = new();
+    private readonly Mock<ILocationRepository> _locationRepoMock = new();
     private readonly AttachmentService _sut;
 
     public AttachmentServiceTests()
@@ -26,6 +27,7 @@ public class AttachmentServiceTests
             _blobMock.Object,
             _userContextMock.Object,
             _transcoderMock.Object,
+            _locationRepoMock.Object,
             Mock.Of<ILogger<AttachmentService>>());
     }
 
@@ -87,24 +89,60 @@ public class AttachmentServiceTests
     }
 
     [Fact]
-    public async Task GenerateUploadSasAsync_WhenMaxAttachmentsExceeded_ShouldThrowArgumentException()
+    public async Task GenerateUploadSasAsync_WhenFiveAttachmentsAndNoLocationConfig_ShouldRejectSixth()
     {
-        var sr = BuildServiceRequest();
-        for (var i = 0; i < 10; i++)
-        {
-            sr.Attachments.Add(new ServiceRequestAttachmentEmbedded
-            {
-                FileName = $"file{i}.jpg",
-                ContentType = "image/jpeg"
-            });
-        }
+        var sr = BuildServiceRequestWithAttachments(5);
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(sr);
 
-        var act = () => _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg", maxAttachments: 10);
+        var act = () => _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg");
 
         await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*Maximum of 10*");
+            .WithMessage("*Maximum of 5*");
+    }
+
+    [Fact]
+    public async Task GenerateUploadSasAsync_WhenLocationCapIsThreeAndThreeAttached_ShouldThrowArgumentException()
+    {
+        var sr = BuildServiceRequestWithAttachments(3);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        SetupLocationCap(sr.LocationId, 3);
+
+        var act = () => _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg");
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Maximum of 3*");
+        _blobMock.Verify(b => b.GenerateUploadSasUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateUploadSasAsync_WhenLocationCapIsThreeAndTwoAttached_ShouldIssueSas()
+    {
+        var sr = BuildServiceRequestWithAttachments(2);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        SetupLocationCap(sr.LocationId, 3);
+        _blobMock.Setup(b => b.GenerateUploadSasUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("https://blob/sas");
+
+        var result = await _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg");
+
+        result.SasUrl.Should().Be("https://blob/sas");
+    }
+
+    [Fact]
+    public async Task GenerateUploadSasAsync_WhenStoredLocationCapIsAboveFive_ShouldStillRejectSixth()
+    {
+        var sr = BuildServiceRequestWithAttachments(5);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        SetupLocationCap(sr.LocationId, 10);
+
+        var act = () => _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg");
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Maximum of 5*");
     }
 
     [Fact]
@@ -265,25 +303,33 @@ public class AttachmentServiceTests
     }
 
     [Fact]
-    public async Task ConfirmAttachmentAsync_WhenMaxAttachmentsExceeded_ShouldThrowArgumentException()
+    public async Task ConfirmAttachmentAsync_WhenFiveAttachmentsAndNoLocationConfig_ShouldRejectSixth()
     {
-        var sr = BuildServiceRequest();
-        for (var i = 0; i < 10; i++)
-        {
-            sr.Attachments.Add(new ServiceRequestAttachmentEmbedded
-            {
-                FileName = $"file{i}.jpg",
-                ContentType = "image/jpeg"
-            });
-        }
+        var sr = BuildServiceRequestWithAttachments(5);
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(sr);
 
         var request = BuildConfirmRequest();
-        var act = () => _sut.ConfirmAttachmentAsync("ten_1", sr.Id, request, maxAttachments: 10);
+        var act = () => _sut.ConfirmAttachmentAsync("ten_1", sr.Id, request);
 
         await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*Maximum of 10*");
+            .WithMessage("*Maximum of 5*");
+    }
+
+    [Fact]
+    public async Task ConfirmAttachmentAsync_WhenLocationCapIsThreeAndThreeAttached_ShouldThrowArgumentException()
+    {
+        var sr = BuildServiceRequestWithAttachments(3);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        SetupLocationCap(sr.LocationId, 3);
+
+        var request = BuildConfirmRequest();
+        var act = () => _sut.ConfirmAttachmentAsync("ten_1", sr.Id, request);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Maximum of 3*");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -563,4 +609,28 @@ public class AttachmentServiceTests
         IssueCategory = "Test",
         Priority = "High"
     };
+
+    private static ServiceRequest BuildServiceRequestWithAttachments(int count)
+    {
+        var sr = BuildServiceRequest();
+        for (var i = 0; i < count; i++)
+        {
+            sr.Attachments.Add(new ServiceRequestAttachmentEmbedded
+            {
+                FileName = $"file{i}.jpg",
+                ContentType = "image/jpeg"
+            });
+        }
+
+        return sr;
+    }
+
+    private void SetupLocationCap(string locationId, int maxAttachments) =>
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", locationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = locationId,
+                TenantId = "ten_1",
+                IntakeConfig = new IntakeFormConfigEmbedded { MaxAttachments = maxAttachments },
+            });
 }

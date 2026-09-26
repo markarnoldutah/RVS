@@ -33,7 +33,7 @@ public class AttachmentsControllerTests
             BlobName = "ten_test/sr_1/guid_photo.jpg",
             ExpiresAtUtc = DateTime.UtcNow.AddMinutes(15)
         };
-        _serviceMock.Setup(s => s.GenerateUploadSasAsync(TenantId, "sr_1", "photo.jpg", "image/jpeg", 10, It.IsAny<CancellationToken>()))
+        _serviceMock.Setup(s => s.GenerateUploadSasAsync(TenantId, "sr_1", "photo.jpg", "image/jpeg", It.IsAny<CancellationToken>()))
             .ReturnsAsync(sasResponse);
 
         var result = await _sut.GetUploadSas("dlr_1", "sr_1", "photo.jpg", "image/jpeg", CancellationToken.None);
@@ -62,7 +62,7 @@ public class AttachmentsControllerTests
             ContentType = "image/jpeg",
             SizeBytes = 1024
         };
-        _serviceMock.Setup(s => s.ConfirmAttachmentAsync(TenantId, "sr_1", request, 10, It.IsAny<CancellationToken>()))
+        _serviceMock.Setup(s => s.ConfirmAttachmentAsync(TenantId, "sr_1", request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(attachmentDto);
 
         var result = await _sut.ConfirmUpload("dlr_1", "sr_1", request, CancellationToken.None);

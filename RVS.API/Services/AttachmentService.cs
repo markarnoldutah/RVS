@@ -3,6 +3,7 @@ using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Services;
 
@@ -16,6 +17,7 @@ public sealed class AttachmentService : IAttachmentService
     private readonly IBlobStorageService _blobStorage;
     private readonly IUserContextAccessor _userContext;
     private readonly IImageTranscoder _imageTranscoder;
+    private readonly ILocationRepository _locationRepository;
     private readonly ILogger<AttachmentService> _logger;
 
     private static readonly TimeSpan UploadSasDuration = TimeSpan.FromMinutes(15);
@@ -52,12 +54,14 @@ public sealed class AttachmentService : IAttachmentService
         IBlobStorageService blobStorage,
         IUserContextAccessor userContext,
         IImageTranscoder imageTranscoder,
+        ILocationRepository locationRepository,
         ILogger<AttachmentService> logger)
     {
         _repository = repository;
         _blobStorage = blobStorage;
         _userContext = userContext;
         _imageTranscoder = imageTranscoder;
+        _locationRepository = locationRepository;
         _logger = logger;
     }
 
@@ -67,7 +71,6 @@ public sealed class AttachmentService : IAttachmentService
         string serviceRequestId,
         string fileName,
         string contentType,
-        int maxAttachments = 10,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
@@ -78,10 +81,7 @@ public sealed class AttachmentService : IAttachmentService
         var sr = await _repository.GetByIdAsync(tenantId, serviceRequestId, cancellationToken)
             ?? throw new KeyNotFoundException($"Service request '{serviceRequestId}' not found.");
 
-        if (sr.Attachments.Count >= maxAttachments)
-        {
-            throw new ArgumentException($"Maximum of {maxAttachments} attachments per service request exceeded.");
-        }
+        await EnsureBelowAttachmentCapAsync(sr, cancellationToken);
 
         if (!AllowedMimeTypes.Contains(contentType))
         {
@@ -130,7 +130,6 @@ public sealed class AttachmentService : IAttachmentService
         string tenantId,
         string serviceRequestId,
         AttachmentConfirmRequestDto request,
-        int maxAttachments = 10,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
@@ -140,10 +139,7 @@ public sealed class AttachmentService : IAttachmentService
         var sr = await _repository.GetByIdAsync(tenantId, serviceRequestId, cancellationToken)
             ?? throw new KeyNotFoundException($"Service request '{serviceRequestId}' not found.");
 
-        if (sr.Attachments.Count >= maxAttachments)
-        {
-            throw new ArgumentException($"Maximum of {maxAttachments} attachments per service request exceeded.");
-        }
+        await EnsureBelowAttachmentCapAsync(sr, cancellationToken);
 
         if (!AllowedMimeTypes.Contains(request.ContentType))
         {
@@ -292,5 +288,25 @@ public sealed class AttachmentService : IAttachmentService
             serviceRequestId, fileName, normalizedFileName, result.ContentType, result.Width, result.Height, result.Bytes.Length, sizeBytes);
 
         return (normalizedBlobName, normalizedFileName, result.ContentType, result.Bytes.Length);
+    }
+
+    /// <summary>
+    /// Rejects one more attachment once the request holds as many as its location allows
+    /// (<c>Spec A-6</c>, issue #777). The cap is read here rather than passed in, so no caller —
+    /// the intake app, the manager, or a scripted client — can skip it; a missing location or a
+    /// stored cap above the platform maximum is held to that maximum.
+    /// </summary>
+    private async Task EnsureBelowAttachmentCapAsync(ServiceRequest sr, CancellationToken cancellationToken)
+    {
+        var location = string.IsNullOrWhiteSpace(sr.LocationId)
+            ? null
+            : await _locationRepository.GetByIdAsync(sr.TenantId, sr.LocationId, cancellationToken);
+
+        var maxAttachments = IntakeConfigValidator.EffectiveAttachmentCap(location?.IntakeConfig.MaxAttachments);
+
+        if (sr.Attachments.Count >= maxAttachments)
+        {
+            throw new ArgumentException($"Maximum of {maxAttachments} attachments per service request exceeded.");
+        }
     }
 }

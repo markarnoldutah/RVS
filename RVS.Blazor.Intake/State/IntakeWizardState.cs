@@ -16,7 +16,6 @@ public sealed class IntakeWizardState
     private const string StorageKey = "rvs_intake_wizard_state";
     private const int TotalStepCount = 8;
     private const int MaxDescriptionLength = 2000;
-    private const int MaxAttachments = 10;
 
     private readonly IJSRuntime _jsRuntime;
 
@@ -68,6 +67,13 @@ public sealed class IntakeWizardState
 
     /// <summary>Location configuration fetched from the API.</summary>
     public IntakeConfigResponseDto? Config { get; set; }
+
+    /// <summary>
+    /// Attachment cap for this intake (<c>Spec A-6</c>): the location's configured value, held to
+    /// the platform maximum of five and falling back to it while <see cref="Config"/> is unset.
+    /// Same rule the API enforces on upload, so the wizard never offers a slot the server refuses.
+    /// </summary>
+    public int MaxAttachments => IntakeConfigValidator.EffectiveAttachmentCap(Config?.MaxAttachments);
 
     /// <summary>
     /// The issue categories a customer can pick on Step 5, alphabetized by name (issue #740).
