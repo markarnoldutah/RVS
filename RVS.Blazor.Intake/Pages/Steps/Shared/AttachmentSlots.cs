@@ -1,8 +1,11 @@
+using MudBlazor;
+
 namespace RVS.Blazor.Intake.Pages.Steps.Shared;
 
 /// <summary>
-/// Pure presentation helpers for the Step 7 attachment list (issue #758): how many more files the
-/// customer can add, said in the drop zone, and the thumbnail shown in place of a bare file name.
+/// Pure presentation helpers for the attachment lists on Step 7 (issue #758) and the Step 8
+/// summary (issue #768): how many more files the customer can add, said in the drop zone, and the
+/// thumbnail — or icon — shown in place of a bare file name.
 /// </summary>
 public static class AttachmentSlots
 {
@@ -57,5 +60,18 @@ public static class AttachmentSlots
         ArgumentNullException.ThrowIfNull(bytes);
 
         return $"data:{contentType};base64,{Convert.ToBase64String(bytes)}";
+    }
+
+    /// <summary>
+    /// The icon drawn in place of a thumbnail — for a video, a PDF, a HEIC, or an image the
+    /// browser could not resize.
+    /// </summary>
+    public static string FileIcon(string contentType)
+    {
+        ArgumentNullException.ThrowIfNull(contentType);
+
+        if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return Icons.Material.Filled.Image;
+        if (contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase)) return Icons.Material.Filled.VideoFile;
+        return Icons.Material.Filled.InsertDriveFile;
     }
 }

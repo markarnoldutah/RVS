@@ -1,4 +1,5 @@
 using FluentAssertions;
+using MudBlazor;
 using RVS.Blazor.Intake.Pages.Steps.Shared;
 
 namespace RVS.UI.Shared.Tests.Pages.Steps;
@@ -94,5 +95,37 @@ public class AttachmentSlotsTests
         var act = () => AttachmentSlots.ThumbnailDataUrl(contentType!, [1]);
 
         act.Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("image/jpeg")]
+    [InlineData("image/heic")]
+    public void FileIcon_Image_ShouldBeTheImageIcon(string contentType)
+    {
+        AttachmentSlots.FileIcon(contentType).Should().Be(Icons.Material.Filled.Image);
+    }
+
+    [Theory]
+    [InlineData("video/mp4")]
+    [InlineData("video/quicktime")]
+    public void FileIcon_Video_ShouldBeTheVideoIcon(string contentType)
+    {
+        AttachmentSlots.FileIcon(contentType).Should().Be(Icons.Material.Filled.VideoFile);
+    }
+
+    [Theory]
+    [InlineData("application/pdf")]
+    [InlineData("")]
+    public void FileIcon_OtherType_ShouldBeTheGenericFileIcon(string contentType)
+    {
+        AttachmentSlots.FileIcon(contentType).Should().Be(Icons.Material.Filled.InsertDriveFile);
+    }
+
+    [Fact]
+    public void FileIcon_NullContentType_ShouldThrow()
+    {
+        var act = () => AttachmentSlots.FileIcon(null!);
+
+        act.Should().Throw<ArgumentNullException>();
     }
 }
