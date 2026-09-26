@@ -28,6 +28,23 @@ public static class AttachmentSlots
     }
 
     /// <summary>
+    /// The error shown when a selection held more files than there was room for (issue #766).
+    /// <paramref name="attachedCount"/> is the count <em>after</em> the files that fit were added,
+    /// so a selection that filled the list says so rather than quoting the room it had before.
+    /// </summary>
+    public static string OverflowMessage(int maxAttachments, int attachedCount)
+    {
+        var remaining = Remaining(maxAttachments, attachedCount);
+
+        return remaining switch
+        {
+            0 => "No more files can be added.",
+            1 => "Only 1 more file can be added.",
+            _ => $"Only {remaining} more files can be added."
+        };
+    }
+
+    /// <summary>
     /// A <c>data:</c> URL for a thumbnail's bytes. Only for the small resized image the browser
     /// produces, never the original upload — a multi-megabyte data URL in the DOM would be
     /// re-diffed on every render.

@@ -183,7 +183,7 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Issue #645: every step starts at the top of the page, on its first empty field.
+        // Issues #645, #766: every step starts at the top of the page, with no field focused.
         if (!_initializing)
         {
             await _stepEntry.OnRenderedAsync(_state.CurrentStep, _stepElement);

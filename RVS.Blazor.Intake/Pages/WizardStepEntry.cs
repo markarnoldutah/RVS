@@ -9,8 +9,8 @@ namespace RVS.Blazor.Intake.Pages;
 /// a long step arrived at the bottom of the next one.
 /// <para>
 /// Call <see cref="OnRenderedAsync"/> from the host's <c>OnAfterRenderAsync</c>. It acts once per
-/// step change: the JS side scrolls to the top and focuses the step's first empty field, if the
-/// step opts in with <c>data-rvs-autofocus</c>, or else the step container itself.
+/// step change: the JS side scrolls to the top and focuses the step container — never a form
+/// field, which raised the soft keyboard and fought the scroll (issue #766).
 /// </para>
 /// </summary>
 public sealed class WizardStepEntry
