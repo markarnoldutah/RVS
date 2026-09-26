@@ -193,13 +193,33 @@ public class PasteBlockGeneratorTests
     // ── Word-boundary truncation to a configurable cap ────────────────────
 
     [Fact]
-    public void Generate_WhenBlockExceedsDefaultCap_ShouldTruncateToOneThousandCharacters()
+    public void DefaultCharacterCap_ShouldBeTwentyFiveHundred()
+    {
+        PasteBlockGenerator.DefaultCharacterCap.Should().Be(2500);
+    }
+
+    [Fact]
+    public void Generate_WhenDescriptionIsAtTheIntakeMaximum_ShouldKeepItWholeUnderTheDefaultCap()
+    {
+        // Intake accepts up to 2,000 characters (Step 5); the default cap must carry that verbatim
+        // with its fences, category, and status line (issue #775).
+        var longest = new string('x', 2000);
+        const string realisticStatusUrl = "https://rvintake.com/status/Ab3dEf6hIj9-kL_mNoPqRsTuVwXyZ012345678";
+
+        var block = PasteBlockGenerator.Generate("Refrigerator / Cooling", longest, realisticStatusUrl);
+
+        block.Should().Contain(longest);
+        block.Should().NotContain("...");
+    }
+
+    [Fact]
+    public void Generate_WhenBlockExceedsDefaultCap_ShouldTruncateToTheDefaultCap()
     {
         var longDescription = string.Join(" ", Enumerable.Repeat("wordword", 400));
 
         var block = PasteBlockGenerator.Generate("Electrical", longDescription, StatusUrl);
 
-        block.Length.Should().BeLessThanOrEqualTo(1000);
+        block.Length.Should().BeLessThanOrEqualTo(PasteBlockGenerator.DefaultCharacterCap);
     }
 
     [Fact]
@@ -256,8 +276,8 @@ public class PasteBlockGeneratorTests
 
         var block = PasteBlockGenerator.Generate("Electrical", longDescription, StatusUrl, characterCap: cap);
 
-        block.Length.Should().BeLessThanOrEqualTo(1000);
-        block.Length.Should().BeGreaterThan(300, "a non-positive cap means 'use the 1,000 default', not 'truncate to nothing'");
+        block.Length.Should().BeLessThanOrEqualTo(PasteBlockGenerator.DefaultCharacterCap);
+        block.Length.Should().BeGreaterThan(300, "a non-positive cap means 'use the default', not 'truncate to nothing'");
     }
 
     [Fact]

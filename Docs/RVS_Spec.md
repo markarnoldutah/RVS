@@ -116,7 +116,7 @@ HTML with an embedded print stylesheet is the primary rendering; it must print c
 |---|---|
 | Transport | Azure Communication Services |
 | Recipients | 1–10 addresses configured per location |
-| Subject | `[RVS] {category} — {year} {make} {model} — {customer last name}` |
+| Subject | `New SR: {customer last name}: {year} {make} {model} - {category}` |
 | Body | The packet as inline HTML, degrading to the paste block for text-only clients |
 | Attachments | The PDF, plus the original photos as image attachments — trimmed to fit the transport's message ceiling, PDF first |
 | Size ceiling | The send is budgeted at 9.5 MB of a 10 MB transport limit, counting both bodies and attachments **after** base64 encoding. Over budget, attachments are dropped to fit rather than failing the send: the PDF is kept first if it fits, then photos fill what is left in order, dropping from the last one back. An email always goes out. The budget is checked at startup — at least 5 MB so the PDF always fits, and never above the transport limit, where every send would fail again |
@@ -137,7 +137,7 @@ the service department a request with no packet at all is the outcome this rule 
 
 ### B-5 — Paste block
 
-A delimited plain-text block formatted for a DMS complaint field. ASCII-safe — no smart quotes, no em-dashes, no non-breaking spaces, because DMS text fields mangle Unicode. Capped at a configurable character count (default 1,000) with truncation at a word boundary. Order: category, then the customer's verbatim description, then the status link.
+A delimited plain-text block formatted for a DMS complaint field. ASCII-safe — no smart quotes, no em-dashes, no non-breaking spaces, because DMS text fields mangle Unicode. Capped at a configurable character count (default 2,500 — enough for the longest description intake accepts, 2,000 characters, plus the fences, category and status line) with truncation at a word boundary. Order: category, then the customer's verbatim description, then the status link.
 
 This is the DMS integration. It is manual, it is honest about being manual, and it eliminates the retyping that the advisor actually cares about.
 

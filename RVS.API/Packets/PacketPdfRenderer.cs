@@ -33,6 +33,11 @@ public static class PacketPdfRenderer
 
     private const float PageMarginMm = 14f;
 
+    /// <summary>Height of each photo's image box, in points. Three rows of two — six photos —
+    /// fit one page with their captions (<c>Spec B-2</c> item 8, issue #775); at full
+    /// half-page width a portrait phone photo ran ~120 mm tall and only four fit.</summary>
+    private const float PhotoHeightPt = 175f;
+
     /// <summary>Sections 1–3 (<c>Spec B-2</c>) are painted together as the IDS-style
     /// masthead — a letterhead + top-right tracking number, then a three-column
     /// Customer / Location / Unit band — rather than as three stacked blocks.</summary>
@@ -406,7 +411,8 @@ public static class PacketPdfRenderer
 
                             if (images.TryGetValue(photo.Url, out var bytes) && IsDecodableRaster(bytes))
                             {
-                                cell.Item().Image(bytes).FitWidth();
+                                cell.Item().Height(PhotoHeightPt).AlignCenter().AlignMiddle()
+                                    .Image(bytes).FitArea();
                             }
                             else if (photo.IsVideo)
                             {

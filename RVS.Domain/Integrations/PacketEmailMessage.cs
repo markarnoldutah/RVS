@@ -14,7 +14,7 @@ public sealed record PacketEmailMessage
 {
     /// <summary>
     /// Subject line, already formatted as
-    /// <c>[RVS] {category} — {year} {make} {model} — {customer last name}</c>.
+    /// <c>New SR: {customer last name}: {year} {make} {model} - {category}</c>.
     /// </summary>
     public required string Subject { get; init; }
 

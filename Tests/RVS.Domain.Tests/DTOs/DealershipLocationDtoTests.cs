@@ -122,7 +122,7 @@ public class DealershipLocationDtoTests
         dto.DisabledRecipients.Should().BeEmpty();
         dto.AttachPdf.Should().BeTrue();
         dto.IncludePhotos.Should().BeTrue();
-        dto.PasteBlockCharacterCap.Should().Be(1000);
+        dto.PasteBlockCharacterCap.Should().Be(2500);
         dto.StatusLinkTtlDays.Should().Be(30);
         dto.LogoUrl.Should().BeNull();
     }

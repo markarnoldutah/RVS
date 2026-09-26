@@ -101,6 +101,10 @@ public class PacketPdfRendererTests
 
     private static PacketPdfLayout Layout(ServicePacket packet) => PacketPdfLayout.Build(packet);
 
+    /// <summary>Counts <c>/Type /Page</c> objects (not the <c>/Pages</c> tree) in the raw PDF.</summary>
+    private static int PageCount(byte[] pdf) =>
+        System.Text.RegularExpressions.Regex.Matches(Encoding.Latin1.GetString(pdf), @"/Type\s*/Page(?![a-zA-Z])").Count;
+
     private static PacketPdfLayoutSection Section(ServicePacket packet, string id) =>
         Layout(packet).Sections.Single(s => s.Id == id);
 
@@ -313,6 +317,32 @@ public class PacketPdfRendererTests
         stopwatch.Elapsed.Should().BeLessThan(
             TimeSpan.FromSeconds(5),
             "Spec B-1 budgets the whole generation pipeline at P95 < 10 s; the PDF render alone must be a small fraction");
+    }
+
+    [Fact]
+    public void Render_WithSixAppendixPhotos_ShouldFitThemOnOnePage()
+    {
+        // Portrait phone photos: at full half-page width only two rows fit, so six photos
+        // spilled onto a second appendix page (issue #775 item 2.4).
+        var portrait = SampleImages.Png(30, 40);
+
+        var sevenPages = PageCount(PacketPdfRenderer.Render(PacketWithPhotos(7, out var seven), Photos(seven, portrait)));
+        var twelvePages = PageCount(PacketPdfRenderer.Render(PacketWithPhotos(12, out var twelve), Photos(twelve, portrait)));
+
+        twelvePages.Should().Be(sevenPages, "photos 7–12 are one appendix page of six, same as photo 7 alone");
+
+        static ServicePacket PacketWithPhotos(int count, out PacketPhoto[] photos)
+        {
+            photos = Enumerable.Range(1, count)
+                .Select(i => new PacketPhoto { Url = $"https://blob/p{i}.jpg", FileName = $"p{i}.jpg" })
+                .ToArray();
+            // Drop the paste block and status link that follow the photos so the page count
+            // measures the photo grid alone, not whether trailing sections also fit.
+            return FullPacket() with { Photos = photos, PasteBlock = null, StatusLink = null };
+        }
+
+        static Dictionary<string, byte[]> Photos(PacketPhoto[] photos, byte[] bytes) =>
+            photos.ToDictionary(p => p.Url, _ => bytes);
     }
 
     // ── Section ordering (Spec B-2) ────────────────────────────────────────
