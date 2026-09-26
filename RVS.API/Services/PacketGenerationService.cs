@@ -130,7 +130,11 @@ public sealed class PacketGenerationService : IPacketGenerationService
 
             var photoUrls = await _photoUrlResolver.ResolveAsync(request, cancellationToken);
 
-            await EnsurePreliminaryAssessmentAsync(request, cancellationToken);
+            // One download feeds both the assessment, which reads the photos (issue #772), and
+            // the PDF, which embeds them. It used to happen after the assessment, for the PDF only.
+            var downloadedPhotos = await DownloadPhotosAsync(request, photoUrls, cancellationToken);
+
+            await EnsurePreliminaryAssessmentAsync(request, downloadedPhotos, cancellationToken);
 
             var pasteBlockCap = location?.PacketConfig.PasteBlockCharacterCap
                 ?? PacketConfigEmbedded.DefaultPasteBlockCharacterCap;
@@ -152,7 +156,8 @@ public sealed class PacketGenerationService : IPacketGenerationService
                     request.IssueCategory,
                     request.IssueDescription,
                     statusLinkUrl: null,   // supplied by #427 once the status token is minted
-                    characterCap: pasteBlockCap),
+                    characterCap: pasteBlockCap,
+                    equipmentLines: PhotoFindingText.PasteLines(request.PreliminaryAssessment?.PhotoFindings)),
                 PhotoUrls = photoUrls,
             };
 
@@ -163,7 +168,11 @@ public sealed class PacketGenerationService : IPacketGenerationService
             var html = PacketHtmlRenderer.Render(packet);
             _logger.LogDebug("Packet generation: composed HTML packet ({Length} chars) for SR {ServiceRequestId}", html.Length, request.Id);
 
-            var photoImages = await DownloadPhotoBytesAsync(request, photoUrls, cancellationToken);
+            var photoImages = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            foreach (var photo in downloadedPhotos)
+            {
+                photoImages[photo.Url] = photo.Bytes;
+            }
 
             var pdf = PacketPdfRenderer.Render(packet, photoImages);
 
@@ -269,8 +278,13 @@ public sealed class PacketGenerationService : IPacketGenerationService
     /// A regeneration reuses the stored result, so the packet's content stays stable and the
     /// model is called once per request. The assessment is advisory: an unexpected failure is
     /// logged and the packet renders without it rather than costing a generation attempt.
+    ///
+    /// The photos already downloaded for the PDF go with it, in attachment order (issue #772). A
+    /// photo that arrives after the first generation is therefore never assessed — regeneration
+    /// reuses the stored result.
     /// </summary>
-    private async Task EnsurePreliminaryAssessmentAsync(ServiceRequest request, CancellationToken cancellationToken)
+    private async Task EnsurePreliminaryAssessmentAsync(
+        ServiceRequest request, IReadOnlyList<DownloadedPhoto> photos, CancellationToken cancellationToken)
     {
         if (request.PreliminaryAssessment is not null)
         {
@@ -279,7 +293,9 @@ public sealed class PacketGenerationService : IPacketGenerationService
 
         try
         {
-            request.PreliminaryAssessment = await _assessmentService.AssessAsync(request, cancellationToken);
+            AssessmentPhoto[] assessmentPhotos =
+                [.. photos.Select(p => new AssessmentPhoto(p.AttachmentId, p.ContentType, p.Bytes))];
+            request.PreliminaryAssessment = await _assessmentService.AssessAsync(request, assessmentPhotos, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -302,18 +318,22 @@ public sealed class PacketGenerationService : IPacketGenerationService
         request.Attachments.Count < request.PacketGeneration.ExpectedAttachmentCount
         && DateTime.UtcNow - request.CreatedAtUtc < AttachmentUploadWindow;
 
+    /// <summary>One image attachment's downloaded bytes and the read URL the packet shows it by.</summary>
+    private sealed record DownloadedPhoto(string AttachmentId, string ContentType, string Url, byte[] Bytes);
+
     /// <summary>
-    /// Downloads the image bytes for each resolved photo so <see cref="PacketPdfRenderer"/> can
-    /// embed them (<c>Spec B-3</c>). A single photo that cannot be fetched is logged and skipped —
-    /// it renders as a labelled placeholder rather than failing the whole packet. Videos are
-    /// skipped here: <see cref="PacketPdfRenderer"/> renders them as a text/hyperlink placeholder,
-    /// not a raster embed, so downloading their (potentially 25 MB) bytes would be wasted work
-    /// (issue <c>#583</c>).
+    /// Downloads the image bytes for each resolved photo, in attachment order, so
+    /// <see cref="PacketPdfRenderer"/> can embed them (<c>Spec B-3</c>) and the preliminary
+    /// assessment can read them (issue #772). A single photo that cannot be fetched is logged and
+    /// skipped — it renders as a labelled placeholder rather than failing the whole packet. Videos
+    /// are skipped here: <see cref="PacketPdfRenderer"/> renders them as a text/hyperlink
+    /// placeholder, not a raster embed, so downloading their (potentially 25 MB) bytes would be
+    /// wasted work (issue <c>#583</c>).
     /// </summary>
-    private async Task<Dictionary<string, byte[]>> DownloadPhotoBytesAsync(
+    private async Task<List<DownloadedPhoto>> DownloadPhotosAsync(
         ServiceRequest request, IReadOnlyDictionary<string, string> photoUrls, CancellationToken cancellationToken)
     {
-        var images = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var images = new List<DownloadedPhoto>();
 
         foreach (var attachment in request.Attachments)
         {
@@ -330,7 +350,8 @@ public sealed class PacketGenerationService : IPacketGenerationService
 
             try
             {
-                images[url] = await _blobStorage.DownloadAsync(AttachmentsContainer, attachment.BlobUri, cancellationToken);
+                var bytes = await _blobStorage.DownloadAsync(AttachmentsContainer, attachment.BlobUri, cancellationToken);
+                images.Add(new DownloadedPhoto(attachment.AttachmentId, attachment.ContentType!, url, bytes));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

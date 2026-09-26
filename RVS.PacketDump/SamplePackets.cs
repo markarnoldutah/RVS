@@ -100,6 +100,13 @@ internal static class SamplePackets
                 ],
                 LikelyParts = ["Air filter", "Temperature sensor", "High-temp shutdown switch"],
                 Confidence = "Medium",
+                // Issue #772: what the assessment read off the photos, cited to them.
+                PhotoFindings =
+                [
+                    new PacketPhotoFinding { Text = "Generator — Onan 5500 · S/N K190123456", PhotoLabel = "photo 1, gen-rear.jpg" },
+                    new PacketPhotoFinding { Text = "Generator — code 36: Engine stopped", PhotoLabel = "photo 2, gen-panel.jpg" },
+                    new PacketPhotoFinding { Text = "Debris packed against the compartment intake vent", PhotoLabel = "photo 1, gen-rear.jpg" },
+                ],
             },
             Photos =
             [
@@ -116,7 +123,11 @@ internal static class SamplePackets
                     Caption = "Generator panel with temp light",
                 },
             ],
-            PasteBlock = PasteBlockGenerator.Generate("Electrical / Generator", issueDescription, statusUrl),
+            PasteBlock = PasteBlockGenerator.Generate(
+                "Electrical / Generator",
+                issueDescription,
+                statusUrl,
+                equipmentLines: ["EQUIPMENT: Generator — Onan 5500 · S/N K190123456", "FAULT CODE: Generator — code 36: Engine stopped"]),
             StatusLink = new PacketStatusLink { Url = statusUrl },
         };
     }

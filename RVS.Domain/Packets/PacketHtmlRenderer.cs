@@ -350,6 +350,15 @@ public static class PacketHtmlRenderer
             AppendRow(sb, "Confidence", summary.Confidence);
             AppendAssessmentList(sb, "ol", "possible-fixes", "Possible fixes", summary.PossibleFixes);
             AppendAssessmentList(sb, "ul", "likely-parts", "Likely parts", summary.LikelyParts);
+        }
+
+        // What was read off the photos (issue #772). It stands apart from the structured
+        // assessment: an abstained assessment still shows a data plate read cleanly.
+        AppendAssessmentList(
+            sb, "ul", "photo-findings", PacketPhotoFinding.Heading, [.. summary.PhotoFindings.Select(f => f.Display)]);
+
+        if (summary.HasStructuredAssessment)
+        {
             sb.Append("<p class=\"advisory\" style=\"margin:2mm 0 0;font-size:8.5pt;font-style:italic;\">")
                 .Append(Text(PacketAiSummary.AdvisoryNote)).Append("</p>\n");
         }

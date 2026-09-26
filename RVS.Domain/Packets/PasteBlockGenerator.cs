@@ -26,8 +26,8 @@ namespace RVS.Domain.Packets;
 ///   bottom so one click-drag selects it cleanly.</item>
 /// </list>
 ///
-/// Order is <c>Spec B-5</c>: category, then the customer's verbatim description, then the
-/// status link.
+/// Order is <c>Spec B-5</c>: category, then the customer's verbatim description, then any
+/// data-plate and fault-code lines read off the photos (issue #772), then the status link.
 /// </summary>
 public static class PasteBlockGenerator
 {
@@ -56,11 +56,17 @@ public static class PasteBlockGenerator
     /// <param name="issueDescription">The customer's description in their own words.</param>
     /// <param name="statusLinkUrl">Fully-formed customer status URL; the status line is omitted when this is <c>null</c>/blank (it is minted upstream by <c>#427</c>).</param>
     /// <param name="characterCap">Maximum length of the whole block; values &#8804; 0 fall back to <see cref="DefaultCharacterCap"/>.</param>
+    /// <param name="equipmentLines">
+    /// Data-plate and fault-code lines read off the customer's photos (issue #772), placed after
+    /// the complaint. They never displace it: each is added whole, in order, only while it fits
+    /// after the complete complaint, and a block that has to cut the complaint carries none.
+    /// </param>
     public static string Generate(
         string? issueCategory,
         string? issueDescription,
         string? statusLinkUrl = null,
-        int characterCap = DefaultCharacterCap)
+        int characterCap = DefaultCharacterCap,
+        IReadOnlyList<string>? equipmentLines = null)
     {
         var cap = characterCap > 0 ? characterCap : DefaultCharacterCap;
 
@@ -77,6 +83,7 @@ public static class PasteBlockGenerator
         var budget = cap - head.Length - tail.Length - 1;
 
         string body;
+        var complaintCut = false;
         if (description.Length == 0)
         {
             body = string.Empty;
@@ -89,9 +96,29 @@ public static class PasteBlockGenerator
         {
             var trimmed = TruncateAtWordBoundary(description, Math.Max(0, budget));
             body = trimmed.Length == 0 ? string.Empty : " " + trimmed;
+            complaintCut = true;
         }
 
-        return head + body + tail;
+        var equipment = new StringBuilder();
+        var room = cap - head.Length - body.Length - tail.Length;
+        foreach (var line in (complaintCut ? null : equipmentLines) ?? [])
+        {
+            var folded = AsciiFold(line).Replace('\n', ' ').Trim();
+            if (folded.Length == 0)
+            {
+                continue;
+            }
+
+            if (folded.Length + 1 > room)
+            {
+                break;
+            }
+
+            equipment.Append('\n').Append(folded);
+            room -= folded.Length + 1;
+        }
+
+        return head + body + equipment + tail;
     }
 
     /// <summary>

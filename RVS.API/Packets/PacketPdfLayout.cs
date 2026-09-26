@@ -232,30 +232,30 @@ internal sealed record PacketPdfLayout
             return null;
         }
 
-        if (!summary.HasStructuredAssessment)
-        {
-            return new PacketPdfLayoutSection
-            {
-                Id = "ai-summary",
-                Heading = "Preliminary assessment",
-                AiGeneratedTag = true,
-                Body = summary.Text,
-            };
-        }
-
         var rows = new List<PacketPdfLayoutRow>();
-        AddRow(rows, "Probable cause", summary.ProbableCause);
-        AddRow(rows, "Confidence", summary.Confidence);
-
         var lists = new List<PacketPdfLayoutList>();
-        if (summary.PossibleFixes.Count > 0)
+
+        if (summary.HasStructuredAssessment)
         {
-            lists.Add(new PacketPdfLayoutList("Possible fixes", summary.PossibleFixes, Numbered: true));
+            AddRow(rows, "Probable cause", summary.ProbableCause);
+            AddRow(rows, "Confidence", summary.Confidence);
+
+            if (summary.PossibleFixes.Count > 0)
+            {
+                lists.Add(new PacketPdfLayoutList("Possible fixes", summary.PossibleFixes, Numbered: true));
+            }
+
+            if (summary.LikelyParts.Count > 0)
+            {
+                lists.Add(new PacketPdfLayoutList("Likely parts", summary.LikelyParts, Numbered: false));
+            }
         }
 
-        if (summary.LikelyParts.Count > 0)
+        // What was read off the photos (issue #772) — kept when the assessment abstained.
+        if (summary.HasPhotoFindings)
         {
-            lists.Add(new PacketPdfLayoutList("Likely parts", summary.LikelyParts, Numbered: false));
+            lists.Add(new PacketPdfLayoutList(
+                PacketPhotoFinding.Heading, [.. summary.PhotoFindings.Select(f => f.Display)], Numbered: false));
         }
 
         return new PacketPdfLayoutSection
@@ -266,7 +266,7 @@ internal sealed record PacketPdfLayout
             Body = summary.Text,
             Rows = rows,
             Lists = lists,
-            Note = PacketAiSummary.AdvisoryNote,
+            Note = summary.HasStructuredAssessment ? PacketAiSummary.AdvisoryNote : null,
         };
     }
 

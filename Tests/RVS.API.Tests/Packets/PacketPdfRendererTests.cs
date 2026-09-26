@@ -731,6 +731,83 @@ public class PacketPdfRendererTests
         bytes.Should().NotBeEmpty();
     }
 
+    // ── 7b. From photos (issue #772) ───────────────────────────────────
+
+    private static readonly PacketPhotoFinding[] PhotoFindings =
+    [
+        new() { Text = "Generator — Onan 5500 · S/N K123", PhotoLabel = "photo 1, generator.jpg" },
+        new() { Text = "Generator — code 36: Out of fuel", PhotoLabel = "photo 1, generator.jpg" },
+    ];
+
+    private static ServicePacket PhotoAssessedPacket() => AssessedPacket() with
+    {
+        AiSummary = AssessedPacket().AiSummary! with { PhotoFindings = PhotoFindings },
+    };
+
+    [Fact]
+    public void Build_WithPhotoFindings_ShouldCarryAFromPhotosList_AfterThePartsList()
+    {
+        var section = Section(PhotoAssessedPacket(), "ai-summary");
+
+        section.Lists.Select(l => l.Label).Should().Equal("Possible fixes", "Likely parts", PacketPhotoFinding.Heading);
+        section.Lists[2].Numbered.Should().BeFalse();
+        section.Lists[2].Items.Should().Equal(PhotoFindings.Select(f => f.Display));
+        section.Note.Should().Be(PacketAiSummary.AdvisoryNote);
+    }
+
+    [Fact]
+    public void Build_WithOnlyPhotoFindings_ShouldCarryTheList_WithNoRowsOrAdvisoryNote()
+    {
+        var packet = FullPacket() with { AiSummary = new PacketAiSummary { PhotoFindings = PhotoFindings } };
+
+        var section = Section(packet, "ai-summary");
+
+        section.AiGeneratedTag.Should().BeTrue();
+        section.Rows.Should().BeEmpty();
+        section.Lists.Should().ContainSingle().Which.Label.Should().Be(PacketPhotoFinding.Heading);
+        section.Note.Should().BeNull();
+    }
+
+    [Fact]
+    public void Build_WithoutPhotoFindings_ShouldCarryNoFromPhotosList()
+    {
+        Section(AssessedPacket(), "ai-summary").Lists.Should().NotContain(l => l.Label == PacketPhotoFinding.Heading);
+    }
+
+    [Fact]
+    public void Build_WithPhotoFindings_ShouldCarryTheSameFindingsAsTheHtmlRendering_InTheSameOrder()
+    {
+        var packet = PhotoAssessedPacket();
+        var html = PacketHtmlRenderer.Render(packet);
+        var pdf = Layout(packet).ToPlainText();
+
+        string[] values =
+        [
+            "High-temp shutdown switch",
+            PacketPhotoFinding.Heading,
+            PhotoFindings[0].Display,
+            PhotoFindings[1].Display,
+            PacketAiSummary.AdvisoryNote,
+        ];
+
+        foreach (var value in values)
+        {
+            html.Should().Contain(WebUtility.HtmlEncode(value));
+            pdf.Should().Contain(value);
+        }
+
+        values.Select(v => pdf.IndexOf(v, StringComparison.Ordinal)).Should().BeInAscendingOrder();
+        var assessmentStart = html.IndexOf("section:ai-summary", StringComparison.Ordinal);
+        values.Select(v => html.IndexOf(WebUtility.HtmlEncode(v), assessmentStart, StringComparison.Ordinal))
+            .Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void Render_WithPhotoFindings_ShouldNotThrow()
+    {
+        PacketPdfRenderer.Render(PhotoAssessedPacket()).Should().NotBeEmpty();
+    }
+
     // ── 8. Photos ───────────────────────────────────────────────────────
 
     [Fact]

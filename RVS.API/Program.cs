@@ -633,7 +633,11 @@ if (!useMockIntegrations && !string.IsNullOrWhiteSpace(assessmentEndpoint))
     // The dedicated deployment is a reasoning model (gpt-5); the gpt-4o fallback is not. The two
     // take different request shapes, and each rejects the other's.
     builder.Services.Configure<AzureOpenAiAssessmentOptions>(o =>
-        o.UseReasoningModelRequest = !string.IsNullOrWhiteSpace(configuredAssessmentDeployment));
+    {
+        o.UseReasoningModelRequest = !string.IsNullOrWhiteSpace(configuredAssessmentDeployment);
+        o.MaxImages = builder.Configuration.GetValue(
+            "AzureOpenAi:AssessmentMaxImages", AzureOpenAiAssessmentOptions.DefaultMaxImages);
+    });
 
     builder.Services.AddHttpClient<IPreliminaryAssessmentService, AzureOpenAiPreliminaryAssessmentService>(client =>
     {
@@ -645,8 +649,13 @@ if (!useMockIntegrations && !string.IsNullOrWhiteSpace(assessmentEndpoint))
     })
     .AddStandardResilienceHandler(options =>
     {
-        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(15);
-        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(35);
+        // Up to five photos at detail "high" ride on this call (issue #772), which reads far
+        // slower than text alone. It runs in the packet worker, off the intake thread, so the
+        // longer budget costs no customer anything. The circuit breaker's sampling window must
+        // be at least twice the attempt timeout or the options fail validation at startup.
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(45);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(100);
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(90);
         options.Retry.MaxRetryAttempts = 2;
     });
 }

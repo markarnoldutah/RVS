@@ -13,4 +13,18 @@ public sealed class AzureOpenAiAssessmentOptions
     /// rejects <c>reasoning_effort</c>.
     /// </summary>
     public bool UseReasoningModelRequest { get; set; }
+
+    /// <summary>Photos sent per call when nothing is configured: the Spec A-6 attachment cap.</summary>
+    public const int DefaultMaxImages = 5;
+
+    /// <summary>Highest <see cref="MaxImages"/> honoured; anything above falls back to the default.</summary>
+    public const int MaxImagesCeiling = 10;
+
+    /// <summary>
+    /// Most photos sent to the model in one assessment call (issue #772), bound from
+    /// <c>AzureOpenAi:AssessmentMaxImages</c>. Every photo at detail "high" adds roughly 0.8–1.1K
+    /// tokens reserved against the deployment's TPM limit, so an environment with less capacity can
+    /// send fewer. Outside 1–<see cref="MaxImagesCeiling"/> it falls back to <see cref="DefaultMaxImages"/>.
+    /// </summary>
+    public int MaxImages { get; set; } = DefaultMaxImages;
 }

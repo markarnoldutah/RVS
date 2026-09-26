@@ -59,7 +59,7 @@ param assessmentModelVersion string = '2025-08-07'
 ])
 param assessmentDeploymentSkuName string = 'DataZoneStandard'
 
-@description('Assessment deployment capacity in K TPM. Staging = 1, Prod = 2 — confirm against remaining model quota before raising.')
+@description('Assessment deployment capacity in K TPM. Staging = 20, Prod = 30 (set in parameters/*.bicepparam) — a call with photos (#772) reserves ~7.6-9.3K. Confirm against remaining model quota before raising.')
 @minValue(1)
 param assessmentDeploymentCapacity int = 1
 

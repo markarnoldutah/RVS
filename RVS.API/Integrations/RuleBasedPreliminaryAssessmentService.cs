@@ -99,7 +99,11 @@ public sealed class RuleBasedPreliminaryAssessmentService : IPreliminaryAssessme
     internal static IReadOnlyCollection<string> CategoriesWithGuidance => Table.Keys;
 
     /// <inheritdoc />
-    public Task<PreliminaryAssessmentEmbedded> AssessAsync(ServiceRequest serviceRequest, CancellationToken cancellationToken = default)
+    /// <remarks>Photos are ignored: the table has nothing to read them with, so it returns no photo findings.</remarks>
+    public Task<PreliminaryAssessmentEmbedded> AssessAsync(
+        ServiceRequest serviceRequest,
+        IReadOnlyList<AssessmentPhoto>? photos = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(serviceRequest);
 

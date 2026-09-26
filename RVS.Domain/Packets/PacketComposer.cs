@@ -25,6 +25,8 @@ public static class PacketComposer
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
+        var photos = ComposePhotos(request.Attachments, context.PhotoUrls);
+
         return new ServicePacket
         {
             Unit = ComposeUnit(request.AssetInfo),
@@ -39,10 +41,10 @@ public static class PacketComposer
             },
             IssueCategory = NullIfBlank(request.IssueCategory),
             CuratedIssue = ComposeCuratedIssue(request),
-            AiSummary = ComposeAiSummary(request.TechnicianSummary, request.PreliminaryAssessment),
+            AiSummary = ComposeAiSummary(request, photos),
             IssueDescription = ComposeComplaint(request),
             Diagnostics = ComposeDiagnostics(request.DiagnosticResponses),
-            Photos = ComposePhotos(request.Attachments, context.PhotoUrls),
+            Photos = [.. photos.Select(p => p.Photo)],
             PasteBlock = NullIfBlank(context.PasteBlock),
             StatusLink = NullIfBlank(context.StatusLinkUrl) is { } url
                 ? new PacketStatusLink { Url = url }
@@ -143,12 +145,18 @@ public static class PacketComposer
     }
 
     private static PacketAiSummary? ComposeAiSummary(
-        string? technicianSummary, PreliminaryAssessmentEmbedded? assessment)
+        ServiceRequest request, IReadOnlyList<(string AttachmentId, PacketPhoto Photo)> photos)
     {
-        var text = NullIfBlank(technicianSummary)?.Trim();
+        var assessment = request.PreliminaryAssessment;
+        var text = NullIfBlank(request.TechnicianSummary)?.Trim();
         var confidence = AssessmentConfidence.DisplayName(assessment?.Confidence);
 
-        var summary = new PacketAiSummary { Text = text };
+        var summary = new PacketAiSummary
+        {
+            Text = text,
+            PhotoFindings = ComposePhotoFindings(assessment?.PhotoFindings, request.Attachments, photos),
+        };
+
         if (assessment is not null && confidence is not null)
         {
             summary = summary with
@@ -164,17 +172,71 @@ public static class PacketComposer
             }
         }
 
-        return text is null && !summary.HasStructuredAssessment ? null : summary;
+        return text is null && !summary.HasStructuredAssessment && !summary.HasPhotoFindings ? null : summary;
+    }
+
+    /// <summary>
+    /// The <c>From photos</c> lines (issue #772): data plates, fault codes, then observations,
+    /// each cited by the photo's position in the packet's photo list and its file name. A finding
+    /// whose attachment has since left the request is dropped rather than cited to nothing.
+    /// </summary>
+    private static IReadOnlyList<PacketPhotoFinding> ComposePhotoFindings(
+        PhotoFindingsEmbedded? findings,
+        IEnumerable<ServiceRequestAttachmentEmbedded> attachments,
+        IReadOnlyList<(string AttachmentId, PacketPhoto Photo)> photos)
+    {
+        if (findings is null)
+        {
+            return [];
+        }
+
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var attachment in attachments)
+        {
+            labels.TryAdd(attachment.AttachmentId, NullIfBlank(attachment.FileName) ?? "photo");
+        }
+
+        for (var i = 0; i < photos.Count; i++)
+        {
+            var fileName = NullIfBlank(photos[i].Photo.FileName);
+            labels[photos[i].AttachmentId] = fileName is null ? $"photo {i + 1}" : $"photo {i + 1}, {fileName}";
+        }
+
+        var lines = new List<PacketPhotoFinding>();
+        void Add(string text, string attachmentId)
+        {
+            if (labels.TryGetValue(attachmentId, out var label) && !string.IsNullOrWhiteSpace(text))
+            {
+                lines.Add(new PacketPhotoFinding { Text = text, PhotoLabel = label });
+            }
+        }
+
+        foreach (var plate in findings.DataPlates)
+        {
+            Add(PhotoFindingText.DataPlate(plate), plate.AttachmentId);
+        }
+
+        foreach (var fault in findings.FaultCodes)
+        {
+            Add(PhotoFindingText.FaultCode(fault), fault.AttachmentId);
+        }
+
+        foreach (var observation in findings.Observations)
+        {
+            Add(observation.Text.Trim(), observation.AttachmentId);
+        }
+
+        return lines;
     }
 
     private static IReadOnlyList<string> TrimNonBlank(IEnumerable<string>? values) =>
         [.. (values ?? []).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim())];
 
-    private static IReadOnlyList<PacketPhoto> ComposePhotos(
+    private static IReadOnlyList<(string AttachmentId, PacketPhoto Photo)> ComposePhotos(
         IEnumerable<ServiceRequestAttachmentEmbedded> attachments,
         IReadOnlyDictionary<string, string> photoUrls)
     {
-        var photos = new List<PacketPhoto>();
+        var photos = new List<(string AttachmentId, PacketPhoto Photo)>();
 
         foreach (var attachment in attachments)
         {
@@ -190,12 +252,12 @@ public static class PacketComposer
                 continue;
             }
 
-            photos.Add(new PacketPhoto
+            photos.Add((attachment.AttachmentId, new PacketPhoto
             {
                 Url = url,
                 FileName = attachment.FileName,
                 ContentType = attachment.ContentType,
-            });
+            }));
         }
 
         return photos;

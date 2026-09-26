@@ -1,6 +1,7 @@
 using FluentAssertions;
 using RVS.API.Integrations;
 using RVS.Domain.Entities;
+using RVS.Domain.Integrations;
 using RVS.Domain.Validation;
 
 namespace RVS.API.Tests.Integrations;
@@ -101,5 +102,16 @@ public class RuleBasedPreliminaryAssessmentServiceTests
         var second = await _sut.AssessAsync(Request("Slides"));
 
         second.PossibleFixes.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task AssessAsync_WithPhotos_ShouldReturnNoPhotoFindings()
+    {
+        AssessmentPhoto[] photos = [new("att_1", "image/jpeg", [0xFF, 0xD8, 0xFF])];
+
+        var result = await _sut.AssessAsync(Request("Slides"), photos);
+
+        result.PhotoFindings.Should().BeNull();
+        result.Confidence.Should().Be(AssessmentConfidence.Low);
     }
 }

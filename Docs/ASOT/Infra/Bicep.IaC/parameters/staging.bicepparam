@@ -12,12 +12,16 @@ param whisperCapacity = 1
 // Try gpt-5 here first; blank assessmentModelName and redeploy to revert to
 // gpt-4o with zero application-code changes. DataZoneStandard (US) SKU — gpt-5
 // isn't offered under the regional Standard SKU textDeploymentName uses.
-// Capacity 5 (5K TPM). Each call reserves ~3K tokens against TPM up front
-// (~1K prompt + max_completion_tokens 2000, reasoning included), so at 1 every
-// call was refused. Staging + prod share one DataZoneStandard gpt-5 quota in
-// westus3 (5 + 10 = 15K TPM) — check it before deploying either.
+// Capacity 20 (20K TPM). A text-only call reserves ~3.6K tokens against TPM up
+// front (~1.6K prompt + max_completion_tokens 2000, reasoning included); with
+// photos (#772, up to 5 at detail "high", ~0.8-1.1K each) it reserves ~7.6-9.3K.
+// A call larger than the whole limit is refused every time, so at 5 any call
+// with photos fell back to text-only. 20 allows ~2 photo calls a minute.
+// Capacity costs nothing on a pay-per-token deployment; the ceiling is quota.
+// Staging + prod share one DataZoneStandard gpt-5 quota in westus3: 300K TPM,
+// 20 + 30 = 50K used (checked Sep 25 2026).
 param assessmentModelName = 'gpt-5'
-param assessmentDeploymentCapacity = 5
+param assessmentDeploymentCapacity = 20
 
 // App Service (API) — Basic B1 ($13.14/mo), upgrade path: B1 → S1
 param deployAppService = true

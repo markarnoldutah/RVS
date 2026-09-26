@@ -67,7 +67,7 @@ public class PacketGenerationServiceTests
 
         _userContextMock.SetupGet(u => u.UserId).Returns("user_manager_7");
 
-        _assessmentMock.Setup(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+        _assessmentMock.Setup(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(GeneratedAssessment);
 
         _sut = new PacketGenerationService(
@@ -305,7 +305,7 @@ public class PacketGenerationServiceTests
         var outcome = await _sut.GenerateAsync(TenantId, SrId);
 
         outcome.Should().Be(PacketGenerationOutcome.Succeeded);
-        _assessmentMock.Verify(a => a.AssessAsync(sr, It.IsAny<CancellationToken>()), Times.Once);
+        _assessmentMock.Verify(a => a.AssessAsync(sr, It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()), Times.Once);
         persisted.Should().NotBeNull();
         persisted!.ProbableCause.Should().Be("Slide motor stalled under load.");
     }
@@ -321,7 +321,7 @@ public class PacketGenerationServiceTests
 
         await _sut.GenerateAsync(TenantId, SrId);
 
-        _assessmentMock.Verify(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        _assessmentMock.Verify(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()), Times.Never);
         sr.PreliminaryAssessment.Should().BeSameAs(stored);
     }
 
@@ -330,7 +330,7 @@ public class PacketGenerationServiceTests
     {
         var sr = BuildRequest();
         SetupRequest(sr);
-        _assessmentMock.Setup(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+        _assessmentMock.Setup(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("assessment blew up"));
 
         var outcome = await _sut.GenerateAsync(TenantId, SrId);
@@ -364,6 +364,122 @@ public class PacketGenerationServiceTests
         block.Should().Contain("<li>Check the slide fuse and battery voltage</li>");
         block.Should().Contain("<li>Replace the slide motor</li>");
         block.Should().Contain("<li>Slide-out motor</li>");
+    }
+
+    // ── Photo-grounded assessment (issue #772) ─────────────────────────────
+
+    // A distinct array instance (the PDF has to decode it, so it must be a real image), told apart
+    // from the first photo's bytes by reference.
+    private static readonly byte[] SecondPhotoBytes = (byte[])OnePixelPng.Clone();
+
+    private ServiceRequest RequestWithTwoResolvedPhotos()
+    {
+        var sr = BuildRequest(
+            Image("att_1", "ten_acme/sr/one.jpg"),
+            Video("att_video", "ten_acme/sr/walkaround.mp4"),
+            Image("att_2", "ten_acme/sr/two.jpg"));
+        SetupRequest(sr);
+        _photoResolverMock.Setup(r => r.ResolveAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>
+            {
+                ["att_1"] = "https://blob/one.jpg?sig=a",
+                ["att_video"] = "https://blob/walkaround.mp4?sig=v",
+                ["att_2"] = "https://blob/two.jpg?sig=b",
+            });
+        _blobMock.Setup(b => b.DownloadAsync(AttachmentsContainer, "ten_acme/sr/two.jpg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SecondPhotoBytes);
+        return sr;
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldHandTheAssessmentTheDownloadedPhotos_InAttachmentOrder_ImagesOnly()
+    {
+        RequestWithTwoResolvedPhotos();
+        IReadOnlyList<AssessmentPhoto>? received = null;
+        _assessmentMock.Setup(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()))
+            .Callback<ServiceRequest, IReadOnlyList<AssessmentPhoto>?, CancellationToken>((_, photos, _) => received = photos)
+            .ReturnsAsync(GeneratedAssessment);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        received.Should().NotBeNull();
+        received!.Select(p => p.AttachmentId).Should().Equal("att_1", "att_2");
+        received[0].ContentType.Should().Be("image/jpeg");
+        received[0].Bytes.Should().BeSameAs(OnePixelPng);
+        received[1].Bytes.Should().BeSameAs(SecondPhotoBytes);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldDownloadEachPhotoOnce_ForBothTheAssessmentAndThePdf()
+    {
+        RequestWithTwoResolvedPhotos();
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        _assessmentMock.Verify(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _blobMock.Verify(b => b.DownloadAsync(AttachmentsContainer, "ten_acme/sr/one.jpg", It.IsAny<CancellationToken>()), Times.Once);
+        _blobMock.Verify(b => b.DownloadAsync(AttachmentsContainer, "ten_acme/sr/two.jpg", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OnRegeneration_ShouldReuseTheStoredAssessment_AndStillDownloadPhotosForThePdf()
+    {
+        var sr = RequestWithTwoResolvedPhotos();
+        sr.PreliminaryAssessment = GeneratedAssessment();
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        _assessmentMock.Verify(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _blobMock.Verify(b => b.DownloadAsync(AttachmentsContainer, "ten_acme/sr/one.jpg", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenAPhotoDownloadFails_ShouldAssessTheRest()
+    {
+        RequestWithTwoResolvedPhotos();
+        _blobMock.Setup(b => b.DownloadAsync(AttachmentsContainer, "ten_acme/sr/one.jpg", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException("blob read timeout"));
+        IReadOnlyList<AssessmentPhoto>? received = null;
+        _assessmentMock.Setup(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()))
+            .Callback<ServiceRequest, IReadOnlyList<AssessmentPhoto>?, CancellationToken>((_, photos, _) => received = photos)
+            .ReturnsAsync(GeneratedAssessment);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        received!.Select(p => p.AttachmentId).Should().Equal("att_2");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldRenderPhotoFindingsIntoTheEmail_AndDataPlatesIntoThePasteBlock()
+    {
+        RequestWithTwoResolvedPhotos();
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+        var assessment = GeneratedAssessment();
+        assessment.PhotoFindings = new PhotoFindingsEmbedded
+        {
+            DataPlates = [new PhotoDataPlateEmbedded { Component = "Slide motor", Manufacturer = "Lippert", ModelNumber = "LCI-123", AttachmentId = "att_2" }],
+            Observations = [new PhotoObservationEmbedded { Text = "Slide seal torn at the top corner", AttachmentId = "att_1" }],
+        };
+        _assessmentMock.Setup(a => a.AssessAsync(It.IsAny<ServiceRequest>(), It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(assessment);
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        var html = sent!.HtmlBody;
+        var block = html[html.IndexOf("section:ai-summary", StringComparison.Ordinal)..html.IndexOf("section:description", StringComparison.Ordinal)];
+        block.Should().Contain("Slide motor — Lippert LCI-123 (photo 3, photo.jpg)");
+        block.Should().Contain("Slide seal torn at the top corner (photo 1, photo.jpg)");
+
+        var pasteBlock = html[html.IndexOf("section:paste-block", StringComparison.Ordinal)..];
+        pasteBlock.Should().Contain("EQUIPMENT: Slide motor - Lippert LCI-123");
+        pasteBlock.Should().NotContain("Slide seal torn");
     }
 
     // ── Waiting for in-flight intake uploads (issue #516) ──────────────────

@@ -885,6 +885,68 @@ public class PacketHtmlRendererTests
         html.Should().Contain("&lt;script&gt;cause&lt;/script&gt;");
     }
 
+    // ── 5b. From photos (issue #772) ──────────────────────────────────────
+
+    private static readonly PacketPhotoFinding[] Findings =
+    [
+        new() { Text = "Refrigerator — Dometic RM2652 · S/N 12345678", PhotoLabel = "photo 3, fridge.jpg" },
+        new() { Text = "Thermostat — code E1", PhotoLabel = "photo 5, thermostat.jpg" },
+    ];
+
+    [Fact]
+    public void Render_WithPhotoFindings_ShouldListThemUnderFromPhotos_AfterThePartsAndBeforeTheAdvisoryNote()
+    {
+        var packet = AssessedPacket() with { AiSummary = AssessedPacket().AiSummary! with { PhotoFindings = Findings } };
+
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(packet));
+
+        block.Should().Contain("<ul class=\"photo-findings\"");
+        Order(block, "Likely parts").Should().BeLessThan(Order(block, PacketPhotoFinding.Heading));
+        Order(block, $"<li>{System.Net.WebUtility.HtmlEncode(Findings[0].Display)}</li>")
+            .Should().BeLessThan(Order(block, $"<li>{System.Net.WebUtility.HtmlEncode(Findings[1].Display)}</li>"));
+        Order(block, "photo 5, thermostat.jpg")
+            .Should().BeLessThan(Order(block, System.Net.WebUtility.HtmlEncode(PacketAiSummary.AdvisoryNote)));
+    }
+
+    [Fact]
+    public void Render_WithOnlyPhotoFindings_ShouldRenderThem_WithoutAssessmentRowsOrTheAdvisoryNote()
+    {
+        var packet = FullPacket() with { AiSummary = new PacketAiSummary { PhotoFindings = Findings } };
+
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(packet));
+
+        block.Should().Contain("AI-generated");
+        block.Should().Contain(PacketPhotoFinding.Heading);
+        block.Should().Contain("Thermostat — code E1 (photo 5, thermostat.jpg)");
+        block.Should().NotContain("Probable cause");
+        block.Should().NotContain("Confidence");
+        block.Should().NotContain(System.Net.WebUtility.HtmlEncode(PacketAiSummary.AdvisoryNote));
+    }
+
+    [Fact]
+    public void Render_WithoutPhotoFindings_ShouldOmitTheFromPhotosBlock()
+    {
+        AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()))
+            .Should().NotContain(PacketPhotoFinding.Heading);
+    }
+
+    [Fact]
+    public void Render_ShouldHtmlEncodePhotoFindings()
+    {
+        var packet = FullPacket() with
+        {
+            AiSummary = new PacketAiSummary
+            {
+                PhotoFindings = [new PacketPhotoFinding { Text = "<img src=x>", PhotoLabel = "photo 1, a&b.jpg" }],
+            },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("<img src=x>");
+        html.Should().Contain("&lt;img src=x&gt; (photo 1, a&amp;b.jpg)");
+    }
+
     // ── 8. Photos ─────────────────────────────────────────────────────────
 
     private static PacketPhoto Video(string fileName = "walkaround.mp4") => new()
