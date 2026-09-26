@@ -7,6 +7,13 @@
             </MudText>
         </MudStack>
 
+        @* Issue #773: the Submit button sits below a long summary — without this, a customer
+           can read the review, assume they're done and close the tab. *@
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true">
+            Your request has <strong>not</strong> been sent yet. Scroll down and tap
+            <strong>Submit Service Request</strong> at the bottom of this page to finish.
+        </MudAlert>
+
         @* Contact Information *@
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="2">
