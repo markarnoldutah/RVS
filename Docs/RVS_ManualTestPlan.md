@@ -100,7 +100,7 @@ A-7 prefill is deferred (Spec A-7, #673). These tests check that it stays off.
 - [ ] Attach a short `.mp4`, and a `.mov` recorded on an iPhone. Both are accepted, and the step shows how long a clip fits under the size limit.
 - [ ] Attach a file of a type the app does not take (`.docx`, `.zip`). The app rejects it with a clear message rather than dropping it silently or crashing.
 - [ ] Attach a `.m4a` or `.wav` audio clip and record what happens. Spec A-6 lists both, but the build does not accept them. See "Known gaps."
-- [ ] Try to attach an 11th file. The 10-attachment cap is enforced with a visible message.
+- [ ] Try to attach a 6th file. The 5-attachment cap is enforced with a visible message, and the step reads "Add up to 5 photos or videos" before any are attached.
 - [ ] Try to attach a file over 25 MB. The app rejects it before or during upload with a clear message, not a spinner that never stops.
 - [ ] On an iPhone that saves photos as HEIC, attach a photo straight from the Camera app, not converted first. It uploads, and it appears in the packet as a normal JPEG (see 2.4).
 - [ ] Turn off Wi-Fi and cellular in the middle of uploading a large photo. The app shows an upload error rather than appearing to succeed while the photo is missing.
@@ -192,7 +192,7 @@ Create the invites from the manager app (3.6) first.
 - [ ] Complete one full happy-path submission on Android Chrome.
 - [ ] Complete one full happy-path submission on a desktop browser.
 - [ ] Submit with only the required fields (no VIN, no photos, no voice, no overrides). The packet still renders sensibly (B-2, "degrades if VIN absent").
-- [ ] Submit with every optional feature used at once (VIN photo, voice input, 10 attachments, category override, follow-up answers). Nothing breaks.
+- [ ] Submit with every optional feature used at once (VIN photo, voice input, 5 attachments (the cap), category override, follow-up answers). Nothing breaks.
 - [ ] Put obviously malicious input in the description (`<script>`, HTML tags, SQL-like strings). It is accepted as plain text and shows up safely in the packet and on the status page, with no script running and no broken layout.
 
 ---

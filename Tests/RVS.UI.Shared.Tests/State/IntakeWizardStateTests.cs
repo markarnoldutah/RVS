@@ -754,20 +754,74 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public async Task ValidateCurrentStep_Step7_TooManyAttachments_ShouldReturnError()
+    public async Task ValidateCurrentStep_Step7_SixAttachmentsWithNoConfig_ShouldReturnError()
     {
         var state = CreateState();
         await state.GoToStepAsync(7);
-        for (var i = 0; i < 11; i++)
-        {
-            state.Attachments.Add(new AttachmentFileInfo { FileName = $"file{i}.jpg" });
-        }
+        AddAttachments(state, 6);
 
         var errors = state.ValidateCurrentStep();
 
         errors.Should().ContainSingle()
-            .Which.Should().Contain("10");
+            .Which.Should().Contain("5");
     }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step7_FiveAttachmentsWithNoConfig_ShouldReturnNoErrors()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(7);
+        AddAttachments(state, 5);
+
+        state.ValidateCurrentStep().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step7_FourAttachmentsWithConfiguredCapOfThree_ShouldReturnError()
+    {
+        var state = CreateState();
+        state.Config = BuildConfig(maxAttachments: 3);
+        await state.GoToStepAsync(7);
+        AddAttachments(state, 4);
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().ContainSingle()
+            .Which.Should().Contain("3");
+    }
+
+    [Theory]
+    [InlineData(null, 5)]
+    [InlineData(0, 5)]
+    [InlineData(3, 3)]
+    [InlineData(5, 5)]
+    [InlineData(10, 5)]
+    public void MaxAttachments_ShouldFollowConfigClampedToFive(int? configured, int expected)
+    {
+        var state = CreateState();
+        if (configured is not null)
+        {
+            state.Config = BuildConfig(configured.Value);
+        }
+
+        state.MaxAttachments.Should().Be(expected);
+    }
+
+    private static void AddAttachments(IntakeWizardState state, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            state.Attachments.Add(new AttachmentFileInfo { FileName = $"file{i}.jpg" });
+        }
+    }
+
+    private static IntakeConfigResponseDto BuildConfig(int maxAttachments) => new()
+    {
+        LocationName = "Test",
+        LocationSlug = "test",
+        DealershipName = "Test",
+        MaxAttachments = maxAttachments,
+    };
 
     [Fact]
     public async Task ValidateCurrentStep_Step8_ShouldAlwaysReturnNoErrors()

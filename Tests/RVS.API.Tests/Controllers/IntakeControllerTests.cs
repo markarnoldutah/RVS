@@ -336,7 +336,7 @@ public class IntakeControllerTests
             BlobName = "ten_test/sr_1/guid_photo.jpg",
             ExpiresAtUtc = DateTime.UtcNow.AddMinutes(15)
         };
-        _attachmentServiceMock.Setup(s => s.GenerateUploadSasAsync("ten_test", "sr_1", "photo.jpg", "image/jpeg", 10, It.IsAny<CancellationToken>()))
+        _attachmentServiceMock.Setup(s => s.GenerateUploadSasAsync("ten_test", "sr_1", "photo.jpg", "image/jpeg", It.IsAny<CancellationToken>()))
             .ReturnsAsync(sasResponse);
 
         var result = await _sut.GetUploadSas("test-slug", "sr_1", "photo.jpg", "image/jpeg");
@@ -367,7 +367,7 @@ public class IntakeControllerTests
             ContentType = "image/jpeg",
             SizeBytes = 1024
         };
-        _attachmentServiceMock.Setup(s => s.ConfirmAttachmentAsync("ten_test", "sr_1", request, 10, It.IsAny<CancellationToken>()))
+        _attachmentServiceMock.Setup(s => s.ConfirmAttachmentAsync("ten_test", "sr_1", request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(attachmentDto);
 
         var result = await _sut.ConfirmUpload("test-slug", "sr_1", request);

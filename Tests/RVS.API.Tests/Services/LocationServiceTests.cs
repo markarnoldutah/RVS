@@ -329,6 +329,22 @@ public class LocationServiceTests
         _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    [InlineData(11)]
+    public async Task CreateAsync_WhenIntakeMaxAttachmentsOutsideOneToFive_ShouldThrowArgumentExceptionAndNotPersist(int maxAttachments)
+    {
+        var location = BuildLocation();
+        location.IntakeConfig = new IntakeFormConfigEmbedded { MaxAttachments = maxAttachments };
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*between 1 and 5*");
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task CreateAsync_WhenPacketConfigHasTenRecipients_ShouldSucceed()
     {
@@ -498,6 +514,21 @@ public class LocationServiceTests
         var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
 
         await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    [InlineData(11)]
+    public async Task UpdateAsync_WhenIntakeMaxAttachmentsOutsideOneToFive_ShouldThrowArgumentException(int maxAttachments)
+    {
+        var updated = BuildLocation();
+        updated.IntakeConfig = new IntakeFormConfigEmbedded { MaxAttachments = maxAttachments };
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*between 1 and 5*");
         _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

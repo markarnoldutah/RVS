@@ -12,8 +12,9 @@ namespace RVS.Domain.Packets;
 /// attachments together — at <see cref="AcsMaxRequestBytes"/>, and attachments travel base64
 /// encoded, which inflates them by about a third. Microsoft's own guidance puts the realistic
 /// payload of raw attachment bytes at roughly 7.5 MB. <c>Spec A-6</c> lets a customer upload
-/// ten 25 MB files, so six full-resolution phone photos attached as originals exceed the cap on
-/// their own — six real 12 MP photos measured about 14.9 MB before base64. Before this, ACS
+/// five 25 MB files (ten before issue #777), and even five full-resolution phone photos attached
+/// as originals exceed the cap on their own — six real 12 MP photos measured about 14.9 MB before
+/// base64, roughly 2.5 MB each. Before this, ACS
 /// rejected the send, all three delivery attempts failed the same way, and the shop got a service
 /// request with no packet. The packet PDF is not the problem: QuestPDF resamples embedded images
 /// to their placed size, so the PDF is roughly 1.5–3 MB for six to ten detailed photos regardless

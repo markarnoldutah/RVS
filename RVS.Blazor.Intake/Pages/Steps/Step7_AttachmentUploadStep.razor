@@ -17,7 +17,7 @@
         else
         {
             <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
-                Max 10 files, up to 25 MB each.
+                Max @MaxAttachments files, up to @MaxFileSizeMb MB each.
             </MudText>
         }
 
@@ -156,7 +156,7 @@
         ? string.Join(",", types)
         : "image/*,video/*,application/pdf";
 
-    private int MaxAttachments => State.Config?.MaxAttachments ?? 10;
+    private int MaxAttachments => State.MaxAttachments;
     private int MaxFileSizeMb => State.Config?.MaxFileSizeMb ?? 25;
 
     /// <summary>

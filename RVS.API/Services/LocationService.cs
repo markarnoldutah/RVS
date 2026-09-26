@@ -73,6 +73,7 @@ public sealed class LocationService : ILocationService
         ArgumentNullException.ThrowIfNull(entity);
 
         ValidatePacketConfig(entity);
+        ValidateIntakeConfig(entity);
         ValidateTimeZone(entity);
 
         var dealership = await GetDealershipAsync(tenantId, cancellationToken);
@@ -172,6 +173,7 @@ public sealed class LocationService : ILocationService
         ArgumentNullException.ThrowIfNull(entity);
 
         ValidatePacketConfig(entity);
+        ValidateIntakeConfig(entity);
         ValidateTimeZone(entity);
 
         var existing = await _locationRepository.GetByIdAsync(tenantId, id, cancellationToken)
@@ -342,6 +344,20 @@ public sealed class LocationService : ILocationService
     private static void ValidatePacketConfig(Location entity)
     {
         var result = PacketConfigValidator.Validate(entity.PacketConfig);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(entity));
+        }
+    }
+
+    /// <summary>
+    /// Rejects a location whose intake configuration breaks a <c>Spec A-6</c> rule — the
+    /// 1–<see cref="IntakeFormConfigEmbedded.MaxAttachmentCap"/> attachment cap (issue #777).
+    /// Surfaces as an <see cref="ArgumentException"/> (HTTP 400) via <c>ExceptionHandlingMiddleware</c>.
+    /// </summary>
+    private static void ValidateIntakeConfig(Location entity)
+    {
+        var result = IntakeConfigValidator.Validate(entity.IntakeConfig);
         if (!result.IsValid)
         {
             throw new ArgumentException(result.ErrorMessage, nameof(entity));

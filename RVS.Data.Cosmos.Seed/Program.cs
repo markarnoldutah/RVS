@@ -661,7 +661,7 @@ static List<Dealership> BuildDealerships() =>
         IntakeConfig = new IntakeFormConfigEmbedded
         {
             MaxFileSizeMb = 50,
-            MaxAttachments = 10,
+            MaxAttachments = 5,
             AiContext = "Large multi-location RV dealership chain in the Western US.",
         },
     },
