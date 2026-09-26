@@ -47,6 +47,7 @@ Version 1.0 was written against the build of September 10. Since then:
 - [ ] Submit the form rapidly many times in a row from one IP (or reload and resubmit). The per-IP rate limit eventually blocks further submissions with a clear message, not a silent failure or a 500.
 - [ ] Reload the page mid-form. The app either restores progress or restarts cleanly, and never leaves a blank or broken screen.
 - [ ] Press **Continue** at the bottom of a long step. The next step opens scrolled to the top. On steps 2–5, the cursor lands in the first empty text field and skips any field already filled.
+- [ ] On a phone, press **Continue** on Step 2 and on Step 5 while the keyboard is still open from the last field you typed in. The keyboard closes and the next step still opens at the top (#758).
 - [ ] Type in a field on the same step. The page never jumps or re-scrolls while you type.
 
 ### 1.1b Channel-tagged links (A-13)
@@ -54,7 +55,7 @@ Version 1.0 was written against the build of September 10. Since then:
 - [ ] Open the short link (`go.rvintake.com/{locationSlug}`). It redirects to the intake form and the address bar ends with `?src=print`.
 - [ ] Open it with `?src=qr`. The redirect carries `src=qr` through.
 - [ ] Open it with a channel nobody has defined (`?src=nfc`). It still redirects, tagged `nfc`, and does not error.
-- [ ] Open it with rubbish (`?src=<script>`). It still redirects, tagged `other`.
+- [ ] Open the **short link** with rubbish (`go.rvintake.com/{locationSlug}?src=<script>`). It still redirects, and the address bar ends with `?src=other`. Opening the intake URL itself (`rvintake.com/{locationSlug}?src=<script>`) skips the redirect, so the address bar keeps what you typed. The submission is still recorded as `other`.
 - [ ] Open it with a slug that does not exist. It still redirects, and the **intake app** shows its own "location not found" page. A 404 from the redirect itself is a failure.
 - [ ] Download the QR code from the manager app's Locations page and scan it. It goes through the short link tagged `src=qr`, not straight to the intake host.
 - [ ] Submit one request each from `qr`, `textrepl` and a bare link, then read `GET api/locations/{id}/intake-sources`. Each submission is counted under the channel you used, and the bare one under `print`. (API only. There is no dealer-facing screen for this report yet.)
@@ -66,6 +67,7 @@ Version 1.0 was written against the build of September 10. Since then:
 - [ ] Where texting is offered, the copy states how often RVS texts, that message and data rates may apply, and *Reply STOP to opt out, HELP for help*. It also links to `/sms-terms`.
 - [ ] Name, phone, email and preferred contact method (`Phone` / `Text` / `Email`) are all required before you can continue. Phone is required even when the preference is Email.
 - [ ] Enter a malformed email (`bob@`, `bob.example.com`) and a short phone number. Each field shows its own error and you cannot continue.
+- [ ] Type or paste letters into the phone field (`801-555-abcd`, `1-800-FLOWERS`). The letters are refused as you type. Digits, spaces and `( ) + - .` are accepted (#758).
 - [ ] Tick *Do not send text messages*. The **Text** option is disabled. If Text was selected, the selection is cleared.
 - [ ] Tick *Do not send email*. The **Email** option is disabled. If Email was selected, the selection is cleared.
 - [ ] With both opt-outs ticked, **Phone** is still available and the step can be completed.
@@ -93,7 +95,8 @@ A-7 prefill is deferred (Spec A-7, #673). These tests check that it stays off.
 
 - [ ] Type a realistic 3–5 sentence description. No character limit is hit early.
 - [ ] Open the issue-category list. All 13 categories are present, sorted alphabetically.
-- [ ] Attach a `.jpg` and a `.png`. Both preview and upload.
+- [ ] Attach a `.jpg` and a `.png`. Each shows a thumbnail in the file list, and both upload (#758). A video, a PDF or an unconverted HEIC shows an icon instead.
+- [ ] With fewer than 10 files attached, the drop zone says how many more you can add (*Add up to 8 more photos or videos*). At 10 it says the maximum is reached and to remove one to add another.
 - [ ] Attach a short `.mp4`, and a `.mov` recorded on an iPhone. Both are accepted, and the step shows how long a clip fits under the size limit.
 - [ ] Attach a file of a type the app does not take (`.docx`, `.zip`). The app rejects it with a clear message rather than dropping it silently or crashing.
 - [ ] Attach a `.m4a` or `.wav` audio clip and record what happens. Spec A-6 lists both, but the build does not accept them. See "Known gaps."
@@ -117,7 +120,8 @@ A-7 prefill is deferred (Spec A-7, #673). These tests check that it stays off.
 
 - [ ] After you enter a description, 2–4 follow-up questions appear, relevant to the problem (a slide-out problem gets slide questions).
 - [ ] Answer the follow-up questions. The answers show up in the packet's diagnostic Q&A (Part 2).
-- [ ] Cause an AI failure for the follow-up questions (airplane mode at the right moment, if you can reproduce it). The fixed questions for that category appear instead of an empty or broken section.
+- [ ] Cause an AI failure for the follow-up questions on the server (the AI endpoint down or unconfigured). The fixed questions for that category appear instead of an empty or broken section.
+- [ ] Go into airplane mode just before continuing from the description step. Step 6 shows no questions, and a non-blocking warning says diagnostic questions are unavailable and you can skip this step. **Continue** still works. The fixed questions cannot appear here, because they come from the API the phone could not reach.
 - [ ] An AI-suggested category appears and can be changed. Pick a category different from the suggestion. **Your** choice is what reaches the packet.
 - [ ] The "Suggested" urgency and usage chips (A-11) are clearly labeled as suggestions, and ignoring or dismissing them does not block submission.
 - [ ] Describe a job clearly outside the location's enabled capabilities. A non-blocking capability alert appears (A-12), and you can still submit.
@@ -170,7 +174,7 @@ Create the invites from the manager app (3.6) first.
 
 ### 1.9 Site identity and policies (A-15)
 
-- [ ] Every intake page, the site root included, shows the operator's legal name, **Arnold Digital Solutions**, in the footer, with links to `/privacy`, `/terms` and `/sms-terms`.
+- [ ] Every intake page, the site root included, shows *Powered by **Arnold Digital Solutions*** in the footer, with links to `/privacy`, `/terms` and `/sms-terms`.
 - [ ] All three policy pages load with no login, link to each other and end with the contact address `support@arnolddigitalsolutions.com`.
 - [ ] The privacy policy states retention as the Spec does: contact details and requests are kept while the dealership uses RV Intake or until the customer asks for deletion, and the VIN-keyed service history is kept indefinitely.
 
@@ -178,7 +182,7 @@ Create the invites from the manager app (3.6) first.
 
 - [ ] The intake app uses the Denim & Rust brand: Ink (dark blue) app bar and headings, Rust primary buttons and links, cream page background, **Space Grotesk** type.
 - [ ] In the browser's network panel, no request goes to Google Fonts. The font is served from the app.
-- [ ] Turn on the high-contrast toggle. The app switches to black, yellow and cyan, and the setting survives a reload. Intake has no dark mode, and none is offered.
+- [ ] Turn on the high-contrast toggle. The app switches to black, yellow and cyan, and the setting survives a reload and a later visit on the same device (#758). Intake has no dark mode, and none is offered.
 - [ ] Every error message shows an icon, so an error never relies on color alone to stand out from a Rust button.
 - [ ] The favicon and home-screen icon show the "Service Tag" mark.
 

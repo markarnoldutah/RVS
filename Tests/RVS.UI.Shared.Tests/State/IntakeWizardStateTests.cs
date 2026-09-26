@@ -287,6 +287,32 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
+    public async Task PersistAndRestore_ShouldKeepTheVinLookupResultAcrossAReload()
+    {
+        // Issue #758: without it, a refresh on Step 4 kept the decoded vehicle but told the
+        // customer no vehicle information was found for the VIN.
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug", Vin = "1HGBH41JXMN109186", VinLookupSucceeded = true };
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+
+        after.VinLookupSucceeded.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetTheVinLookupResult()
+    {
+        var state = CreateState();
+        state.VinLookupSucceeded = true;
+
+        await state.ClearAsync();
+
+        state.VinLookupSucceeded.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ClearAsync_ShouldDropTheInvite()
     {
         var state = CreateState();
