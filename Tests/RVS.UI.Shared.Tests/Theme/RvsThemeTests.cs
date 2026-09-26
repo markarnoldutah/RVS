@@ -208,10 +208,78 @@ public class RvsThemeTests
         }
     }
 
+    [Theory]
+    [MemberData(nameof(IntakeThemes))]
+    public void IntakeTheme_EverySemanticFill_ShouldMeetAaAgainstItsContrastText(string name, MudTheme theme)
+    {
+        // Intake notifications are solid fills (#761): the text and icon sit on the semantic
+        // colour itself, so each fill/contrast-text pair must clear WCAG AA on its own.
+        var palette = theme.PaletteLight;
+
+        foreach (var (role, fill, text) in new[]
+                 {
+                     ("success", palette.Success, palette.SuccessContrastText),
+                     ("warning", palette.Warning, palette.WarningContrastText),
+                     ("error", palette.Error, palette.ErrorContrastText),
+                     ("info", palette.Info, palette.InfoContrastText)
+                 })
+        {
+            ContrastRatio(fill, text).Should().BeGreaterThanOrEqualTo(4.5, $"{name} {role}");
+        }
+    }
+
+    [Fact]
+    public void HighContrastThemes_SemanticFillsShouldBeBrightWithBlackText()
+    {
+        // On a black ground a solid notification must be a bright fill carrying black text;
+        // MudBlazor's stock warning/info fills take white text and fail AA there.
+        foreach (var (name, theme) in new[]
+                 {
+                     ("manager", ManagerTheme.HighContrast),
+                     ("intake", IntakeTheme.HighContrast)
+                 })
+        {
+            var palette = theme.PaletteLight;
+            var stock = new PaletteLight();
+
+            palette.Warning.Should().NotBeColor(stock.Warning.Value, name);
+            palette.Info.Should().NotBeColor(stock.Info.Value, name);
+            palette.SuccessContrastText.Should().BeColor("#000000", name);
+            palette.WarningContrastText.Should().BeColor("#000000", name);
+            palette.ErrorContrastText.Should().BeColor("#000000", name);
+            palette.InfoContrastText.Should().BeColor("#000000", name);
+        }
+    }
+
     [Fact]
     public void ManagerTheme_Dark_SecondaryShouldBeTheAuditedLightDenim()
     {
         ManagerTheme.Theme.PaletteDark.Secondary.Should().BeColor("#8FA9C2");
+    }
+
+    public static TheoryData<string, MudTheme> IntakeThemes() => new()
+    {
+        { "intake", IntakeTheme.Theme },
+        { "intake-high-contrast", IntakeTheme.HighContrast }
+    };
+
+    /// <summary>WCAG 2.1 contrast ratio between two opaque colours.</summary>
+    private static double ContrastRatio(MudColor a, MudColor b)
+    {
+        var la = RelativeLuminance(a);
+        var lb = RelativeLuminance(b);
+        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+    }
+
+    private static double RelativeLuminance(MudColor c)
+    {
+        static double Channel(byte v)
+        {
+            var s = v / 255.0;
+            return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+        }
+
+        return 0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
     }
 
     public static TheoryData<string, MudTheme> AllThemes() => new()

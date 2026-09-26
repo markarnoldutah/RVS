@@ -5,7 +5,7 @@
            required capabilities. Otherwise no UI is rendered for this. *@
         @if (State.CapabilityAssessment is { Matched: false })
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined"
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled"
                       Icon="@Icons.Material.Filled.Warning">
                 @GetCapabilityFallbackMessage()
             </MudAlert>
@@ -33,7 +33,7 @@
         }
         else if (_error is not null)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
                 @_error You can skip this step and continue.
             </MudAlert>
         }
@@ -41,7 +41,7 @@
         {
             @if (!string.IsNullOrWhiteSpace(State.SmartSuggestion))
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true"
+                <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true"
                           Icon="@Icons.Material.Filled.Lightbulb">
                     <strong>Suggestion:</strong> @State.SmartSuggestion
                 </MudAlert>

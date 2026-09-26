@@ -29,6 +29,12 @@ internal static class RvsHighContrastPalette
             ErrorContrastText = "#000000",
             Success = "#00FF00",
             SuccessContrastText = "#000000",
+            // Set explicitly: MudBlazor's stock warning/info fills carry white text, which
+            // fails AA on a solid notification. Bright fill, black text, like the rest.
+            Warning = "#FFB000",
+            WarningContrastText = "#000000",
+            Info = "#80D8FF",
+            InfoContrastText = "#000000",
             Divider = "#FFFFFF",
             ActionDefault = "#FFFFFF",
             ActionDisabled = "#666666",
