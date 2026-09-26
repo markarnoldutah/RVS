@@ -31,8 +31,12 @@ namespace RVS.Domain.Packets;
 /// </summary>
 public static class PasteBlockGenerator
 {
-    /// <summary>Default character cap for the block (<c>Spec B-5</c> / <c>B-6</c>).</summary>
-    public const int DefaultCharacterCap = 1000;
+    /// <summary>
+    /// Default character cap for the block (<c>Spec B-5</c> / <c>B-6</c>). Sized so the longest
+    /// description Intake accepts (2,000 characters) survives whole with its fences, category,
+    /// and status line (issue #775); a location whose DMS field is shorter lowers its own cap.
+    /// </summary>
+    public const int DefaultCharacterCap = 2500;
 
     /// <summary>The fence line placed above and below the block for clean selection.</summary>
     public const string Delimiter = "----- RV INTAKE -----";

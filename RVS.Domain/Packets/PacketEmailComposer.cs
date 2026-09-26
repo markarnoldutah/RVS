@@ -12,7 +12,8 @@ namespace RVS.Domain.Packets;
 /// attachment bytes, and knows nothing about the transport. The packet generation
 /// orchestrator resolves the recipient list and attachment bytes and hands them in.
 ///
-/// <para><b>Subject.</b> <c>[RVS] {category} — {year} {make} {model} — {customer last name}</c>,
+/// <para><b>Subject.</b> <c>New SR: {customer last name}: {year} {make} {model} - {category}</c>
+/// (issue #775 — the last name leads so an inbox sorts and scans by customer),
 /// degrading field by field: an unclassified request reads <c>Uncategorized</c>; a unit with
 /// no year/make/model reads <c>Unknown vehicle</c>; a missing last name reads
 /// <c>Unknown</c>.</para>
@@ -33,8 +34,8 @@ public static class PacketEmailComposer
     /// <summary>Last-name placeholder for requests created before the name was captured.</summary>
     private const string UnknownLastNameLabel = "Unknown";
 
-    /// <summary>The em-dash separating the three subject segments, matching <c>Spec B-4</c>.</summary>
-    private const string SubjectSeparator = " — ";
+    /// <summary>Leads the subject so a new request stands out in a shared service inbox.</summary>
+    private const string SubjectPrefix = "New SR";
 
     /// <summary>
     /// Builds the packet email for one request.
@@ -89,7 +90,7 @@ public static class PacketEmailComposer
             ? UnknownLastNameLabel
             : customerLastName.Trim();
 
-        return $"[RVS] {category}{SubjectSeparator}{vehicle}{SubjectSeparator}{lastName}";
+        return $"{SubjectPrefix}: {lastName}: {vehicle} - {category}";
     }
 
     private static string BuildVehicle(PacketUnitHeader unit)

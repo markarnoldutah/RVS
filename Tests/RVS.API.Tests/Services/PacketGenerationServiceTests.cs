@@ -595,7 +595,7 @@ public class PacketGenerationServiceTests
 
         _notificationMock.Verify(n => n.SendPacketEmailAsync(
             It.Is<PacketEmailMessage>(m =>
-                m.Subject == "[RVS] Slide System — 2021 Jayco Eagle — Doe" &&
+                m.Subject == "New SR: Doe: 2021 Jayco Eagle - Slide System" &&
                 m.Recipients.SequenceEqual(new[] { "service@dealer.example", "advisor@dealer.example" })),
             It.IsAny<CancellationToken>()), Times.Once);
     }

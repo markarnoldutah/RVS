@@ -202,7 +202,7 @@ Create the invites from the manager app (3.6) first.
 ### 2.1 Delivery timing and reliability (B-1, B-4)
 
 - [ ] After a real intake submission, the packet email reaches the configured recipients within about a minute (spec target is P99 under 60 s).
-- [ ] The subject matches `[RVS] {category} — {year} {make} {model} — {customer last name}`.
+- [ ] The subject matches `New SR: {customer last name}: {year} {make} {model} - {category}`.
 - [ ] Submit with **no VIN and no decoded vehicle**. The subject reads `Unknown vehicle` in that segment (and `Uncategorized` when there is no category), never a blank or broken segment.
 - [ ] The sender shows as **RV Intake**, not `DoNotReply`.
 - [ ] Set a location to 1 recipient and confirm delivery. Set it to 10 recipients (the maximum) and confirm all 10 receive the packet.
@@ -255,7 +255,8 @@ Open the packet inline in the email body, not the PDF, and check from top to bot
 
 - [ ] Copy the paste block out of the email. It is plain ASCII: no smart quotes, no em dashes, no non-breaking spaces.
 - [ ] The order is category, then the customer's verbatim description, then the status link.
-- [ ] Submit a description longer than the cap (default 1,000 characters). The block is cut at a word boundary, not mid-word, and never goes over the cap.
+- [ ] Submit a 2,000-character description (the intake maximum) under the default cap (2,500). The block carries it whole, with no `...`.
+- [ ] Lower the location's cap to 500 and submit a longer description. The block is cut at a word boundary, not mid-word, and never goes over the cap.
 - [ ] Paste the block into a real text field (a DMS complaint field if you have one, or at least Notepad or a plain textarea). It pastes cleanly with no mangled characters.
 
 ### 2.6 Size ceiling and dropped attachments (B-4)

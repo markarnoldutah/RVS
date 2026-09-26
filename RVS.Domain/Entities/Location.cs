@@ -86,7 +86,7 @@ public class PacketConfigEmbedded
     public const int MaxRecipients = 10;
 
     /// <summary>Default paste-block character cap (<c>Spec B-5</c>).</summary>
-    public const int DefaultPasteBlockCharacterCap = 1000;
+    public const int DefaultPasteBlockCharacterCap = Packets.PasteBlockGenerator.DefaultCharacterCap;
 
     /// <summary>Smallest allowed paste-block character cap.</summary>
     public const int MinPasteBlockCharacterCap = 100;

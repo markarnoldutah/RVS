@@ -14,7 +14,7 @@ public class PacketConfigEmbeddedTests
         config.Recipients.Should().BeEmpty();
         config.AttachPdf.Should().BeTrue();
         config.IncludePhotos.Should().BeTrue();
-        config.PasteBlockCharacterCap.Should().Be(1000);
+        config.PasteBlockCharacterCap.Should().Be(2500);
         config.StatusLinkTtlDays.Should().Be(30);
         config.LogoUrl.Should().BeNull();
     }

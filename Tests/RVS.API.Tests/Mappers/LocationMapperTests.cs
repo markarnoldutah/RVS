@@ -606,7 +606,7 @@ public class LocationMapperTests
         dto.PacketConfig.Should().NotBeNull();
         dto.PacketConfig.Enabled.Should().BeTrue();
         dto.PacketConfig.Recipients.Should().BeEmpty();
-        dto.PacketConfig.PasteBlockCharacterCap.Should().Be(1000);
+        dto.PacketConfig.PasteBlockCharacterCap.Should().Be(2500);
         dto.PacketConfig.StatusLinkTtlDays.Should().Be(30);
     }
 

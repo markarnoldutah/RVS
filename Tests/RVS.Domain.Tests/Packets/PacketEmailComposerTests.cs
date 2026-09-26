@@ -10,7 +10,7 @@ namespace RVS.Domain.Tests.Packets;
 /// <see cref="PacketEmailMessage"/> (<c>Spec B-4</c>, issue #437).
 ///
 /// Contract under test: the subject matches
-/// <c>[RVS] {category} — {year} {make} {model} — {customer last name}</c> and degrades
+/// <c>New SR: {customer last name}: {year} {make} {model} - {category}</c> (issue #775) and degrades
 /// field-by-field; the plain-text body is the paste block, generated on the fly when the
 /// packet has none; the HTML body, recipients, and attachments pass through untouched.
 /// </summary>
@@ -95,7 +95,7 @@ public class PacketEmailComposerTests
     {
         var message = PacketEmailComposer.Compose(BuildPacket(), Html, "Doe", OneRecipient);
 
-        message.Subject.Should().Be("[RVS] Slide System — 2021 Jayco Eagle — Doe");
+        message.Subject.Should().Be("New SR: Doe: 2021 Jayco Eagle - Slide System");
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class PacketEmailComposerTests
     {
         var message = PacketEmailComposer.Compose(BuildPacket(category: null), Html, "Doe", OneRecipient);
 
-        message.Subject.Should().Be("[RVS] Uncategorized — 2021 Jayco Eagle — Doe");
+        message.Subject.Should().Be("New SR: Doe: 2021 Jayco Eagle - Uncategorized");
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class PacketEmailComposerTests
 
         var message = PacketEmailComposer.Compose(packet, Html, "Doe", OneRecipient);
 
-        message.Subject.Should().Be("[RVS] Slide System — Unknown vehicle — Doe");
+        message.Subject.Should().Be("New SR: Doe: Unknown vehicle - Slide System");
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public class PacketEmailComposerTests
 
         var message = PacketEmailComposer.Compose(packet, Html, "Doe", OneRecipient);
 
-        message.Subject.Should().Be("[RVS] Slide System — 2021 Eagle — Doe");
+        message.Subject.Should().Be("New SR: Doe: 2021 Eagle - Slide System");
     }
 
     [Theory]
@@ -134,7 +134,7 @@ public class PacketEmailComposerTests
     {
         var message = PacketEmailComposer.Compose(BuildPacket(), Html, lastName!, OneRecipient);
 
-        message.Subject.Should().Be("[RVS] Slide System — 2021 Jayco Eagle — Unknown");
+        message.Subject.Should().Be("New SR: Unknown: 2021 Jayco Eagle - Slide System");
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public class PacketEmailComposerTests
     {
         var message = PacketEmailComposer.Compose(BuildPacket(), Html, "  Doe  ", OneRecipient);
 
-        message.Subject.Should().Be("[RVS] Slide System — 2021 Jayco Eagle — Doe");
+        message.Subject.Should().Be("New SR: Doe: 2021 Jayco Eagle - Slide System");
     }
 
     // ── Bodies ─────────────────────────────────────────────────────────────
