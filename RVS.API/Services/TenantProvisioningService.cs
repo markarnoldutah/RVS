@@ -441,6 +441,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             Name = LocationNameGenerator.ForBusiness(tenant.Name, request.Name),
             Slug = string.IsNullOrWhiteSpace(request.Slug) ? string.Empty : request.Slug.Trim(),
             Phone = TrimToNull(request.Phone),
+            TimeZoneId = TrimToNull(request.TimeZoneId),
             PacketConfig = new PacketConfigEmbedded { Recipients = [.. request.Recipients.Select(r => r.Trim())] },
             EnabledCapabilities = request.EnabledCapabilities is not null ? [.. request.EnabledCapabilities] : [],
             CreatedByUserId = _userContext.UserId

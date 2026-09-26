@@ -360,6 +360,25 @@ public class TenantProvisioningValidatorTests
         TenantProvisioningValidator.ValidateAddLocation(request).IsValid.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("America/Denver")]
+    public void ValidateAddLocation_WhenTimeZoneIsBlankOrKnown_ShouldPass(string? timeZoneId)
+    {
+        TenantProvisioningValidator.ValidateAddLocation(ValidLocation() with { TimeZoneId = timeZoneId })
+            .IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidateAddLocation_WhenTimeZoneIsUnknown_ShouldFail()
+    {
+        var result = TenantProvisioningValidator.ValidateAddLocation(ValidLocation() with { TimeZoneId = "Mars/Olympus_Mons" });
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("Mars/Olympus_Mons");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static TenantCreateRequestDto ValidCreate() => new()

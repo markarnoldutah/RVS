@@ -161,7 +161,10 @@ public static partial class TenantProvisioningValidator
             : RequiredText(request.Reason, "Reason", MaxReasonLength);
     }
 
-    /// <summary>Validates an add-location request (Spec P-5): 1–10 packet recipients.</summary>
+    /// <summary>
+    /// Validates an add-location request (Spec P-5): 1–10 packet recipients, and an optional
+    /// time zone checked by <see cref="TimeZoneValidator"/> (issue #770).
+    /// </summary>
     public static ValidationResult ValidateAddLocation(TenantLocationCreateRequestDto request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -170,6 +173,7 @@ public static partial class TenantProvisioningValidator
             () => RequiredText(request.Name, "Location name", MaxNameLength),
             () => OptionalSlug(request.Slug),
             () => MaxLength(request.Phone, "Phone", MaxPhoneLength),
+            () => TimeZoneValidator.Validate(request.TimeZoneId?.Trim()),
             () => Recipients(request.Recipients));
     }
 

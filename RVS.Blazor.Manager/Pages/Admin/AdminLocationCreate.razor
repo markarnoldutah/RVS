@@ -50,6 +50,15 @@ else
                                   Variant="Variant.Outlined" HelperText="Leave blank to generate one from the names." />
                     <MudTextField T="string" @bind-Value="_form.Phone" Label="Phone (optional)"
                                   InputType="InputType.Telephone" Variant="Variant.Outlined" autocomplete="tel" />
+                    <MudSelect T="string" @bind-Value="_form.TimeZoneId" Label="Time zone (optional)"
+                               Variant="Variant.Outlined" Clearable="true"
+                               HelperText="Sets the Received time on service packets. Leave blank to show UTC."
+                               AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                        @foreach (var tz in DealershipTimeZones.All)
+                        {
+                            <MudSelectItem T="string" Value="@tz.IanaId">@tz.DisplayName</MudSelectItem>
+                        }
+                    </MudSelect>
                     <MudTextField T="string" @bind-Value="_form.Recipients" Label="Packet recipients"
                                   Lines="4" Variant="Variant.Outlined"
                                   HelperText="One email per line, 1 to 10." />
@@ -139,6 +148,7 @@ else
                 Name = _form.Name ?? string.Empty,
                 Slug = _form.Slug,
                 Phone = _form.Phone,
+                TimeZoneId = _form.TimeZoneId,
                 Recipients = [.. (_form.Recipients ?? string.Empty)
                     .Split(['\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)],
                 EnabledCapabilities = [.. _form.EnabledCapabilities]
@@ -174,6 +184,7 @@ else
         public string? Name { get; set; }
         public string? Slug { get; set; }
         public string? Phone { get; set; }
+        public string? TimeZoneId { get; set; }
         public string? Recipients { get; set; }
         public List<string> EnabledCapabilities { get; set; } = [];
     }
