@@ -172,17 +172,23 @@
                                    OnClick="() => EditStep(7)"
                                    Style="text-transform: none;">Edit</MudButton>
                     </MudStack>
-                    <MudStack Spacing="1">
+                    @* Issue #768: thumbnails, not file names — camera names like IMG_4521.jpg say nothing. *@
+                    <ul class="attachment-thumbs">
                         @foreach (var attachment in State.Attachments)
                         {
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.Save" Size="Size.Small" Color="Color.Default" />
-                                <MudText Typo="Typo.body1">
-                                    @attachment.FileName (@FormatFileSize(attachment.SizeBytes))
-                                </MudText>
-                            </MudStack>
+                            <li class="attachment-thumb" title="@attachment.FileName">
+                                @if (attachment.ThumbnailDataUrl is not null)
+                                {
+                                    <img src="@attachment.ThumbnailDataUrl" alt="@attachment.FileName" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@AttachmentSlots.FileIcon(attachment.ContentType)" Color="Color.Primary" />
+                                    <span class="attachment-thumb-name">@attachment.FileName</span>
+                                }
+                            </li>
                         }
-                    </MudStack>
+                    </ul>
                 </MudStack>
             </MudPaper>
         }
@@ -364,13 +370,6 @@
             StateHasChanged();
         }
     }
-
-    private static string FormatFileSize(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
-        _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
-    };
 
     private string GetNotificationSummary()
     {

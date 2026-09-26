@@ -63,7 +63,7 @@
                             }
                             else
                             {
-                                <MudIcon Icon="@GetFileIcon(file.ContentType)" Color="Color.Primary" />
+                                <MudIcon Icon="@AttachmentSlots.FileIcon(file.ContentType)" Color="Color.Primary" />
                             }
                             <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
                                 <MudText Typo="Typo.body2" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
@@ -277,13 +277,6 @@
         State.Attachments.Remove(file);
         _fileErrors = [];
         StateHasChanged();
-    }
-
-    private static string GetFileIcon(string contentType)
-    {
-        if (contentType.StartsWith("image/")) return Icons.Material.Filled.Image;
-        if (contentType.StartsWith("video/")) return Icons.Material.Filled.VideoFile;
-        return Icons.Material.Filled.InsertDriveFile;
     }
 
     private static string FormatFileSize(long bytes) => bytes switch
