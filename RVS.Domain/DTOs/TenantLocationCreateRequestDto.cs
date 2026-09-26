@@ -12,6 +12,12 @@ public sealed record TenantLocationCreateRequestDto
 
     public string? Phone { get; init; }
 
+    /// <summary>
+    /// Optional IANA time-zone id (e.g. <c>America/Denver</c>) for the packet's Received line
+    /// (issues #506, #770). Blank leaves it unset, which renders in UTC.
+    /// </summary>
+    public string? TimeZoneId { get; init; }
+
     /// <summary>1–10 packet-email recipients.</summary>
     public List<string> Recipients { get; init; } = [];
 

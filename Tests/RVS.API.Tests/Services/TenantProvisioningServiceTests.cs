@@ -1038,6 +1038,44 @@ public sealed class TenantProvisioningServiceTests
         location.Name.Should().Be("Nova RV Services - St. George");
     }
 
+    [Fact]
+    public async Task AddLocationAsync_WhenTimeZoneGiven_ShouldPassItTrimmed()
+    {
+        SetupExistingTenant();
+        _locationServiceMock.Setup(s => s.CreateAsync(TenantId, It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, Location l, CancellationToken _) => l);
+
+        var location = await _sut.AddLocationAsync(TenantId, ValidLocation() with { TimeZoneId = "  America/Denver  " });
+
+        location.TimeZoneId.Should().Be("America/Denver");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task AddLocationAsync_WhenTimeZoneBlank_ShouldLeaveItNull(string? timeZoneId)
+    {
+        SetupExistingTenant();
+        _locationServiceMock.Setup(s => s.CreateAsync(TenantId, It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, Location l, CancellationToken _) => l);
+
+        var location = await _sut.AddLocationAsync(TenantId, ValidLocation() with { TimeZoneId = timeZoneId });
+
+        location.TimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AddLocationAsync_WhenTimeZoneUnknown_ShouldThrowArgumentExceptionAndNotCreate()
+    {
+        SetupExistingTenant();
+
+        var act = () => _sut.AddLocationAsync(TenantId, ValidLocation() with { TimeZoneId = "Mars/Olympus_Mons" });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationServiceMock.Verify(
+            s => s.CreateAsync(It.IsAny<string>(), It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static TenantCreateRequestDto ValidCreate() => new()
