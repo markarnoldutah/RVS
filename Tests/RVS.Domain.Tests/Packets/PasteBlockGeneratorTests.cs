@@ -288,4 +288,56 @@ public class PasteBlockGeneratorTests
         block.Should().NotContain("\r");
         block.Should().Contain("line one\nline two");
     }
+
+    // ── Equipment lines from photos (issue #772) ───────────────────────────
+
+    private static readonly string[] EquipmentLines =
+    [
+        "EQUIPMENT: Refrigerator — Dometic RM2652 · S/N 12345678",
+        "FAULT CODE: Thermostat — code E1",
+    ];
+
+    [Fact]
+    public void Generate_WithEquipmentLines_ShouldPlaceThemAfterTheComplaint_BeforeTheStatus_AsciiFolded()
+    {
+        var block = PasteBlockGenerator.Generate("Appliances", Description, StatusUrl, equipmentLines: EquipmentLines);
+
+        block.Should().Be(
+            $"{PasteBlockGenerator.Delimiter}\nCATEGORY: APPLIANCES\nCOMPLAINT: {Description}\n" +
+            "EQUIPMENT: Refrigerator - Dometic RM2652 - S/N 12345678\n" +
+            "FAULT CODE: Thermostat - code E1\n" +
+            $"STATUS: {StatusUrl}\n{PasteBlockGenerator.Delimiter}");
+        IsAsciiSafe(block).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Generate_WithNoEquipmentLines_ShouldMatchTheBlockWithout()
+    {
+        PasteBlockGenerator.Generate("Appliances", Description, StatusUrl, equipmentLines: [])
+            .Should().Be(PasteBlockGenerator.Generate("Appliances", Description, StatusUrl));
+    }
+
+    [Fact]
+    public void Generate_ShouldNeverShortenTheComplaint_ToFitEquipmentLines()
+    {
+        var withoutLines = PasteBlockGenerator.Generate("Appliances", Description, StatusUrl);
+
+        var block = PasteBlockGenerator.Generate(
+            "Appliances", Description, StatusUrl, characterCap: withoutLines.Length + 10, equipmentLines: EquipmentLines);
+
+        block.Should().Be(withoutLines);
+    }
+
+    [Fact]
+    public void Generate_ShouldAddEquipmentLinesWhole_InOrder_WhileTheyFit()
+    {
+        var firstOnly = PasteBlockGenerator.Generate(
+            "Appliances", Description, StatusUrl, equipmentLines: [EquipmentLines[0]]);
+
+        var block = PasteBlockGenerator.Generate(
+            "Appliances", Description, StatusUrl, characterCap: firstOnly.Length + 5, equipmentLines: EquipmentLines);
+
+        block.Should().Be(firstOnly);
+        block.Length.Should().BeLessThanOrEqualTo(firstOnly.Length + 5);
+    }
 }

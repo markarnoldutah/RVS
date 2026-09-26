@@ -785,4 +785,88 @@ public class PreliminaryAssessmentEmbedded
     /// <summary>UTC time the assessment was generated.</summary>
     [JsonProperty("generatedAtUtc")]
     public DateTime GeneratedAtUtc { get; set; }
+
+    /// <summary>
+    /// What the model read off the customer's photos (issue #772): data plates, fault codes and
+    /// visible observations, each cited to its attachment. Unlike the fields above it survives an
+    /// abstention — a data plate read cleanly is worth printing when the cause cannot be assessed.
+    /// <c>null</c> when no photo was assessed or nothing usable was found.
+    /// </summary>
+    [JsonProperty("photoFindings")]
+    public PhotoFindingsEmbedded? PhotoFindings { get; set; }
+}
+
+/// <summary>
+/// Facts taken from the customer's photos by the preliminary assessment (issue #772). Every entry
+/// carries the <c>attachmentId</c> it came from so the packet can cite the photo. Cleaned by
+/// <see cref="Validation.PhotoFindingsCleaner"/> before it is stored: capped, trimmed, and never
+/// citing an attachment the request does not have.
+/// </summary>
+public class PhotoFindingsEmbedded
+{
+    /// <summary>Appliance / equipment data plates, transcribed.</summary>
+    [JsonProperty("dataPlates")]
+    public List<PhotoDataPlateEmbedded> DataPlates { get; set; } = [];
+
+    /// <summary>Fault or error codes shown on a display or panel.</summary>
+    [JsonProperty("faultCodes")]
+    public List<PhotoFaultCodeEmbedded> FaultCodes { get; set; } = [];
+
+    /// <summary>Visible condition, one photo per observation.</summary>
+    [JsonProperty("observations")]
+    public List<PhotoObservationEmbedded> Observations { get; set; } = [];
+}
+
+/// <summary>
+/// A data plate read off one photo. The model number is a fact transcribed from the plate, not a
+/// suggested part — the "never part numbers" rule for likely parts (<c>Spec B-2</c> item 5) is
+/// unaffected.
+/// </summary>
+public class PhotoDataPlateEmbedded
+{
+    /// <summary>The equipment the plate belongs to, e.g. <c>Refrigerator</c>.</summary>
+    [JsonProperty("component")]
+    public string Component { get; set; } = string.Empty;
+
+    [JsonProperty("manufacturer")]
+    public string? Manufacturer { get; set; }
+
+    [JsonProperty("modelNumber")]
+    public string? ModelNumber { get; set; }
+
+    [JsonProperty("serialNumber")]
+    public string? SerialNumber { get; set; }
+
+    /// <summary>The attachment the plate was read from.</summary>
+    [JsonProperty("attachmentId")]
+    public string AttachmentId { get; set; } = string.Empty;
+}
+
+/// <summary>A fault or error code shown in one photo.</summary>
+public class PhotoFaultCodeEmbedded
+{
+    /// <summary>The equipment showing the code, e.g. <c>Thermostat</c>.</summary>
+    [JsonProperty("component")]
+    public string Component { get; set; } = string.Empty;
+
+    /// <summary>The code exactly as displayed.</summary>
+    [JsonProperty("code")]
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>What the code means, when the model knows it.</summary>
+    [JsonProperty("meaning")]
+    public string? Meaning { get; set; }
+
+    [JsonProperty("attachmentId")]
+    public string AttachmentId { get; set; } = string.Empty;
+}
+
+/// <summary>A visible condition in one photo — never hidden or internal condition.</summary>
+public class PhotoObservationEmbedded
+{
+    [JsonProperty("text")]
+    public string Text { get; set; } = string.Empty;
+
+    [JsonProperty("attachmentId")]
+    public string AttachmentId { get; set; } = string.Empty;
 }

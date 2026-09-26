@@ -199,12 +199,44 @@ public sealed record PacketAiSummary
     /// <summary>Display label (<c>High</c> / <c>Medium</c> / <c>Low</c>); <c>null</c> without a structured assessment.</summary>
     public string? Confidence { get; init; }
 
+    /// <summary>
+    /// The <c>From photos</c> sub-block (issue #772): data plates, then fault codes, then visible
+    /// observations, each citing its photo. Independent of the structured assessment — it is kept
+    /// when the model abstains. Empty when nothing was read off the photos.
+    /// </summary>
+    public IReadOnlyList<PacketPhotoFinding> PhotoFindings { get; init; } = [];
+
     /// <summary><c>true</c> when any structured field is present.</summary>
     public bool HasStructuredAssessment =>
         ProbableCause is not null || PossibleFixes.Count > 0 || LikelyParts.Count > 0;
 
+    /// <summary><c>true</c> when the <c>From photos</c> sub-block has anything to show.</summary>
+    public bool HasPhotoFindings => PhotoFindings.Count > 0;
+
     /// <summary>Always <c>true</c> — this block is presented as AI-generated.</summary>
     public bool IsAiGenerated => true;
+}
+
+/// <summary>
+/// One line of the assessment's <c>From photos</c> sub-block (issue #772), e.g.
+/// <c>Thermostat — code E1 (photo 3, thermostat.jpg)</c>.
+/// </summary>
+public sealed record PacketPhotoFinding
+{
+    /// <summary>The sub-block's heading, shared by both renderers.</summary>
+    public const string Heading = "From photos";
+
+    /// <summary>The finding itself, formatted by <see cref="PhotoFindingText"/>.</summary>
+    public required string Text { get; init; }
+
+    /// <summary>
+    /// Which photo it came from: its position in the packet's photo list and its file name
+    /// (<c>photo 3, thermostat.jpg</c>), or the file name alone when the photo is not in that list.
+    /// </summary>
+    public required string PhotoLabel { get; init; }
+
+    /// <summary>The line as rendered — one string, so the HTML and PDF cannot drift.</summary>
+    public string Display => $"{Text} ({PhotoLabel})";
 }
 
 /// <summary>

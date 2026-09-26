@@ -721,6 +721,144 @@ public class PacketComposerTests
         packet.AiSummary.Should().BeNull();
     }
 
+    // ── Photo findings (issue #772) ─────────────────────────────────────────
+
+    /// <summary>A request with a video ahead of two photos, so photo positions are not attachment indexes.</summary>
+    private static ServiceRequest RequestWithPhotos()
+    {
+        var request = FullyPopulatedRequest();
+        request.Attachments =
+        [
+            new ServiceRequestAttachmentEmbedded { AttachmentId = "att_video", FileName = "walkaround.mp4", ContentType = "video/mp4", BlobUri = "b/v" },
+            new ServiceRequestAttachmentEmbedded { AttachmentId = "att_voice", FileName = "note.m4a", ContentType = "audio/mp4", BlobUri = "b/n" },
+            new ServiceRequestAttachmentEmbedded { AttachmentId = "att_fridge", FileName = "fridge-plate.jpg", ContentType = "image/jpeg", BlobUri = "b/f" },
+            new ServiceRequestAttachmentEmbedded { AttachmentId = "att_ceiling", FileName = "ceiling.jpg", ContentType = "image/jpeg", BlobUri = "b/c" },
+        ];
+        return request;
+    }
+
+    private static PacketCompositionContext ContextWithPhotos() => FullContext() with
+    {
+        PhotoUrls = new Dictionary<string, string>
+        {
+            ["att_video"] = "https://blob/walkaround.mp4?sas",
+            ["att_fridge"] = "https://blob/fridge-plate.jpg?sas",
+            ["att_ceiling"] = "https://blob/ceiling.jpg?sas",
+        },
+    };
+
+    private static PhotoFindingsEmbedded Findings() => new()
+    {
+        DataPlates =
+        [
+            new PhotoDataPlateEmbedded
+            {
+                Component = "Refrigerator", Manufacturer = "Dometic", ModelNumber = "RM2652",
+                SerialNumber = "12345678", AttachmentId = "att_fridge",
+            },
+        ],
+        FaultCodes = [new PhotoFaultCodeEmbedded { Component = "Thermostat", Code = "E1", AttachmentId = "att_ceiling" }],
+        Observations = [new PhotoObservationEmbedded { Text = "Water staining on the ceiling panel", AttachmentId = "att_ceiling" }],
+    };
+
+    [Fact]
+    public void Compose_WhenPhotoFindingsStored_ShouldListThem_PlatesThenCodesThenObservations_CitedByPhotoPositionAndName()
+    {
+        var request = RequestWithPhotos();
+        request.PreliminaryAssessment = Assessment();
+        request.PreliminaryAssessment.PhotoFindings = Findings();
+
+        var packet = PacketComposer.Compose(request, ContextWithPhotos());
+
+        packet.AiSummary!.HasPhotoFindings.Should().BeTrue();
+        packet.AiSummary.PhotoFindings.Select(f => f.Display).Should().Equal(
+            "Refrigerator — Dometic RM2652 · S/N 12345678 (photo 2, fridge-plate.jpg)",
+            "Thermostat — code E1 (photo 3, ceiling.jpg)",
+            "Water staining on the ceiling panel (photo 3, ceiling.jpg)");
+    }
+
+    [Fact]
+    public void Compose_ShouldFormatPartialPlatesAndFaultMeanings()
+    {
+        var request = RequestWithPhotos();
+        request.PreliminaryAssessment = Assessment();
+        request.PreliminaryAssessment.PhotoFindings = new PhotoFindingsEmbedded
+        {
+            DataPlates =
+            [
+                new PhotoDataPlateEmbedded { Component = "Water heater", SerialNumber = "A1", AttachmentId = "att_fridge" },
+                new PhotoDataPlateEmbedded { Component = "Furnace", ModelNumber = "SF-35", AttachmentId = "att_fridge" },
+            ],
+            FaultCodes = [new PhotoFaultCodeEmbedded { Component = "Generator", Code = "36", Meaning = "Out of fuel", AttachmentId = "att_fridge" }],
+        };
+
+        var packet = PacketComposer.Compose(request, ContextWithPhotos());
+
+        packet.AiSummary!.PhotoFindings.Select(f => f.Text).Should().Equal(
+            "Water heater — S/N A1",
+            "Furnace — SF-35",
+            "Generator — code 36: Out of fuel");
+    }
+
+    [Fact]
+    public void Compose_WhenACitedPhotoHasNoReadUrl_ShouldCiteItByFileNameOnly()
+    {
+        var request = RequestWithPhotos();
+        request.PreliminaryAssessment = Assessment();
+        request.PreliminaryAssessment.PhotoFindings = Findings();
+        var context = ContextWithPhotos() with
+        {
+            PhotoUrls = new Dictionary<string, string> { ["att_ceiling"] = "https://blob/ceiling.jpg?sas" },
+        };
+
+        var packet = PacketComposer.Compose(request, context);
+
+        packet.AiSummary!.PhotoFindings[0].PhotoLabel.Should().Be("fridge-plate.jpg");
+        packet.AiSummary.PhotoFindings[1].PhotoLabel.Should().Be("photo 1, ceiling.jpg");
+    }
+
+    [Fact]
+    public void Compose_ShouldDropAFindingCitingAnAttachmentNoLongerOnTheRequest()
+    {
+        var request = RequestWithPhotos();
+        request.PreliminaryAssessment = Assessment();
+        request.PreliminaryAssessment.PhotoFindings = Findings();
+        request.Attachments.RemoveAll(a => a.AttachmentId == "att_fridge");
+
+        var packet = PacketComposer.Compose(request, ContextWithPhotos());
+
+        packet.AiSummary!.PhotoFindings.Should().HaveCount(2);
+        packet.AiSummary.PhotoFindings.Should().NotContain(f => f.Text.Contains("Dometic"));
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentAbstainedWithPhotoFindings_ShouldKeepTheFindings()
+    {
+        var request = RequestWithPhotos();
+        request.TechnicianSummary = null;
+        request.PreliminaryAssessment = Assessment(confidence: "abstain", probableCause: null, possibleFixes: [], likelyParts: []);
+        request.PreliminaryAssessment.PhotoFindings = Findings();
+
+        var packet = PacketComposer.Compose(request, ContextWithPhotos());
+
+        packet.AiSummary.Should().NotBeNull();
+        packet.AiSummary!.HasStructuredAssessment.Should().BeFalse();
+        packet.AiSummary.Confidence.Should().BeNull();
+        packet.AiSummary.PhotoFindings.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void Compose_WhenNoPhotoFindings_ShouldCarryAnEmptyList()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment();
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.HasPhotoFindings.Should().BeFalse();
+        packet.AiSummary.PhotoFindings.Should().BeEmpty();
+    }
+
     // ── Verbatim description ────────────────────────────────────────────────
 
     [Fact]
