@@ -35,10 +35,13 @@
                     border-color: var(--mud-palette-primary); position: relative;">
             <MudIcon Icon="@Icons.Material.Filled.PhotoCamera" Color="Color.Primary"
                      Style="font-size: 3rem;" />
-            <MudText Typo="Typo.body1" Class="mt-2" Style="text-align:center;">
+            @* Issue #758: count what is left, so it is obvious the zone still takes more. *@
+            <MudText Typo="Typo.body1" Class="mt-2" Style="text-align:center; font-weight: 700;" aria-live="polite">
+                @AttachmentSlots.Prompt(MaxAttachments, State.Attachments.Count)
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mt-1" Style="text-align:center; color: var(--mud-palette-text-secondary);">
                 Max video length: @EstimatedMaxVideoSeconds seconds<br />
-                Max upload size: @MaxFileSizeMb MB.<br />
-                Max photos: @MaxAttachments
+                Max upload size: @MaxFileSizeMb MB
             </MudText>
             <InputFile OnChange="HandleFilesSelected"
                        multiple
@@ -53,7 +56,15 @@
                 {
                     <MudPaper Elevation="1" Class="pa-3">
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@GetFileIcon(file.ContentType)" Color="Color.Primary" />
+                            @if (file.ThumbnailDataUrl is not null)
+                            {
+                                <img src="@file.ThumbnailDataUrl" alt=""
+                                     style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; flex-shrink: 0;" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@GetFileIcon(file.ContentType)" Color="Color.Primary" />
+                            }
                             <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
                                 <MudText Typo="Typo.body2" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                     @file.FileName
@@ -67,7 +78,7 @@
                                            Size="Size.Small"
                                            Color="Color.Error"
                                            OnClick="() => RemoveFile(file)"
-                                           aria-label="Remove file" />
+                                           aria-label="@($"Remove {file.FileName}")" />
                         </MudStack>
                     </MudPaper>
                 }
@@ -217,6 +228,8 @@
                 continue;
             }
 
+            attachment.ThumbnailDataUrl = await TryCreateThumbnailAsync(file, contentType);
+
             State.Attachments.Add(attachment);
         }
 
@@ -226,6 +239,35 @@
         }
 
         StateHasChanged();
+    }
+
+    /// <summary>Longest edge of a Step 7 thumbnail, in CSS pixels; drawn at 48px, so this covers 3x screens.</summary>
+    private const int ThumbnailMaxEdgePx = 144;
+
+    /// <summary>
+    /// Asks the browser for a small JPEG of an image attachment (issue #758). The resize happens
+    /// in the browser's canvas, so only a few kilobytes cross into .NET. Must run while
+    /// <paramref name="file"/> is still valid — the same moment the bytes are buffered.
+    /// Best-effort: a video, PDF, HEIC, or an image the browser cannot decode gets an icon instead.
+    /// </summary>
+    private static async Task<string?> TryCreateThumbnailAsync(
+        Microsoft.AspNetCore.Components.Forms.IBrowserFile file, string contentType)
+    {
+        if (AttachmentPreview.Classify(contentType) != AttachmentPreviewKind.Image)
+            return null;
+
+        try
+        {
+            var resized = await file.RequestImageFileAsync("image/jpeg", ThumbnailMaxEdgePx, ThumbnailMaxEdgePx);
+            await using var stream = resized.OpenReadStream(maxAllowedSize: 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            return ms.Length == 0 ? null : AttachmentSlots.ThumbnailDataUrl("image/jpeg", ms.ToArray());
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void RemoveFile(AttachmentFileInfo file)

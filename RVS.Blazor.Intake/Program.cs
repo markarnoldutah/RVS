@@ -44,6 +44,9 @@ builder.Services.AddScoped<ThemeService>();
 
 var app = builder.Build();
 
+// Restore the customer's high-contrast choice before the first render (issue #758).
+await app.Services.GetRequiredService<ThemeService>().InitializeAsync();
+
 // Startup diagnostics — console.warn is always visible in browser DevTools (F12 → Console)
 var js = app.Services.GetRequiredService<IJSRuntime>();
 await js.InvokeVoidAsync("console.warn", $"[RVS.Intake] Environment       : {builder.HostEnvironment.Environment}");

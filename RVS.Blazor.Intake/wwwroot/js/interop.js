@@ -154,6 +154,50 @@ window.rvs_attachDatePickerKeyboardGuard = function (wrapperId) {
 };
 
 /**
+ * Keeps the page at the top for a moment after a wizard step change (issue #758). Continue on a
+ * long step is usually pressed with the soft keyboard still up from the last text field — Step 2's
+ * phone, Step 5's description. The keyboard closes as that field leaves the DOM, and mobile
+ * browsers re-scroll while the viewport resizes back, which undid the scroll to the top. So the
+ * scroll is reasserted on every viewport resize and scroll for a short window, and the hold is
+ * dropped the moment the customer touches, wheels or presses a key, so it never fights them.
+ * @private
+ */
+function _rvs_holdScrollAtTop() {
+    var holdMs = 700;
+    var released = false;
+    var vv = window.visualViewport;
+
+    var reassert = function () {
+        if (!released && (window.scrollY !== 0 || (vv && vv.offsetTop !== 0))) {
+            window.scrollTo(0, 0);
+        }
+    };
+    var release = function () {
+        if (released) return;
+        released = true;
+        window.removeEventListener('scroll', reassert);
+        if (vv) {
+            vv.removeEventListener('resize', reassert);
+            vv.removeEventListener('scroll', reassert);
+        }
+        ['touchstart', 'wheel', 'keydown', 'pointerdown'].forEach(function (type) {
+            window.removeEventListener(type, release, true);
+        });
+    };
+
+    window.addEventListener('scroll', reassert, { passive: true });
+    if (vv) {
+        vv.addEventListener('resize', reassert);
+        vv.addEventListener('scroll', reassert);
+    }
+    ['touchstart', 'wheel', 'keydown', 'pointerdown'].forEach(function (type) {
+        window.addEventListener(type, release, { capture: true, passive: true });
+    });
+    requestAnimationFrame(reassert);
+    setTimeout(release, holdMs);
+}
+
+/**
  * Enters an intake wizard step (issue #645): scrolls to the top of the page, then focuses the
  * first empty text field inside the step's [data-rvs-autofocus] region. A step with no such
  * region, or with every field already filled, gets the step container focused instead, so
@@ -164,6 +208,7 @@ window.rvs_attachDatePickerKeyboardGuard = function (wrapperId) {
  */
 window.rvs_enterWizardStep = function (stepElement) {
     window.scrollTo(0, 0);
+    _rvs_holdScrollAtTop();
     if (!stepElement) return;
 
     var region = stepElement.querySelector('[data-rvs-autofocus]');

@@ -516,6 +516,7 @@ public sealed class IntakeWizardState
             Manufacturer = Manufacturer,
             Model = Model,
             Year = Year,
+            VinLookupSucceeded = VinLookupSucceeded,
             IssueCategory = IssueCategory,
             IsCategorySuggestedByAi = IsCategorySuggestedByAi,
             IssueDescription = IssueDescription,
@@ -570,6 +571,7 @@ public sealed class IntakeWizardState
             Manufacturer = data.Manufacturer;
             Model = data.Model;
             Year = data.Year;
+            VinLookupSucceeded = data.VinLookupSucceeded;
             IssueCategory = data.IssueCategory;
             IsCategorySuggestedByAi = data.IsCategorySuggestedByAi;
             IssueDescription = data.IssueDescription;
@@ -651,6 +653,7 @@ public sealed class IntakeWizardState
         Manufacturer = null;
         Model = null;
         Year = null;
+        VinLookupSucceeded = false;
         IssueCategory = string.Empty;
         IsCategorySuggestedByAi = false;
         IsUrgencySuggestedByAi = false;
@@ -894,6 +897,14 @@ public sealed class AttachmentFileInfo
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public byte[]? FileData { get; set; }
+
+    /// <summary>
+    /// A small resized preview of an image attachment as a <c>data:</c> URL, drawn in Step 7's
+    /// file list (issue #758). <c>null</c> for videos, PDFs, HEIC, and any image the browser could
+    /// not resize — those show an icon. Not serializable, like <see cref="FileData"/>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? ThumbnailDataUrl { get; set; }
 }
 
 /// <summary>
@@ -933,6 +944,10 @@ internal sealed class IntakeWizardStateData
     public string? Manufacturer { get; set; }
     public string? Model { get; set; }
     public int? Year { get; set; }
+
+    /// <summary>Whether Step 3's VIN decode filled the vehicle, so Step 4 still says so after a refresh (issue #758).</summary>
+    public bool VinLookupSucceeded { get; set; }
+
     public string IssueCategory { get; set; } = string.Empty;
     public bool IsCategorySuggestedByAi { get; set; }
     public string IssueDescription { get; set; } = string.Empty;

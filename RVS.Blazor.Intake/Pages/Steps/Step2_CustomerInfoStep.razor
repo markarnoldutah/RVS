@@ -63,6 +63,7 @@
                     <MudTextField @bind-Value="State.Phone"
                                   T="string"
                                   Validation="@(new Func<string?, string?>(ValidatePhone))"
+                                  Mask="_phoneMask"
                                   InputType="InputType.Telephone"
                                   Variant="Variant.Outlined"
                                   Margin="Margin.Dense"
@@ -127,6 +128,9 @@
 
     private MudForm _form = default!;
     private bool _submitted;
+
+    // Issue #758: refuse letters at the keystroke; the rule below still counts the digits.
+    private readonly IMask _phoneMask = new RegexMask(PhoneInputMask.Pattern, "(555) 123-4567");
 
     private string? ValidateFirstName(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "First name is required" : null;

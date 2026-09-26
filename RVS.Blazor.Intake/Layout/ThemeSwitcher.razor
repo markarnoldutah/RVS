@@ -10,8 +10,5 @@
                      aria-label="@(ThemeService.IsHighContrast ? "Switch to light theme" : "Switch to high-contrast theme")" />
 
 @code {
-    private void OnToggled(bool toggled)
-    {
-        ThemeService.Toggle();
-    }
+    private Task OnToggled(bool toggled) => ThemeService.ToggleAsync();
 }
