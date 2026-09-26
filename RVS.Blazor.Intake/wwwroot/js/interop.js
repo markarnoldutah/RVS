@@ -198,38 +198,18 @@ function _rvs_holdScrollAtTop() {
 }
 
 /**
- * Enters an intake wizard step (issue #645): scrolls to the top of the page, then focuses the
- * first empty text field inside the step's [data-rvs-autofocus] region. A step with no such
- * region, or with every field already filled, gets the step container focused instead, so
- * keyboard and screen-reader users start on the new step rather than on the removed button.
- * Filled fields are skipped on purpose: a returning or prefilled customer is reviewing, and a
- * focused field would raise the soft keyboard over what they came to read.
+ * Enters an intake wizard step (issues #645, #766): scrolls to the top of the page and holds it
+ * there, then focuses the step container so keyboard and screen-reader users start on the new step
+ * rather than on the removed button. No form field is focused: on a phone that raised the soft
+ * keyboard, and the browser's scroll to the focused field fought the scroll to the top — the
+ * jitter on Steps 2 and 5 (issue #766). The container carries tabindex="-1" and is focused with
+ * preventScroll, so it neither opens the keyboard nor moves the page.
  * @param {HTMLElement} stepElement - The wizard step container; carries tabindex="-1".
  */
 window.rvs_enterWizardStep = function (stepElement) {
     window.scrollTo(0, 0);
     _rvs_holdScrollAtTop();
-    if (!stepElement) return;
-
-    var region = stepElement.querySelector('[data-rvs-autofocus]');
-    var field = null;
-    if (region) {
-        var candidates = region.querySelectorAll(
-            'input:not([type]):not([readonly]):not([disabled]),' +
-            'input[type=text]:not([readonly]):not([disabled]),' +
-            'input[type=email]:not([readonly]):not([disabled]),' +
-            'input[type=tel]:not([readonly]):not([disabled]),' +
-            'input[type=number]:not([readonly]):not([disabled]),' +
-            'textarea:not([readonly]):not([disabled])');
-        for (var i = 0; i < candidates.length; i++) {
-            if (candidates[i].value === '' && candidates[i].offsetParent !== null) {
-                field = candidates[i];
-                break;
-            }
-        }
-    }
-
-    (field || stepElement).focus({ preventScroll: true });
+    if (stepElement) stepElement.focus({ preventScroll: true });
 };
 
 /**

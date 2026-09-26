@@ -186,7 +186,9 @@
             return;
         }
 
-        var files = e.GetMultipleFiles(MaxAttachments);
+        // Read every file the customer picked: GetMultipleFiles throws when handed more than its
+        // cap, and a selection past the limit is handled below by taking only what fits.
+        var files = e.GetMultipleFiles(e.FileCount);
 
         foreach (var file in files.Take(remainingSlots))
         {
@@ -235,7 +237,7 @@
 
         if (files.Count > remainingSlots)
         {
-            _fileErrors.Add($"Only {remainingSlots} more file(s) can be added.");
+            _fileErrors.Add(AttachmentSlots.OverflowMessage(MaxAttachments, State.Attachments.Count));
         }
 
         StateHasChanged();

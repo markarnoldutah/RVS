@@ -38,6 +38,29 @@ public class AttachmentSlotsTests
     }
 
     [Theory]
+    [InlineData(10)]
+    [InlineData(11)]
+    public void OverflowMessage_FullAfterTheAdd_ShouldSayNoMoreCanBeAdded(int attachedAfterAdd)
+    {
+        AttachmentSlots.OverflowMessage(maxAttachments: 10, attachedCount: attachedAfterAdd)
+            .Should().Be("No more files can be added.");
+    }
+
+    [Fact]
+    public void OverflowMessage_OneSlotStillOpen_ShouldBeSingular()
+    {
+        AttachmentSlots.OverflowMessage(maxAttachments: 10, attachedCount: 9)
+            .Should().Be("Only 1 more file can be added.");
+    }
+
+    [Fact]
+    public void OverflowMessage_SeveralSlotsStillOpen_ShouldCountThem()
+    {
+        AttachmentSlots.OverflowMessage(maxAttachments: 10, attachedCount: 7)
+            .Should().Be("Only 3 more files can be added.");
+    }
+
+    [Theory]
     [InlineData(0, 10)]
     [InlineData(3, 7)]
     [InlineData(10, 0)]
