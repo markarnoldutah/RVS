@@ -36,6 +36,8 @@ Supporting pages: `Confirmation`, `Status` (confirmation-number entry), `StatusP
 
 **Operator identity (`Spec A-15`, `#680`).** `Layout/SiteFooter.razor`, rendered by `MainLayout` under every page, names the operating entity (*Powered by Arnold Digital Solutions*, #758) and links the three policy pages; the contact address sits at the end of each policy, not in the footer (#695). The entity name, contact address and policies' "last updated" date live in one place, `SiteIdentity.cs`, and must match the toll-free verification application (`#659`). `Home` repeats the entity name above its buttons. The privacy and terms wording is a legal document: change it only with the owner's sign-off, and bump `SiteIdentity.PoliciesLastUpdated` in the same change. `Intake.razor` at `/intake` is a static "use your dealer's link" notice and a dead end.
 
+**Notifications are solid (#761).** Every `MudAlert` in Intake is `Variant.Filled`, so its text and icon take the severity's `*ContrastText`. That is white on the audited brand fills, and black on the bright high-contrast fills. Outlined and text alerts were too faint on cream to be noticed. The high-contrast palette sets `Warning` and `Info` explicitly, because MudBlazor's stock fills take white text and fail AA. `RvsThemeTests` checks every fill against its contrast text.
+
 **Steps 3 and 5 depend on AI capability now specced as Spec A-9–A-12** — Whisper transcription, gpt-4o VIN extraction, urgency/usage insights, capability pre-check. All four are in scope (issue #429, closes Q8); nothing here is archived. See `RVS_Architecture.md`.
 
 ---

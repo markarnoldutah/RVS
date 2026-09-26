@@ -10,7 +10,7 @@
 
         @if (!string.IsNullOrWhiteSpace(State.Vin))
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true"
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true"
                       Icon="@Icons.Material.Filled.Pin">
                 VIN: @State.Vin
             </MudAlert>
@@ -18,13 +18,13 @@
 
         @if (State.VinLookupSucceeded)
         {
-            <MudAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true">
+            <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Dense="true">
                 Vehicle information retrieved from VIN lookup.
             </MudAlert>
         }
         else
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true">
                 No vehicle information was found for this VIN. Please enter details manually below.
             </MudAlert>
         }

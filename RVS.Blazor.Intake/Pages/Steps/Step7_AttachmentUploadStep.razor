@@ -21,7 +21,7 @@
             </MudText>
         }
 
-        @*         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" NoIcon="false"
+        @*         <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true" NoIcon="false"
                   Icon="@Icons.Material.Filled.Videocam" Class="mt-n2">
             <MudText Typo="Typo.body2">
                 <strong>Recording a video?</strong> Keep clips under @EstimatedMaxVideoSeconds seconds
@@ -87,7 +87,7 @@
 
         @if (_fileErrors.Count > 0)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
                 <ul style="margin: 0; padding-left: 16px;">
                     @foreach (var error in _fileErrors)
                     {

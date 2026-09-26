@@ -70,7 +70,7 @@
                 }
                 @if (_transcriptionError is not null)
                 {
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true">
                         <MudText Typo="Typo.body2">@_transcriptionError</MudText>
                     </MudAlert>
                 }
@@ -124,14 +124,14 @@
 
         @if (_extractionMessage is not null)
         {
-            <MudAlert Severity="@_extractionSeverity" Variant="Variant.Outlined" Dense="true">
+            <MudAlert Severity="@_extractionSeverity" Variant="Variant.Filled" Dense="true">
                 <MudText Typo="Typo.body2">@_extractionMessage</MudText>
             </MudAlert>
         }
 
         @if (_lookupFailed)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="false"
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="false"
                       Icon="@Icons.Material.Filled.ErrorOutline">
                 <MudText Typo="Typo.body2">
                     We tried to retrieve your RV's information but could not. Are you sure the information is correct?
