@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
 using RVS.Domain.Integrations;
 using RVS.Domain.Validation;
 
@@ -10,11 +11,24 @@ namespace RVS.API.Integrations;
 /// Azure OpenAI–powered categorization service.
 /// Uses the chat completions API for contextual diagnostic question generation.
 /// Falls back to <see cref="RuleBasedCategorizationService"/> on timeout or error.
+///
+/// Question generation has its own client (issue #783): pointed at a reasoning-model deployment
+/// (gpt-5) it sends the reasoning request shape, otherwise it is the text client and the gpt-4o
+/// request is unchanged. Category suggestion always stays on the text client.
 /// </summary>
 public sealed class AzureOpenAiCategorizationService : ICategorizationService
 {
     private const string ProviderName = nameof(AzureOpenAiCategorizationService);
     private const string ApiVersion = "2024-10-21";
+
+    // Reasoning-model shape for question generation (gpt-5, #783), as in
+    // AzureOpenAiPreliminaryAssessmentService. Reasoning tokens count against
+    // max_completion_tokens and Azure reserves it against TPM up front, so it is sized for
+    // "low" effort plus the ~400-token reply, and no higher.
+    private const string ReasoningApiVersion = "2025-04-01-preview";
+    private const int MaxTokens = 800;
+    private const int MaxCompletionTokens = 3000;
+    private static readonly HashSet<string> AllowedReasoningEfforts = new(StringComparer.OrdinalIgnoreCase) { "minimal", "low" };
 
     private const string DiagnosticSystemPrompt =
         "You are a senior RV service advisor with 15+ years of hands-on experience in the recreational vehicle " +
@@ -53,16 +67,31 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
     };
 
     private readonly HttpClient _httpClient;
+    private readonly HttpClient _questionsHttpClient;
     private readonly RuleBasedCategorizationService _fallback;
+    private readonly bool _useReasoningModelRequest;
+    private readonly string _reasoningEffort;
     private readonly ILogger<AzureOpenAiCategorizationService> _logger;
 
+    /// <summary>
+    /// Creates the service over the gpt-4o text client and the question-generation client, which
+    /// is the same client when no questions deployment is configured.
+    /// </summary>
     public AzureOpenAiCategorizationService(
         HttpClient httpClient,
+        HttpClient questionsHttpClient,
         RuleBasedCategorizationService fallback,
+        IOptions<AzureOpenAiQuestionsOptions> options,
         ILogger<AzureOpenAiCategorizationService> logger)
     {
+        ArgumentNullException.ThrowIfNull(options);
         _httpClient = httpClient;
+        _questionsHttpClient = questionsHttpClient;
         _fallback = fallback;
+        _useReasoningModelRequest = options.Value.UseReasoningModelRequest;
+        _reasoningEffort = options.Value.ReasoningEffort is { } effort && AllowedReasoningEfforts.Contains(effort)
+            ? effort.ToLowerInvariant()
+            : AzureOpenAiQuestionsOptions.DefaultReasoningEffort;
         _logger = logger;
     }
 
@@ -119,12 +148,13 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
         {
             var userMessage = BuildDiagnosticUserMessage(issueCategory, issueDescription, manufacturer, model, year);
             var requestBody = BuildChatRequestBody(DiagnosticSystemPrompt, userMessage);
+            var apiVersion = _useReasoningModelRequest ? ReasoningApiVersion : ApiVersion;
 
             _logger.LogDebug("Sending diagnostic question generation request for category {Category}",
                 new string(issueCategory.Where(c => !char.IsControl(c)).ToArray()));
 
-            var response = await _httpClient.PostAsJsonAsync(
-                $"chat/completions?api-version={ApiVersion}",
+            var response = await _questionsHttpClient.PostAsJsonAsync(
+                $"chat/completions?api-version={apiVersion}",
                 requestBody,
                 cancellationToken);
 
@@ -201,9 +231,11 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
         return string.Join("\n", parts);
     }
 
-    private static JsonObject BuildChatRequestBody(string systemPrompt, string userMessage)
+    // gpt-5 rejects "max_tokens" with a 400 and gpt-4o rejects "reasoning_effort"; either mismatch
+    // would answer every intake from the question bank.
+    private JsonObject BuildChatRequestBody(string systemPrompt, string userMessage)
     {
-        return new JsonObject
+        var body = new JsonObject
         {
             ["messages"] = new JsonArray(
                 new JsonObject
@@ -217,9 +249,20 @@ public sealed class AzureOpenAiCategorizationService : ICategorizationService
                     ["content"] = userMessage
                 }
             ),
-            ["max_tokens"] = 800,
             ["response_format"] = new JsonObject { ["type"] = "json_object" }
         };
+
+        if (_useReasoningModelRequest)
+        {
+            body["max_completion_tokens"] = MaxCompletionTokens;
+            body["reasoning_effort"] = _reasoningEffort;
+        }
+        else
+        {
+            body["max_tokens"] = MaxTokens;
+        }
+
+        return body;
     }
 
     // ── Private response types ───────────────────────────────────────────

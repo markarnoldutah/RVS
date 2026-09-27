@@ -59,9 +59,19 @@ param assessmentModelVersion string = '2025-08-07'
 ])
 param assessmentDeploymentSkuName string = 'DataZoneStandard'
 
-@description('Assessment deployment capacity in K TPM. Staging = 20, Prod = 30 (set in parameters/*.bicepparam) — a call with photos (#772) reserves ~7.6-9.3K. Confirm against remaining model quota before raising.')
+@description('Assessment deployment capacity in K TPM. Staging = 30, Prod = 40 (set in parameters/*.bicepparam) — a packet call with photos (#772) reserves ~7.6-9.3K, and an intake\'s step-6 question call ~4K when questionsUseAssessmentDeployment is on (#783). Confirm against remaining model quota before raising.')
 @minValue(1)
 param assessmentDeploymentCapacity int = 1
+
+@description('When true, intake step-6 diagnostic question generation also runs on the assessment deployment (gpt-5, #783); category suggestion and text cleanup stay on textDeploymentName. False (or assessmentModelName blank) keeps questions on gpt-4o — the revert path, no application-code change.')
+param questionsUseAssessmentDeployment bool = false
+
+@description('reasoning_effort for step-6 question generation on the assessment deployment. The call is on the customer\'s path, so only the two fastest settings are allowed.')
+@allowed([
+  'minimal'
+  'low'
+])
+param questionsReasoningEffort string = 'minimal'
 
 // ── Storage Parameters ────────────────────────────────────────
 
@@ -529,6 +539,9 @@ module openAi 'modules/openai.bicep' = {
 // Name of the assessment-only model deployment, or empty when assessmentModelName is unset.
 var openAiAssessmentDeploymentName = empty(assessmentModelName) ? '' : openAi.outputs.additionalDeploymentNames[0]
 
+// Step-6 question generation shares that deployment when switched on (#783); empty keeps it on gpt-4o.
+var openAiQuestionsDeploymentName = questionsUseAssessmentDeployment ? openAiAssessmentDeploymentName : ''
+
 // ── Whisper STT (dedicated region: northcentralus) ────────────
 
 module whisperNaming 'modules/naming-tags.bicep' = {
@@ -566,6 +579,8 @@ module keyVaultSecrets 'modules/openai-keyvault-secrets.bicep' = if (deployKeyVa
     openAiDeploymentName: openAi.outputs.deploymentName
     openAiTextDeploymentName: textDeploymentName
     openAiAssessmentDeploymentName: openAiAssessmentDeploymentName
+    openAiQuestionsDeploymentName: openAiQuestionsDeploymentName
+    openAiQuestionsReasoningEffort: questionsReasoningEffort
     whisperOpenAiName: whisper.outputs.name
     whisperOpenAiResourceGroup: rgWhisper.name
     openAiWhisperDeploymentName: whisper.outputs.whisperDeploymentName
@@ -1197,6 +1212,7 @@ output openAiEndpoint string = openAi.outputs.endpoint
 @description('The name of the GPT-4o model deployment.')
 output openAiDeploymentName string = openAi.outputs.deploymentName
 output openAiAssessmentDeploymentName string = openAiAssessmentDeploymentName
+output openAiQuestionsDeploymentName string = openAiQuestionsDeploymentName
 
 @description('The Whisper Azure OpenAI resource endpoint URL.')
 output whisperEndpoint string = whisper.outputs.endpoint

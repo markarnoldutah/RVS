@@ -32,12 +32,20 @@ param assessmentModelName = 'gpt-5'
 // Capacity 30 (30K TPM). A text-only call reserves ~3.6K tokens against TPM up
 // front (~1.6K prompt + max_completion_tokens 2000, reasoning included); with
 // photos (#772, up to 5 at detail "high", ~0.8-1.1K each) it reserves ~7.6-9.3K,
-// so 30 allows ~3 photo calls a minute. The packet worker sends one at a time,
-// so a burst above that queues rather than dropping to text-only. Capacity
-// costs nothing on a pay-per-token deployment; the ceiling is quota. Staging +
-// prod share one DataZoneStandard gpt-5 quota in westus3: 300K TPM, 20 + 30 =
-// 50K used (checked Sep 25 2026).
-param assessmentDeploymentCapacity = 30
+// so 30 allowed ~3 photo calls a minute. The packet worker sends one at a time,
+// so a burst above that queues rather than dropping to text-only. #783 added 10
+// so step-6 question calls (~4K each: ~0.6K prompt + max_completion_tokens
+// 3000) don't compete with packet assessments. Capacity costs nothing on a
+// pay-per-token deployment; the ceiling is quota. Staging + prod share one
+// DataZoneStandard gpt-5 quota in westus3: 300K TPM, 30 + 40 = 70K used after
+// #783 (20 + 30 checked Sep 25 2026).
+param assessmentDeploymentCapacity = 40
+
+// Step-6 diagnostic question generation on the gpt-5 deployment above (#783).
+// Moves questions only; category suggestion stays on gpt-4o. false and redeploy
+// reverts to gpt-4o, no code change.
+param questionsUseAssessmentDeployment = true
+param questionsReasoningEffort = 'minimal'
 
 // App Service (API) — Basic B1 for the pilot: no Always On, no deployment slot.
 // Upgrade path: 'S1' adds Always On and a staging slot (README "SKU Upgrade Paths").
