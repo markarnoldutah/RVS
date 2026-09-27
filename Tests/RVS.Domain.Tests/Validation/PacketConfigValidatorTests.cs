@@ -194,30 +194,6 @@ public class PacketConfigValidatorTests
         PacketConfigValidator.Validate(config).IsValid.Should().BeFalse();
     }
 
-    // ── Optional logo ────────────────────────────────────────────────────────
-
-    [Theory]
-    [InlineData("https://cdn.dealer.com/logo.png")]
-    [InlineData("http://dealer.com/assets/logo.svg")]
-    public void Validate_ValidLogoUrl_ReturnsSuccess(string url)
-    {
-        var config = new PacketConfigEmbedded { LogoUrl = url };
-
-        PacketConfigValidator.Validate(config).IsValid.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData("not-a-url")]
-    [InlineData("ftp://dealer.com/logo.png")]
-    [InlineData("/relative/logo.png")]
-    [InlineData("javascript:alert(1)")]
-    public void Validate_InvalidLogoUrl_ReturnsFailure(string url)
-    {
-        var config = new PacketConfigEmbedded { LogoUrl = url };
-
-        PacketConfigValidator.Validate(config).IsValid.Should().BeFalse();
-    }
-
     [Fact]
     public void Validate_NullConfig_ThrowsArgumentNullException()
     {
@@ -259,23 +235,5 @@ public class PacketConfigValidatorTests
 
         result.IsValid.Should().BeFalse();
         result.ErrorMessage.Should().Contain("254");
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("https://cdn.dealer.com/logo.png")]
-    public void ValidateLogoUrl_BlankOrAbsoluteHttpUrl_ReturnsSuccess(string? url)
-    {
-        PacketConfigValidator.ValidateLogoUrl(url).IsValid.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData("not-a-url")]
-    [InlineData("ftp://dealer.com/logo.png")]
-    [InlineData("javascript:alert(1)")]
-    public void ValidateLogoUrl_InvalidUrl_ReturnsFailure(string url)
-    {
-        PacketConfigValidator.ValidateLogoUrl(url).IsValid.Should().BeFalse();
     }
 }

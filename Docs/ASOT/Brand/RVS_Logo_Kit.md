@@ -15,9 +15,15 @@
 >   below. The separate 16/32/48 PNGs were dropped, since `favicon.ico` carries all three, except
 >   that Manager keeps `favicon-32x32.png` because the Auth0 login page references it by URL.
 >   The manifests already matched the snippet; they only gained `"purpose": "any"`.
-> - **`email/`, `print/`, `social/`: not in the repo.** Nothing consumes them yet. The packet
->   masthead carries the *dealer's* logo (`PacketBranding.LogoDataUri`), not RV Intake's, and no
->   page emits `og:image`. Take them from the kit zip when a consumer appears.
+> - **`email/`, `print/`, `social/`: not in the repo.** The packet masthead carries the *dealer's*
+>   logo (`PacketBranding.LogoUrl`, Spec A-16), not RV Intake's, and no page emits `og:image`.
+>   Take them from the kit zip when a consumer appears.
+> - **One raster added, not from the kit (issue #470):** `logo-horizontal.png` (650 × 180, RGBA)
+>   in `RVS.UI.Shared/wwwroot/brand/`, rendered from `logo-horizontal.svg` with QuestPDF. It is the
+>   packet email's "Powered by" mark, served from the Intake app at
+>   `/_content/RVS.UI.Shared/brand/logo-horizontal.png`, because mail clients render neither SVG
+>   nor `data:` images. Regenerate it whenever the SVG changes. The packet PDF draws the SVG
+>   itself, embedded into `RVS.API` as a linked resource.
 >
 > "Rust `#C1502E` is the logo color" below is `RvsBrand.AccentLogo`; the text-safe `#A8431F` is
 > `RvsBrand.Accent`.
@@ -30,7 +36,7 @@
 | Denim | `#2F4C6B` | App-icon background, glyph and "Intake" on light backgrounds |
 | Rust | `#C1502E` | "RV" in the wordmark on light backgrounds |
 | Light rust | `#E8956D` | "RV" in the wordmark on dark backgrounds |
-| Cream | `#F6F1E7` | Glyph and "Intake" on dark backgrounds; page background |
+| Cream | `#F6F1E7` | Glyph and "Intake" on dark backgrounds |
 
 Rust `#C1502E` is the **logo** color. In app UI text and buttons, use the darker `#A8431F` from the theme spec, because `#C1502E` fails contrast as body text on cream.
 

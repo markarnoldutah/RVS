@@ -532,6 +532,59 @@ public class LocationServiceTests
         _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // ── Branding (Spec A-16, issue #470) ────────────────────────────────
+
+    [Theory]
+    [InlineData("http://cdn.dealer.com/logo.png", null)]
+    [InlineData(null, "green")]
+    public async Task CreateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentExceptionAndNotPersist(string? logoUrl, string? headerColor)
+    {
+        var location = BuildLocation();
+        location.Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl, HeaderColor = headerColor };
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("http://cdn.dealer.com/logo.png", null)]
+    [InlineData(null, "#FFF")]
+    public async Task UpdateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentException(string? logoUrl, string? headerColor)
+    {
+        var updated = BuildLocation();
+        updated.Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl, HeaderColor = headerColor };
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldPersistBrandingOntoTheExistingLocation()
+    {
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.Branding = new LocationBrandingEmbedded
+        {
+            LogoUrl = "https://cdn.dealer.com/logo.png",
+            HeaderColor = "#1A5E20",
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+        result.Branding.HeaderColor.Should().Be("#1A5E20");
+    }
+
     [Fact]
     public async Task UpdateAsync_ShouldPersistPacketConfigOntoExistingLocation()
     {

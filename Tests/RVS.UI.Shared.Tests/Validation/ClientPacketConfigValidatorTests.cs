@@ -144,14 +144,6 @@ public class ClientPacketConfigValidatorTests
     }
 
     [Fact]
-    public void ValidateForSave_InvalidLogoUrl_ReturnsFailure()
-    {
-        var config = new PacketConfigDto { Recipients = Addresses(1), LogoUrl = "not-a-url" };
-
-        ClientPacketConfigValidator.ValidateForSave(config).IsValid.Should().BeFalse();
-    }
-
-    [Fact]
     public void ValidateForSave_DefaultsPlusOneRecipient_ReturnsSuccess()
     {
         // Spec B-6: a location works with one setting changed — the recipient address.

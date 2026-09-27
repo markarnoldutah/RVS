@@ -1926,6 +1926,42 @@ public class IntakeOrchestrationServiceTests
         result.LocationPhone.Should().Be("(555) 123-4567");
     }
 
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenLocationHasBranding_ShouldReturnItForTheIntakeChrome()
+    {
+        SetupConfigHappyPath();
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                CreatedByUserId = "admin",
+                Branding = new LocationBrandingEmbedded
+                {
+                    LogoUrl = "https://cdn.dealer.com/logo.png",
+                    HeaderColor = "#1A5E20",
+                },
+            });
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+        result.Branding.HeaderColor.Should().Be("#1A5E20");
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenLocationHasNoBranding_ShouldReturnEmptyBrandingSoTheDefaultsApply()
+    {
+        SetupConfigHappyPath();
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.Branding.Should().NotBeNull();
+        result.Branding.LogoUrl.Should().BeNull();
+        result.Branding.HeaderColor.Should().BeNull();
+    }
+
     // ── AssessCapabilitiesAsync ──────────────────────────────────────────────
 
     [Theory]

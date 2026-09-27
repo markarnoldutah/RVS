@@ -34,9 +34,6 @@ public sealed record PacketConfigDto
 
     /// <summary>Time-to-live, in days, for the customer status link minted into the packet.</summary>
     public int StatusLinkTtlDays { get; init; } = PacketConfigEmbedded.DefaultStatusLinkTtlDays;
-
-    /// <summary>Optional absolute URL to a location-specific logo rendered on the packet.</summary>
-    public string? LogoUrl { get; init; }
 }
 
 /// <summary>

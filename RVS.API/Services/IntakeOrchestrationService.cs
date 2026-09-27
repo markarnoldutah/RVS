@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using RVS.API.Mappers;
 using RVS.API.Options;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
@@ -607,6 +608,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             LocationSlug = slugLookup.Slug,
             DealershipName = slugLookup.DealershipName,
             LocationPhone = location?.Phone,
+            Branding = location?.Branding.ToDto() ?? new LocationBrandingDto(),
             AcceptedFileTypes = intakeConfig.AcceptedFileTypes,
             MaxFileSizeMb = intakeConfig.MaxFileSizeMb,
             MaxAttachments = intakeConfig.MaxAttachments,

@@ -75,6 +75,7 @@ public sealed class LocationService : ILocationService
         ValidatePacketConfig(entity);
         ValidateIntakeConfig(entity);
         ValidateTimeZone(entity);
+        ValidateBranding(entity);
 
         var dealership = await GetDealershipAsync(tenantId, cancellationToken);
         var alreadyReserved = false;
@@ -175,6 +176,7 @@ public sealed class LocationService : ILocationService
         ValidatePacketConfig(entity);
         ValidateIntakeConfig(entity);
         ValidateTimeZone(entity);
+        ValidateBranding(entity);
 
         var existing = await _locationRepository.GetByIdAsync(tenantId, id, cancellationToken)
             ?? throw new KeyNotFoundException($"Location '{id}' not found.");
@@ -221,6 +223,7 @@ public sealed class LocationService : ILocationService
         existing.EnabledCapabilities = entity.EnabledCapabilities;
         existing.PacketConfig = entity.PacketConfig;
         existing.PacketConfig.DisabledRecipients = carriedDisabled;
+        existing.Branding = entity.Branding;
         existing.MarkAsUpdated(_userContext.UserId);
 
         ValidatePacketConfig(existing);
@@ -372,6 +375,20 @@ public sealed class LocationService : ILocationService
     private static void ValidateTimeZone(Location entity)
     {
         var result = TimeZoneValidator.Validate(entity.TimeZoneId);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(entity));
+        }
+    }
+
+    /// <summary>
+    /// Rejects a location whose branding breaks a <c>Spec A-16</c> rule — a logo URL that is not
+    /// absolute https, or a header colour that is not <c>#RRGGBB</c> (issue #470). Surfaces as an
+    /// <see cref="ArgumentException"/> (HTTP 400) via <c>ExceptionHandlingMiddleware</c>.
+    /// </summary>
+    private static void ValidateBranding(Location entity)
+    {
+        var result = LocationBrandingValidator.Validate(entity.Branding);
         if (!result.IsValid)
         {
             throw new ArgumentException(result.ErrorMessage, nameof(entity));

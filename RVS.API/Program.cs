@@ -410,6 +410,15 @@ builder.Services.AddOptions<RVS.API.Options.EventGridInboundOptions>()
 
 builder.Services.AddScoped<IPacketPhotoUrlResolver, PacketPhotoUrlResolver>();
 
+// Dealer logo for the packet PDF (Spec A-16, issue #470). Fetched once per generation; a slow or
+// broken logo host costs the packet its logo, never the packet, so the budget is short.
+builder.Services.AddHttpClient<ILocationLogoFetcher, HttpLocationLogoFetcher>()
+    .AddStandardResilienceHandler(options =>
+    {
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(12);
+    });
+
 // Packet generation (issue #434): non-blocking in-process queue + background worker.
 // IPacketGenerationQueue is the seam for a future durable transport (e.g. Azure Storage Queue).
 builder.Services.AddSingleton<IPacketGenerationQueue, ChannelPacketGenerationQueue>();

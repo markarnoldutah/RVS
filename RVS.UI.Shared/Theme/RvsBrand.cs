@@ -41,7 +41,10 @@ public static class RvsBrand
     /// <summary>Rust as it sits on a dark or Ink surface; full-saturation Rust loses contrast there.</summary>
     public const string AccentOnDark = "#E8956D";
 
-    /// <summary>Cream — page and card background in light mode.</summary>
+    /// <summary>
+    /// Cream — text and marks on Ink surfaces. No longer a page ground: Intake went white so a
+    /// dealer's own branding sits on a neutral page (issue #470), and Manager uses <see cref="PaperNeutral"/>.
+    /// </summary>
     public const string Paper = "#F6F1E7";
 
     /// <summary>A step deeper than <see cref="Ink"/> — the dark-mode page background.</summary>

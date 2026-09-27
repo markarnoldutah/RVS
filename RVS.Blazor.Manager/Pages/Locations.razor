@@ -5,6 +5,8 @@
 @inject ThemeService ThemeService
 @implements IDisposable
 @using RVS.UI.Shared.Validation
+@using RVS.UI.Shared.Theme
+@using RVS.Domain.Branding
 
 <PageTitle>RV Intake Manager — Locations</PageTitle>
 
@@ -395,22 +397,74 @@
                                                          Min="1"
                                                          Max="MaxStatusLinkTtlDays" />
                                     </MudStack>
-                                    <MudStack Spacing="1">
-                                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Logo URL</MudText>
-                                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                                            Optional — shown at the top of this location's packets.
-                                        </MudText>
-                                        <MudTextField T="string" @bind-Value="_form.LogoUrl"
-                                                      Validation="@(new Func<string?, string?>(ValidateLogoUrl))"
-                                                      Variant="Variant.Outlined"
-                                                      Margin="Margin.Dense"
-                                                      InputType="InputType.Url"
-                                                      Placeholder="https://yourdealership.com/logo.png"
-                                                      autocomplete="off" />
-                                    </MudStack>
                                 </MudStack>
                             </MudExpansionPanel>
                         </MudExpansionPanels>
+
+                        @* Customer-facing branding — Spec A-16 (issue #470). Both fields are optional and
+                           fall back to RV Intake's own look independently. *@
+                        <MudStack Spacing="1" Class="mt-2">
+                            <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Branding</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                What customers see on this location's intake form and at the top of its packets.
+                                Leave blank to use RV Intake's.
+                            </MudText>
+                        </MudStack>
+
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="4">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Logo URL</MudText>
+                                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                        A PNG or JPEG at an https:// address — the one on your website works.
+                                        Use a transparent background, in a version that reads on your header colour:
+                                        it sits straight on that colour, and on a white panel only when no colour is set.
+                                    </MudText>
+                                    <MudTextField T="string" @bind-Value="_form.LogoUrl"
+                                                  Validation="@(new Func<string?, string?>(ValidateLogoUrl))"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  InputType="InputType.Url"
+                                                  Immediate="true"
+                                                  Clearable="true"
+                                                  Placeholder="https://yourdealership.com/logo.png"
+                                                  autocomplete="off" />
+                                </MudStack>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Header colour</MudText>
+                                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                        The bar across the top of the intake form. Leave blank for RV Intake's blue.
+                                    </MudText>
+                                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+                                        <MudTextField T="string" @bind-Value="_form.HeaderColor"
+                                                      Validation="@(new Func<string?, string?>(ValidateHeaderColor))"
+                                                      Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense"
+                                                      Immediate="true"
+                                                      Clearable="true"
+                                                      Placeholder="@RvsBrand.Ink"
+                                                      autocomplete="off" />
+                                        <input type="color" class="header-color-picker"
+                                               value="@HeaderPickerValue"
+                                               @onchange="OnHeaderColorPicked"
+                                               aria-label="Pick a header colour" />
+                                    </MudStack>
+                                </MudStack>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Preview</MudText>
+                                    <div class="header-preview" style="@HeaderPreviewStyle" aria-hidden="true">
+                                        @if (LocationBrandingValidator.IsHttpsUrl(_form.LogoUrl))
+                                        {
+                                            <span class="@HeaderPreviewLogoClass"><img src="@_form.LogoUrl!.Trim()" alt="" /></span>
+                                        }
+                                        else
+                                        {
+                                            <BrandWordmark Reversed="@HeaderPreviewReversed" Height="28px" Title="" />
+                                        }
+                                    </div>
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
                     </MudStack>
                 </MudForm>
             </div>
@@ -447,7 +501,7 @@
     //       – AiContext (multiline text area for system-prompt augmentation)
     //   • Operating hours (the time zone itself is now editable — issue #506)
     //   • Service email and dedicated SMS sender phone for ACS notifications
-    //   • Branding overrides (accent color — the packet logo URL is editable, issue #447)
+    //   • Branding (logo + intake header colour) is editable — Spec A-16, issue #470
     //   • Default service-advisor / round-robin queue assignment rules
     //   • Tax / labor-rate codes per location (for downstream estimating)
     // ──────────────────────────────────────────────────────────────────────────
@@ -479,7 +533,31 @@
         _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a location name" : null;
 
     private static string? ValidateLogoUrl(string? value) =>
-        PacketConfigValidator.ValidateLogoUrl(value).ErrorMessage;
+        LocationBrandingValidator.ValidateLogoUrl(value).ErrorMessage;
+
+    private static string? ValidateHeaderColor(string? value) =>
+        LocationBrandingValidator.ValidateHeaderColor(value).ErrorMessage;
+
+    // The preview paints what the intake header will: the dealer's colour, or Ink when none (or an
+    // invalid one) is set, with the foreground chosen for contrast (RVS.Domain HeaderColor).
+    private string HeaderPreviewBackground => HeaderColor.Normalize(_form.HeaderColor) ?? RvsBrand.Ink;
+
+    private bool HeaderPreviewReversed => HeaderColor.PrefersLightForeground(HeaderPreviewBackground);
+
+    private string HeaderPreviewStyle =>
+        $"background-color:{HeaderPreviewBackground};color:{HeaderColor.ForegroundFor(HeaderPreviewBackground)};";
+
+    // Same rule as the Intake app's IntakeChrome.LogoOnPlate: the logo sits straight on a colour the
+    // dealer chose, and on a white plate only over the default Ink.
+    private string HeaderPreviewLogoClass => HeaderColor.Normalize(_form.HeaderColor) is null
+        ? "header-preview-logo header-preview-plate"
+        : "header-preview-logo";
+
+    // <input type="color"> needs lower-case #rrggbb and has no "empty" state, so it shows Ink when unset.
+    private string HeaderPickerValue => HeaderPreviewBackground.ToLowerInvariant();
+
+    private void OnHeaderColorPicked(ChangeEventArgs e) =>
+        _form.HeaderColor = HeaderColor.Normalize(e.Value?.ToString());
 
     /// <summary>
     /// Moves the typed address onto the recipient list. Returns false (and shows why) when the
@@ -644,7 +722,8 @@
             IncludePhotos = location.PacketConfig.IncludePhotos,
             PasteBlockCharacterCap = location.PacketConfig.PasteBlockCharacterCap,
             StatusLinkTtlDays = location.PacketConfig.StatusLinkTtlDays,
-            LogoUrl = location.PacketConfig.LogoUrl
+            LogoUrl = location.Branding.LogoUrl,
+            HeaderColor = location.Branding.HeaderColor
         };
         ResetPacketEditor();
         _dialogOpen = true;
@@ -716,7 +795,9 @@
                 },
                 EnabledCapabilities = [.. _form.EnabledCapabilities],
                 // Sent whole: a non-null PacketConfig replaces the stored one wholesale.
-                PacketConfig = packetConfig
+                PacketConfig = packetConfig,
+                // Also sent whole, so clearing a field here clears it (Spec A-16, issue #470).
+                Branding = BuildBranding()
             };
 
             if (_editingLocationId is not null)
@@ -751,7 +832,14 @@
         IncludePhotos = _form.IncludePhotos,
         PasteBlockCharacterCap = _form.PasteBlockCharacterCap,
         StatusLinkTtlDays = _form.StatusLinkTtlDays,
-        LogoUrl = string.IsNullOrWhiteSpace(_form.LogoUrl) ? null : _form.LogoUrl.Trim()
+    };
+
+    private LocationBrandingDto BuildBranding() => new()
+    {
+        LogoUrl = string.IsNullOrWhiteSpace(_form.LogoUrl) ? null : _form.LogoUrl.Trim(),
+        HeaderColor = string.IsNullOrWhiteSpace(_form.HeaderColor)
+            ? null
+            : HeaderColor.Normalize(_form.HeaderColor) ?? _form.HeaderColor.Trim()
     };
 
     private void OpenSendIntakeLink(LocationSummaryResponseDto location)
@@ -810,6 +898,9 @@
         public bool IncludePhotos { get; set; } = PacketDefaults.IncludePhotos;
         public int PasteBlockCharacterCap { get; set; } = PacketDefaults.PasteBlockCharacterCap;
         public int StatusLinkTtlDays { get; set; } = PacketDefaults.StatusLinkTtlDays;
-        public string? LogoUrl { get; set; } = PacketDefaults.LogoUrl;
+
+        // Branding (Spec A-16, issue #470): blank means RV Intake's own.
+        public string? LogoUrl { get; set; }
+        public string? HeaderColor { get; set; }
     }
 }

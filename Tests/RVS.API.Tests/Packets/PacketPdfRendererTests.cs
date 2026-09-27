@@ -272,31 +272,48 @@ public class PacketPdfRendererTests
         act.Should().NotThrow();
     }
 
-    [Fact]
-    public void Render_WithALogoDataUri_ShouldDecodeAndEmbedItWithoutThrowing()
+    // ── Dealer logo and "Powered by" mark (Spec A-16, issue #470) ──────────
+
+    private static ServicePacket BrandedPacket() => FullPacket() with
     {
-        var pngDataUri = "data:image/png;base64," + Convert.ToBase64String(OnePixelPng());
-        var packet = FullPacket() with
-        {
-            Branding = new PacketBranding { BrandName = "RV Intake", LogoDataUri = pngDataUri },
-        };
+        Branding = new PacketBranding { LogoUrl = "https://cdn.dealer.example/logo.png" },
+    };
 
-        var act = () => PacketPdfRenderer.Render(packet);
+    [Fact]
+    public void Render_WithLogoBytes_ShouldEmbedTheLogo()
+    {
+        var packet = BrandedPacket();
 
-        act.Should().NotThrow();
+        var withLogo = PacketPdfRenderer.Render(packet, logoImage: OnePixelPng());
+        var withoutLogo = PacketPdfRenderer.Render(packet);
+
+        withLogo.Length.Should().BeGreaterThan(withoutLogo.Length, "the logo is embedded as an image");
     }
 
     [Fact]
-    public void Render_WithAnUndecodableLogoDataUri_ShouldFallBackToNoLogo_NotThrow()
+    public void Render_WithLogoBytesButNoLogoOnTheBranding_ShouldIgnoreThem()
     {
-        var packet = FullPacket() with
-        {
-            Branding = new PacketBranding { BrandName = "RV Intake", LogoDataUri = "data:image/png;base64,not-base64!!" },
-        };
+        var withBytes = PacketPdfRenderer.Render(FullPacket(), logoImage: OnePixelPng());
+        var withoutBytes = PacketPdfRenderer.Render(FullPacket());
 
-        var act = () => PacketPdfRenderer.Render(packet);
+        withBytes.Should().Equal(withoutBytes);
+    }
+
+    [Fact]
+    public void Render_WithUndecodableLogoBytes_ShouldFallBackToNoLogo_NotThrow()
+    {
+        var act = () => PacketPdfRenderer.Render(BrandedPacket(), logoImage: [0x3C, 0x68, 0x74, 0x6D, 0x6C, 0x3E]);
 
         act.Should().NotThrow();
+        act().Should().Equal(PacketPdfRenderer.Render(BrandedPacket()));
+    }
+
+    [Fact]
+    public void PoweredByMarkSvg_ShouldBeTheKitsHorizontalLockup()
+    {
+        // Linked from RVS.UI.Shared/wwwroot/brand/logo-horizontal.svg, so the PDF footer and the
+        // apps draw one file, not two copies that can drift.
+        PacketPdfRenderer.PoweredByMarkSvg.Should().StartWith("<svg").And.Contain("viewBox=\"0 0 390.4 108.0\"");
     }
 
     [Fact]

@@ -129,6 +129,9 @@ internal static class SamplePackets
                 statusUrl,
                 equipmentLines: ["EQUIPMENT: Generator — Onan 5500 · S/N K190123456", "FAULT CODE: Generator — code 36: Engine stopped"]),
             StatusLink = new PacketStatusLink { Url = statusUrl },
+            // The footer's "Powered by" mark as production serves it (issue #470). The minimal
+            // sample leaves it unset to show the text fallback.
+            Branding = new PacketBranding { PoweredByLogoUrl = PacketBranding.PoweredByLogoUrlFor("https://rvintake.com") },
         };
     }
 

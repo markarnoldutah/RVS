@@ -73,8 +73,8 @@ public sealed record ServicePacket
 
     /// <summary>
     /// Displayed brand identity for the masthead, footer, and PDF author. Defaults to the
-    /// product brand (<see cref="PacketBranding.Default"/>); the future per-location override
-    /// (issue <c>#470</c>) supplies it via <see cref="PacketCompositionContext"/>.
+    /// product brand (<see cref="PacketBranding.Default"/>); a location's logo (issue <c>#470</c>)
+    /// arrives via <see cref="PacketCompositionContext"/>.
     /// </summary>
     public PacketBranding Branding { get; init; } = PacketBranding.Default;
 

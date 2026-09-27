@@ -124,7 +124,15 @@ public class DealershipLocationDtoTests
         dto.IncludePhotos.Should().BeTrue();
         dto.PasteBlockCharacterCap.Should().Be(2500);
         dto.StatusLinkTtlDays.Should().Be(30);
+    }
+
+    [Fact]
+    public void LocationBrandingDto_DefaultsToTheRvIntakeBrand()
+    {
+        var dto = new LocationBrandingDto();
+
         dto.LogoUrl.Should().BeNull();
+        dto.HeaderColor.Should().BeNull();
     }
 
     [Fact]

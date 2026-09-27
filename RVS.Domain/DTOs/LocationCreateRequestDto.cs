@@ -41,4 +41,11 @@ public sealed record LocationCreateRequestDto
     /// unchanged; a non-null value replaces it wholesale.
     /// </summary>
     public PacketConfigDto? PacketConfig { get; init; }
+
+    /// <summary>
+    /// Customer-facing branding (<c>Spec A-16</c>, issue #470). When omitted on create, the
+    /// RV Intake defaults apply. Pass null on update to leave the existing branding unchanged;
+    /// a non-null value replaces it wholesale, so a blank field clears it.
+    /// </summary>
+    public LocationBrandingDto? Branding { get; init; }
 }
