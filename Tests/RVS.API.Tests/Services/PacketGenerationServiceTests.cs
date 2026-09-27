@@ -27,6 +27,8 @@ public class PacketGenerationServiceTests
     private const string SrId = "a1b2c3d4-1111-2222-3333-444455556666";
     private const string AttachmentsContainer = "rvs-attachments";
     private const string ManagerAppBaseUrl = "https://manager.test";
+    private const string IntakeBaseUrl = "https://intake.test";
+    private const string DealerLogoUrl = "https://cdn.dealer.example/logo.png";
 
     private readonly Mock<IServiceRequestRepository> _srRepoMock = new();
     private readonly Mock<ILocationRepository> _locationRepoMock = new();
@@ -36,6 +38,7 @@ public class PacketGenerationServiceTests
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
     private readonly Mock<INotificationService> _notificationMock = new();
     private readonly Mock<IPreliminaryAssessmentService> _assessmentMock = new();
+    private readonly Mock<ILocationLogoFetcher> _logoFetcherMock = new();
     private readonly PacketGenerationService _sut;
 
     private static PreliminaryAssessmentEmbedded GeneratedAssessment() => new()
@@ -79,9 +82,11 @@ public class PacketGenerationServiceTests
             _userContextMock.Object,
             _notificationMock.Object,
             _assessmentMock.Object,
+            _logoFetcherMock.Object,
             // Zero backoff so retry tests do not actually wait.
             Microsoft.Extensions.Options.Options.Create(new PacketEmailOptions { RetryBaseDelay = TimeSpan.Zero }),
             Microsoft.Extensions.Options.Options.Create(new ManagerAppUrlOptions { BaseUrl = ManagerAppBaseUrl }),
+            Microsoft.Extensions.Options.Options.Create(new IntakeUrlOptions { BaseUrl = IntakeBaseUrl }),
             Mock.Of<ILogger<PacketGenerationService>>());
     }
 
@@ -364,6 +369,75 @@ public class PacketGenerationServiceTests
         block.Should().Contain("<li>Check the slide fuse and battery voltage</li>");
         block.Should().Contain("<li>Replace the slide motor</li>");
         block.Should().Contain("<li>Slide-out motor</li>");
+    }
+
+    // ── Dealer branding (Spec A-16, issue #470) ─────────────────────────────
+
+    private static Location BrandedLocation()
+    {
+        var location = LocationWithRecipients();
+        location.Branding = new LocationBrandingEmbedded { LogoUrl = DealerLogoUrl };
+        return location;
+    }
+
+    private async Task<string> GenerateAndCaptureHtmlAsync(Location location)
+    {
+        var sr = BuildRequest();
+        SetupRequest(sr);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        PacketEmailMessage? sent = null;
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent = m)
+            .Returns(Task.CompletedTask);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        sent.Should().NotBeNull();
+        return sent!.HtmlBody;
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheLocationHasALogo_ShouldFetchItAndShowItInTheEmailedPacket()
+    {
+        _logoFetcherMock.Setup(f => f.FetchAsync(DealerLogoUrl, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(OnePixelPng);
+
+        var html = await GenerateAndCaptureHtmlAsync(BrandedLocation());
+
+        html.Should().Contain($"class=\"masthead-logo\" src=\"{DealerLogoUrl}\"");
+        _logoFetcherMock.Verify(f => f.FetchAsync(DealerLogoUrl, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheLogoCannotBeFetched_ShouldStillGenerateThePacketWithoutIt()
+    {
+        // The HTML shows the logo only when the PDF can too: a URL the server could not load
+        // would be a broken image in the service manager's inbox.
+        _logoFetcherMock.Setup(f => f.FetchAsync(DealerLogoUrl, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((byte[]?)null);
+
+        var html = await GenerateAndCaptureHtmlAsync(BrandedLocation());
+
+        html.Should().NotContain("class=\"masthead-logo\"");
+        html.Should().NotContain(DealerLogoUrl);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheLocationHasNoLogo_ShouldNotFetchOne()
+    {
+        await GenerateAndCaptureHtmlAsync(LocationWithRecipients());
+
+        _logoFetcherMock.Verify(f => f.FetchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldSignTheEmailedPacketWithThePoweredByMarkFromTheIntakeOrigin()
+    {
+        var html = await GenerateAndCaptureHtmlAsync(LocationWithRecipients());
+
+        html.Should().Contain($"src=\"{IntakeBaseUrl}/_content/RVS.UI.Shared/brand/logo-horizontal.png\"");
     }
 
     // ── Photo-grounded assessment (issue #772) ─────────────────────────────
@@ -1204,12 +1278,14 @@ public class PacketGenerationServiceTests
             _userContextMock.Object,
             _notificationMock.Object,
             _assessmentMock.Object,
+            _logoFetcherMock.Object,
             Microsoft.Extensions.Options.Options.Create(new PacketEmailOptions
             {
                 RetryBaseDelay = TimeSpan.Zero,
                 MaxRequestBytes = maxRequestBytes,
             }),
             Microsoft.Extensions.Options.Options.Create(new ManagerAppUrlOptions { BaseUrl = managerAppBaseUrl }),
+            Microsoft.Extensions.Options.Options.Create(new IntakeUrlOptions { BaseUrl = IntakeBaseUrl }),
             Mock.Of<ILogger<PacketGenerationService>>());
 
     // ── Manager-app status deep links (Spec C-7, issue #498) ───────────────

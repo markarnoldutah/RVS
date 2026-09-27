@@ -47,11 +47,18 @@ public sealed record PacketCompositionContext
     public string? BrandName { get; init; }
 
     /// <summary>
-    /// Per-location logo as a <c>data:</c> URI (issue <c>#470</c>), or <c>null</c> for no
-    /// logo. The orchestrator resolves a location's <c>LogoUrl</c> to this form so the
-    /// renderers stay I/O-free. See <see cref="PacketBranding.LogoDataUri"/>.
+    /// The location's dealer logo as an absolute https URL (<c>Spec A-16</c>, issue <c>#470</c>),
+    /// or <c>null</c> for none. Set only once the orchestrator has fetched it as a real image, so
+    /// the HTML never points a mail client at a logo the PDF could not show. Anything but https
+    /// is dropped. See <see cref="PacketBranding.LogoUrl"/>.
     /// </summary>
-    public string? LogoDataUri { get; init; }
+    public string? LogoUrl { get; init; }
+
+    /// <summary>
+    /// Absolute URL of the RV Intake mark for the footer's "Powered by" line (issue <c>#470</c>),
+    /// or <c>null</c> to name the product in text. See <see cref="PacketBranding.PoweredByLogoUrlFor"/>.
+    /// </summary>
+    public string? PoweredByLogoUrl { get; init; }
 
     /// <summary>
     /// Time-limited read URLs for photo attachments, keyed by

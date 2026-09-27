@@ -50,7 +50,7 @@ Known API facts for 8+/9.x. Don't "correct" these from older tutorials:
 |---|---|---|
 | Denim | `#2F4C6B` | Structural color: app bar, drawer, logo |
 | Rust (logo) | `#C1502E` | **Logo and marketing only.** Fails AA as body text on cream (4.19:1) |
-| Cream | `#F6F1E7` | Intake background; text on Denim |
+| Cream | `#F6F1E7` | Text on Denim. *Was* the Intake background; Intake went white on Sep 27 2026 (#470) so a dealer's branding (Spec A-16) sits on a neutral page |
 
 ### UI (used in the MudBlazor themes)
 Every pairing below was checked against WCAG 2.1 AA (≥ 4.5:1 for normal text).
@@ -245,7 +245,7 @@ Assets come from `rv-intake-logo-kit` (delivered separately). All text in the lo
 
 ## 5. Manual checks after it builds
 
-- [ ] **Intake on a real phone** (or a 390px DevTools viewport): the Continue and Submit buttons are at least 44px tall, the cream background shows, and the step cards are white.
+- [ ] **Intake on a real phone** (or a 390px DevTools viewport): the Continue and Submit buttons are at least 44px tall, the page background is white (#470), and the step cards read as cards against it.
 - [ ] **Manager, both modes:** the app bar, drawer, active nav item, primary buttons and focus rings all look correct. In dark mode, primary buttons have **dark** text on light-rust fills.
 - [ ] **`StatusBadge` / `PriorityBadge` review:** every error-type status shows an icon, per §1. List any badge changed in the PR description.
 - [ ] Run Lighthouse accessibility on one Intake page and one Manager page, and paste the scores into the PR. Any contrast failure there is a bug in this spec. Report it back rather than hand-tuning a color in a component.

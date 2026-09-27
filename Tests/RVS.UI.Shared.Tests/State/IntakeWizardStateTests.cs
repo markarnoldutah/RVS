@@ -1140,6 +1140,19 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
+    public void OnChange_ShouldFireWhenTheConfigIsLoaded()
+    {
+        // The layout listens for this to swap in the dealer's header branding (Spec A-16, #470).
+        var state = CreateState();
+        var fired = false;
+        state.OnChange += () => fired = true;
+
+        state.Config = new IntakeConfigResponseDto { LocationName = "SLC", LocationSlug = "acme-slc", DealershipName = "Acme" };
+
+        fired.Should().BeTrue();
+    }
+
+    [Fact]
     public void OnChange_ShouldFireWhenStepChanges()
     {
         var state = CreateState();

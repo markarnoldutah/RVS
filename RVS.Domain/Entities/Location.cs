@@ -1,4 +1,6 @@
+using System.Runtime.Serialization;
 using Newtonsoft.Json;
+using RVS.Domain.Validation;
 
 namespace RVS.Domain.Entities;
 
@@ -67,6 +69,74 @@ public class Location : EntityBase
     /// </summary>
     [JsonProperty("packetConfig")]
     public PacketConfigEmbedded PacketConfig { get; set; } = new();
+
+    /// <summary>
+    /// What this location's customers see of the dealer: the logo on the intake form and the
+    /// packet, and the intake form's header colour (<c>Spec A-16</c>, issue #470). Empty — the
+    /// default — shows the RV Intake mark on Denim.
+    /// </summary>
+    [JsonProperty("branding")]
+    public LocationBrandingEmbedded Branding { get; set; } = new();
+
+    /// <summary>
+    /// Read-time migration (issue #470): the logo lived at <c>packetConfig.logoUrl</c> (#435)
+    /// until branding had a home of its own. A stored legacy logo moves into
+    /// <see cref="Branding"/> unless branding already has one, and is never written back, so
+    /// the next save of the location completes the migration. A legacy value that is not an
+    /// absolute https URL is dropped rather than carried — branding rejects it, and a location
+    /// that failed validation on a field its settings screen no longer shows could not be saved.
+    /// </summary>
+    [OnDeserialized]
+    internal void MigrateLegacyPacketLogo(StreamingContext context)
+    {
+        Branding ??= new LocationBrandingEmbedded();
+        PacketConfig ??= new PacketConfigEmbedded();
+
+#pragma warning disable CS0618 // the legacy field exists only to be read here
+        var legacy = PacketConfig.LegacyLogoUrl?.Trim();
+        PacketConfig.LegacyLogoUrl = null;
+#pragma warning restore CS0618
+
+        if (!Branding.HasLogo && LocationBrandingValidator.IsHttpsUrl(legacy))
+        {
+            Branding.LogoUrl = legacy;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: LocationBrandingEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// A location's customer-facing branding (<c>Spec A-16</c>, issue #470). Both fields are
+/// optional; each falls back to the RV Intake default on its own.
+/// </summary>
+public class LocationBrandingEmbedded
+{
+    /// <summary>
+    /// Absolute https URL of the dealer's logo. Shown top left on the packet, in the intake
+    /// form's header bar and on its landing step. <c>null</c> shows the RV Intake mark instead.
+    /// Validated by <see cref="LocationBrandingValidator"/>.
+    /// </summary>
+    [JsonProperty("logoUrl")]
+    public string? LogoUrl { get; set; }
+
+    /// <summary>
+    /// The intake form's header-bar colour as <c>#RRGGBB</c>. <c>null</c> keeps the brand's
+    /// Denim. The foreground on it is chosen for contrast (<see cref="RVS.Domain.Branding.HeaderColor"/>),
+    /// and high-contrast mode ignores it.
+    /// </summary>
+    [JsonProperty("headerColor")]
+    public string? HeaderColor { get; set; }
+
+    /// <summary><c>true</c> when a logo URL is set.</summary>
+    [JsonIgnore]
+    public bool HasLogo => !string.IsNullOrWhiteSpace(LogoUrl);
+
+    /// <summary><c>true</c> when a header colour is set.</summary>
+    [JsonIgnore]
+    public bool HasHeaderColor => !string.IsNullOrWhiteSpace(HeaderColor);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,9 +283,17 @@ public class PacketConfigEmbedded
     [JsonProperty("statusLinkTtlDays")]
     public int StatusLinkTtlDays { get; set; } = DefaultStatusLinkTtlDays;
 
-    /// <summary>Optional absolute URL to a location-specific logo rendered on the packet.</summary>
+    /// <summary>
+    /// Where the location logo was stored before it moved to <see cref="Location.Branding"/>
+    /// (issue #470). Read from stored documents only, so <see cref="Location"/> can migrate it,
+    /// and never written back.
+    /// </summary>
     [JsonProperty("logoUrl")]
-    public string? LogoUrl { get; set; }
+    [Obsolete("Moved to Location.Branding.LogoUrl (issue #470). Read only by the Location migration.")]
+    public string? LegacyLogoUrl { get; set; }
+
+    /// <summary>Tells Newtonsoft never to write <see cref="LegacyLogoUrl"/>.</summary>
+    public bool ShouldSerializeLegacyLogoUrl() => false;
 }
 
 // ---------------------------------------------------------------------------

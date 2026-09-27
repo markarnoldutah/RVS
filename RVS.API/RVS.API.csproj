@@ -40,6 +40,16 @@
   </ItemGroup>
 
   <!--
+    The packet PDF's "Powered by" mark (issue #470) is the logo kit's horizontal lockup, linked
+    from RVS.UI.Shared rather than copied, so the PDF and the apps draw the same file.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\RVS.UI.Shared\wwwroot\brand\logo-horizontal.svg"
+                      Link="Packets\logo-horizontal.svg"
+                      LogicalName="RVS.API.Packets.logo-horizontal.svg" />
+  </ItemGroup>
+
+  <!--
     Ship the third-party open-source notices next to the binaries they cover
     (ImageMagick / Magick.NET native delegates incl. LGPL libheif/libde265,
     QuestPDF + its native deps). Copied into build AND publish output so the

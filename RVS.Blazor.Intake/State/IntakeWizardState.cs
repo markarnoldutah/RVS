@@ -65,8 +65,26 @@ public sealed class IntakeWizardState
     /// </summary>
     public string? InviteToken { get; set; }
 
-    /// <summary>Location configuration fetched from the API.</summary>
-    public IntakeConfigResponseDto? Config { get; set; }
+    /// <summary>
+    /// Location configuration fetched from the API. Setting it raises <see cref="OnChange"/>, which
+    /// the layout listens for to show the dealer's header branding (<c>Spec A-16</c>, issue #470).
+    /// </summary>
+    public IntakeConfigResponseDto? Config
+    {
+        get => _config;
+        set
+        {
+            if (ReferenceEquals(_config, value))
+            {
+                return;
+            }
+
+            _config = value;
+            NotifyStateChanged();
+        }
+    }
+
+    private IntakeConfigResponseDto? _config;
 
     /// <summary>
     /// Attachment cap for this intake (<c>Spec A-6</c>): the location's configured value, held to

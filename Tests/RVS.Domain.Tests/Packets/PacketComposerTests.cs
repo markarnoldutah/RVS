@@ -354,7 +354,8 @@ public class PacketComposerTests
 
         packet.Branding.Should().BeSameAs(PacketBranding.Default);
         packet.Branding.BrandName.Should().Be("RV Intake");
-        packet.Branding.LogoDataUri.Should().BeNull();
+        packet.Branding.LogoUrl.Should().BeNull();
+        packet.Branding.PoweredByLogoUrl.Should().BeNull();
     }
 
     [Fact]
@@ -368,15 +369,44 @@ public class PacketComposerTests
     }
 
     [Fact]
-    public void Compose_WhenContextSuppliesLogoDataUri_ShouldCarryItAndKeepTheDefaultName()
+    public void Compose_WhenContextSuppliesALogoUrl_ShouldCarryItAndKeepTheDefaultName()
     {
-        var context = FullContext() with { LogoDataUri = "data:image/png;base64,AAAA" };
+        var context = FullContext() with { LogoUrl = "  https://cdn.dealer.example/logo.png  " };
 
         var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
 
         packet.Branding.BrandName.Should().Be("RV Intake");
-        packet.Branding.LogoDataUri.Should().Be("data:image/png;base64,AAAA");
+        packet.Branding.LogoUrl.Should().Be("https://cdn.dealer.example/logo.png");
         packet.Branding.HasLogo.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("http://cdn.dealer.example/logo.png")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("data:image/png;base64,AAAA")]
+    public void Compose_WhenContextLogoUrlIsNotHttps_ShouldDropIt(string logoUrl)
+    {
+        // The HTML is the email body, so whatever lands in the logo's src is fetched by the
+        // recipient's mail client. Only https gets that far (issue #470).
+        var context = FullContext() with { LogoUrl = logoUrl };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.HasLogo.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Compose_WhenContextSuppliesAPoweredByLogoUrl_ShouldCarryIt()
+    {
+        var context = FullContext() with
+        {
+            PoweredByLogoUrl = "https://rvintake.com/_content/RVS.UI.Shared/brand/logo-horizontal.png",
+        };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.PoweredByLogoUrl.Should().Be("https://rvintake.com/_content/RVS.UI.Shared/brand/logo-horizontal.png");
+        packet.Branding.BrandName.Should().Be("RV Intake");
     }
 
     [Fact]

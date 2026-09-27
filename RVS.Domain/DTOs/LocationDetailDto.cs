@@ -32,6 +32,9 @@ public sealed record LocationDetailDto
     /// </summary>
     public PacketConfigDto PacketConfig { get; init; } = new();
 
+    /// <summary>Customer-facing branding (<c>Spec A-16</c>, issue #470).</summary>
+    public LocationBrandingDto Branding { get; init; } = new();
+
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
 }

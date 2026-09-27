@@ -80,7 +80,6 @@ public static class ClientPacketConfigValidator
             IncludePhotos = config.IncludePhotos,
             PasteBlockCharacterCap = config.PasteBlockCharacterCap,
             StatusLinkTtlDays = config.StatusLinkTtlDays,
-            LogoUrl = config.LogoUrl?.Trim(),
         });
     }
 }

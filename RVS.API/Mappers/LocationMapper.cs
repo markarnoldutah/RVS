@@ -1,3 +1,4 @@
+using RVS.Domain.Branding;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 
@@ -27,6 +28,7 @@ public static class LocationMapper
             IntakeConfig = entity.IntakeConfig.ToDto(),
             EnabledCapabilities = [.. entity.EnabledCapabilities],
             PacketConfig = entity.PacketConfig.ToDto(),
+            Branding = entity.Branding.ToDto(),
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
@@ -85,7 +87,8 @@ public static class LocationMapper
             Address = dto.Address is not null ? dto.Address.ToEmbedded() : new AddressEmbedded(),
             IntakeConfig = dto.IntakeConfig is not null ? dto.IntakeConfig.ToEmbedded() : new IntakeFormConfigEmbedded(),
             EnabledCapabilities = dto.EnabledCapabilities is not null ? [.. dto.EnabledCapabilities] : [],
-            PacketConfig = dto.PacketConfig is not null ? dto.PacketConfig.ToEmbedded() : new PacketConfigEmbedded()
+            PacketConfig = dto.PacketConfig is not null ? dto.PacketConfig.ToEmbedded() : new PacketConfigEmbedded(),
+            Branding = dto.Branding is not null ? dto.Branding.ToEmbedded() : new LocationBrandingEmbedded()
         };
     }
 
@@ -140,6 +143,11 @@ public static class LocationMapper
         if (dto.PacketConfig is not null)
         {
             entity.PacketConfig = dto.PacketConfig.ToEmbedded();
+        }
+
+        if (dto.Branding is not null)
+        {
+            entity.Branding = dto.Branding.ToEmbedded();
         }
 
         entity.MarkAsUpdated(updatedByUserId);
@@ -202,13 +210,12 @@ public static class LocationMapper
             IncludePhotos = config.IncludePhotos,
             PasteBlockCharacterCap = config.PasteBlockCharacterCap,
             StatusLinkTtlDays = config.StatusLinkTtlDays,
-            LogoUrl = config.LogoUrl
         };
     }
 
     /// <summary>
     /// Maps a <see cref="PacketConfigDto"/> to a <see cref="PacketConfigEmbedded"/> entity,
-    /// trimming the recipient addresses and the logo URL. Range and address-shape rules are
+    /// trimming the recipient addresses. Range and address-shape rules are
     /// enforced by <c>PacketConfigValidator</c> in the service, not here.
     ///
     /// <see cref="PacketConfigDto.DisabledRecipients"/> is deliberately <b>not</b> read: the
@@ -229,7 +236,40 @@ public static class LocationMapper
             IncludePhotos = dto.IncludePhotos,
             PasteBlockCharacterCap = dto.PasteBlockCharacterCap,
             StatusLinkTtlDays = dto.StatusLinkTtlDays,
-            LogoUrl = string.IsNullOrWhiteSpace(dto.LogoUrl) ? null : dto.LogoUrl.Trim()
+        };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="LocationBrandingEmbedded"/> entity to a <see cref="LocationBrandingDto"/>
+    /// (<c>Spec A-16</c>, issue #470).
+    /// </summary>
+    public static LocationBrandingDto ToDto(this LocationBrandingEmbedded branding)
+    {
+        ArgumentNullException.ThrowIfNull(branding);
+
+        return new LocationBrandingDto
+        {
+            LogoUrl = branding.LogoUrl,
+            HeaderColor = branding.HeaderColor
+        };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="LocationBrandingDto"/> to a <see cref="LocationBrandingEmbedded"/> entity:
+    /// blanks become <c>null</c>, the logo URL is trimmed, and a well-formed header colour is
+    /// upper-cased. A malformed colour is kept, trimmed, for <c>LocationBrandingValidator</c> to
+    /// reject in the service.
+    /// </summary>
+    public static LocationBrandingEmbedded ToEmbedded(this LocationBrandingDto dto)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        var headerColor = string.IsNullOrWhiteSpace(dto.HeaderColor) ? null : dto.HeaderColor.Trim();
+
+        return new LocationBrandingEmbedded
+        {
+            LogoUrl = string.IsNullOrWhiteSpace(dto.LogoUrl) ? null : dto.LogoUrl.Trim(),
+            HeaderColor = HeaderColor.Normalize(headerColor) ?? headerColor
         };
     }
 

@@ -1,0 +1,54 @@
+@* A dealer's logo (Spec A-16, issue #470). On a colour the dealer chose it sits straight on it:
+   they picked logo and colour together, and may have uploaded a white logo for a dark header, which
+   a plate would hide. Plated puts it on a white plate instead, for surfaces the dealer did not
+   colour — the default Ink, or high contrast's black — where a dark logo would vanish
+   (IntakeChrome.LogoOnPlate decides). If the image will not load, Fallback renders instead, so a
+   moved or deleted file is never a broken image in front of a customer. *@
+
+@if (_failed)
+{
+    @Fallback
+}
+else
+{
+    <span class="@(Plated ? "dealer-logo dealer-logo-plate" : "dealer-logo")">
+        <img src="@Url" alt="@Alt" style="@ImageStyle" @onerror="OnError" />
+    </span>
+}
+
+@code {
+    /// <summary>The logo's https URL.</summary>
+    [Parameter, EditorRequired] public string Url { get; set; } = string.Empty;
+
+    /// <summary>Accessible name. Pass an empty string where the logo repeats nearby text.</summary>
+    [Parameter] public string? Alt { get; set; }
+
+    /// <summary>Rendered image height, e.g. <c>"28px"</c>. Width follows the aspect ratio.</summary>
+    [Parameter] public string Height { get; set; } = "28px";
+
+    /// <summary>The widest the logo may run, e.g. <c>"180px"</c>.</summary>
+    [Parameter] public string MaxWidth { get; set; } = "180px";
+
+    /// <summary>Mount the logo on a white plate — for a surface whose colour the dealer did not choose.</summary>
+    [Parameter] public bool Plated { get; set; }
+
+    /// <summary>What to show if the logo fails to load — the RV Intake mark.</summary>
+    [Parameter] public RenderFragment? Fallback { get; set; }
+
+    private bool _failed;
+    private string? _renderedUrl;
+
+    private string ImageStyle => $"height:{Height};max-width:{MaxWidth};";
+
+    protected override void OnParametersSet()
+    {
+        // A different logo gets its own chance to load.
+        if (_renderedUrl != Url)
+        {
+            _renderedUrl = Url;
+            _failed = false;
+        }
+    }
+
+    private void OnError() => _failed = true;
+}

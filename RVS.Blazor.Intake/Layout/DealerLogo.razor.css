@@ -1,0 +1,19 @@
+.dealer-logo {
+    display: inline-flex;
+    align-items: center;
+    line-height: 0;
+}
+
+/* A neutral white mount, not a brand colour: what a dealer's logo was most likely drawn on. Used
+   only where the surface colour is not the dealer's (issue #470). */
+.dealer-logo-plate {
+    background-color: #FFFFFF;
+    border-radius: 8px;
+    padding: 4px 8px;
+}
+
+.dealer-logo img {
+    display: block;
+    width: auto;
+    object-fit: contain;
+}

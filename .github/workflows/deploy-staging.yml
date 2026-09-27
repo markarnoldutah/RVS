@@ -38,8 +38,9 @@ jobs:
           echo "$CHANGED"
           echo "---------------------"
 
-          # API: RVS.API + Domain + all Infra projects
-          API_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.API/|RVS\.Domain/|RVS\.Infra\.)' && echo true || echo false)
+          # API: RVS.API + Domain + all Infra projects, plus the brand kit — the packet PDF
+          # embeds RVS.UI.Shared/wwwroot/brand/logo-horizontal.svg as a linked resource (#470)
+          API_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.API/|RVS\.Domain/|RVS\.Infra\.|RVS\.UI\.Shared/wwwroot/brand/)' && echo true || echo false)
 
           # Intake: Blazor.Intake + UI.Shared + Domain (shared dependency)
           INTAKE_CHANGED=$(echo "$CHANGED" | grep -qE '^(RVS\.Blazor\.Intake/|RVS\.UI\.Shared/|RVS\.Domain/)' && echo true || echo false)

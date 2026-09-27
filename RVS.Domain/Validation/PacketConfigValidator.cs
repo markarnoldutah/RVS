@@ -6,16 +6,13 @@ namespace RVS.Domain.Validation;
 /// <summary>
 /// Validates a location's <see cref="PacketConfigEmbedded"/> (<c>Spec B-6</c> / <c>C-6</c>):
 /// the 0–<see cref="PacketConfigEmbedded.MaxRecipients"/> recipient bound and address shape,
-/// the paste-block cap range (<c>Spec B-5</c>), the status-link TTL bound (<c>Spec X-5</c>),
-/// and the optional logo URL.
+/// the paste-block cap range (<c>Spec B-5</c>), and the status-link TTL bound (<c>Spec X-5</c>).
+/// The location logo is branding, not packet configuration: see <see cref="LocationBrandingValidator"/>.
 /// </summary>
 public static class PacketConfigValidator
 {
     /// <summary>Longest e-mail address accepted for a recipient (RFC 5321).</summary>
     private const int MaxRecipientLength = 254;
-
-    /// <summary>Longest logo URL accepted.</summary>
-    private const int MaxLogoUrlLength = 2048;
 
     private static readonly EmailAddressAttribute EmailValidator = new();
 
@@ -97,7 +94,7 @@ public static class PacketConfigValidator
                 $"Status-link TTL must be between 1 and {PacketConfigEmbedded.MaxStatusLinkTtlDays} days.");
         }
 
-        return ValidateLogoUrl(config.LogoUrl);
+        return ValidationResult.Success;
     }
 
     /// <summary>
@@ -122,33 +119,6 @@ public static class PacketConfigValidator
         if (recipient.Any(char.IsWhiteSpace) || !EmailValidator.IsValid(recipient))
         {
             return ValidationResult.Failure($"'{recipient}' is not a valid email address.");
-        }
-
-        return ValidationResult.Success;
-    }
-
-    /// <summary>
-    /// Validates the optional packet logo URL: blank is allowed; otherwise an absolute http(s)
-    /// URL of at most 2048 characters. Exposed for the manager settings form (issue #447).
-    /// </summary>
-    /// <param name="logoUrl">The URL to check.</param>
-    public static ValidationResult ValidateLogoUrl(string? logoUrl)
-    {
-        if (string.IsNullOrWhiteSpace(logoUrl))
-        {
-            return ValidationResult.Success;
-        }
-
-        if (logoUrl.Length > MaxLogoUrlLength)
-        {
-            return ValidationResult.Failure(
-                $"Logo URL must not exceed {MaxLogoUrlLength} characters.");
-        }
-
-        if (!Uri.TryCreate(logoUrl, UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-        {
-            return ValidationResult.Failure("Logo URL must be an absolute http(s) URL.");
         }
 
         return ValidationResult.Success;

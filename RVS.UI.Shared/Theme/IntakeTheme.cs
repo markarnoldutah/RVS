@@ -6,9 +6,11 @@ namespace RVS.UI.Shared.Theme;
 /// The Denim &amp; Rust theme for <c>RVS.Blazor.Intake</c> (Spec THEME-1).
 /// <para>
 /// Intake is anonymous and mobile-first, filled out once by a stressed customer standing next
-/// to a broken RV — not a tool anyone lives in. Brand shows up more here, not less: full cream
-/// ground, white cards, rounder corners, a notch more type. There is no dark-mode toggle; the
-/// high-contrast mode below is an accessibility choice, not a second look.
+/// to a broken RV — not a tool anyone lives in. Rounder corners and a notch more type than
+/// Manager. The page ground is white, not cream (issue #470): a location's intake page carries
+/// the dealer's own logo and header colour (Spec A-16), and a neutral ground suits every dealer's
+/// brand where cream suits only ours. Denim and Rust still carry structure and action. There is
+/// no dark-mode toggle; the high-contrast mode below is an accessibility choice, not a second look.
 /// </para>
 /// </summary>
 public static class IntakeTheme
@@ -21,7 +23,7 @@ public static class IntakeTheme
         SecondaryContrastText = RvsBrand.Paper,
         AppbarBackground = RvsBrand.Ink,
         AppbarText = RvsBrand.Paper,
-        Background = RvsBrand.Paper,
+        Background = "#FFFFFF",
         Surface = "#FFFFFF",
         TextPrimary = RvsBrand.TextOnPaper,
         TextSecondary = RvsBrand.TextSecondaryOnPaper,

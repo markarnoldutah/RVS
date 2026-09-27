@@ -66,11 +66,13 @@ public sealed class PacketGenerationService : IPacketGenerationService
     private readonly IUserContextAccessor _userContext;
     private readonly INotificationService _notificationService;
     private readonly IPreliminaryAssessmentService _assessmentService;
+    private readonly ILocationLogoFetcher _logoFetcher;
     private readonly PacketEmailOptions _packetEmailOptions;
     private readonly ManagerAppUrlOptions _managerAppUrlOptions;
+    private readonly IntakeUrlOptions _intakeUrlOptions;
     private readonly ILogger<PacketGenerationService> _logger;
 
-    /// <summary>Creates the packet generation orchestrator with its repositories, blob storage, queue, notification transport, and assessment generator.</summary>
+    /// <summary>Creates the packet generation orchestrator with its repositories, blob storage, queue, notification transport, assessment generator, and logo fetcher.</summary>
     public PacketGenerationService(
         IServiceRequestRepository serviceRequestRepository,
         ILocationRepository locationRepository,
@@ -80,8 +82,10 @@ public sealed class PacketGenerationService : IPacketGenerationService
         IUserContextAccessor userContext,
         INotificationService notificationService,
         IPreliminaryAssessmentService assessmentService,
+        ILocationLogoFetcher logoFetcher,
         IOptions<PacketEmailOptions> packetEmailOptions,
         IOptions<ManagerAppUrlOptions> managerAppUrlOptions,
+        IOptions<IntakeUrlOptions> intakeUrlOptions,
         ILogger<PacketGenerationService> logger)
     {
         _serviceRequestRepository = serviceRequestRepository;
@@ -92,8 +96,10 @@ public sealed class PacketGenerationService : IPacketGenerationService
         _userContext = userContext;
         _notificationService = notificationService;
         _assessmentService = assessmentService;
+        _logoFetcher = logoFetcher;
         _packetEmailOptions = packetEmailOptions.Value;
         _managerAppUrlOptions = managerAppUrlOptions.Value;
+        _intakeUrlOptions = intakeUrlOptions.Value;
         _logger = logger;
     }
 
@@ -136,6 +142,12 @@ public sealed class PacketGenerationService : IPacketGenerationService
 
             await EnsurePreliminaryAssessmentAsync(request, downloadedPhotos, cancellationToken);
 
+            // The dealer's logo (Spec A-16, issue #470). The PDF needs its bytes; the HTML only
+            // names its URL, and does so only when the fetch succeeded, so the two renderings show
+            // the logo or both leave it out. A logo that will not load never fails the packet.
+            var logoUrl = location?.Branding is { HasLogo: true } branding ? branding.LogoUrl : null;
+            var logoImage = logoUrl is null ? null : await _logoFetcher.FetchAsync(logoUrl, cancellationToken);
+
             var pasteBlockCap = location?.PacketConfig.PasteBlockCharacterCap
                 ?? PacketConfigEmbedded.DefaultPasteBlockCharacterCap;
 
@@ -159,6 +171,8 @@ public sealed class PacketGenerationService : IPacketGenerationService
                     characterCap: pasteBlockCap,
                     equipmentLines: PhotoFindingText.PasteLines(request.PreliminaryAssessment?.PhotoFindings)),
                 PhotoUrls = photoUrls,
+                LogoUrl = logoImage is null ? null : logoUrl,
+                PoweredByLogoUrl = PacketBranding.PoweredByLogoUrlFor(_intakeUrlOptions.BaseUrl),
             };
 
             var packet = PacketComposer.Compose(request, context);
@@ -174,7 +188,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
                 photoImages[photo.Url] = photo.Bytes;
             }
 
-            var pdf = PacketPdfRenderer.Render(packet, photoImages);
+            var pdf = PacketPdfRenderer.Render(packet, photoImages, logoImage);
 
             var nextVersion = request.PacketGeneration.PacketVersion + 1;
             var pdfBlobPath = $"packets/{tenantId}/{request.Id}/v{nextVersion}.pdf";

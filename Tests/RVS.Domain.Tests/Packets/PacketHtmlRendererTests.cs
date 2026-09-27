@@ -394,7 +394,9 @@ public class PacketHtmlRendererTests
         html[..Order(html, "section:customer")].Should().Contain("Acme RV Group");   // masthead
         html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*Acme RV Group");            // running footer
         html[Order(html, "class=\"packet-foot\"")..].Should().Contain("Acme RV Group"); // static footer
-        html.Should().NotContain("RV Intake");
+        // The "Powered by" mark names the product whatever the brand is (issue #470); nothing
+        // before it does.
+        html[..Order(html, "class=\"powered-by\"")].Should().NotContain("RV Intake");
     }
 
     [Fact]
@@ -406,22 +408,75 @@ public class PacketHtmlRendererTests
     }
 
     [Fact]
-    public void Render_WhenBrandingHasLogoDataUri_ShouldEmitItAsAMastheadImage()
+    public void Render_WhenBrandingHasALogoUrl_ShouldEmitItAsTheFirstThingInTheMasthead()
+    {
+        // Top left, by URL rather than a data: URI: this HTML is the email body, and Gmail and
+        // Outlook drop data: images (issue #470).
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding { LogoUrl = "https://cdn.dealer.example/logo.png?v=1&size=l" },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var masthead = html[Order(html, "section:unit")..Order(html, "section:customer")];
+        masthead.Should().Contain("class=\"masthead-logo\"");
+        masthead.Should().Contain("src=\"https://cdn.dealer.example/logo.png?v=1&amp;size=l\"");
+        masthead.IndexOf("masthead-logo", StringComparison.Ordinal)
+            .Should().BeLessThan(masthead.IndexOf("class=\"letterhead\"", StringComparison.Ordinal));
+        masthead.IndexOf("masthead-logo", StringComparison.Ordinal)
+            .Should().BeLessThan(masthead.IndexOf("class=\"refbox\"", StringComparison.Ordinal));
+    }
+
+    // ── "Powered by RV Intake" footer (issue #470) ───────────────────────
+
+    [Fact]
+    public void Render_ShouldCenterAPoweredByLineInTheStaticFooter()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var footer = html[Order(html, "class=\"packet-foot\"")..];
+        footer.Should().MatchRegex(@"<td[^>]*class=""powered-by""[^>]*text-align:center");
+        footer[Order(footer, "class=\"powered-by\"")..].Should().Contain("Powered by");
+    }
+
+    [Fact]
+    public void Render_WhenAPoweredByLogoUrlIsSet_ShouldShowTheRvIntakeMarkAsASizedImage()
     {
         var packet = FullPacket() with
         {
             Branding = new PacketBranding
             {
-                BrandName = "RV Intake",
-                LogoDataUri = "data:image/png;base64,iVBORw0KGgo=",
+                PoweredByLogoUrl = "https://rvintake.com/_content/RVS.UI.Shared/brand/logo-horizontal.png",
             },
         };
 
         var html = PacketHtmlRenderer.Render(packet);
 
-        var masthead = html[..Order(html, "section:customer")];
-        masthead.Should().Contain("class=\"masthead-logo\"");
-        masthead.Should().Contain("src=\"data:image/png;base64,iVBORw0KGgo=\"");
+        var poweredBy = html[Order(html, "class=\"powered-by\"")..];
+        poweredBy.Should().MatchRegex(
+            @"<img[^>]*src=""https://rvintake\.com/_content/RVS\.UI\.Shared/brand/logo-horizontal\.png""[^>]*alt=""RV Intake""");
+        // Outlook ignores CSS sizes on images; explicit attributes keep the mark small.
+        poweredBy.Should().MatchRegex(@"<img[^>]*width=""\d+""[^>]*height=""\d+""");
+    }
+
+    [Fact]
+    public void Render_WhenNoPoweredByLogoUrl_ShouldNameRvIntakeInText()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var poweredBy = html[Order(html, "class=\"powered-by\"")..];
+        poweredBy.Should().Contain("Powered by <strong>RV Intake</strong>");
+        poweredBy.Should().NotContain("<img");
+    }
+
+    [Fact]
+    public void Render_PoweredByLine_ShouldComeBeforeTheAiDisclaimer()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("class=\"ai-disclaimer\"");
+        Order(html, "class=\"powered-by\"").Should().BeLessThan(Order(html, "class=\"ai-disclaimer\""));
     }
 
     [Fact]

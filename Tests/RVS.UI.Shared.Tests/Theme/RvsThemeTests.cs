@@ -130,11 +130,13 @@ public class RvsThemeTests
     }
 
     [Fact]
-    public void IntakeTheme_ShouldUseFullCreamBackgroundWithWhiteCards()
+    public void IntakeTheme_ShouldUseAWhiteBackgroundWithWhiteCards()
     {
+        // White, not cream (issue #470): a dealer's logo and header colour now sit on this page,
+        // and a neutral ground is the one that suits every dealer's brand.
         var palette = IntakeTheme.Theme.PaletteLight;
 
-        palette.Background.Should().BeColor(RvsBrand.Paper);
+        palette.Background.Should().BeColor("#FFFFFF");
         palette.Surface.Should().BeColor("#FFFFFF");
         palette.Primary.Should().BeColor(RvsBrand.Accent);
         palette.AppbarBackground.Should().BeColor(RvsBrand.Ink);

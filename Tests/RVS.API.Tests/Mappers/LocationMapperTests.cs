@@ -510,7 +510,6 @@ public class LocationMapperTests
             IncludePhotos = false,
             PasteBlockCharacterCap = 750,
             StatusLinkTtlDays = 14,
-            LogoUrl = "https://cdn.dealer.com/logo.png"
         };
 
         var dto = config.ToDto();
@@ -521,7 +520,6 @@ public class LocationMapperTests
         dto.IncludePhotos.Should().BeFalse();
         dto.PasteBlockCharacterCap.Should().Be(750);
         dto.StatusLinkTtlDays.Should().Be(14);
-        dto.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
     }
 
     [Fact]
@@ -574,26 +572,11 @@ public class LocationMapperTests
     }
 
     [Fact]
-    public void PacketConfigToEmbedded_ShouldTrimRecipientsAndLogoUrl()
+    public void PacketConfigToEmbedded_ShouldTrimRecipients()
     {
-        var dto = new PacketConfigDto
-        {
-            Recipients = ["  a@dealer.com ", " b@dealer.com"],
-            LogoUrl = "  https://cdn.dealer.com/logo.png  "
-        };
+        var dto = new PacketConfigDto { Recipients = ["  a@dealer.com ", " b@dealer.com"] };
 
-        var embedded = dto.ToEmbedded();
-
-        embedded.Recipients.Should().BeEquivalentTo(["a@dealer.com", "b@dealer.com"]);
-        embedded.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
-    }
-
-    [Fact]
-    public void PacketConfigToEmbedded_WhenLogoUrlBlank_ShouldBeNull()
-    {
-        var dto = new PacketConfigDto { LogoUrl = "   " };
-
-        dto.ToEmbedded().LogoUrl.Should().BeNull();
+        dto.ToEmbedded().Recipients.Should().BeEquivalentTo(["a@dealer.com", "b@dealer.com"]);
     }
 
     [Fact]
@@ -786,5 +769,121 @@ public class LocationMapperTests
         entity.ApplyUpdate(dto, "usr_2");
 
         entity.TimeZoneId.Should().Be("America/Denver");
+    }
+
+    // ── Branding (Spec A-16, issue #470) ────────────────────────────────
+
+    [Fact]
+    public void BrandingToDto_WhenNull_ShouldThrowArgumentNullException()
+    {
+        LocationBrandingEmbedded? branding = null;
+
+        var act = () => branding!.ToDto();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void BrandingToEmbedded_WhenNull_ShouldThrowArgumentNullException()
+    {
+        LocationBrandingDto? dto = null;
+
+        var act = () => dto!.ToEmbedded();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void ToDetailDto_ShouldMapBranding()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            Branding = new LocationBrandingEmbedded { LogoUrl = "https://cdn.dealer.com/logo.png", HeaderColor = "#1A5E20" }
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+        dto.Branding.HeaderColor.Should().Be("#1A5E20");
+    }
+
+    [Fact]
+    public void ToEntity_WhenNoBranding_ShouldUseTheDefaults()
+    {
+        var entity = BuildValidCreateRequest().ToEntity("ten_1", "usr_1");
+
+        entity.Branding.HasLogo.Should().BeFalse();
+        entity.Branding.HasHeaderColor.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToEntity_ShouldTrimTheLogoAndNormalizeTheHeaderColor()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            Branding = new LocationBrandingDto { LogoUrl = "  https://cdn.dealer.com/logo.png  ", HeaderColor = " #1a5e20 " }
+        };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+        entity.Branding.HeaderColor.Should().Be("#1A5E20");
+    }
+
+    [Fact]
+    public void BrandingToEmbedded_WhenFieldsBlank_ShouldBeNull()
+    {
+        var embedded = new LocationBrandingDto { LogoUrl = "   ", HeaderColor = "" }.ToEmbedded();
+
+        embedded.LogoUrl.Should().BeNull();
+        embedded.HeaderColor.Should().BeNull();
+    }
+
+    [Fact]
+    public void BrandingToEmbedded_WhenHeaderColorIsNotHex_ShouldKeepItTrimmedForTheValidatorToReject()
+    {
+        // The mapper is a pure transform; LocationService rejects the value with a 400.
+        var embedded = new LocationBrandingDto { HeaderColor = " green " }.ToEmbedded();
+
+        embedded.HeaderColor.Should().Be("green");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenBrandingProvided_ShouldReplaceItWholesale()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            Branding = new LocationBrandingEmbedded { LogoUrl = "https://cdn.dealer.com/old.png", HeaderColor = "#1A5E20" }
+        };
+        var dto = BuildValidCreateRequest() with
+        {
+            Branding = new LocationBrandingDto { LogoUrl = "https://cdn.dealer.com/new.png" }
+        };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/new.png");
+        entity.Branding.HeaderColor.Should().BeNull("a non-null branding replaces the stored one, so an omitted colour clears it");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenBrandingNull_ShouldLeaveExistingUnchanged()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            Branding = new LocationBrandingEmbedded { LogoUrl = "https://cdn.dealer.com/keep.png", HeaderColor = "#1A5E20" }
+        };
+        var dto = BuildValidCreateRequest() with { Branding = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/keep.png");
+        entity.Branding.HeaderColor.Should().Be("#1A5E20");
     }
 }

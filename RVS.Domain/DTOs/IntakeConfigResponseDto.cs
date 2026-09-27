@@ -15,6 +15,13 @@ public sealed record IntakeConfigResponseDto
     /// capabilities do not match the issue). Null when the location has no phone configured.
     /// </summary>
     public string? LocationPhone { get; init; }
+
+    /// <summary>
+    /// The location's dealer logo and header colour for the intake form's chrome
+    /// (<c>Spec A-16</c>, issue #470). Empty fields fall back to the RV Intake defaults.
+    /// </summary>
+    public LocationBrandingDto Branding { get; init; } = new();
+
     public List<string> AcceptedFileTypes { get; init; } = [];
     public int MaxFileSizeMb { get; init; }
     public int MaxAttachments { get; init; }

@@ -16,7 +16,6 @@ public class PacketConfigEmbeddedTests
         config.IncludePhotos.Should().BeTrue();
         config.PasteBlockCharacterCap.Should().Be(2500);
         config.StatusLinkTtlDays.Should().Be(30);
-        config.LogoUrl.Should().BeNull();
     }
 
     [Fact]

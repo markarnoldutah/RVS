@@ -14,8 +14,9 @@ namespace RVS.Domain.Packets;
 /// <c>ServiceRequest</c>. It performs no I/O. Images are neither embedded nor named — they
 /// travel as the email's own attachments, which mail clients already show as clickable
 /// thumbnails (issues <c>#580</c>, <c>#735</c>); only videos, which are never attached, get a
-/// link. The only embedded asset is the optional masthead logo, supplied pre-encoded as a
-/// <c>data:</c> URI on <see cref="PacketBranding"/>.
+/// link. The two brand images — the dealer's masthead logo and the "Powered by" RV Intake mark
+/// (issue <c>#470</c>) — are referenced by https URL from <see cref="PacketBranding"/>, never
+/// embedded: Gmail and Outlook drop <c>data:</c> images, and neither renders SVG.
 ///
 /// Layout follows the Integrated Dealer Systems (IDS) work-order idiom so a service
 /// manager reads it on daily muscle memory: a right-aligned tracking number in the
@@ -91,7 +92,7 @@ public static class PacketHtmlRenderer
         AppendPhotos(sb, packet.Photos, managerAppServiceRequestUrl);
         AppendPasteBlock(sb, packet.PasteBlock);
         AppendStatusLink(sb, packet.StatusLink);
-        AppendFooter(sb, packet.Origin.ReferenceCode, received, brandName, packet.AiDisclaimer);
+        AppendFooter(sb, packet.Origin.ReferenceCode, received, brandName, packet.Branding.PoweredByLogoUrl, packet.AiDisclaimer);
 
         sb.Append("</main>\n</body>\n</html>\n");
 
@@ -166,7 +167,8 @@ public static class PacketHtmlRenderer
         sb.Append("<!-- section:unit -->\n");
         sb.Append("<header class=\"masthead\" style=\"border-bottom:2px solid #000;padding-bottom:3mm;\">\n");
 
-        // Masthead top: optional logo + brand letterhead left, tracking number right.
+        // Masthead top: the dealer's logo, when the location sets one (Spec A-16, issue #470),
+        // then the brand letterhead, both top left; tracking number right.
         // A presentational <table>, never flexbox: this HTML is used verbatim as the packet
         // delivery email body, and Gmail/Outlook drop `display:flex`, which would collapse
         // this row into a single stacked column. Column geometry is carried inline so it
@@ -175,8 +177,10 @@ public static class PacketHtmlRenderer
         sb.Append("<td class=\"brand\" style=\"vertical-align:top;\">\n");
         if (branding.HasLogo)
         {
-            sb.Append("<img class=\"masthead-logo\" src=\"").Append(Attr(branding.LogoDataUri!))
-                .Append("\" alt=\"\" style=\"height:12mm;width:auto;vertical-align:middle;margin-right:4mm;\">\n");
+            // Height as an attribute too: Outlook ignores CSS sizes on images. The width is left
+            // to the aspect ratio, which a dealer's logo does not share with anyone else's.
+            sb.Append("<img class=\"masthead-logo\" src=\"").Append(Attr(branding.LogoUrl!))
+                .Append("\" alt=\"\" height=\"45\" style=\"height:12mm;width:auto;max-width:60mm;vertical-align:middle;margin-right:4mm;border:0;\">\n");
         }
 
         sb.Append("<div class=\"letterhead\" style=\"font-size:13pt;font-weight:700;\">").Append(Text(branding.BrandName))
@@ -473,8 +477,13 @@ public static class PacketHtmlRenderer
 
     // ── Running footer (mirrors IDS "Printed On … © … Page N of N") ───────
 
+    /// <summary>The "Powered by" mark's rendered size, in CSS pixels — the lockup's 390.4 x 108 aspect.</summary>
+    private const int PoweredByLogoWidthPx = 72;
+
+    private const int PoweredByLogoHeightPx = 20;
+
     private static void AppendFooter(
-        StringBuilder sb, string referenceCode, string received, string brandName, string? aiDisclaimer)
+        StringBuilder sb, string referenceCode, string received, string brandName, string? poweredByLogoUrl, string? aiDisclaimer)
     {
         // A static end-of-flow footer for engines that ignore @page margin boxes
         // (Safari); the @page rule in the stylesheet repeats the same line on every
@@ -484,6 +493,26 @@ public static class PacketHtmlRenderer
         sb.Append("<td style=\"padding-top:2mm;vertical-align:top;\">Intake #").Append(Text(referenceCode)).Append(" · ").Append(Text(received)).Append("</td>\n");
         sb.Append("<td style=\"padding-top:2mm;vertical-align:top;text-align:right;\">").Append(Text(brandName)).Append(" — service intake packet</td>\n");
         sb.Append("</tr>\n");
+
+        // "Powered by" the RV Intake mark, centred (issue #470): the packet is the dealer's, the
+        // platform signs it once, at the end. The mark is a hosted PNG with explicit size
+        // attributes for Outlook; with no URL the product is named in text instead.
+        sb.Append("<tr>\n<td colspan=\"2\" class=\"powered-by\" style=\"padding-top:3mm;vertical-align:middle;text-align:center;\">Powered by ");
+        if (IsHttpUrl(poweredByLogoUrl))
+        {
+            sb.Append("<img src=\"").Append(Attr(poweredByLogoUrl!)).Append("\" alt=\"").Append(PacketBranding.ProductName)
+                .Append("\" width=\"").Append(PoweredByLogoWidthPx.ToString(CultureInfo.InvariantCulture))
+                .Append("\" height=\"").Append(PoweredByLogoHeightPx.ToString(CultureInfo.InvariantCulture))
+                .Append("\" style=\"width:").Append(PoweredByLogoWidthPx.ToString(CultureInfo.InvariantCulture))
+                .Append("px;height:").Append(PoweredByLogoHeightPx.ToString(CultureInfo.InvariantCulture))
+                .Append("px;vertical-align:middle;border:0;\">");
+        }
+        else
+        {
+            sb.Append("<strong>").Append(PacketBranding.ProductName).Append("</strong>");
+        }
+
+        sb.Append("</td>\n</tr>\n");
 
         // The one AI disclosure, in place of per-section badges (issue #780). Once, at the end
         // of the flow — not in the @page running footer, which would repeat it on every sheet.

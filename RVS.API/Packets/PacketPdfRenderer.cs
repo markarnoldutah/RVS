@@ -1,3 +1,4 @@
+using QuestPDF.Drawing.Exceptions;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -46,6 +47,27 @@ public static class PacketPdfRenderer
     private static readonly IReadOnlyDictionary<string, byte[]> NoImages =
         new Dictionary<string, byte[]>();
 
+    /// <summary>Height of the footer's "Powered by" mark, in points; the width follows the lockup's aspect.</summary>
+    private const float PoweredByMarkHeightPt = 14f;
+
+    /// <summary>The logo kit's horizontal lockup (390.4 x 108), for the footer's "Powered by" mark.</summary>
+    private const float PoweredByMarkAspect = 390.4f / 108f;
+
+    /// <summary>
+    /// The RV Intake horizontal lockup as SVG markup (issue #470), embedded from
+    /// <c>RVS.UI.Shared/wwwroot/brand/logo-horizontal.svg</c> so the PDF footer draws the same file
+    /// the apps do. Its text is outlined, so no font is needed to render it.
+    /// </summary>
+    internal static readonly string PoweredByMarkSvg = LoadPoweredByMarkSvg();
+
+    private static string LoadPoweredByMarkSvg()
+    {
+        using var stream = typeof(PacketPdfRenderer).Assembly.GetManifestResourceStream("RVS.API.Packets.logo-horizontal.svg")
+            ?? throw new InvalidOperationException("The embedded RV Intake mark (logo-horizontal.svg) is missing from RVS.API.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
     static PacketPdfRenderer()
     {
         // QuestPDF Community License — RVS qualifies today (Spec B-7 / issue #426).
@@ -62,7 +84,15 @@ public static class PacketPdfRenderer
     /// Image bytes keyed by <see cref="PacketPhoto.Url"/>. Photos with no entry render as a
     /// labelled placeholder. Pass <c>null</c> to render every photo as a placeholder.
     /// </param>
-    public static byte[] Render(ServicePacket packet, IReadOnlyDictionary<string, byte[]>? photoImages = null)
+    /// <param name="logoImage">
+    /// The dealer logo's bytes (issue #470), fetched by the caller from
+    /// <see cref="PacketBranding.LogoUrl"/>. Drawn top left only when the packet's branding has a
+    /// logo and the bytes are a PNG or JPEG; otherwise the masthead renders without one.
+    /// </param>
+    public static byte[] Render(
+        ServicePacket packet,
+        IReadOnlyDictionary<string, byte[]>? photoImages = null,
+        byte[]? logoImage = null)
     {
         ArgumentNullException.ThrowIfNull(packet);
 
@@ -77,6 +107,7 @@ public static class PacketPdfRenderer
             .Select(id => layout.Sections.First(s => s.Id == id))
             .ToArray();
         var bodySections = layout.Sections.Where(s => !MastheadSectionIds.Contains(s.Id));
+        var logo = packet.Branding.HasLogo ? TryDecodeLogo(logoImage) : null;
 
         return Document.Create(container =>
             {
@@ -91,20 +122,26 @@ public static class PacketPdfRenderer
                         column.Spacing(18f);
 
                         column.Item().Element(e => RenderMasthead(
-                            e, packet, layout, unit: masthead[0], customer: masthead[1], origin: masthead[2]));
+                            e, packet, layout, logo, unit: masthead[0], customer: masthead[1], origin: masthead[2]));
 
                         foreach (var section in bodySections)
                         {
                             RenderSection(column, section, images);
                         }
 
-                        // The one AI disclosure, once, after the last section — matching the
-                        // HTML's static footer (issue #780).
-                        if (layout.AiDisclaimer is not null)
+                        // The end-of-flow footer, matching the HTML's static one: "Powered by" the
+                        // RV Intake mark, centred (issue #470), then the one AI disclosure
+                        // (issue #780). Once, after the last section — not on every page.
+                        column.Item().BorderTop(1f).PaddingTop(4f).Column(foot =>
                         {
-                            column.Item().BorderTop(1f).PaddingTop(4f)
-                                .Text(layout.AiDisclaimer).Italic().FontSize(8f);
-                        }
+                            foot.Spacing(3f);
+                            foot.Item().AlignCenter().Element(RenderPoweredBy);
+
+                            if (layout.AiDisclaimer is not null)
+                            {
+                                foot.Item().Text(layout.AiDisclaimer).Italic().FontSize(8f);
+                            }
+                        });
                     });
                 });
             })
@@ -126,28 +163,27 @@ public static class PacketPdfRenderer
         IContainer container,
         ServicePacket packet,
         PacketPdfLayout layout,
+        Image? logo,
         PacketPdfLayoutSection unit,
         PacketPdfLayoutSection customer,
         PacketPdfLayoutSection origin)
     {
         var branding = packet.Branding;
-        var logoBytes = branding.HasLogo && TryDecodeDataUri(branding.LogoDataUri!, out var bytes)
-            ? bytes
-            : null;
 
         container.Column(col =>
         {
             col.Spacing(3f);
 
-            // Optional logo + brand letterhead (left) + tracking number (right), mirroring IDS.
+            // The dealer's logo, when the location sets one (Spec A-16, issue #470), and the brand
+            // letterhead top left; tracking number right, mirroring IDS.
             col.Item().Row(row =>
             {
                 row.RelativeItem().Row(brand =>
                 {
                     brand.Spacing(8f);
-                    if (logoBytes is not null)
+                    if (logo is not null)
                     {
-                        brand.ConstantItem(34f).AlignMiddle().Image(logoBytes).FitWidth();
+                        brand.ConstantItem(LogoWidthPt(logo)).Height(LogoHeightPt).AlignMiddle().Image(logo).FitArea();
                     }
 
                     brand.RelativeItem().Column(left =>
@@ -190,36 +226,50 @@ public static class PacketPdfRenderer
         });
     }
 
+    /// <summary>The dealer logo's height in the masthead, in points — 12 mm, as in the HTML.</summary>
+    private const float LogoHeightPt = 34f;
+
+    /// <summary>The widest a dealer logo may run, in points — 60 mm, as in the HTML.</summary>
+    private const float LogoMaxWidthPt = 170f;
+
     /// <summary>
-    /// Decodes a <c>data:</c> URI's base64 payload to bytes (the masthead logo — see
-    /// <see cref="PacketBranding.LogoDataUri"/>). Returns <c>false</c> for anything that is
-    /// not a base64 <c>data:</c> URI so the masthead simply renders without a logo rather
-    /// than throwing.
+    /// Decodes the dealer logo, or returns <c>null</c> — and the masthead renders without one —
+    /// when there are no bytes, they are not a PNG or JPEG, or they do not decode.
     /// </summary>
-    private static bool TryDecodeDataUri(string dataUri, out byte[] bytes)
+    private static Image? TryDecodeLogo(byte[]? bytes)
     {
-        bytes = [];
-
-        if (!dataUri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        if (bytes is not { Length: > 0 } || !PacketImageSignature.IsPngOrJpeg(bytes))
         {
-            return false;
-        }
-
-        var comma = dataUri.IndexOf(',');
-        if (comma < 0 || !dataUri[..comma].Contains("base64", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
+            return null;
         }
 
         try
         {
-            bytes = Convert.FromBase64String(dataUri[(comma + 1)..]);
-            return bytes.Length > 0;
+            var image = Image.FromBinaryData(bytes);
+            return image.Size.Width > 0 && image.Size.Height > 0 ? image : null;
         }
-        catch (FormatException)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or DocumentComposeException)
         {
-            return false;
+            return null;
         }
+    }
+
+    /// <summary>The logo's width at <see cref="LogoHeightPt"/>, keeping its aspect, capped at <see cref="LogoMaxWidthPt"/>.</summary>
+    private static float LogoWidthPt(Image logo) =>
+        Math.Min(LogoMaxWidthPt, LogoHeightPt * logo.Size.Width / logo.Size.Height);
+
+    /// <summary>"Powered by" and the RV Intake mark on one centred line (issue #470).</summary>
+    private static void RenderPoweredBy(IContainer container)
+    {
+        container.Row(row =>
+        {
+            row.Spacing(4f);
+            row.AutoItem().AlignMiddle().Text("Powered by").FontSize(8f);
+            row.ConstantItem(PoweredByMarkHeightPt * PoweredByMarkAspect)
+                .Height(PoweredByMarkHeightPt)
+                .AlignMiddle()
+                .Svg(PoweredByMarkSvg);
+        });
     }
 
     private static void RenderMastheadColumn(

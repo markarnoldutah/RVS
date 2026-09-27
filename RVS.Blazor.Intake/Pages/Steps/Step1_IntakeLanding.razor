@@ -1,3 +1,5 @@
+@implements IDisposable
+
 @* Step 0 — the first screen after following an intake link (issue #707). It borrows the
    public landing page's shape: an Ink hero band carries the badge and the dealership's name,
    then the page says what the next few minutes will ask for, then offers the one control on
@@ -44,26 +46,42 @@
             </MudAlert>
         }
 
-        @* Hero band — the same Ink-on-cream lockup the public landing page opens with. *@
-        <MudPaper Elevation="3" Class="pa-8 rounded-lg"
-                  Style="width: 100%; background: var(--mud-palette-secondary); text-align: center;">
+        @* Hero band — the same lockup the public landing page opens with, on Ink. On a location that
+           sets branding (Spec A-16, issue #470) the band takes the dealer's colour, so it matches the
+           header bar, and the dealer's logo leads it: straight on their colour, which they chose to
+           suit it, or on a white plate when the band stays Ink. The RV Intake mark stands in when
+           there is no logo or it fails to load. Decorative either way: the names below say whose
+           form this is. *@
+        <MudPaper Elevation="3" Class="pa-8 rounded-lg" Style="@HeroStyle">
             <MudStack AlignItems="AlignItems.Center" Spacing="3">
-                <BrandWordmark Variant="BrandWordmarkVariant.Glyph" Reversed="true" Height="56px" Title="" />
+                @if (Hero.HasDealerLogo)
+                {
+                    <DealerLogo Url="@(Hero.DealerLogoUrl ?? string.Empty)" Alt="" Height="64px" MaxWidth="100%"
+                                Plated="@Hero.LogoOnPlate">
+                        <Fallback>
+                            <BrandWordmark Variant="BrandWordmarkVariant.Glyph" Reversed="@Hero.UseReversedMark" Height="56px" Title="" />
+                        </Fallback>
+                    </DealerLogo>
+                }
+                else
+                {
+                    <BrandWordmark Variant="BrandWordmarkVariant.Glyph" Reversed="@Hero.UseReversedMark" Height="56px" Title="" />
+                }
 
-                <MudText Typo="Typo.h4" Style="color: var(--mud-palette-secondary-text); font-weight: 700;">
+                <MudText Typo="Typo.h4" Style="@HeroTextStyle(bold: true)">
                     Start a service request
                 </MudText>
 
-                <MudDivider Style="width: 64px; border-color: var(--mud-palette-secondary-text); opacity: 0.35;" />
+                <MudDivider Style="@HeroDividerStyle" />
 
-                <MudText Typo="Typo.h6" Style="color: var(--mud-palette-secondary-text);">
+                <MudText Typo="Typo.h6" Style="@HeroTextStyle()">
                     @State.Config.LocationName
                 </MudText>
 
                 @if (!string.IsNullOrWhiteSpace(State.Config.DealershipName)
                      && !string.Equals(State.Config.DealershipName, State.Config.LocationName, StringComparison.OrdinalIgnoreCase))
                 {
-                    <MudText Typo="Typo.body2" Style="color: var(--mud-palette-secondary-text); opacity: 0.85;">
+                    <MudText Typo="Typo.body2" Style="@HeroTextStyle(opacity: "0.85")">
                         @State.Config.DealershipName
                     </MudText>
                 }
@@ -118,6 +136,21 @@
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnStart { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+    [Inject] private ThemeService ThemeService { get; set; } = default!;
+
+    // The hero follows the header bar's surface rules (Spec A-16, issue #470): the dealer's colour
+    // and a contrast-chosen foreground when set, Ink and its own text colour otherwise.
+    private IntakeChrome Hero => IntakeChrome.ForLanding(State.Config, ThemeService.IsHighContrast);
+
+    private string HeroForeground => Hero.AppBarForeground ?? "var(--mud-palette-secondary-text)";
+
+    private string HeroStyle =>
+        $"width: 100%; text-align: center; background: {Hero.AppBarBackground ?? "var(--mud-palette-secondary)"};";
+
+    private string HeroDividerStyle => $"width: 64px; border-color: {HeroForeground}; opacity: 0.35;";
+
+    private string HeroTextStyle(bool bold = false, string? opacity = null) =>
+        $"color: {HeroForeground};{(bold ? " font-weight: 700;" : string.Empty)}{(opacity is null ? string.Empty : $" opacity: {opacity};")}";
 
     private bool _isLoading = true;
     private string? _error;
@@ -137,6 +170,10 @@
         (Icons.Material.Filled.PhotoCamera, "Photos",
             "Optional — but a picture of the problem saves a phone call.")
     ];
+
+    protected override void OnInitialized() => ThemeService.OnThemeChanged += StateHasChanged;
+
+    public void Dispose() => ThemeService.OnThemeChanged -= StateHasChanged;
 
     protected override async Task OnInitializedAsync()
     {

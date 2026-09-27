@@ -57,9 +57,10 @@ public static class PacketComposer
     private static PacketBranding ComposeBranding(PacketCompositionContext context)
     {
         var brandName = NullIfBlank(context.BrandName)?.Trim();
-        var logoDataUri = NullIfBlank(context.LogoDataUri)?.Trim();
+        var logoUrl = HttpsOrNull(context.LogoUrl);
+        var poweredByLogoUrl = HttpsOrNull(context.PoweredByLogoUrl);
 
-        if (brandName is null && logoDataUri is null)
+        if (brandName is null && logoUrl is null && poweredByLogoUrl is null)
         {
             return PacketBranding.Default;
         }
@@ -67,8 +68,19 @@ public static class PacketComposer
         return new PacketBranding
         {
             BrandName = brandName ?? PacketBranding.Default.BrandName,
-            LogoDataUri = logoDataUri,
+            LogoUrl = logoUrl,
+            PoweredByLogoUrl = poweredByLogoUrl,
         };
+    }
+
+    /// <summary>
+    /// The trimmed URL when it is absolute https, otherwise <c>null</c>. The packet HTML is the
+    /// email body, so an image source is fetched by the recipient's mail client (issue #470).
+    /// </summary>
+    private static string? HttpsOrNull(string? url)
+    {
+        var trimmed = NullIfBlank(url)?.Trim();
+        return Validation.LocationBrandingValidator.IsHttpsUrl(trimmed) ? trimmed : null;
     }
 
     private static PacketUnitHeader ComposeUnit(AssetInfoEmbedded asset) => new()
