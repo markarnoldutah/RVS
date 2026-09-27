@@ -2,6 +2,7 @@ using FluentAssertions;
 using RVS.Blazor.Intake.Layout;
 using RVS.Domain.Branding;
 using RVS.Domain.DTOs;
+using RVS.UI.Shared.Theme;
 
 namespace RVS.UI.Shared.Tests.Layout;
 
@@ -14,12 +15,13 @@ public class IntakeChromeTests
     private const string Slug = "acme-rv-slc";
     private const string LogoUrl = "https://cdn.acme.example/logo.png";
 
-    private static IntakeConfigResponseDto Config(string? logoUrl = LogoUrl, string? headerColor = "#1A5E20") => new()
+    private static IntakeConfigResponseDto Config(
+        string? logoUrl = LogoUrl, string? headerColor = "#1A5E20", string? accentColor = null) => new()
     {
         LocationName = "Salt Lake City",
         LocationSlug = Slug,
         DealershipName = "Acme RV",
-        Branding = new LocationBrandingDto { LogoUrl = logoUrl, HeaderColor = headerColor },
+        Branding = new LocationBrandingDto { LogoUrl = logoUrl, HeaderColor = headerColor, AccentColor = accentColor },
     };
 
     [Fact]
@@ -176,6 +178,62 @@ public class IntakeChromeTests
     public void ForLanding_WhenNoConfig_ShouldUseTheDefaults()
     {
         IntakeChrome.ForLanding(null, highContrast: false).Should().Be(IntakeChrome.Default);
+    }
+
+    // ── Accent: replaces Rust for buttons, links, focus (issue #470 follow-up) ──
+
+    [Fact]
+    public void Resolve_OnTheLocationsIntakePage_ShouldCarryTheDealersAccent()
+    {
+        IntakeChrome.Resolve(Config(accentColor: "#0d47a1"), Slug, highContrast: false)
+            .AccentColor.Should().Be("#0D47A1");
+    }
+
+    [Fact]
+    public void Resolve_WhenOnlyAnAccentIsSet_ShouldNotBeTheDefaults()
+    {
+        var chrome = IntakeChrome.Resolve(Config(logoUrl: null, headerColor: null, accentColor: "#0D47A1"), Slug, highContrast: false);
+
+        chrome.Should().NotBe(IntakeChrome.Default);
+        chrome.AccentColor.Should().Be("#0D47A1");
+        chrome.AppBarStyle.Should().BeNull();
+    }
+
+    [Fact]
+    public void Resolve_OffTheLocationsIntakePage_ShouldNotCarryTheAccent()
+    {
+        IntakeChrome.Resolve(Config(accentColor: "#0D47A1"), "privacy", highContrast: false)
+            .AccentColor.Should().BeNull();
+    }
+
+    [Fact]
+    public void Resolve_InHighContrastMode_ShouldIgnoreTheAccent()
+    {
+        IntakeChrome.Resolve(Config(accentColor: "#0D47A1"), Slug, highContrast: true)
+            .AccentColor.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("#FFD54F")]   // too light — the API rejects it, but the page must not trust that
+    [InlineData("blue")]
+    public void Resolve_WhenTheAccentIsNotTextSafe_ShouldIgnoreIt(string accent)
+    {
+        IntakeChrome.Resolve(Config(accentColor: accent), Slug, highContrast: false)
+            .AccentColor.Should().BeNull();
+    }
+
+    [Fact]
+    public void ThemeOr_WithAnAccent_ShouldUseTheAccentTheme()
+    {
+        var chrome = IntakeChrome.Resolve(Config(accentColor: "#0D47A1"), Slug, highContrast: false);
+
+        chrome.ThemeOr(IntakeTheme.Theme).Should().BeSameAs(IntakeTheme.WithAccent("#0D47A1"));
+    }
+
+    [Fact]
+    public void ThemeOr_WithoutAnAccent_ShouldUseTheModesTheme()
+    {
+        IntakeChrome.Default.ThemeOr(IntakeTheme.HighContrast).Should().BeSameAs(IntakeTheme.HighContrast);
     }
 
     // ── Landing-step logo ────────────────────────────────────────────────

@@ -4,7 +4,8 @@
 @inject IntakeWizardState WizardState
 @inject NavigationManager Navigation
 
-<MudThemeProvider Theme="ThemeService.CurrentTheme" />
+@* The dealer's accent replaces Rust on their own intake page (Spec A-16); IntakeChrome decides. *@
+<MudThemeProvider Theme="@_chrome.ThemeOr(ThemeService.CurrentTheme)" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
