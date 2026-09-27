@@ -21,8 +21,10 @@ State as of September 26 2026, including issue #772 (photo-grounded assessment).
 | 4 | **Tidy a typed description** | 5. Issue | Azure OpenAI **gpt-4o** | Cleans up spelling and rambling in what the customer typed. The original is kept word for word. | The shop gets a readable description, and the customer doesn't need to write well. | A rule-based cleanup, or the text exactly as typed. |
 | 5 | **Service availability check** | 5. Issue | **gpt-4o** categorization, used only when no category was chosen | Works out the kind of problem and checks it against the services this location offers. | The customer learns straight away if the location doesn't do that kind of work, before finishing the form. | A keyword-based categorizer; otherwise the check is skipped. |
 | 6 | **Follow-up questions for this problem** | 6. Questions | Azure OpenAI **gpt-4o** | Writes diagnostic questions with tap-to-answer options for the chosen category, the description and the RV. It may add one short tip, shown as a *Suggestion*. | The customer answers the questions a technician would ask on the phone, without the phone call. | A fixed question bank for each category. |
+| 7 | **Pre-fill the issue category** | 5. Issue | **gpt-4o** categorization | Suggests a category from the description as the customer types, marked with an *AI suggested* chip. | One less menu to think about; the customer can still change it. | The category field stays whatever the customer last chose. |
+| 8 | **Pre-fill urgency and RV usage** | 5. Issue | **gpt-4o** | Infers "How urgent" and "How is the RV used" from the description, each marked *AI suggested*. | Two fewer choices to make; both stay editable. | The fields are left for the customer to set. |
 
-The customer always picks the issue category themselves (step 5). AI does not override it.
+The category, urgency and RV-usage suggestions are always editable — the *AI suggested* chip disappears the moment the customer changes the value, and their choice is what reaches the packet.
 
 ---
 
@@ -61,7 +63,6 @@ The packet is the one-page summary emailed to the service department, with a PDF
 
 | Gap | Effect |
 |---|---|
-| The one-line note that can open *Preliminary assessment* (a requested service is not offered at this location) is written by fixed rules, not AI. It sits under the *AI-generated* label anyway. | That note is mislabelled as AI. |
+| The one-line note that can open *Preliminary assessment* (a requested service is not offered at this location) is written by fixed rules, not AI — and the same field can carry text an advisor typed by hand in the manager app. Both sit under the *AI-generated* label anyway (filed as [#781](https://github.com/markarnoldutah/RVS/issues/781)). | Non-AI content is mislabelled as AI. |
 | The manager app does not show the assessment or the photo findings. | Managers see them in the email and the PDF only; the PDF is linked from the request's detail dialog. |
-| The API has AI category-suggestion and urgency-suggestion endpoints, but the Intake app doesn't call them. | Not part of the customer experience today. |
 | Photos uploaded after the packet is first generated, videos and voice notes are not analysed. | Only images present at the first generation feed *From photos*. |
