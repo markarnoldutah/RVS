@@ -520,6 +520,62 @@ public class PacketHtmlRendererTests
         html.Should().MatchRegex(@"<table[^>]*role=""presentation""[^>]*class=""packet-foot""");
     }
 
+    // ── Mobile: the identity band stacks (issue #780) ───────────────────────
+    //
+    // Three columns at phone width squeeze each to a few words a line. On a narrow screen the
+    // band's cells become full-width blocks and read top to bottom. The inline geometry stays
+    // (it is the stripped-<style> fallback), so the media query must override it with
+    // !important; it changes layout only, never the font or its size.
+
+    [Fact]
+    public void Render_TheThreeColumnBand_ShouldStackVerticallyOnANarrowScreen()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var query = Regex.Match(
+            html, @"@media\s+screen\s+and\s+\(max-width:\s*600px\)\s*\{(?<body>(?:[^{}]*\{[^}]*\})*)[^{}]*\}");
+        query.Success.Should().BeTrue("the band needs a narrow-screen rule");
+        var body = query.Groups["body"].Value;
+
+        body.Should().MatchRegex(@"\.idcols[^{]*\.col[^{]*\{[^}]*display:\s*block\s*!important");
+        body.Should().MatchRegex(@"\.idcols[^{]*\.col[^{]*\{[^}]*width:\s*100%\s*!important");
+        body.Should().MatchRegex(@"\.idcols[^{]*\.col[^{]*\{[^}]*padding-right:\s*0\s*!important");
+        body.Should().NotContain("font", "stacking changes the layout, not the type");
+    }
+
+    // ── AI disclaimer in the footer, no per-section badges (issue #780) ─────
+
+    [Fact]
+    public void Render_ShouldNotBadgeAnySectionAsAiGenerated()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("class=\"tag\"");
+        html.Should().Contain("<h2>Issue</h2>");
+        html.Should().Contain("<h2>Preliminary assessment</h2>");
+    }
+
+    [Fact]
+    public void Render_WhenAiContentPresent_ShouldCarryTheAiDisclaimerInTheStaticFooter()
+    {
+        var packet = FullPacket();
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var footer = html[Order(html, "class=\"packet-foot\"")..];
+        footer.Should().Contain("class=\"ai-disclaimer\"");
+        footer.Should().Contain(System.Net.WebUtility.HtmlEncode(packet.AiDisclaimer!));
+    }
+
+    [Fact]
+    public void Render_WhenNoAiContent_ShouldOmitTheAiDisclaimer()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        html.Should().NotContain("class=\"ai-disclaimer\"");
+        html.Should().NotContain("AI disclosure");
+    }
+
     [Fact]
     public void Render_ShouldUseIdsFieldVocabulary()
     {
@@ -688,14 +744,26 @@ public class PacketHtmlRendererTests
     }
 
     [Fact]
-    public void Render_TheDiagnosticsQandA_ShouldUseTheSameMonospaceAsTheVerbatimDescription()
+    public void Render_TheDiagnosticAnswers_ShouldUseTheSameMonospaceAsTheVerbatimDescription()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
         // The customer's own answers read as their words, like the verbatim description
         // (issue #735) — the same Courier stack, not the body sans-serif.
         html.Should().MatchRegex(@"\.description \.verbatim,[^{]*\{[^}]*""Courier New""");
-        html.Should().MatchRegex(@"\.diagnostics\s+dl\s*\{[^}]*font-family:\s*""Courier New"", ""Liberation Mono"", monospace");
+        html.Should().MatchRegex(@"\.diagnostics\s+dd\s*\{[^}]*font-family:\s*""Courier New"", ""Liberation Mono"", monospace");
+    }
+
+    [Fact]
+    public void Render_TheDiagnosticQuestions_ShouldUseThePageTypeface_NotMonospace()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        // The questions are ours, not the customer's: they match the rest of the page, and
+        // only the answers are in Courier (issue #780). Neither the list nor the question
+        // may set a monospace face.
+        html.Should().NotMatchRegex(@"\.diagnostics\s+dl\s*\{[^}]*font-family");
+        html.Should().NotMatchRegex(@"\.diagnostics\s+dt\s*\{[^}]*font-family");
     }
 
     [Fact]
@@ -738,13 +806,15 @@ public class PacketHtmlRendererTests
     // ── 5. AI summary (rendered above the complaint) ──────────────────────
 
     [Fact]
-    public void Render_WhenAiSummaryPresent_ShouldRenderItLabelledAsAiGenerated()
+    public void Render_WhenAiSummaryPresent_ShouldRenderIt_DisclosedInTheFooterRatherThanBadged()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
         var block = html[Order(html, "section:ai-summary")..Order(html, "section:description")];
         block.Should().Contain("Likely overheating on the generator windings.");
-        block.ToLowerInvariant().Should().Contain("ai-generated");
+        // Issue #780: no badge on the section; the footer's AI disclaimer names it instead.
+        block.ToLowerInvariant().Should().NotContain("ai-generated");
+        html[Order(html, "class=\"packet-foot\"")..].Should().Contain("Preliminary assessment");
     }
 
     [Fact]
@@ -915,7 +985,6 @@ public class PacketHtmlRendererTests
 
         var block = AssessmentBlock(PacketHtmlRenderer.Render(packet));
 
-        block.Should().Contain("AI-generated");
         block.Should().Contain(PacketPhotoFinding.Heading);
         block.Should().Contain("Thermostat — code E1 (photo 5, thermostat.jpg)");
         block.Should().NotContain("Probable cause");

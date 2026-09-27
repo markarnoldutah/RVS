@@ -161,7 +161,7 @@ public class PacketComposerTests
         // 4. Issue category
         packet.IssueCategory.Should().Be("Electrical");
 
-        // 5. AI summary, labelled AI-generated (rendered above the description)
+        // 5. AI summary, disclosed as AI-generated (rendered above the description)
         packet.AiSummary.Should().NotBeNull();
         packet.AiSummary!.Text.Should().Be("Likely overheating on the generator windings.");
         packet.AiSummary.IsAiGenerated.Should().BeTrue();

@@ -45,6 +45,14 @@ internal sealed record PacketPdfLayout
     /// </summary>
     public string? CustomerHeadline { get; init; }
 
+    /// <summary>
+    /// The AI disclosure that closes the packet, after the last section (issue #780) — it
+    /// replaced the per-section "AI-generated" badges. Taken straight from
+    /// <see cref="ServicePacket.AiDisclaimer"/> so it matches the HTML footer word for word.
+    /// <c>null</c> when the packet carries no AI content.
+    /// </summary>
+    public string? AiDisclaimer { get; init; }
+
     public static PacketPdfLayout Build(ServicePacket packet)
     {
         ArgumentNullException.ThrowIfNull(packet);
@@ -105,6 +113,7 @@ internal sealed record PacketPdfLayout
             Sections = sections,
             ReceivedDisplay = received,
             CustomerHeadline = customerHeadline,
+            AiDisclaimer = packet.AiDisclaimer,
         };
     }
 
@@ -262,7 +271,6 @@ internal sealed record PacketPdfLayout
         {
             Id = "ai-summary",
             Heading = "Preliminary assessment",
-            AiGeneratedTag = true,
             Body = summary.Text,
             Rows = rows,
             Lists = lists,
@@ -355,6 +363,11 @@ internal sealed record PacketPdfLayout
 
         var blocks = new List<string> { string.Join("\n", preambleLines) };
         blocks.AddRange(Sections.Select(RenderSectionText));
+        if (AiDisclaimer is not null)
+        {
+            blocks.Add(AiDisclaimer);
+        }
+
         return string.Join("\n\n", blocks) + "\n";
     }
 
@@ -362,7 +375,7 @@ internal sealed record PacketPdfLayout
     {
         var lines = new List<string> { $"[section:{section.Id}]" };
 
-        lines.Add(section.AiGeneratedTag ? $"{section.Heading} [AI-generated]" : section.Heading);
+        lines.Add(section.Heading);
 
         // Body before rows: for the customer section the name leads, then the contact
         // rows — matching PacketHtmlRenderer (name in <p class="name">, then the rows).
@@ -437,9 +450,6 @@ internal sealed record PacketPdfLayoutSection
 
     /// <summary>Section heading. For the unit header this is the year/make/model line itself.</summary>
     public required string Heading { get; init; }
-
-    /// <summary>When <c>true</c>, the heading carries an "AI-generated" tag (<c>Spec B-2</c> item 7).</summary>
-    public bool AiGeneratedTag { get; init; }
 
     /// <summary>Label/value rows.</summary>
     public IReadOnlyList<PacketPdfLayoutRow> Rows { get; init; } = [];

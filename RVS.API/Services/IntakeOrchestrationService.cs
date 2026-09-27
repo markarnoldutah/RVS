@@ -412,7 +412,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     /// Builds the preliminary-assessment seed text: the capability-mismatch note, when one was
     /// raised, and nothing else (issue #601). It must never echo the issue description — the
     /// packet renders that verbatim in its own "Complaint" section, and this text renders above
-    /// it labelled "AI-generated"; repeating the same words in both would misrepresent the
+    /// it disclosed as AI-generated; repeating the same words in both would misrepresent the
     /// literal text as an AI summary. The diagnostic Q&amp;A is deliberately not repeated here
     /// either — the packet renders it in full in its own "Reported symptoms &amp; diagnostic
     /// Q&amp;A" section (issue #492 item 6).
