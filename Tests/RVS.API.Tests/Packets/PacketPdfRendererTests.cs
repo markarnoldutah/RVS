@@ -606,13 +606,36 @@ public class PacketPdfRendererTests
     // ── 7. AI summary ───────────────────────────────────────────────────
 
     [Fact]
-    public void Build_WhenAiSummaryPresent_ShouldCarryItFlaggedAsAiGenerated()
+    public void Build_WhenAiSummaryPresent_ShouldCarryItUnbadged()
     {
         var section = Section(FullPacket(), "ai-summary");
 
-        section.AiGeneratedTag.Should().BeTrue();
+        // No per-section badge: one AI disclaimer closes the packet instead (issue #780).
+        section.Heading.Should().Be("Preliminary assessment");
         section.Body.Should().Be("Likely overheating on the generator windings.");
-        Layout(FullPacket()).ToPlainText().ToLowerInvariant().Should().Contain("ai-generated");
+        Layout(FullPacket()).ToPlainText().Should().NotContain("[AI-generated]");
+    }
+
+    [Fact]
+    public void Build_WhenAiContentPresent_ShouldCloseWithTheSameAiDisclaimerAsTheHtmlFooter()
+    {
+        var packet = FullPacket();
+
+        var layout = Layout(packet);
+
+        layout.AiDisclaimer.Should().Be(packet.AiDisclaimer).And.NotBeNull();
+        var text = layout.ToPlainText();
+        Order(text, packet.AiDisclaimer!).Should().BeGreaterThan(Order(text, "[section:status-link]"));
+        PacketHtmlRenderer.Render(packet).Should().Contain(System.Net.WebUtility.HtmlEncode(packet.AiDisclaimer!));
+    }
+
+    [Fact]
+    public void Build_WhenNoAiContent_ShouldCarryNoAiDisclaimer()
+    {
+        var layout = Layout(MinimalPacket());
+
+        layout.AiDisclaimer.Should().BeNull();
+        layout.ToPlainText().Should().NotContain("AI disclosure");
     }
 
     [Fact]
@@ -762,7 +785,6 @@ public class PacketPdfRendererTests
 
         var section = Section(packet, "ai-summary");
 
-        section.AiGeneratedTag.Should().BeTrue();
         section.Rows.Should().BeEmpty();
         section.Lists.Should().ContainSingle().Which.Label.Should().Be(PacketPhotoFinding.Heading);
         section.Note.Should().BeNull();

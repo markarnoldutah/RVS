@@ -97,6 +97,14 @@ public static class PacketPdfRenderer
                         {
                             RenderSection(column, section, images);
                         }
+
+                        // The one AI disclosure, once, after the last section — matching the
+                        // HTML's static footer (issue #780).
+                        if (layout.AiDisclaimer is not null)
+                        {
+                            column.Item().BorderTop(1f).PaddingTop(4f)
+                                .Text(layout.AiDisclaimer).Italic().FontSize(8f);
+                        }
                     });
                 });
             })
@@ -262,23 +270,7 @@ public static class PacketPdfRenderer
     {
         column.Spacing(4f);
 
-        column.Item().Row(row =>
-        {
-            row.Spacing(6f);
-            row.RelativeItem().Text(section.Heading).Bold().FontSize(11f);
-
-            if (section.AiGeneratedTag)
-            {
-                row.ConstantItem(96f)
-                    .AlignRight()
-                    .Border(1f)
-                    .PaddingHorizontal(4f)
-                    .PaddingVertical(1f)
-                    .Text("AI-GENERATED")
-                    .FontSize(7f)
-                    .SemiBold();
-            }
-        });
+        column.Item().Text(section.Heading).Bold().FontSize(11f);
 
         column.Item().PaddingBottom(2f).LineHorizontal(1f);
 

@@ -595,7 +595,7 @@ public class IntakeOrchestrationServiceTests
     [Fact]
     public async Task ExecuteAsync_WhenNoCapabilityMismatchNote_TechnicianSummaryShouldBeNull()
     {
-        // Issue #601: the packet's Preliminary assessment section (labelled AI-generated)
+        // Issue #601: the packet's Preliminary assessment section (disclosed as AI-generated)
         // must never echo the literal issue description — that duplicates the Complaint
         // section, which shows the customer's words verbatim. With no capability-mismatch
         // note there is nothing distinct to say, so the seed text is null.

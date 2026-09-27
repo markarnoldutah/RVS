@@ -91,7 +91,7 @@ public static class PacketHtmlRenderer
         AppendPhotos(sb, packet.Photos, managerAppServiceRequestUrl);
         AppendPasteBlock(sb, packet.PasteBlock);
         AppendStatusLink(sb, packet.StatusLink);
-        AppendFooter(sb, packet.Origin.ReferenceCode, received, brandName);
+        AppendFooter(sb, packet.Origin.ReferenceCode, received, brandName, packet.AiDisclaimer);
 
         sb.Append("</main>\n</body>\n</html>\n");
 
@@ -260,9 +260,9 @@ public static class PacketHtmlRenderer
     // ── 4b. Issue — the curated restatement of the complaint (issue #601) ──
     //
     // Sits between the category and the assessment: the manager reads the clean version of the
-    // problem first and can drop to the verbatim complaint below to check it. Labelled
-    // AI-generated for the same reason the assessment is — the packet never passes machine
-    // wording off as the customer's.
+    // problem first and can drop to the verbatim complaint below to check it. Named in the
+    // footer's AI disclaimer (issue #780) for the same reason the assessment is — the packet
+    // never passes machine wording off as the customer's.
 
     private static void AppendCuratedIssue(StringBuilder sb, string? curatedIssue)
     {
@@ -273,7 +273,7 @@ public static class PacketHtmlRenderer
 
         sb.Append("<!-- section:curated-issue -->\n");
         sb.Append("<section class=\"curated-issue\">\n");
-        sb.Append("<h2>Issue <span class=\"tag\">AI-generated</span></h2>\n");
+        sb.Append("<h2>Issue</h2>\n");
         sb.Append("<p>").Append(Text(curatedIssue)).Append("</p>\n");
         sb.Append("</section>\n");
     }
@@ -325,7 +325,7 @@ public static class PacketHtmlRenderer
         sb.Append("</section>\n");
     }
 
-    // ── 5. AI summary — a preliminary assessment, labelled AI-generated ───
+    // ── 5. AI summary — a preliminary assessment, disclosed in the footer ─
     //     Positioned above the complaint (see Render): the manager reads the concise
     //     problem recreation first.
 
@@ -338,7 +338,7 @@ public static class PacketHtmlRenderer
 
         sb.Append("<!-- section:ai-summary -->\n");
         sb.Append("<section class=\"ai-summary\">\n");
-        sb.Append("<h2>Preliminary assessment <span class=\"tag\">AI-generated</span></h2>\n");
+        sb.Append("<h2>Preliminary assessment</h2>\n");
         if (summary.Text is not null)
         {
             sb.Append("<p>").Append(Text(summary.Text)).Append("</p>\n");
@@ -473,7 +473,8 @@ public static class PacketHtmlRenderer
 
     // ── Running footer (mirrors IDS "Printed On … © … Page N of N") ───────
 
-    private static void AppendFooter(StringBuilder sb, string referenceCode, string received, string brandName)
+    private static void AppendFooter(
+        StringBuilder sb, string referenceCode, string received, string brandName, string? aiDisclaimer)
     {
         // A static end-of-flow footer for engines that ignore @page margin boxes
         // (Safari); the @page rule in the stylesheet repeats the same line on every
@@ -482,7 +483,17 @@ public static class PacketHtmlRenderer
         sb.Append("<table role=\"presentation\" class=\"packet-foot\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:8mm;border-top:1px solid #000;font-size:8pt;\">\n<tr>\n");
         sb.Append("<td style=\"padding-top:2mm;vertical-align:top;\">Intake #").Append(Text(referenceCode)).Append(" · ").Append(Text(received)).Append("</td>\n");
         sb.Append("<td style=\"padding-top:2mm;vertical-align:top;text-align:right;\">").Append(Text(brandName)).Append(" — service intake packet</td>\n");
-        sb.Append("</tr>\n</table>\n");
+        sb.Append("</tr>\n");
+
+        // The one AI disclosure, in place of per-section badges (issue #780). Once, at the end
+        // of the flow — not in the @page running footer, which would repeat it on every sheet.
+        if (aiDisclaimer is not null)
+        {
+            sb.Append("<tr>\n<td colspan=\"2\" class=\"ai-disclaimer\" style=\"padding-top:1.5mm;vertical-align:top;font-style:italic;\">")
+                .Append(Text(aiDisclaimer)).Append("</td>\n</tr>\n");
+        }
+
+        sb.Append("</table>\n");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -653,6 +664,15 @@ public static class PacketHtmlRenderer
         .idcols .col .name { font-weight: 700; }
         .idcols .col .empty { font-style: italic; }
 
+        /* Phone width: the band's three cells stack as full-width blocks, read top to bottom
+           (issue #780). Layout only — the type is unchanged. !important because the column
+           geometry is also inline, as the fallback for a mail client that strips this block;
+           a client that strips it keeps the three columns. Screen only, so print is untouched. */
+        @media screen and (max-width: 600px) {
+          .idcols, .idcols tbody, .idcols tr { display: block !important; width: 100% !important; }
+          .idcols .col { display: block !important; width: 100% !important; padding-right: 0 !important; margin-bottom: 3mm; }
+        }
+
         .row, .name { margin: 0 0 1mm; }
 
         .description .verbatim,
@@ -674,35 +694,24 @@ public static class PacketHtmlRenderer
         /* The diagnostic Q&A is the block that must read as expert: bold questions and a
            left-rule accent per answer. Emphasis survives greyscale without a frame. */
         .diagnostics { margin-bottom: 8mm; }
-        /* The answers are the customer's own words, so the Q&A shares the verbatim
-           description's typewriter face (issue #735). Face only: the pre-wrap of the shared
-           rule above would render the newlines between the <dt>/<dd> tags as blank lines. */
-        .diagnostics dl {
-          margin: 0;
-          font-family: "Courier New", "Liberation Mono", monospace;
-        }
+        .diagnostics dl { margin: 0; }
+        /* The questions are ours and match the rest of the page (issue #780). */
         .diagnostics dt {
           font-weight: 700;
           margin: 3mm 0 1mm;
         }
         .diagnostics dt:first-child { margin-top: 0; }
+        /* The answers are the customer's own words, so they share the verbatim description's
+           typewriter face (issue #735). Face only: the pre-wrap of the shared rule above would
+           render the newlines between the tags as blank lines. */
         .diagnostics dd {
           margin: 0 0 0 5mm;
           padding-left: 3mm;
           border-left: 2px solid #000;
+          font-family: "Courier New", "Liberation Mono", monospace;
         }
         .diagnostics .empty { margin: 0; font-style: italic; }
         .diagnostics .no-answer { font-style: italic; }
-
-        .ai-summary .tag,
-        .curated-issue .tag {
-          font-size: 8pt;
-          font-weight: 700;
-          text-transform: uppercase;
-          border: 1px solid #000;
-          padding: 0 1mm;
-          vertical-align: middle;
-        }
 
         .photo-line { margin: 0 0 1mm; }
         .photo-note { margin: 2mm 0 0; font-style: italic; }
@@ -718,6 +727,7 @@ public static class PacketHtmlRenderer
           font-size: 8pt;
         }
         .packet-foot td { padding-top: 2mm; }
+        .packet-foot .ai-disclaimer { padding-top: 1.5mm; font-style: italic; }
 
         @media print {
           body { font-size: 10pt; }
