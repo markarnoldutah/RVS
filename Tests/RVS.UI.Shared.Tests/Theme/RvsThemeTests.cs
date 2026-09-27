@@ -322,12 +322,19 @@ public class RvsThemeTests
         IntakeTheme.Theme.PaletteLight.Primary.Should().BeColor(RvsBrand.Accent);
     }
 
-    [Theory]
-    [InlineData("#FFD54F")]   // too light for links on white
-    [InlineData("rust")]
-    public void IntakeTheme_WithAccent_WhenNotATextSafeHexColor_ShouldThrowArgumentException(string accent)
+    [Fact]
+    public void IntakeTheme_WithAccent_WhenTooLightForText_ShouldUseADarkerShadeOfIt()
     {
-        var act = () => IntakeTheme.WithAccent(accent);
+        var theme = IntakeTheme.WithAccent("#FFD54F");
+
+        theme.PaletteLight.Primary.Should().BeColor(RVS.Domain.Validation.LocationBrandingValidator.EffectiveAccent("#FFD54F")!);
+        theme.PaletteLight.PrimaryContrastText.Should().BeColor("#FFFFFF");
+    }
+
+    [Fact]
+    public void IntakeTheme_WithAccent_WhenNotHex_ShouldThrowArgumentException()
+    {
+        var act = () => IntakeTheme.WithAccent("rust");
 
         act.Should().Throw<ArgumentException>();
     }

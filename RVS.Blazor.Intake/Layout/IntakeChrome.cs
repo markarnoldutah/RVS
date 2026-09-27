@@ -24,7 +24,7 @@ namespace RVS.Blazor.Intake.Layout;
 /// <param name="DealerName">The dealer's name, for the logo's alt text.</param>
 /// <param name="AppBarBackground">The dealer's <c>#RRGGBB</c> bar colour, or <c>null</c> for the theme's.</param>
 /// <param name="AppBarForeground">The foreground chosen for contrast on <paramref name="AppBarBackground"/>.</param>
-/// <param name="AccentColor">The dealer's <c>#RRGGBB</c> accent in place of Rust, or <c>null</c> for Rust.</param>
+/// <param name="AccentColor">The dealer's accent in place of Rust — already darkened if it was too light for text on white — or <c>null</c> for Rust.</param>
 public sealed record IntakeChrome(
     string? DealerLogoUrl,
     string? DealerName,
@@ -80,10 +80,8 @@ public sealed record IntakeChrome(
         var logoUrl = DealerLogoUrlOf(config);
         var background = highContrast ? null : HeaderColor.Normalize(config.Branding?.HeaderColor);
 
-        // The API rejects an accent too light for link text; the page re-checks rather than trust it.
-        var accent = !highContrast && LocationBrandingValidator.IsTextSafeAccent(config.Branding?.AccentColor)
-            ? HeaderColor.Normalize(config.Branding!.AccentColor)
-            : null;
+        // The accent as customers see it: darkened when too light to be link text on white.
+        var accent = highContrast ? null : LocationBrandingValidator.EffectiveAccent(config.Branding?.AccentColor);
 
         if (logoUrl is null && background is null && accent is null)
         {

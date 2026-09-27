@@ -77,4 +77,48 @@ public class HeaderColorTests
 
         act.Should().Throw<ArgumentException>();
     }
+
+    // ── Darkening to a contrast floor (accent auto-darken, issue #470 follow-up) ──
+
+    [Theory]
+    [InlineData("#A8431F")]
+    [InlineData("#000000")]
+    public void DarkenToContrast_WhenTheColorAlreadyClearsTheFloor_ShouldReturnItUnchanged(string color)
+    {
+        HeaderColor.DarkenToContrast(color, "#FFFFFF", 4.5).Should().Be(color);
+    }
+
+    [Theory]
+    [InlineData("#FFD54F")]
+    [InlineData("#90CAF9")]
+    [InlineData("#FF9800")]
+    [InlineData("#E53935")]
+    [InlineData("#FFFFFF")]
+    public void DarkenToContrast_WhenTooLight_ShouldReturnTheLightestShadeThatClearsTheFloor(string color)
+    {
+        var darkened = HeaderColor.DarkenToContrast(color, "#FFFFFF", 4.5);
+
+        var contrast = HeaderColor.ContrastRatio(darkened, "#FFFFFF");
+        contrast.Should().BeGreaterThanOrEqualTo(4.5);
+        contrast.Should().BeLessThan(4.8, "it should stop at the floor, not darken further than it has to");
+    }
+
+    [Theory]
+    [InlineData("#FFD54F", 45)]    // amber
+    [InlineData("#90CAF9", 207)]   // sky blue
+    [InlineData("#FF9800", 36)]    // orange
+    public void DarkenToContrast_ShouldKeepTheHue(string color, double hue)
+    {
+        var darkened = HeaderColor.DarkenToContrast(color, "#FFFFFF", 4.5);
+
+        HeaderColor.Hue(darkened).Should().BeApproximately(hue, 3);
+    }
+
+    [Fact]
+    public void DarkenToContrast_WhenColorIsNotHex_ShouldThrowArgumentException()
+    {
+        var act = () => HeaderColor.DarkenToContrast("yellow", "#FFFFFF", 4.5);
+
+        act.Should().Throw<ArgumentException>();
+    }
 }

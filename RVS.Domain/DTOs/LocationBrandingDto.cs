@@ -14,8 +14,8 @@ public sealed record LocationBrandingDto
     public string? HeaderColor { get; init; }
 
     /// <summary>
-    /// Intake accent — buttons, links, focus — as <c>#RRGGBB</c>, or <c>null</c> for Rust. Must
-    /// clear 4.5:1 against white.
+    /// Intake accent — buttons, links, focus — as <c>#RRGGBB</c>, or <c>null</c> for Rust. As the
+    /// dealer entered it; a colour too light for text on white is darkened when rendered.
     /// </summary>
     public string? AccentColor { get; init; }
 }

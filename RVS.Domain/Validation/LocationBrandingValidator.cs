@@ -6,7 +6,7 @@ namespace RVS.Domain.Validation;
 /// <summary>
 /// Validates a location's <see cref="LocationBrandingEmbedded"/> (<c>Spec A-16</c>, issue #470):
 /// an optional absolute https logo URL, an optional <c>#RRGGBB</c> header colour, and an optional
-/// <c>#RRGGBB</c> accent colour dark enough to be link text on white.
+/// <c>#RRGGBB</c> accent colour (darkened for customers when too light — <see cref="EffectiveAccent"/>).
 /// </summary>
 public static class LocationBrandingValidator
 {
@@ -14,8 +14,8 @@ public static class LocationBrandingValidator
     public const int MaxLogoUrlLength = 2048;
 
     /// <summary>
-    /// The least contrast an accent may have against white: WCAG AA for body text. The accent
-    /// is link text and outlined-button text on the white page, not only a button fill.
+    /// The contrast an accent is darkened to reach against white: WCAG AA for body text. The
+    /// accent is link text and outlined-button text on the white page, not only a button fill.
     /// </summary>
     public const double MinAccentContrast = 4.5;
 
@@ -82,10 +82,9 @@ public static class LocationBrandingValidator
     }
 
     /// <summary>
-    /// Validates the optional accent colour: blank is allowed; otherwise <c>#RRGGBB</c> with at
-    /// least <see cref="MinAccentContrast"/> against white. A lighter colour is rejected, not
-    /// darkened, so the dealer sees exactly what their customers will. Exposed for the manager
-    /// settings form.
+    /// Validates the optional accent colour: blank is allowed; otherwise <c>#RRGGBB</c>. Any
+    /// colour is accepted — one too light to be link text on white is darkened for customers by
+    /// <see cref="EffectiveAccent"/>, not rejected. Exposed for the manager settings form.
     /// </summary>
     /// <param name="accentColor">The colour to check.</param>
     public static ValidationResult ValidateAccentColor(string? accentColor)
@@ -95,24 +94,24 @@ public static class LocationBrandingValidator
             return ValidationResult.Success;
         }
 
-        var hex = HeaderColor.Normalize(accentColor);
-        if (hex is null)
-        {
-            return ValidationResult.Failure("Accent colour must be a hex colour in the form #RRGGBB.");
-        }
-
-        var contrast = HeaderColor.ContrastRatio(hex, White);
-        return contrast >= MinAccentContrast
+        return HeaderColor.Normalize(accentColor) is not null
             ? ValidationResult.Success
-            : ValidationResult.Failure(
-                $"Accent colour {hex} is too light for links and buttons on white "
-                + $"({contrast:0.0}:1; it needs {MinAccentContrast:0.0}:1). Try a darker shade.");
+            : ValidationResult.Failure("Accent colour must be a hex colour in the form #RRGGBB.");
     }
 
-    /// <summary><c>true</c> when <paramref name="accentColor"/> is <c>#RRGGBB</c> and clears <see cref="MinAccentContrast"/> on white.</summary>
-    /// <param name="accentColor">The colour to check.</param>
-    public static bool IsTextSafeAccent(string? accentColor) =>
-        !string.IsNullOrWhiteSpace(accentColor) && ValidateAccentColor(accentColor).IsValid;
+    /// <summary>
+    /// The accent customers actually see: <paramref name="accentColor"/> itself when it reaches
+    /// <see cref="MinAccentContrast"/> against white, otherwise the lightest darker shade of it that
+    /// does (<see cref="HeaderColor.DarkenToContrast"/>). The dealer's colour is stored as entered
+    /// and darkened here, at render, so the rule can change without touching stored data.
+    /// <c>null</c> when the colour is blank or not <c>#RRGGBB</c>.
+    /// </summary>
+    /// <param name="accentColor">The dealer's accent as stored.</param>
+    public static string? EffectiveAccent(string? accentColor)
+    {
+        var hex = HeaderColor.Normalize(accentColor);
+        return hex is null ? null : HeaderColor.DarkenToContrast(hex, White, MinAccentContrast);
+    }
 
     /// <summary><c>true</c> when <paramref name="url"/> is an absolute https URL.</summary>
     /// <param name="url">The URL to check.</param>
