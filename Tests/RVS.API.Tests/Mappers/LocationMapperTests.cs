@@ -800,13 +800,19 @@ public class LocationMapperTests
         {
             TenantId = "ten_1",
             Name = "Phoenix Service Center",
-            Branding = new LocationBrandingEmbedded { LogoUrl = "https://cdn.dealer.com/logo.png", HeaderColor = "#1A5E20" }
+            Branding = new LocationBrandingEmbedded
+            {
+                LogoUrl = "https://cdn.dealer.com/logo.png",
+                HeaderColor = "#1A5E20",
+                AccentColor = "#0D47A1"
+            }
         };
 
         var dto = entity.ToDetailDto();
 
         dto.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
         dto.Branding.HeaderColor.Should().Be("#1A5E20");
+        dto.Branding.AccentColor.Should().Be("#0D47A1");
     }
 
     [Fact]
@@ -823,22 +829,29 @@ public class LocationMapperTests
     {
         var dto = BuildValidCreateRequest() with
         {
-            Branding = new LocationBrandingDto { LogoUrl = "  https://cdn.dealer.com/logo.png  ", HeaderColor = " #1a5e20 " }
+            Branding = new LocationBrandingDto
+            {
+                LogoUrl = "  https://cdn.dealer.com/logo.png  ",
+                HeaderColor = " #1a5e20 ",
+                AccentColor = " #0d47a1 "
+            }
         };
 
         var entity = dto.ToEntity("ten_1", "usr_1");
 
         entity.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
         entity.Branding.HeaderColor.Should().Be("#1A5E20");
+        entity.Branding.AccentColor.Should().Be("#0D47A1");
     }
 
     [Fact]
     public void BrandingToEmbedded_WhenFieldsBlank_ShouldBeNull()
     {
-        var embedded = new LocationBrandingDto { LogoUrl = "   ", HeaderColor = "" }.ToEmbedded();
+        var embedded = new LocationBrandingDto { LogoUrl = "   ", HeaderColor = "", AccentColor = " " }.ToEmbedded();
 
         embedded.LogoUrl.Should().BeNull();
         embedded.HeaderColor.Should().BeNull();
+        embedded.AccentColor.Should().BeNull();
     }
 
     [Fact]

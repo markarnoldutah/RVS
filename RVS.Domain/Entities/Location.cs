@@ -109,7 +109,7 @@ public class Location : EntityBase
 // ---------------------------------------------------------------------------
 
 /// <summary>
-/// A location's customer-facing branding (<c>Spec A-16</c>, issue #470). Both fields are
+/// A location's customer-facing branding (<c>Spec A-16</c>, issue #470). Every field is
 /// optional; each falls back to the RV Intake default on its own.
 /// </summary>
 public class LocationBrandingEmbedded
@@ -130,6 +130,15 @@ public class LocationBrandingEmbedded
     [JsonProperty("headerColor")]
     public string? HeaderColor { get; set; }
 
+    /// <summary>
+    /// The colour that replaces Rust on the intake form — buttons, links, focus rings, checked
+    /// controls — as <c>#RRGGBB</c>. <c>null</c> keeps Rust. It must clear 4.5:1 against white,
+    /// because it is also link text; a lighter colour is rejected rather than adjusted
+    /// (<see cref="LocationBrandingValidator.ValidateAccentColor"/>). High contrast ignores it.
+    /// </summary>
+    [JsonProperty("accentColor")]
+    public string? AccentColor { get; set; }
+
     /// <summary><c>true</c> when a logo URL is set.</summary>
     [JsonIgnore]
     public bool HasLogo => !string.IsNullOrWhiteSpace(LogoUrl);
@@ -137,6 +146,10 @@ public class LocationBrandingEmbedded
     /// <summary><c>true</c> when a header colour is set.</summary>
     [JsonIgnore]
     public bool HasHeaderColor => !string.IsNullOrWhiteSpace(HeaderColor);
+
+    /// <summary><c>true</c> when an accent colour is set.</summary>
+    [JsonIgnore]
+    public bool HasAccentColor => !string.IsNullOrWhiteSpace(AccentColor);
 }
 
 // ---------------------------------------------------------------------------

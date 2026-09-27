@@ -5,12 +5,21 @@ namespace RVS.Domain.Validation;
 
 /// <summary>
 /// Validates a location's <see cref="LocationBrandingEmbedded"/> (<c>Spec A-16</c>, issue #470):
-/// an optional absolute https logo URL and an optional <c>#RRGGBB</c> header colour.
+/// an optional absolute https logo URL, an optional <c>#RRGGBB</c> header colour, and an optional
+/// <c>#RRGGBB</c> accent colour dark enough to be link text on white.
 /// </summary>
 public static class LocationBrandingValidator
 {
     /// <summary>Longest logo URL accepted.</summary>
     public const int MaxLogoUrlLength = 2048;
+
+    /// <summary>
+    /// The least contrast an accent may have against white: WCAG AA for body text. The accent
+    /// is link text and outlined-button text on the white page, not only a button fill.
+    /// </summary>
+    public const double MinAccentContrast = 4.5;
+
+    private const string White = "#FFFFFF";
 
     /// <summary>
     /// Validates <paramref name="branding"/> and returns the first problem found, or
@@ -22,7 +31,13 @@ public static class LocationBrandingValidator
         ArgumentNullException.ThrowIfNull(branding);
 
         var logoResult = ValidateLogoUrl(branding.LogoUrl);
-        return logoResult.IsValid ? ValidateHeaderColor(branding.HeaderColor) : logoResult;
+        if (!logoResult.IsValid)
+        {
+            return logoResult;
+        }
+
+        var headerResult = ValidateHeaderColor(branding.HeaderColor);
+        return headerResult.IsValid ? ValidateAccentColor(branding.AccentColor) : headerResult;
     }
 
     /// <summary>
@@ -65,6 +80,39 @@ public static class LocationBrandingValidator
             ? ValidationResult.Success
             : ValidationResult.Failure("Header colour must be a hex colour in the form #RRGGBB.");
     }
+
+    /// <summary>
+    /// Validates the optional accent colour: blank is allowed; otherwise <c>#RRGGBB</c> with at
+    /// least <see cref="MinAccentContrast"/> against white. A lighter colour is rejected, not
+    /// darkened, so the dealer sees exactly what their customers will. Exposed for the manager
+    /// settings form.
+    /// </summary>
+    /// <param name="accentColor">The colour to check.</param>
+    public static ValidationResult ValidateAccentColor(string? accentColor)
+    {
+        if (string.IsNullOrWhiteSpace(accentColor))
+        {
+            return ValidationResult.Success;
+        }
+
+        var hex = HeaderColor.Normalize(accentColor);
+        if (hex is null)
+        {
+            return ValidationResult.Failure("Accent colour must be a hex colour in the form #RRGGBB.");
+        }
+
+        var contrast = HeaderColor.ContrastRatio(hex, White);
+        return contrast >= MinAccentContrast
+            ? ValidationResult.Success
+            : ValidationResult.Failure(
+                $"Accent colour {hex} is too light for links and buttons on white "
+                + $"({contrast:0.0}:1; it needs {MinAccentContrast:0.0}:1). Try a darker shade.");
+    }
+
+    /// <summary><c>true</c> when <paramref name="accentColor"/> is <c>#RRGGBB</c> and clears <see cref="MinAccentContrast"/> on white.</summary>
+    /// <param name="accentColor">The colour to check.</param>
+    public static bool IsTextSafeAccent(string? accentColor) =>
+        !string.IsNullOrWhiteSpace(accentColor) && ValidateAccentColor(accentColor).IsValid;
 
     /// <summary><c>true</c> when <paramref name="url"/> is an absolute https URL.</summary>
     /// <param name="url">The URL to check.</param>

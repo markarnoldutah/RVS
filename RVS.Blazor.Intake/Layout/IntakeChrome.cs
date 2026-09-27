@@ -1,6 +1,8 @@
+using MudBlazor;
 using RVS.Domain.Branding;
 using RVS.Domain.DTOs;
 using RVS.Domain.Validation;
+using RVS.UI.Shared.Theme;
 
 namespace RVS.Blazor.Intake.Layout;
 
@@ -10,7 +12,9 @@ namespace RVS.Blazor.Intake.Layout;
 /// "Everywhere else" includes the homepage and the policy pages even mid-session — they are
 /// RV Intake's pages, not the dealer's.
 ///
-/// High contrast ignores the dealer's colour, as it ignores the brand's own (Spec THEME-1), but
+/// The dealer's accent, when set, replaces Rust through the theme (<see cref="ThemeOr"/>).
+///
+/// High contrast ignores the dealer's colours, as it ignores the brand's own (Spec THEME-1), but
 /// keeps the logo. The logo sits straight on a colour the dealer chose — they picked the two
 /// together, and may well have uploaded a white logo for a dark header — and on a white plate
 /// only where the colour is not theirs: the default Ink, or high contrast's black
@@ -20,13 +24,15 @@ namespace RVS.Blazor.Intake.Layout;
 /// <param name="DealerName">The dealer's name, for the logo's alt text.</param>
 /// <param name="AppBarBackground">The dealer's <c>#RRGGBB</c> bar colour, or <c>null</c> for the theme's.</param>
 /// <param name="AppBarForeground">The foreground chosen for contrast on <paramref name="AppBarBackground"/>.</param>
+/// <param name="AccentColor">The dealer's <c>#RRGGBB</c> accent in place of Rust, or <c>null</c> for Rust.</param>
 public sealed record IntakeChrome(
     string? DealerLogoUrl,
     string? DealerName,
     string? AppBarBackground,
-    string? AppBarForeground)
+    string? AppBarForeground,
+    string? AccentColor = null)
 {
-    /// <summary>The RV Intake chrome: its own mark, on the theme's Ink bar.</summary>
+    /// <summary>The RV Intake chrome: its own mark, on the theme's Ink bar, with Rust accents.</summary>
     public static readonly IntakeChrome Default = new(null, null, null, null);
 
     /// <summary><c>true</c> when the bar shows the dealer's logo.</summary>
@@ -52,6 +58,14 @@ public sealed record IntakeChrome(
     /// </summary>
     public bool UseReversedMark => AppBarForeground is null or HeaderColor.LightForeground;
 
+    /// <summary>
+    /// The theme to render: the dealer's accent theme when there is one, otherwise
+    /// <paramref name="modeTheme"/> — the theme the user's mode selected. High contrast never
+    /// reaches the accent theme, because <see cref="Resolve"/> drops the accent there.
+    /// </summary>
+    public MudTheme ThemeOr(MudTheme modeTheme) =>
+        AccentColor is null ? modeTheme : IntakeTheme.WithAccent(AccentColor);
+
     /// <summary>Resolves the chrome for the page at <paramref name="currentPath"/>.</summary>
     /// <param name="config">The loaded location config, or <c>null</c> before one loads.</param>
     /// <param name="currentPath">The base-relative path, e.g. <c>acme-slc?step=2</c>.</param>
@@ -66,7 +80,12 @@ public sealed record IntakeChrome(
         var logoUrl = DealerLogoUrlOf(config);
         var background = highContrast ? null : HeaderColor.Normalize(config.Branding?.HeaderColor);
 
-        if (logoUrl is null && background is null)
+        // The API rejects an accent too light for link text; the page re-checks rather than trust it.
+        var accent = !highContrast && LocationBrandingValidator.IsTextSafeAccent(config.Branding?.AccentColor)
+            ? HeaderColor.Normalize(config.Branding!.AccentColor)
+            : null;
+
+        if (logoUrl is null && background is null && accent is null)
         {
             return Default;
         }
@@ -75,7 +94,8 @@ public sealed record IntakeChrome(
             logoUrl,
             string.IsNullOrWhiteSpace(config.DealershipName) ? config.LocationName : config.DealershipName,
             background,
-            background is null ? null : HeaderColor.ForegroundFor(background));
+            background is null ? null : HeaderColor.ForegroundFor(background),
+            accent);
     }
 
     /// <summary>

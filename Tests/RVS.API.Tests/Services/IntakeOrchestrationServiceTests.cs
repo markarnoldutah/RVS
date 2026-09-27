@@ -1941,6 +1941,7 @@ public class IntakeOrchestrationServiceTests
                 {
                     LogoUrl = "https://cdn.dealer.com/logo.png",
                     HeaderColor = "#1A5E20",
+                    AccentColor = "#0D47A1",
                 },
             });
 
@@ -1948,6 +1949,7 @@ public class IntakeOrchestrationServiceTests
 
         result.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
         result.Branding.HeaderColor.Should().Be("#1A5E20");
+        result.Branding.AccentColor.Should().Be("#0D47A1");
     }
 
     [Fact]

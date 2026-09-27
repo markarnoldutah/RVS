@@ -284,6 +284,54 @@ public class RvsThemeTests
         return 0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
     }
 
+    // ── Dealer accent (Spec A-16, issue #470 follow-up) ──────────────────
+
+    [Fact]
+    public void IntakeTheme_WithAccent_ShouldReplaceRustWithTheDealersColorAndKeepEverythingElse()
+    {
+        var theme = IntakeTheme.WithAccent("#0D47A1");
+
+        theme.PaletteLight.Primary.Should().BeColor("#0D47A1");
+        theme.PaletteLight.PrimaryContrastText.Should().BeColor("#FFFFFF");
+        theme.PaletteLight.Secondary.Should().BeColor(RvsBrand.Ink);
+        theme.PaletteLight.AppbarBackground.Should().BeColor(RvsBrand.Ink);
+        theme.PaletteLight.Background.Should().BeColor("#FFFFFF");
+        theme.PaletteLight.Error.Should().BeColor(RvsBrand.Error);
+        theme.LayoutProperties.DefaultBorderRadius.Should().Be(IntakeTheme.Theme.LayoutProperties.DefaultBorderRadius);
+    }
+
+    [Fact]
+    public void IntakeTheme_WithAccent_ShouldCarryTheAccentIntoTheMirroredDarkPalette()
+    {
+        IntakeTheme.WithAccent("#0D47A1").PaletteDark.Primary.Should().BeColor("#0D47A1");
+    }
+
+    [Fact]
+    public void IntakeTheme_WithAccent_ShouldReturnTheSameInstanceForTheSameColor()
+    {
+        // MudThemeProvider re-emits its CSS variables when the theme instance changes; one
+        // instance per colour keeps a layout re-render from repainting the page.
+        IntakeTheme.WithAccent("#0d47a1").Should().BeSameAs(IntakeTheme.WithAccent("#0D47A1"));
+    }
+
+    [Fact]
+    public void IntakeTheme_WithAccent_ShouldLeaveTheDefaultThemeRust()
+    {
+        _ = IntakeTheme.WithAccent("#0D47A1");
+
+        IntakeTheme.Theme.PaletteLight.Primary.Should().BeColor(RvsBrand.Accent);
+    }
+
+    [Theory]
+    [InlineData("#FFD54F")]   // too light for links on white
+    [InlineData("rust")]
+    public void IntakeTheme_WithAccent_WhenNotATextSafeHexColor_ShouldThrowArgumentException(string accent)
+    {
+        var act = () => IntakeTheme.WithAccent(accent);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
     public static TheoryData<string, MudTheme> AllThemes() => new()
     {
         { "manager", ManagerTheme.Theme },

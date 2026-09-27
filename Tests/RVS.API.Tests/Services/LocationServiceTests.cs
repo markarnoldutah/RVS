@@ -535,12 +535,14 @@ public class LocationServiceTests
     // ── Branding (Spec A-16, issue #470) ────────────────────────────────
 
     [Theory]
-    [InlineData("http://cdn.dealer.com/logo.png", null)]
-    [InlineData(null, "green")]
-    public async Task CreateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentExceptionAndNotPersist(string? logoUrl, string? headerColor)
+    [InlineData("http://cdn.dealer.com/logo.png", null, null)]
+    [InlineData(null, "green", null)]
+    [InlineData(null, null, "#FFD54F")]   // accent too light for links on white — rejected, not adjusted
+    public async Task CreateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentExceptionAndNotPersist(
+        string? logoUrl, string? headerColor, string? accentColor)
     {
         var location = BuildLocation();
-        location.Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl, HeaderColor = headerColor };
+        location.Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl, HeaderColor = headerColor, AccentColor = accentColor };
 
         var act = () => _sut.CreateAsync("ten_1", location);
 
@@ -550,12 +552,14 @@ public class LocationServiceTests
     }
 
     [Theory]
-    [InlineData("http://cdn.dealer.com/logo.png", null)]
-    [InlineData(null, "#FFF")]
-    public async Task UpdateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentException(string? logoUrl, string? headerColor)
+    [InlineData("http://cdn.dealer.com/logo.png", null, null)]
+    [InlineData(null, "#FFF", null)]
+    [InlineData(null, null, "#90CAF9")]
+    public async Task UpdateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentException(
+        string? logoUrl, string? headerColor, string? accentColor)
     {
         var updated = BuildLocation();
-        updated.Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl, HeaderColor = headerColor };
+        updated.Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl, HeaderColor = headerColor, AccentColor = accentColor };
 
         var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
 
@@ -572,6 +576,7 @@ public class LocationServiceTests
         {
             LogoUrl = "https://cdn.dealer.com/logo.png",
             HeaderColor = "#1A5E20",
+            AccentColor = "#0D47A1",
         };
 
         _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
@@ -583,6 +588,7 @@ public class LocationServiceTests
 
         result.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
         result.Branding.HeaderColor.Should().Be("#1A5E20");
+        result.Branding.AccentColor.Should().Be("#0D47A1");
     }
 
     [Fact]

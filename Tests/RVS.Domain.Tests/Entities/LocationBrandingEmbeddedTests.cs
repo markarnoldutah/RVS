@@ -22,6 +22,8 @@ public class LocationBrandingEmbeddedTests
         location.Branding.HeaderColor.Should().BeNull();
         location.Branding.HasLogo.Should().BeFalse();
         location.Branding.HasHeaderColor.Should().BeFalse();
+        location.Branding.AccentColor.Should().BeNull();
+        location.Branding.HasAccentColor.Should().BeFalse();
     }
 
     [Fact]
@@ -33,11 +35,13 @@ public class LocationBrandingEmbeddedTests
             {
                 LogoUrl = "https://cdn.dealer.example/logo.png",
                 HeaderColor = "#1A5E20",
+                AccentColor = "#0D47A1",
             },
         };
 
         var json = JObject.Parse(JsonConvert.SerializeObject(location));
 
+        json["branding"]!["accentColor"]!.Value<string>().Should().Be("#0D47A1");
         json["branding"]!["logoUrl"]!.Value<string>().Should().Be("https://cdn.dealer.example/logo.png");
         json["branding"]!["headerColor"]!.Value<string>().Should().Be("#1A5E20");
     }

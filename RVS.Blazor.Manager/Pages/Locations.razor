@@ -451,6 +451,27 @@
                                     </MudStack>
                                 </MudStack>
                                 <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Accent colour</MudText>
+                                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                        Buttons, links and highlighted fields on the intake form. Leave blank for RV Intake's rust.
+                                        It is also used as link text on white, so it must be dark enough to read there.
+                                    </MudText>
+                                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+                                        <MudTextField T="string" @bind-Value="_form.AccentColor"
+                                                      Validation="@(new Func<string?, string?>(ValidateAccentColor))"
+                                                      Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense"
+                                                      Immediate="true"
+                                                      Clearable="true"
+                                                      Placeholder="@RvsBrand.Accent"
+                                                      autocomplete="off" />
+                                        <input type="color" class="header-color-picker"
+                                               value="@AccentPickerValue"
+                                               @onchange="OnAccentColorPicked"
+                                               aria-label="Pick an accent colour" />
+                                    </MudStack>
+                                </MudStack>
+                                <MudStack Spacing="1">
                                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Preview</MudText>
                                     <div class="header-preview" style="@HeaderPreviewStyle" aria-hidden="true">
                                         @if (LocationBrandingValidator.IsHttpsUrl(_form.LogoUrl))
@@ -461,6 +482,11 @@
                                         {
                                             <BrandWordmark Reversed="@HeaderPreviewReversed" Height="28px" Title="" />
                                         }
+                                    </div>
+                                    @* The intake page under the bar: a button and a link in the accent. *@
+                                    <div class="accent-preview" aria-hidden="true">
+                                        <span class="accent-preview-button" style="@AccentPreviewButtonStyle">Continue</span>
+                                        <span class="accent-preview-link" style="@AccentPreviewLinkStyle">Privacy policy</span>
                                     </div>
                                 </MudStack>
                             </MudStack>
@@ -555,6 +581,23 @@
 
     // <input type="color"> needs lower-case #rrggbb and has no "empty" state, so it shows Ink when unset.
     private string HeaderPickerValue => HeaderPreviewBackground.ToLowerInvariant();
+
+    private static string? ValidateAccentColor(string? value) =>
+        LocationBrandingValidator.ValidateAccentColor(value).ErrorMessage;
+
+    // The preview shows Rust until the accent is valid: an accent the API would reject never reaches customers.
+    private string AccentPreviewColor => LocationBrandingValidator.IsTextSafeAccent(_form.AccentColor)
+        ? HeaderColor.Normalize(_form.AccentColor)!
+        : RvsBrand.Accent;
+
+    private string AccentPreviewButtonStyle => $"background-color:{AccentPreviewColor};color:#FFFFFF;";
+
+    private string AccentPreviewLinkStyle => $"color:{AccentPreviewColor};";
+
+    private string AccentPickerValue => AccentPreviewColor.ToLowerInvariant();
+
+    private void OnAccentColorPicked(ChangeEventArgs e) =>
+        _form.AccentColor = HeaderColor.Normalize(e.Value?.ToString());
 
     private void OnHeaderColorPicked(ChangeEventArgs e) =>
         _form.HeaderColor = HeaderColor.Normalize(e.Value?.ToString());
@@ -723,7 +766,8 @@
             PasteBlockCharacterCap = location.PacketConfig.PasteBlockCharacterCap,
             StatusLinkTtlDays = location.PacketConfig.StatusLinkTtlDays,
             LogoUrl = location.Branding.LogoUrl,
-            HeaderColor = location.Branding.HeaderColor
+            HeaderColor = location.Branding.HeaderColor,
+            AccentColor = location.Branding.AccentColor
         };
         ResetPacketEditor();
         _dialogOpen = true;
@@ -837,10 +881,12 @@
     private LocationBrandingDto BuildBranding() => new()
     {
         LogoUrl = string.IsNullOrWhiteSpace(_form.LogoUrl) ? null : _form.LogoUrl.Trim(),
-        HeaderColor = string.IsNullOrWhiteSpace(_form.HeaderColor)
-            ? null
-            : HeaderColor.Normalize(_form.HeaderColor) ?? _form.HeaderColor.Trim()
+        HeaderColor = NormalizeFormColor(_form.HeaderColor),
+        AccentColor = NormalizeFormColor(_form.AccentColor)
     };
+
+    private static string? NormalizeFormColor(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : HeaderColor.Normalize(value) ?? value.Trim();
 
     private void OpenSendIntakeLink(LocationSummaryResponseDto location)
     {
@@ -902,5 +948,6 @@
         // Branding (Spec A-16, issue #470): blank means RV Intake's own.
         public string? LogoUrl { get; set; }
         public string? HeaderColor { get; set; }
+        public string? AccentColor { get; set; }
     }
 }

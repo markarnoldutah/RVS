@@ -133,6 +133,7 @@ public class DealershipLocationDtoTests
 
         dto.LogoUrl.Should().BeNull();
         dto.HeaderColor.Should().BeNull();
+        dto.AccentColor.Should().BeNull();
     }
 
     [Fact]

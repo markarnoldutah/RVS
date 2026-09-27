@@ -250,27 +250,34 @@ public static class LocationMapper
         return new LocationBrandingDto
         {
             LogoUrl = branding.LogoUrl,
-            HeaderColor = branding.HeaderColor
+            HeaderColor = branding.HeaderColor,
+            AccentColor = branding.AccentColor
         };
     }
 
     /// <summary>
     /// Maps a <see cref="LocationBrandingDto"/> to a <see cref="LocationBrandingEmbedded"/> entity:
-    /// blanks become <c>null</c>, the logo URL is trimmed, and a well-formed header colour is
-    /// upper-cased. A malformed colour is kept, trimmed, for <c>LocationBrandingValidator</c> to
-    /// reject in the service.
+    /// blanks become <c>null</c>, the logo URL is trimmed, and well-formed colours are
+    /// upper-cased. A malformed or too-light colour is kept, trimmed, for
+    /// <c>LocationBrandingValidator</c> to reject in the service.
     /// </summary>
     public static LocationBrandingEmbedded ToEmbedded(this LocationBrandingDto dto)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        var headerColor = string.IsNullOrWhiteSpace(dto.HeaderColor) ? null : dto.HeaderColor.Trim();
-
         return new LocationBrandingEmbedded
         {
             LogoUrl = string.IsNullOrWhiteSpace(dto.LogoUrl) ? null : dto.LogoUrl.Trim(),
-            HeaderColor = HeaderColor.Normalize(headerColor) ?? headerColor
+            HeaderColor = NormalizeColor(dto.HeaderColor),
+            AccentColor = NormalizeColor(dto.AccentColor)
         };
+    }
+
+    /// <summary>Blank becomes <c>null</c>; well-formed hex is upper-cased; anything else is kept, trimmed, for the validator to reject.</summary>
+    private static string? NormalizeColor(string? color)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(color) ? null : color.Trim();
+        return HeaderColor.Normalize(trimmed) ?? trimmed;
     }
 
     /// <summary>

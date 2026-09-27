@@ -117,4 +117,63 @@ public class LocationBrandingValidatorTests
         result.IsValid.Should().BeFalse();
         result.ErrorMessage.Should().Contain("#RRGGBB");
     }
+
+    // ── Accent colour: replaces Rust for buttons, links, focus (issue #470 follow-up) ──
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("#A8431F")]   // text-safe Rust itself — 6.02:1
+    [InlineData("#1A5E20")]   // a dealer's dark green
+    [InlineData("#0D47A1")]   // a dealer's navy
+    [InlineData("#767676")]   // mid grey, just over 4.5:1
+    [InlineData("#C1502E")]   // logo Rust: fails AA on cream, but clears it on the white page
+    public void ValidateAccentColor_BlankOrTextSafeOnWhite_ShouldSucceed(string? color)
+    {
+        LocationBrandingValidator.ValidateAccentColor(color).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("#FFD54F")]   // yellow
+    [InlineData("#90CAF9")]   // light blue
+    [InlineData("#FF9800")]   // bright orange
+    [InlineData("#777777")]   // mid grey, just under 4.5:1
+    public void ValidateAccentColor_WhenTooLightForTextOnWhite_ShouldFailAndSayWhy(string color)
+    {
+        var result = LocationBrandingValidator.ValidateAccentColor(color);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("too light").And.Contain("4.5:1").And.Contain("darker");
+    }
+
+    [Theory]
+    [InlineData("A8431F")]
+    [InlineData("#FFF")]
+    [InlineData("rust")]
+    public void ValidateAccentColor_WhenNotSixDigitHex_ShouldFail(string color)
+    {
+        var result = LocationBrandingValidator.ValidateAccentColor(color);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("#RRGGBB");
+    }
+
+    [Fact]
+    public void Validate_WhenAccentColorIsTooLight_ShouldFail()
+    {
+        var branding = new LocationBrandingEmbedded { AccentColor = "#FFD54F" };
+
+        LocationBrandingValidator.Validate(branding).IsValid.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("#A8431F", true)]
+    [InlineData("#FFD54F", false)]
+    [InlineData(null, false)]
+    [InlineData("green", false)]
+    public void IsTextSafeAccent_ShouldHoldOnlyForHexThatClearsFourPointFiveOnWhite(string? color, bool expected)
+    {
+        LocationBrandingValidator.IsTextSafeAccent(color).Should().Be(expected);
+    }
 }
