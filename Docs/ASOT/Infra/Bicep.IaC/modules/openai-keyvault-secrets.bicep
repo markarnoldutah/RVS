@@ -32,6 +32,16 @@ param openAiWhisperDeploymentName string = 'whisper'
 @description('Optional. Name of an additional deployment used only for the packet preliminary assessment, independent of openAiTextDeploymentName (e.g. gpt-5, to try it without moving categorization/refinement off gpt-4o). Empty = not set — the app falls back to openAiTextDeploymentName.')
 param openAiAssessmentDeploymentName string = ''
 
+@description('Optional. Deployment used only for intake step-6 diagnostic question generation (#783), a reasoning model (gpt-5). Empty = not set — the app keeps questions on openAiTextDeploymentName.')
+param openAiQuestionsDeploymentName string = ''
+
+@description('reasoning_effort for question generation when openAiQuestionsDeploymentName is set: minimal or low.')
+@allowed([
+  'minimal'
+  'low'
+])
+param openAiQuestionsReasoningEffort string = 'minimal'
+
 // ── Existing Resource References ──────────────────────────────
 
 resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
@@ -94,6 +104,24 @@ resource assessmentDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2024-
   name: 'AzureOpenAi--AssessmentDeploymentName'
   properties: {
     value: openAiAssessmentDeploymentName
+    contentType: 'text/plain'
+  }
+}
+
+resource questionsDeploymentNameSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
+  parent: keyVault
+  name: 'AzureOpenAi--QuestionsDeploymentName'
+  properties: {
+    value: openAiQuestionsDeploymentName
+    contentType: 'text/plain'
+  }
+}
+
+resource questionsReasoningEffortSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
+  parent: keyVault
+  name: 'AzureOpenAi--QuestionsReasoningEffort'
+  properties: {
+    value: openAiQuestionsReasoningEffort
     contentType: 'text/plain'
   }
 }

@@ -115,7 +115,7 @@ One flag, `Integrations:UseMocks`, read once at startup. **It is `false` in ever
 | VIN extraction from photo | Azure OpenAI gpt-4o vision | Mock |
 | Speech-to-text | Azure OpenAI Whisper (northcentralus) | Mock |
 | Issue-text refinement | Azure OpenAI | `RuleBasedIssueTextRefinementService` (deliberately thin) |
-| Categorization + diagnostic questions | Azure OpenAI | `RuleBasedCategorizationService` |
+| Categorization + diagnostic questions | Azure OpenAI. Category suggestion on gpt-4o (text deployment); question generation on the gpt-5 assessment deployment when `AzureOpenAi:QuestionsDeploymentName` is set (`#783`, set in staging and prod), on its own client with a 15 s budget, else gpt-4o | `RuleBasedCategorizationService` |
 | Packet preliminary assessment — probable cause, possible fixes, likely parts (`#507`); reads up to 5 photos for data plates, fault codes and visible observations (`#772`) | Azure OpenAI gpt-4o (text deployment), called from the packet pipeline once per request | `RuleBasedPreliminaryAssessmentService` (per-category table, low confidence) |
 | Email | Azure Communication Services | NoOp |
 | Packet email size fitting (`#521`) | `PacketEmailSizeFitter` (pure, Domain) — trims attachments to ACS's 10 MB request ceiling, base64 accounted for | none needed; a pure transform with no I/O |

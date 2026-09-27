@@ -591,15 +591,51 @@ else
             ?? builder.Configuration["AzureOpenAi:DeploymentName"]
             ?? "gpt-4o";
 
-        builder.Services.AddHttpClient<ICategorizationService, AzureOpenAiCategorizationService>(client =>
+        // QuestionsDeploymentName moves step-6 question generation alone onto a reasoning model
+        // (gpt-5, issue #783); category suggestion stays on TextDeploymentName. Blank (the Key
+        // Vault secret always exists, empty when unset) keeps questions on gpt-4o, as before.
+        var questionsDeploymentName = builder.Configuration["AzureOpenAi:QuestionsDeploymentName"];
+        var questionsOnOwnDeployment = !string.IsNullOrWhiteSpace(questionsDeploymentName);
+        var questionsOptions = Microsoft.Extensions.Options.Options.Create(new AzureOpenAiQuestionsOptions
         {
-            var baseUrl = openAiEndpoint.TrimEnd('/') + $"/openai/deployments/{categorizationDeploymentName}/";
-            client.BaseAddress = new Uri(baseUrl);
+            UseReasoningModelRequest = questionsOnOwnDeployment,
+            ReasoningEffort = builder.Configuration["AzureOpenAi:QuestionsReasoningEffort"]
+                ?? AzureOpenAiQuestionsOptions.DefaultReasoningEffort,
+        });
+
+        void ConfigureOpenAiClient(HttpClient client, string deploymentName)
+        {
+            client.BaseAddress = new Uri(openAiEndpoint.TrimEnd('/') + $"/openai/deployments/{deploymentName}/");
             if (!string.IsNullOrWhiteSpace(openAiApiKey))
             {
                 client.DefaultRequestHeaders.Add("api-key", openAiApiKey);
             }
-        })
+        }
+
+        if (questionsOnOwnDeployment)
+        {
+            builder.Services.AddHttpClient("AzureOpenAiQuestions", client => ConfigureOpenAiClient(client, questionsDeploymentName!))
+            .AddStandardResilienceHandler(options =>
+            {
+                // On the customer's path at step 6: one retry, and a total budget that hands the
+                // customer the question bank after 15 s rather than the text client's 30 s.
+                // The circuit breaker's sampling window must stay at least twice the attempt timeout.
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(12);
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(15);
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+                options.Retry.MaxRetryAttempts = 1;
+            });
+        }
+
+        builder.Services.AddHttpClient("AzureOpenAiCategorization", client => ConfigureOpenAiClient(client, categorizationDeploymentName))
+        .AddTypedClient<ICategorizationService>((textClient, sp) => new AzureOpenAiCategorizationService(
+            textClient,
+            questionsOnOwnDeployment
+                ? sp.GetRequiredService<IHttpClientFactory>().CreateClient("AzureOpenAiQuestions")
+                : textClient,
+            sp.GetRequiredService<RuleBasedCategorizationService>(),
+            questionsOptions,
+            sp.GetRequiredService<ILogger<AzureOpenAiCategorizationService>>()))
         .AddStandardResilienceHandler(options =>
         {
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(15);
