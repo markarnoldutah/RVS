@@ -1,7 +1,9 @@
 @page "/sms-terms"
 
 @* Linked from the Step 2 texting disclosure (Spec A-2, issue #662). Keep in step with the
-   consent script in Docs/Guides/Advisor_Text_Consent_Script.md. *@
+   consent script in Docs/Guides/Advisor_Text_Consent_Script.md. The opening line names the
+   operator, matching Privacy and Terms (Spec A-15) — the footer no longer states identity
+   itself, so each linked policy has to lead with it, not bury it near the contact address. *@
 
 <PageTitle>Texting Terms</PageTitle>
 
@@ -11,9 +13,10 @@
             <MudText Typo="Typo.h5">RV Intake texting terms</MudText>
 
             <MudText Typo="Typo.body1">
-                RV Intake sends text messages on behalf of the RV dealership you are requesting service from.
-                We text you only about your own service request: a confirmation when you submit it, and a link
-                to start a request if you asked a service advisor to send you one.
+                RV Intake is operated by @SiteIdentity.LegalEntityName ("we", "us"). We send text messages
+                on behalf of the RV dealership you are requesting service from. We text you only about your
+                own service request: a confirmation when you submit it, and a link to start a request if you
+                asked a service advisor to send you one.
             </MudText>
 
             <MudText Typo="Typo.h6">How often</MudText>
@@ -41,9 +44,9 @@
                 else RV Intake collects and who receives it.
             </MudText>
 
-            <MudText Typo="Typo.h6">Who sends these messages</MudText>
+            <MudText Typo="Typo.h6">Questions</MudText>
             <MudText Typo="Typo.body1">
-                RV Intake is operated by @SiteIdentity.LegalEntityName. Questions about these terms:
+                Questions about these terms:
                 <MudLink Href="@SiteIdentity.ContactMailto" Typo="Typo.body1">@SiteIdentity.ContactEmail</MudLink>.
             </MudText>
 
