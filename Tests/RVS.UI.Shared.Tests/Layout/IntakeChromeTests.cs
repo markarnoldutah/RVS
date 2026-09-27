@@ -2,6 +2,7 @@ using FluentAssertions;
 using RVS.Blazor.Intake.Layout;
 using RVS.Domain.Branding;
 using RVS.Domain.DTOs;
+using RVS.Domain.Validation;
 using RVS.UI.Shared.Theme;
 
 namespace RVS.UI.Shared.Tests.Layout;
@@ -213,12 +214,19 @@ public class IntakeChromeTests
             .AccentColor.Should().BeNull();
     }
 
-    [Theory]
-    [InlineData("#FFD54F")]   // too light — the API rejects it, but the page must not trust that
-    [InlineData("blue")]
-    public void Resolve_WhenTheAccentIsNotTextSafe_ShouldIgnoreIt(string accent)
+    [Fact]
+    public void Resolve_WhenTheAccentIsTooLightForText_ShouldCarryADarkerShadeOfIt()
     {
-        IntakeChrome.Resolve(Config(accentColor: accent), Slug, highContrast: false)
+        var accent = IntakeChrome.Resolve(Config(accentColor: "#FFD54F"), Slug, highContrast: false).AccentColor;
+
+        accent.Should().Be(LocationBrandingValidator.EffectiveAccent("#FFD54F"));
+        HeaderColor.ContrastRatio(accent!, "#FFFFFF").Should().BeGreaterThanOrEqualTo(4.5);
+    }
+
+    [Fact]
+    public void Resolve_WhenTheAccentIsNotHex_ShouldIgnoreIt()
+    {
+        IntakeChrome.Resolve(Config(accentColor: "blue"), Slug, highContrast: false)
             .AccentColor.Should().BeNull();
     }
 

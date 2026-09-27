@@ -454,7 +454,8 @@
                                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Accent colour</MudText>
                                     <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
                                         Buttons, links and highlighted fields on the intake form. Leave blank for RV Intake's rust.
-                                        It is also used as link text on white, so it must be dark enough to read there.
+                                        It is also used as link text on white, so a colour too light to read there is shown to
+                                        customers a little darker — the preview shows exactly what they'll see.
                                     </MudText>
                                     <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
                                         <MudTextField T="string" @bind-Value="_form.AccentColor"
@@ -470,6 +471,13 @@
                                                @onchange="OnAccentColorPicked"
                                                aria-label="Pick an accent colour" />
                                     </MudStack>
+                                    @if (AccentAdjusted)
+                                    {
+                                        <MudAlert Severity="Severity.Info" Dense="true">
+                                            @HeaderColor.Normalize(_form.AccentColor) is too light for link text on white, so customers
+                                            will see the darker shade @AccentPreviewColor.
+                                        </MudAlert>
+                                    }
                                 </MudStack>
                                 <MudStack Spacing="1">
                                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Preview</MudText>
@@ -585,16 +593,21 @@
     private static string? ValidateAccentColor(string? value) =>
         LocationBrandingValidator.ValidateAccentColor(value).ErrorMessage;
 
-    // The preview shows Rust until the accent is valid: an accent the API would reject never reaches customers.
-    private string AccentPreviewColor => LocationBrandingValidator.IsTextSafeAccent(_form.AccentColor)
-        ? HeaderColor.Normalize(_form.AccentColor)!
-        : RvsBrand.Accent;
+    // The preview shows the accent customers will see — darkened if it is too light for text on
+    // white — and Rust while the field is blank or not yet a hex colour.
+    private string AccentPreviewColor =>
+        LocationBrandingValidator.EffectiveAccent(_form.AccentColor) ?? RvsBrand.Accent;
+
+    private bool AccentAdjusted =>
+        HeaderColor.Normalize(_form.AccentColor) is { } entered && entered != AccentPreviewColor;
 
     private string AccentPreviewButtonStyle => $"background-color:{AccentPreviewColor};color:#FFFFFF;";
 
     private string AccentPreviewLinkStyle => $"color:{AccentPreviewColor};";
 
-    private string AccentPickerValue => AccentPreviewColor.ToLowerInvariant();
+    // The picker shows what the dealer chose, not the darkened shade, so picking does not drift darker.
+    private string AccentPickerValue =>
+        (HeaderColor.Normalize(_form.AccentColor) ?? RvsBrand.Accent).ToLowerInvariant();
 
     private void OnAccentColorPicked(ChangeEventArgs e) =>
         _form.AccentColor = HeaderColor.Normalize(e.Value?.ToString());

@@ -132,9 +132,10 @@ public class LocationBrandingEmbedded
 
     /// <summary>
     /// The colour that replaces Rust on the intake form — buttons, links, focus rings, checked
-    /// controls — as <c>#RRGGBB</c>. <c>null</c> keeps Rust. It must clear 4.5:1 against white,
-    /// because it is also link text; a lighter colour is rejected rather than adjusted
-    /// (<see cref="LocationBrandingValidator.ValidateAccentColor"/>). High contrast ignores it.
+    /// controls — as <c>#RRGGBB</c>, stored as the dealer entered it. <c>null</c> keeps Rust. It is
+    /// also link text on white, so a colour under 4.5:1 there is shown to customers as the lightest
+    /// darker shade that reaches it (<see cref="LocationBrandingValidator.EffectiveAccent"/>).
+    /// High contrast ignores it.
     /// </summary>
     [JsonProperty("accentColor")]
     public string? AccentColor { get; set; }

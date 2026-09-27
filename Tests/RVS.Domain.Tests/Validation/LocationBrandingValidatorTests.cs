@@ -1,3 +1,4 @@
+using RVS.Domain.Branding;
 using FluentAssertions;
 using RVS.Domain.Entities;
 using RVS.Domain.Validation;
@@ -119,32 +120,22 @@ public class LocationBrandingValidatorTests
     }
 
     // ── Accent colour: replaces Rust for buttons, links, focus (issue #470 follow-up) ──
+    //
+    // Any hex colour is accepted. One too light to be link text on white is darkened for
+    // customers (EffectiveAccent), not rejected.
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
-    [InlineData("#A8431F")]   // text-safe Rust itself — 6.02:1
-    [InlineData("#1A5E20")]   // a dealer's dark green
-    [InlineData("#0D47A1")]   // a dealer's navy
-    [InlineData("#767676")]   // mid grey, just over 4.5:1
-    [InlineData("#C1502E")]   // logo Rust: fails AA on cream, but clears it on the white page
-    public void ValidateAccentColor_BlankOrTextSafeOnWhite_ShouldSucceed(string? color)
+    [InlineData("#A8431F")]
+    [InlineData("#0D47A1")]
+    [InlineData("#FFD54F")]   // yellow — too light for text, accepted and darkened
+    [InlineData("#90CAF9")]
+    [InlineData("#FFFFFF")]
+    public void ValidateAccentColor_BlankOrAnySixDigitHex_ShouldSucceed(string? color)
     {
         LocationBrandingValidator.ValidateAccentColor(color).IsValid.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData("#FFD54F")]   // yellow
-    [InlineData("#90CAF9")]   // light blue
-    [InlineData("#FF9800")]   // bright orange
-    [InlineData("#777777")]   // mid grey, just under 4.5:1
-    public void ValidateAccentColor_WhenTooLightForTextOnWhite_ShouldFailAndSayWhy(string color)
-    {
-        var result = LocationBrandingValidator.ValidateAccentColor(color);
-
-        result.IsValid.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("too light").And.Contain("4.5:1").And.Contain("darker");
     }
 
     [Theory]
@@ -160,20 +151,41 @@ public class LocationBrandingValidatorTests
     }
 
     [Fact]
-    public void Validate_WhenAccentColorIsTooLight_ShouldFail()
+    public void Validate_WhenAccentColorIsLight_ShouldSucceed()
     {
         var branding = new LocationBrandingEmbedded { AccentColor = "#FFD54F" };
 
-        LocationBrandingValidator.Validate(branding).IsValid.Should().BeFalse();
+        LocationBrandingValidator.Validate(branding).IsValid.Should().BeTrue();
     }
 
     [Theory]
-    [InlineData("#A8431F", true)]
-    [InlineData("#FFD54F", false)]
-    [InlineData(null, false)]
-    [InlineData("green", false)]
-    public void IsTextSafeAccent_ShouldHoldOnlyForHexThatClearsFourPointFiveOnWhite(string? color, bool expected)
+    [InlineData("#A8431F")]   // text-safe Rust itself
+    [InlineData("#0d47a1")]   // navy, lower-case
+    [InlineData("#767676")]   // mid grey, just over 4.5:1
+    public void EffectiveAccent_WhenAlreadyReadableOnWhite_ShouldBeTheSameColor(string color)
     {
-        LocationBrandingValidator.IsTextSafeAccent(color).Should().Be(expected);
+        LocationBrandingValidator.EffectiveAccent(color).Should().Be(color.ToUpperInvariant());
+    }
+
+    [Theory]
+    [InlineData("#FFD54F")]
+    [InlineData("#90CAF9")]
+    [InlineData("#FF9800")]
+    [InlineData("#FFFFFF")]
+    public void EffectiveAccent_WhenTooLightForTextOnWhite_ShouldBeADarkerShadeThatClearsFourPointFive(string color)
+    {
+        var effective = LocationBrandingValidator.EffectiveAccent(color)!;
+
+        effective.Should().NotBe(color);
+        HeaderColor.ContrastRatio(effective, "#FFFFFF").Should().BeGreaterThanOrEqualTo(LocationBrandingValidator.MinAccentContrast);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    [InlineData("green")]
+    public void EffectiveAccent_WhenBlankOrNotHex_ShouldBeNull(string? color)
+    {
+        LocationBrandingValidator.EffectiveAccent(color).Should().BeNull();
     }
 }

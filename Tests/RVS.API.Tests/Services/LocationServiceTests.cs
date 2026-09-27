@@ -537,7 +537,7 @@ public class LocationServiceTests
     [Theory]
     [InlineData("http://cdn.dealer.com/logo.png", null, null)]
     [InlineData(null, "green", null)]
-    [InlineData(null, null, "#FFD54F")]   // accent too light for links on white — rejected, not adjusted
+    [InlineData(null, null, "yellow")]    // an accent must still be #RRGGBB; a light one is darkened, not rejected
     public async Task CreateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentExceptionAndNotPersist(
         string? logoUrl, string? headerColor, string? accentColor)
     {
@@ -554,7 +554,7 @@ public class LocationServiceTests
     [Theory]
     [InlineData("http://cdn.dealer.com/logo.png", null, null)]
     [InlineData(null, "#FFF", null)]
-    [InlineData(null, null, "#90CAF9")]
+    [InlineData(null, null, "#FFF")]
     public async Task UpdateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentException(
         string? logoUrl, string? headerColor, string? accentColor)
     {
@@ -565,6 +565,24 @@ public class LocationServiceTests
 
         await act.Should().ThrowAsync<ArgumentException>();
         _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenTheAccentIsTooLightForText_ShouldStoreItAsEntered()
+    {
+        // The dealer's colour is kept; the Intake app darkens it for customers at render time.
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.Branding = new LocationBrandingEmbedded { AccentColor = "#FFD54F" };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.Branding.AccentColor.Should().Be("#FFD54F");
     }
 
     [Fact]

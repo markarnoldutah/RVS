@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using MudBlazor;
-using RVS.Domain.Branding;
 using RVS.Domain.Validation;
 
 namespace RVS.UI.Shared.Theme;
@@ -28,20 +27,18 @@ public static class IntakeTheme
     /// The Intake theme with a dealer's accent in place of Rust (<c>Spec A-16</c>, issue #470
     /// follow-up): buttons, links, focus rings and checked controls. Everything else — Ink
     /// structure, the white ground, the audited semantic colours, type, corners — stays the brand's.
-    /// The accent must already clear 4.5:1 against white, the rule the API enforces, which is also
-    /// why white is always legible on it as a button fill.
+    /// A colour too light to be link text on white is used as the lightest darker shade that
+    /// reaches 4.5:1 (<see cref="LocationBrandingValidator.EffectiveAccent"/>), which is also why
+    /// white is always legible on it as a button fill.
     /// </summary>
-    /// <param name="accentColor">A <c>#RRGGBB</c> colour that clears 4.5:1 against white.</param>
-    /// <exception cref="ArgumentException">The colour is not <c>#RRGGBB</c>, or is too light.</exception>
+    /// <param name="accentColor">A <c>#RRGGBB</c> colour.</param>
+    /// <exception cref="ArgumentException">The colour is not <c>#RRGGBB</c>.</exception>
     public static MudTheme WithAccent(string accentColor)
     {
-        var result = LocationBrandingValidator.ValidateAccentColor(accentColor);
-        if (string.IsNullOrWhiteSpace(accentColor) || !result.IsValid)
-        {
-            throw new ArgumentException(result.ErrorMessage ?? "An accent colour is required.", nameof(accentColor));
-        }
+        var effective = LocationBrandingValidator.EffectiveAccent(accentColor)
+            ?? throw new ArgumentException("Accent colour must be a hex colour in the form #RRGGBB.", nameof(accentColor));
 
-        return AccentThemes.GetOrAdd(HeaderColor.Normalize(accentColor)!, Build);
+        return AccentThemes.GetOrAdd(effective, Build);
     }
 
     private static MudTheme Build(string primary)
