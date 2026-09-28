@@ -372,17 +372,22 @@ public class PacketHtmlRendererTests
     // ── Masthead: brand, logo, customer headline, received line (issue #492) ──
 
     [Fact]
-    public void Render_ByDefault_ShouldTitleTheMastheadWithTheProductBrand()
+    public void Render_ShouldTitleTheMastheadServiceIntakePacket_NotTheBrandName()
     {
+        // Issue #794: the letterhead names the document, not the brand — "Service Intake Packet"
+        // where "RV Intake" was, in the same bold 13pt, with no doctype line under it.
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        var masthead = html[..Order(html, "section:customer")];
-        masthead.Should().Contain("RV Intake");
+        var masthead = html[Order(html, "section:unit")..Order(html, "section:customer")];
+        masthead.Should().MatchRegex(
+            @"<div class=""letterhead"" style=""font-size:13pt;font-weight:700;"">Service Intake Packet</div>");
+        masthead.Should().NotContain("RV Intake");
+        masthead.Should().NotContain("class=\"doctype\"");
         html.Should().NotContain("RV ServiceFlow");
     }
 
     [Fact]
-    public void Render_WhenBrandNameOverridden_ShouldUseItInTheMastheadAndBothFooters()
+    public void Render_WhenBrandNameOverridden_ShouldUseItInBothFootersButNotTheMasthead()
     {
         var packet = FullPacket() with
         {
@@ -391,7 +396,8 @@ public class PacketHtmlRendererTests
 
         var html = PacketHtmlRenderer.Render(packet);
 
-        html[..Order(html, "section:customer")].Should().Contain("Acme RV Group");   // masthead
+        html[Order(html, "section:unit")..Order(html, "section:customer")]
+            .Should().NotContain("Acme RV Group");                                      // masthead (#794)
         html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*Acme RV Group");            // running footer
         html[Order(html, "class=\"packet-foot\"")..].Should().Contain("Acme RV Group"); // static footer
         // The "Powered by" mark names the product whatever the brand is (issue #470); nothing
@@ -426,6 +432,31 @@ public class PacketHtmlRendererTests
             .Should().BeLessThan(masthead.IndexOf("class=\"letterhead\"", StringComparison.Ordinal));
         masthead.IndexOf("masthead-logo", StringComparison.Ordinal)
             .Should().BeLessThan(masthead.IndexOf("class=\"refbox\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Render_WhenBrandingHasALogoUrl_ShouldLeaveTwoLinesOfWhitespaceBelowTheLogoRow()
+    {
+        // Issue #794. Inline padding on the cell, not a CSS margin: this HTML is the email body,
+        // and mail clients drop the <style> block and ignore margins on tables.
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding { LogoUrl = "https://cdn.dealer.example/logo.png" },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var masthead = html[Order(html, "section:unit")..Order(html, "section:customer")];
+        masthead.Should().MatchRegex(@"<td class=""brand"" style=""[^""]*padding-bottom:10mm;");
+    }
+
+    [Fact]
+    public void Render_WhenBrandingHasNoLogo_ShouldNotAddWhitespaceBelowTheLetterhead()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var masthead = html[Order(html, "section:unit")..Order(html, "section:customer")];
+        masthead.Should().NotContain("padding-bottom:10mm");
     }
 
     // ── "Powered by RV Intake" footer (issue #470) ───────────────────────

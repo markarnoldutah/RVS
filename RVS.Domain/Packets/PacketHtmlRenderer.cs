@@ -168,13 +168,18 @@ public static class PacketHtmlRenderer
         sb.Append("<header class=\"masthead\" style=\"border-bottom:2px solid #000;padding-bottom:3mm;\">\n");
 
         // Masthead top: the dealer's logo, when the location sets one (Spec A-16, issue #470),
-        // then the brand letterhead, both top left; tracking number right.
+        // then the letterhead, both top left; tracking number right. The letterhead names the
+        // document, not the brand (issue #794) — the brand name is in the footers.
         // A presentational <table>, never flexbox: this HTML is used verbatim as the packet
         // delivery email body, and Gmail/Outlook drop `display:flex`, which would collapse
         // this row into a single stacked column. Column geometry is carried inline so it
         // survives even when the <style> block is stripped.
         sb.Append("<table role=\"presentation\" class=\"masthead-top\" width=\"100%\" style=\"width:100%;border-collapse:collapse;\">\n<tr>\n");
-        sb.Append("<td class=\"brand\" style=\"vertical-align:top;\">\n");
+        // Two lines of body text (10.5pt/1.4, about 10mm) of whitespace below the logo row
+        // (issue #794). Inline cell padding, since mail clients strip <style> and ignore table margins.
+        sb.Append("<td class=\"brand\" style=\"vertical-align:top;")
+            .Append(branding.HasLogo ? "padding-bottom:10mm;" : string.Empty)
+            .Append("\">\n");
         if (branding.HasLogo)
         {
             // Height as an attribute too: Outlook ignores CSS sizes on images. The width is left
@@ -183,8 +188,7 @@ public static class PacketHtmlRenderer
                 .Append("\" alt=\"\" height=\"45\" style=\"height:12mm;width:auto;max-width:60mm;vertical-align:middle;margin-right:4mm;border:0;\">\n");
         }
 
-        sb.Append("<div class=\"letterhead\" style=\"font-size:13pt;font-weight:700;\">").Append(Text(branding.BrandName))
-            .Append("<span class=\"doctype\" style=\"display:block;font-size:8.5pt;font-weight:400;text-transform:uppercase;letter-spacing:0.06em;\">Service intake packet</span></div>\n");
+        sb.Append("<div class=\"letterhead\" style=\"font-size:13pt;font-weight:700;\">Service Intake Packet</div>\n");
         sb.Append("</td>\n");
         sb.Append("<td class=\"refbox\" style=\"vertical-align:top;text-align:right;white-space:nowrap;\">\n");
         sb.Append("<p class=\"rvsno\" style=\"margin:0;font-size:12pt;\">Intake #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
@@ -673,13 +677,6 @@ public static class PacketHtmlRenderer
         .masthead-top .brand { vertical-align: top; }
         .masthead-logo { height: 12mm; width: auto; vertical-align: middle; margin-right: 4mm; }
         .letterhead { font-size: 13pt; font-weight: 700; }
-        .letterhead .doctype {
-          display: block;
-          font-size: 8.5pt;
-          font-weight: 400;
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-        }
         .refbox { text-align: right; white-space: nowrap; vertical-align: top; }
         .refbox .rvsno { margin: 0; font-size: 12pt; }
         .refbox .rvsno strong { font-size: 13pt; }
