@@ -1,0 +1,315 @@
+@* The in-page camera (issue #736): full screen, over the wizard. Captures stay in the page, so
+   Android never has to hand the customer to its camera app — which can cost the tab. *@
+@implements IAsyncDisposable
+
+<div class="rvs-camera" role="dialog" aria-modal="true" aria-label="Camera">
+    <video @ref="_video" class="rvs-camera__preview" autoplay muted playsinline></video>
+
+    <div class="rvs-camera__top">
+        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                       Class="rvs-camera__icon"
+                       OnClick="CloseAsync"
+                       Disabled="_busy"
+                       aria-label="Close camera" />
+        @if (_isRecording)
+        {
+            <span class="rvs-camera__timer">
+                <span class="rvs-camera__dot" aria-hidden="true"></span>
+                @FormatElapsed(_elapsedSeconds) / @FormatElapsed(MaxVideoSeconds)
+            </span>
+        }
+        else if (!string.IsNullOrWhiteSpace(Caption))
+        {
+            <span class="rvs-camera__caption">@Caption</span>
+        }
+        <span class="rvs-camera__spacer"></span>
+    </div>
+
+    @if (_failure is not null)
+    {
+        <div class="rvs-camera__failure">
+            <MudPaper Elevation="2" Class="pa-4" Style="max-width: 420px; width: 100%;">
+                <MudStack Spacing="3">
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">@_failure</MudAlert>
+                    <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
+                        <MudButton Variant="Variant.Outlined" OnClick="CloseAsync" Style="text-transform: none;">
+                            Close
+                        </MudButton>
+                        @if (OnUseNativeCamera.HasDelegate)
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                       OnClick="UseNativeCameraAsync" Style="text-transform: none;">
+                                Use phone camera
+                            </MudButton>
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_message ?? Message))
+    {
+        var isError = _message is not null || MessageIsError;
+        <div class="rvs-camera__message" role="status">
+            <MudIcon Icon="@(isError ? Icons.Material.Filled.ErrorOutline : Icons.Material.Filled.CheckCircle)"
+                     Size="Size.Small" Class="rvs-camera__message-icon" />
+            @(_message ?? Message)
+        </div>
+    }
+
+    <div class="rvs-camera__bottom">
+        <div class="rvs-camera__modes">
+            @if (AllowVideo)
+            {
+                <button type="button"
+                        class="@ModeClass(CameraMode.Photo)"
+                        aria-pressed="@(_mode == CameraMode.Photo ? "true" : "false")"
+                        disabled="@(_busy || _isRecording)"
+                        @onclick="() => SwitchModeAsync(CameraMode.Photo)">
+                    Photo
+                </button>
+                <button type="button"
+                        class="@ModeClass(CameraMode.Video)"
+                        aria-pressed="@(_mode == CameraMode.Video ? "true" : "false")"
+                        disabled="@(_busy || _isRecording)"
+                        @onclick="() => SwitchModeAsync(CameraMode.Video)">
+                    Video
+                </button>
+            }
+        </div>
+
+        <button type="button"
+                class="@ShutterClass"
+                disabled="@(!_started || _busy || NoRoomLeft)"
+                aria-label="@ShutterLabel"
+                @onclick="ShutterAsync"></button>
+
+        <div class="rvs-camera__done">
+            @if (!string.IsNullOrWhiteSpace(DoneText))
+            {
+                <MudButton Variant="Variant.Text" Class="rvs-camera__done-button"
+                           OnClick="CloseAsync" Disabled="@(_busy || _isRecording)"
+                           Style="text-transform: none;">
+                    @DoneText
+                </MudButton>
+            }
+        </div>
+    </div>
+
+    <div aria-live="polite" class="rvs-camera__sr-only">@_announcement</div>
+</div>
+
+@code {
+    /// <summary>Whether the customer can switch to video. Off for the VIN photo.</summary>
+    [Parameter] public bool AllowVideo { get; set; }
+
+    /// <summary>Longest clip; recording stops itself here.</summary>
+    [Parameter] public int MaxVideoSeconds { get; set; } = 60;
+
+    /// <summary>A line over the preview, e.g. what to point the camera at.</summary>
+    [Parameter] public string? Caption { get; set; }
+
+    /// <summary>A line from the host about the last capture — "Photo added", or why it was not.</summary>
+    [Parameter] public string? Message { get; set; }
+
+    /// <summary>Whether <see cref="Message"/> reports a problem, which changes its icon.</summary>
+    [Parameter] public bool MessageIsError { get; set; }
+
+    /// <summary>How many more captures the host will take; <c>null</c> for no limit. At zero the shutter is disabled.</summary>
+    [Parameter] public int? RemainingCaptures { get; set; }
+
+    /// <summary>Label of the button that closes the camera when the customer is finished; none when empty.</summary>
+    [Parameter] public string? DoneText { get; set; }
+
+    [Parameter] public EventCallback<CapturedMedia> OnCaptured { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Offered when the camera will not start; the host falls back to the phone's camera app.</summary>
+    [Parameter] public EventCallback OnUseNativeCamera { get; set; }
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private ElementReference _video;
+    private CameraInterop _camera = default!;
+    private RecordingTimer? _timer;
+    private CameraMode _mode = CameraMode.Photo;
+    private bool _started;
+    private bool _busy;
+    private bool _isRecording;
+    private int _elapsedSeconds;
+    private string? _failure;
+    private string? _message;
+    private string _announcement = string.Empty;
+
+    private bool NoRoomLeft => RemainingCaptures is <= 0 && !_isRecording;
+
+    private string ShutterLabel => _mode switch
+    {
+        CameraMode.Video when _isRecording => "Stop recording",
+        CameraMode.Video => "Start recording",
+        _ => "Take photo"
+    };
+
+    private string ShutterClass =>
+        "rvs-camera__shutter"
+        + (_mode == CameraMode.Video ? " rvs-camera__shutter--video" : "")
+        + (_isRecording ? " rvs-camera__shutter--recording" : "");
+
+    private string ModeClass(CameraMode mode) =>
+        "rvs-camera__mode" + (_mode == mode ? " rvs-camera__mode--active" : "");
+
+    protected override void OnInitialized()
+    {
+        _camera = new CameraInterop(JS);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await StartAsync(CameraMode.Photo);
+        }
+    }
+
+    private async Task StartAsync(CameraMode mode)
+    {
+        _busy = true;
+        _started = false;
+        StateHasChanged();
+
+        var result = await _camera.StartAsync(_video, mode);
+
+        _mode = mode;
+        _started = result == CameraStartResult.Started;
+        _failure = CameraCapture.StartFailureMessage(result);
+        _busy = false;
+        StateHasChanged();
+    }
+
+    private async Task SwitchModeAsync(CameraMode mode)
+    {
+        if (mode == _mode || _busy || _isRecording) return;
+
+        _message = null;
+        // Video needs the microphone as well, and a lower resolution; a fresh stream gives both.
+        await StartAsync(mode);
+    }
+
+    private async Task ShutterAsync()
+    {
+        if (!_started || _busy) return;
+
+        _message = null;
+
+        if (_mode == CameraMode.Photo)
+        {
+            await TakePhotoAsync();
+        }
+        else if (_isRecording)
+        {
+            await StopRecordingAsync();
+        }
+        else
+        {
+            await StartRecordingAsync();
+        }
+    }
+
+    private async Task TakePhotoAsync()
+    {
+        _busy = true;
+        StateHasChanged();
+
+        var photo = await _camera.TakePhotoAsync(_video);
+
+        _busy = false;
+        if (photo is null)
+        {
+            _message = "Couldn't take the photo. Please try again.";
+            return;
+        }
+
+        _announcement = "Photo taken";
+        await OnCaptured.InvokeAsync(photo);
+    }
+
+    private async Task StartRecordingAsync()
+    {
+        if (!await _camera.StartRecordingAsync())
+        {
+            _message = "Couldn't start recording. Please try again.";
+            return;
+        }
+
+        _isRecording = true;
+        _elapsedSeconds = 0;
+        _announcement = "Recording";
+        _timer?.Dispose();
+        _timer = new RecordingTimer(
+            MaxVideoSeconds,
+            onTick: () =>
+            {
+                _elapsedSeconds = _timer?.ElapsedSeconds ?? 0;
+                _ = InvokeAsync(StateHasChanged);
+            },
+            onAutoStop: () => InvokeAsync(StopRecordingAsync));
+        _timer.Start();
+    }
+
+    private async Task StopRecordingAsync()
+    {
+        if (!_isRecording) return;
+
+        _timer?.Dispose();
+        _timer = null;
+        _isRecording = false;
+        _busy = true;
+        StateHasChanged();
+
+        var clip = await _camera.StopRecordingAsync();
+
+        _busy = false;
+        if (clip is null)
+        {
+            _message = "Nothing was recorded. Please try again.";
+            StateHasChanged();
+            return;
+        }
+
+        _announcement = "Recording stopped";
+        await OnCaptured.InvokeAsync(clip);
+        StateHasChanged();
+    }
+
+    private async Task CloseAsync()
+    {
+        await StopCameraAsync();
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task UseNativeCameraAsync()
+    {
+        await StopCameraAsync();
+        await OnUseNativeCamera.InvokeAsync();
+    }
+
+    private async Task StopCameraAsync()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        _isRecording = false;
+        _started = false;
+        await _camera.StopAsync();
+    }
+
+    private static string FormatElapsed(int totalSeconds)
+    {
+        var elapsed = TimeSpan.FromSeconds(totalSeconds);
+        return $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:D2}";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopCameraAsync();
+    }
+}

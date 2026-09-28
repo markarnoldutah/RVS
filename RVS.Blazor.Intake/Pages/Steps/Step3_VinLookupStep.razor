@@ -77,7 +77,16 @@
             </MudStack>
         </MudPaper>
 
-        @* Hidden camera input for native capture on mobile devices *@
+        @* Issue #736: the VIN photo is taken in the page. The phone's camera app, reached through
+           this input, is only the fallback when the in-page camera will not start. *@
+        @if (_cameraOpen)
+        {
+            <CameraOverlay Caption="Fit the VIN plate or sticker in the frame"
+                           OnCaptured="HandleInPageCapture"
+                           OnClose="() => _cameraOpen = false"
+                           OnUseNativeCamera="UseNativeCamera" />
+        }
+
         <InputFile @ref="_cameraInput"
                    accept="image/*"
                    capture="environment"
@@ -177,7 +186,6 @@
 
 @implements IDisposable
 @code {
-    private const long MaxCameraCaptureSizeBytes = 10 * 1024 * 1024;
     private const double VinAutoFillThreshold = 0.7;
     private const double VinAutoLookupThreshold = 0.9;
 
@@ -194,6 +202,7 @@
     private MudForm _form = default!;
     private bool _submitted;
     private InputFile? _cameraInput;
+    private bool _cameraOpen;
     private string? _capturedImageUrl;
     private bool _isLookingUp;
     private bool _isExtracting;
@@ -256,12 +265,33 @@
         return parts.Count > 0 ? string.Join(" ", parts) : asset.AssetId;
     }
 
-    private async Task TriggerCameraCapture()
+    private void TriggerCameraCapture()
     {
+        _cameraOpen = true;
+    }
+
+    /// <summary>The in-page camera would not start: fall back to the phone's camera app.</summary>
+    private async Task UseNativeCamera()
+    {
+        _cameraOpen = false;
         if (_cameraInput?.Element is not null)
         {
             await JsRuntime.InvokeVoidAsync("rvs_triggerClick", _cameraInput.Element);
         }
+    }
+
+    private async Task HandleInPageCapture(CapturedMedia media)
+    {
+        // One photo is all the VIN needs; the camera closes, and the extraction shows under the field.
+        _cameraOpen = false;
+        if (media.Bytes.Length > VinPhoto.MaxUploadBytes)
+        {
+            _extractionMessage = "We couldn't use that photo. Please try again, or enter the VIN manually.";
+            _extractionSeverity = Severity.Warning;
+            return;
+        }
+
+        await ExtractVinFromPhotoAsync(new VinPhotoImage(media.Bytes, media.ContentType));
     }
 
     private async Task ToggleVinRecording()
@@ -367,22 +397,38 @@
         if (file is null) return;
 
         _extractionMessage = null;
+        _capturedImageUrl = null;
         _isExtracting = true;
         StateHasChanged();
 
-        var buffer = new byte[file.Size];
-        await using var stream = file.OpenReadStream(maxAllowedSize: MaxCameraCaptureSizeBytes);
-        _ = await stream.ReadAsync(buffer);
-        var base64 = Convert.ToBase64String(buffer);
-        _capturedImageUrl = $"data:{file.ContentType};base64,{base64}";
+        // Issue #736: shrunk in the browser and read whole. A full-size Android photo was over the
+        // API's limit, and a single read took only its first chunk.
+        var photo = await VinPhoto.ReadAsync(file, VinPhoto.ResizeInBrowser);
+        if (photo is null)
+        {
+            _isExtracting = false;
+            _extractionMessage = "We couldn't use that photo. Please try again, or enter the VIN manually.";
+            _extractionSeverity = Severity.Warning;
+            StateHasChanged();
+            return;
+        }
+
+        await ExtractVinFromPhotoAsync(photo);
+    }
+
+    private async Task ExtractVinFromPhotoAsync(VinPhotoImage photo)
+    {
+        _extractionMessage = null;
+        _isExtracting = true;
+        _capturedImageUrl = photo.DataUrl;
         StateHasChanged();
 
         try
         {
             var request = new VinExtractionRequestDto
             {
-                ImageBase64 = base64,
-                ContentType = file.ContentType
+                ImageBase64 = photo.Base64,
+                ContentType = photo.ContentType
             };
 
             var response = await IntakeApi.ExtractVinFromImageAsync(State.Slug, request);

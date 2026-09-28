@@ -94,6 +94,8 @@
                                 <MudTextField Value="@(GetResponse(questionIndex)?.FreeTextResponse ?? "")"
                                               ValueChanged="(string value) => SetFreeText(questionIndex, value)"
                                               T="string"
+                                              Immediate="true"
+                                              DebounceInterval="300"
                                               Placeholder="Additional details..."
                                               Lines="2"
                                               Variant="Variant.Outlined"
@@ -135,15 +137,8 @@
             var request = State.BuildCreateRequest();
             var response = await IntakeApi.GetDiagnosticQuestionsAsync(State.Slug, request);
 
-            State.DiagnosticQuestions = response.Questions;
-            State.SmartSuggestion = response.SmartSuggestion;
-
-            State.DiagnosticResponses = response.Questions.Select(q => new DiagnosticResponseDto
-            {
-                QuestionText = q.QuestionText,
-                SelectedOptions = [],
-                FreeTextResponse = null
-            }).ToList();
+            State.ApplyDiagnosticQuestions(response);
+            await State.PersistAsync();
         }
         catch (Exception)
         {
@@ -160,7 +155,7 @@
         return index < State.DiagnosticResponses.Count ? State.DiagnosticResponses[index] : null;
     }
 
-    private void ToggleOption(int questionIndex, string option)
+    private async Task ToggleOption(int questionIndex, string option)
     {
         if (questionIndex >= State.DiagnosticResponses.Count) return;
 
@@ -174,14 +169,18 @@
 
         State.DiagnosticResponses[questionIndex] = response with { SelectedOptions = options };
         StateHasChanged();
+
+        // Issue #736: saved as given, not on Continue — Back, or a reload Android forces, must not lose it.
+        await State.PersistAsync();
     }
 
-    private void SetFreeText(int questionIndex, string? value)
+    private async Task SetFreeText(int questionIndex, string? value)
     {
         if (questionIndex >= State.DiagnosticResponses.Count) return;
 
         var response = State.DiagnosticResponses[questionIndex];
         State.DiagnosticResponses[questionIndex] = response with { FreeTextResponse = value };
+        await State.PersistAsync();
     }
 
     private async Task HandleNext()

@@ -1493,4 +1493,92 @@ public class IntakeWizardStateTests
 
         state.MaxStepReached.Should().Be(1);
     }
+
+    private static DiagnosticQuestionsResponseDto TwoDiagnosticQuestions() => new()
+    {
+        Questions =
+        [
+            new DiagnosticQuestionDto { QuestionText = "Is the slide-out moving at all?", Options = ["Yes", "No"] },
+            new DiagnosticQuestionDto { QuestionText = "Do you hear the motor?", Options = ["Yes", "No"], AllowFreeText = true }
+        ],
+        SmartSuggestion = "Check the slide-out fuse."
+    };
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepTheDiagnosticQuestionsAcrossAReload()
+    {
+        // Issue #736: Android can reload the page — returning from the camera on Step 7, for one.
+        // Without the questions, Step 6 regenerated them and blanked every answer the customer gave.
+        var js = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(js) { Slug = "acme-rv" };
+        before.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+        before.DiagnosticResponses[0] = before.DiagnosticResponses[0] with { SelectedOptions = ["No"] };
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(js);
+        await after.RestoreAsync();
+
+        after.DiagnosticQuestions.Select(q => q.QuestionText).Should().Equal(
+            "Is the slide-out moving at all?", "Do you hear the motor?");
+        after.DiagnosticQuestions[1].AllowFreeText.Should().BeTrue();
+        after.DiagnosticResponses[0].SelectedOptions.Should().Equal("No");
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_ShouldSetQuestionsSuggestionAndOneBlankResponsePerQuestion()
+    {
+        var state = CreateState();
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Should().HaveCount(2);
+        state.SmartSuggestion.Should().Be("Check the slide-out fuse.");
+        state.DiagnosticResponses.Select(r => r.QuestionText).Should().Equal(
+            "Is the slide-out moving at all?", "Do you hear the motor?");
+        state.DiagnosticResponses.Should().OnlyContain(r => r.SelectedOptions.Count == 0 && r.FreeTextResponse == null);
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_ShouldKeepAnswersToQuestionsAskedAgain()
+    {
+        // A session saved by the previous build carries answers but no questions, so Step 6 asks
+        // for them again. An answer to a question that comes back must not be thrown away.
+        var state = CreateState();
+        state.DiagnosticResponses =
+        [
+            new DiagnosticResponseDto { QuestionText = "Do you hear the motor?", SelectedOptions = ["Yes"], FreeTextResponse = "A click" },
+            new DiagnosticResponseDto { QuestionText = "A question not asked this time", SelectedOptions = ["No"] }
+        ];
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticResponses.Should().HaveCount(2);
+        state.DiagnosticResponses[0].SelectedOptions.Should().BeEmpty();
+        state.DiagnosticResponses[1].SelectedOptions.Should().Equal("Yes");
+        state.DiagnosticResponses[1].FreeTextResponse.Should().Be("A click");
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WithNullResponse_ShouldThrow()
+    {
+        var act = () => CreateState().ApplyDiagnosticQuestions(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetTheDiagnosticQuestions()
+    {
+        var js = new InMemoryWebStorageJSRuntime();
+        var state = new IntakeWizardState(js) { Slug = "acme-rv" };
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+        await state.PersistAsync();
+
+        await state.ClearAsync();
+        var restored = new IntakeWizardState(js);
+        await restored.RestoreAsync();
+
+        state.DiagnosticQuestions.Should().BeEmpty();
+        restored.DiagnosticQuestions.Should().BeEmpty();
+    }
 }
