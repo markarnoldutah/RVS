@@ -214,10 +214,10 @@ Create the invites from the manager app (3.6) first.
 Open the packet inline in the email body, not the PDF, and check from top to bottom:
 
 - [ ] A small action bar above the masthead offers **In Progress**, **Waiting on Parts** and **Completed** as filled Rust buttons, with an outlined **Open Manager** button on the line below (see 3.3 for what they do).
-- [ ] The letterhead reads **Service Intake Packet**, after the location's logo when it has one — not **RV Intake**. The top right shows `Intake #` with the reference code (the first hyphen-separated segment of the request id, upper-cased) and the Received time.
+- [ ] The location's logo, when it has one, is top left. The top right shows the letterhead **Service Intake Packet** (not **RV Intake**), then `Intake #` with the reference code (the first hyphen-separated segment of the request id, upper-cased), then the Received time.
 - [ ] The Received time is in the location's own time zone with a short zone name on a 12-hour clock (e.g. `2026-09-24 8:30 AM MDT`). For a location with no time zone set, it shows `… UTC`.
 - [ ] One bold title line reads `Last, First : Year Make Model`.
-- [ ] A three-column Customer / Location / Unit band shows name, phone, email and preferred contact; the location; and year, manufacturer and `Serial# (VIN)`. With no VIN, only the Serial# line is dropped.
+- [ ] Customer, Location and Unit are stacked top to bottom (in the PDF, three columns side by side), showing name, phone, email and preferred contact; the location; and year, manufacturer and `Serial# (VIN)`. With no VIN, only the Serial# line is dropped.
 - [ ] Issue category is shown and matches what was chosen at intake.
 - [ ] An **Issue** section (the tidied-up description) appears only when it adds something the complaint does not already say. The same words never appear under two headings.
 - [ ] A **Preliminary assessment** section is tagged **AI-generated** and says it is advisory. When the model offers one, it has a probable cause, a confidence (high / medium / low), **possible fixes** (plural, most likely first, never one "recommended" fix) and likely parts as generic names.
@@ -228,7 +228,8 @@ Open the packet inline in the email body, not the PDF, and check from top to bot
 - [ ] The diagnostic Q&A shows the actual questions and answers from intake.
 - [ ] The reported issue and the diagnostic Q&A are both in a typewriter (Courier) face.
 - [ ] No photo file names are listed and no images are embedded: the photos are the email's attachments. A **Photos** section appears only for a video link or the "Some images can only be shown in the manager app" note.
-- [ ] One click in the **Copy & paste into your DMS** box selects the whole block, fenced by `----- RV INTAKE -----`. This works in Apple Mail and a browser; some webmail clients ignore it and need a click-drag.
+- [ ] The footer's `Intake #` line has the "Powered by" RV Intake mark on its right, and nothing else names the brand there.
+- [ ] One click in the **Copy & Paste Ready** box selects the whole block, fenced by `----- RV INTAKE -----`. This works in Apple Mail and a browser; some webmail clients ignore it and need a click-drag.
 - [ ] A paste block is present (2.5).
 - [ ] A status link and QR code are present near the end.
 - [ ] The packet **never** shows pricing, quotes, labor rates or any other customer's data.

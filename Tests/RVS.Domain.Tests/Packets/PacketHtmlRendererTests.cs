@@ -387,7 +387,21 @@ public class PacketHtmlRendererTests
     }
 
     [Fact]
-    public void Render_WhenBrandNameOverridden_ShouldUseItInBothFootersButNotTheMasthead()
+    public void Render_TheLetterhead_ShouldSitInTheRefboxAboveTheIntakeNumber()
+    {
+        // Issue #800: the letterhead moved from under the logo, top left, to the right-hand
+        // refbox, directly above the Intake # line.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var refbox = html[Order(html, "class=\"refbox\"")..Order(html, "section:customer")];
+        refbox.Should().Contain("class=\"letterhead\"");
+        Order(refbox, "class=\"letterhead\"").Should().BeLessThan(Order(refbox, "Intake #:"));
+        html[Order(html, "class=\"brand\"")..Order(html, "class=\"refbox\"")]
+            .Should().NotContain("Service Intake Packet");
+    }
+
+    [Fact]
+    public void Render_WhenBrandNameOverridden_ShouldUseItInTheRunningFooterOnly()
     {
         var packet = FullPacket() with
         {
@@ -397,9 +411,9 @@ public class PacketHtmlRendererTests
         var html = PacketHtmlRenderer.Render(packet);
 
         html[Order(html, "section:unit")..Order(html, "section:customer")]
-            .Should().NotContain("Acme RV Group");                                      // masthead (#794)
-        html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*Acme RV Group");            // running footer
-        html[Order(html, "class=\"packet-foot\"")..].Should().Contain("Acme RV Group"); // static footer
+            .Should().NotContain("Acme RV Group");                                         // masthead (#794)
+        html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*Acme RV Group");               // running footer
+        html[Order(html, "class=\"packet-foot\"")..].Should().NotContain("Acme RV Group"); // static footer (#800)
         // The "Powered by" mark names the product whatever the brand is (issue #470); nothing
         // before it does.
         html[..Order(html, "class=\"powered-by\"")].Should().NotContain("RV Intake");
@@ -462,13 +476,19 @@ public class PacketHtmlRendererTests
     // ── "Powered by RV Intake" footer (issue #470) ───────────────────────
 
     [Fact]
-    public void Render_ShouldCenterAPoweredByLineInTheStaticFooter()
+    public void Render_ShouldPutThePoweredByMarkOnTheRightOfTheStaticFooterLine()
     {
+        // Issue #800: the mark replaced "RV Intake — service intake packet" on the right of the
+        // Intake # line, and is no longer a separate centred row.
         var html = PacketHtmlRenderer.Render(FullPacket());
 
         var footer = html[Order(html, "class=\"packet-foot\"")..];
-        footer.Should().MatchRegex(@"<td[^>]*class=""powered-by""[^>]*text-align:center");
-        footer[Order(footer, "class=\"powered-by\"")..].Should().Contain("Powered by");
+        var firstRow = footer[..Order(footer, "</tr>")];
+        firstRow.Should().Contain("Intake #A1B2C3D4");
+        firstRow.Should().MatchRegex(@"<td[^>]*class=""powered-by""[^>]*text-align:right");
+        firstRow[Order(firstRow, "class=\"powered-by\"")..].Should().Contain("Powered by");
+        footer.Should().NotContain("service intake packet");
+        footer.Should().NotContain("text-align:center");
     }
 
     [Fact]
@@ -545,7 +565,7 @@ public class PacketHtmlRendererTests
     }
 
     [Fact]
-    public void Render_ShouldRenderTheThreeColumnCustomerLocationUnitBand()
+    public void Render_ShouldRenderTheCustomerLocationUnitBand()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
@@ -553,6 +573,22 @@ public class PacketHtmlRendererTests
         html.Should().Contain("class=\"col customer\"")
             .And.Contain("class=\"col origin\"")
             .And.Contain("class=\"col unit\"");
+    }
+
+    [Fact]
+    public void Render_TheIdentityBand_ShouldStackCustomerLocationUnitVertically()
+    {
+        // Issue #800: Customer, Location and Unit read top to bottom at every width — each in
+        // its own table row, full width — rather than as three side-by-side columns.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var band = html[Order(html, "class=\"idcols\"")..Order(html, "</header>")];
+        Regex.Matches(band, "<tr>").Count.Should().Be(3);
+        band.Should().MatchRegex(@"<td class=""col customer""[^>]*style=""[^""]*width:100%");
+        band.Should().MatchRegex(@"<td class=""col origin""[^>]*style=""[^""]*width:100%");
+        band.Should().MatchRegex(@"<td class=""col unit""[^>]*style=""[^""]*width:100%");
+        Order(band, "class=\"col customer\"").Should().BeLessThan(Order(band, "class=\"col origin\""));
+        Order(band, "class=\"col origin\"").Should().BeLessThan(Order(band, "class=\"col unit\""));
     }
 
     // ── Email-client-safe layout ─────────────────────────────────────────────
@@ -574,13 +610,13 @@ public class PacketHtmlRendererTests
     }
 
     [Fact]
-    public void Render_TheThreeColumnBand_ShouldBeAPresentationalTable_WithInlineColumnGeometry()
+    public void Render_TheIdentityBand_ShouldBeAPresentationalTable_WithInlineCellGeometry()
     {
         var html = PacketHtmlRenderer.Render(FullPacket());
 
         html.Should().MatchRegex(@"<table[^>]*role=""presentation""[^>]*class=""idcols""");
-        // Each column is a <td> that carries width + top alignment inline, so the band
-        // still reads as three columns when the <style> block is discarded.
+        // Each cell carries width + top alignment inline, so the band keeps its shape when the
+        // <style> block is discarded.
         html.Should().MatchRegex(@"<td class=""col customer""[^>]*style=""[^""]*vertical-align:\s*top");
         html.Should().MatchRegex(@"<td class=""col customer""[^>]*style=""[^""]*width:");
         html.Should().MatchRegex(@"<td class=""col origin""[^>]*style=""[^""]*vertical-align:\s*top");
@@ -606,27 +642,15 @@ public class PacketHtmlRendererTests
         html.Should().MatchRegex(@"<table[^>]*role=""presentation""[^>]*class=""packet-foot""");
     }
 
-    // ── Mobile: the identity band stacks (issue #780) ───────────────────────
-    //
-    // Three columns at phone width squeeze each to a few words a line. On a narrow screen the
-    // band's cells become full-width blocks and read top to bottom. The inline geometry stays
-    // (it is the stripped-<style> fallback), so the media query must override it with
-    // !important; it changes layout only, never the font or its size.
-
     [Fact]
-    public void Render_TheThreeColumnBand_ShouldStackVerticallyOnANarrowScreen()
+    public void Render_TheIdentityBand_ShouldNeedNoNarrowScreenRule()
     {
+        // The band stacks at every width since issue #800, so the #780 phone-width override
+        // that stacked three columns is gone.
         var html = PacketHtmlRenderer.Render(FullPacket());
 
-        var query = Regex.Match(
-            html, @"@media\s+screen\s+and\s+\(max-width:\s*600px\)\s*\{(?<body>(?:[^{}]*\{[^}]*\})*)[^{}]*\}");
-        query.Success.Should().BeTrue("the band needs a narrow-screen rule");
-        var body = query.Groups["body"].Value;
-
-        body.Should().MatchRegex(@"\.idcols[^{]*\.col[^{]*\{[^}]*display:\s*block\s*!important");
-        body.Should().MatchRegex(@"\.idcols[^{]*\.col[^{]*\{[^}]*width:\s*100%\s*!important");
-        body.Should().MatchRegex(@"\.idcols[^{]*\.col[^{]*\{[^}]*padding-right:\s*0\s*!important");
-        body.Should().NotContain("font", "stacking changes the layout, not the type");
+        html.Should().NotContain("max-width: 600px");
+        html.Should().NotContain("!important");
     }
 
     // ── AI disclaimer in the footer, no per-section badges (issue #780) ─────
@@ -1342,6 +1366,17 @@ public class PacketHtmlRendererTests
         block.Should().Contain("<pre");
         block.Should().Contain("ELECTRICAL");
         block.Should().MatchRegex(@"Generator quits after ten minutes\.\r?\nhttps://rvintake\.com/status/abc123");
+    }
+
+    [Fact]
+    public void Render_ThePasteBlock_ShouldBeHeadedCopyAndPasteReady()
+    {
+        // Issue #800 — "Copy & paste into your DMS" until then.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var block = html[Order(html, "section:paste-block")..Order(html, "section:status-link")];
+        block.Should().Contain("<h2>Copy &amp; Paste Ready</h2>");
+        html.Should().NotContain("into your DMS");
     }
 
     [Fact]

@@ -309,7 +309,7 @@ internal sealed record PacketPdfLayout
         return new PacketPdfLayoutSection
         {
             Id = "paste-block",
-            Heading = "Copy & paste into your DMS",
+            Heading = "Copy & Paste Ready",
             Verbatim = pasteBlock,
         };
     }

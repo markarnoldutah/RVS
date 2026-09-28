@@ -921,6 +921,13 @@ public class PacketPdfRendererTests
     }
 
     [Fact]
+    public void Build_ThePasteBlock_ShouldBeHeadedCopyAndPasteReady()
+    {
+        // Issue #800 — "Copy & paste into your DMS" until then; matches the HTML heading.
+        Section(FullPacket(), "paste-block").Heading.Should().Be("Copy & Paste Ready");
+    }
+
+    [Fact]
     public void Build_WhenPasteBlockAbsent_ShouldOmitTheSection()
     {
         Layout(MinimalPacket()).Sections.Should().NotContain(s => s.Id == "paste-block");

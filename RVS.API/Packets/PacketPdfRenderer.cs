@@ -55,7 +55,7 @@ public static class PacketPdfRenderer
     private const uint PhotoMaxWidthPx = 900;
 
     /// <summary>Sections 1–3 (<c>Spec B-2</c>) are painted together as the IDS-style
-    /// masthead — a letterhead + top-right tracking number, then a three-column
+    /// masthead — a logo, the letterhead over a top-right tracking number, then a three-column
     /// Customer / Location / Unit band — rather than as three stacked blocks.</summary>
     private static readonly string[] MastheadSectionIds = ["unit", "customer", "origin"];
 
@@ -187,24 +187,22 @@ public static class PacketPdfRenderer
         {
             col.Spacing(3f);
 
-            // The dealer's logo, when the location sets one (Spec A-16, issue #470), and the
-            // letterhead top left; tracking number right, mirroring IDS. The letterhead names the
-            // document, not the brand (issue #794) — the brand name is in the footer.
+            // The dealer's logo, when the location sets one (Spec A-16, issue #470), top left;
+            // the letterhead above the tracking number, right (issue #800), mirroring IDS. The
+            // letterhead names the document, not the brand (issue #794).
             col.Item().Row(row =>
             {
-                row.RelativeItem().Row(brand =>
+                row.RelativeItem().Element(brand =>
                 {
-                    brand.Spacing(8f);
                     if (logo is not null)
                     {
-                        brand.ConstantItem(LogoWidthPt(logo)).Height(LogoHeightPt).AlignMiddle().Image(logo).FitArea();
+                        brand.AlignLeft().Width(LogoWidthPt(logo)).Height(LogoHeightPt).Image(logo).FitArea();
                     }
-
-                    brand.RelativeItem().Text("Service Intake Packet").Bold().FontSize(13f);
                 });
 
                 row.ConstantItem(170f).Column(right =>
                 {
+                    right.Item().AlignRight().Text("Service Intake Packet").Bold().FontSize(13f);
                     right.Item().AlignRight().Text(t =>
                     {
                         t.Span($"{PacketPdfLayout.ReferenceLabel}: ").FontSize(11f);
