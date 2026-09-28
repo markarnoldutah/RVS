@@ -39,6 +39,21 @@ public static class PacketPdfRenderer
     /// half-page width a portrait phone photo ran ~120 mm tall and only four fit.</summary>
     private const float PhotoHeightPt = 175f;
 
+    /// <summary>Space between the photo grid's two columns and between its rows, in points.</summary>
+    private const float PhotoGutterPt = 8f;
+
+    /// <summary>Width of each photo cell, in points: half the content width, less the gutter.</summary>
+    private const float PhotoCellWidthPt = ((PageWidthMm - 2 * PageMarginMm) / 25.4f * 72f - PhotoGutterPt) / 2f;
+
+    /// <summary>
+    /// Every photo is cropped to the cell's shape so the grid is uniform (issue #736); fitted
+    /// whole, a portrait phone photo was a narrow strip beside a wide one.
+    /// </summary>
+    private const double PhotoCellAspect = PhotoCellWidthPt / PhotoHeightPt;
+
+    /// <summary>Widest a cropped photo is kept, in pixels — about 250 dpi across the cell.</summary>
+    private const uint PhotoMaxWidthPx = 900;
+
     /// <summary>Sections 1–3 (<c>Spec B-2</c>) are painted together as the IDS-style
     /// masthead — a letterhead + top-right tracking number, then a three-column
     /// Customer / Location / Unit band — rather than as three stacked blocks.</summary>
@@ -437,13 +452,13 @@ public static class PacketPdfRenderer
     {
         container.Column(grid =>
         {
-            grid.Spacing(8f);
+            grid.Spacing(PhotoGutterPt);
 
             foreach (var pair in photos.Chunk(2))
             {
                 grid.Item().Row(row =>
                 {
-                    row.Spacing(8f);
+                    row.Spacing(PhotoGutterPt);
 
                     foreach (var photo in pair)
                     {
@@ -451,28 +466,30 @@ public static class PacketPdfRenderer
                         {
                             cell.Spacing(2f);
 
-                            if (images.TryGetValue(photo.Url, out var bytes) && IsDecodableRaster(bytes))
+                            // Every cell is the same box, whatever fills it (issue #736).
+                            var box = cell.Item().Height(PhotoHeightPt);
+                            var cropped = images.TryGetValue(photo.Url, out var bytes) && IsDecodableRaster(bytes)
+                                ? PacketPhotoCrop.ToAspect(bytes, PhotoCellAspect, PhotoMaxWidthPx)
+                                : null;
+
+                            if (cropped is not null)
                             {
-                                cell.Item().Height(PhotoHeightPt).AlignCenter().AlignMiddle()
-                                    .Image(bytes).FitArea();
+                                box.Image(cropped).FitArea();
                             }
                             else if (photo.IsVideo)
                             {
-                                // Videos never render as a raster thumbnail — link to the
-                                // resolved read URL instead so the file is still reachable
-                                // from the PDF (issue #583).
-                                cell.Item().Border(1f).Padding(12f).AlignCenter()
-                                    .Hyperlink(photo.Url)
-                                    .Text(text => text.Span(photo.FileName).FontSize(9f).Underline());
+                                // Videos never render as a raster thumbnail — the tile links to
+                                // the resolved read URL so the file is still reachable from the
+                                // PDF (issue #583).
+                                box.Hyperlink(photo.Url).Element(tile => RenderPhotoTile(tile, "Video", "Open video", underline: true));
                             }
                             else
                             {
                                 // No bytes, or a format QuestPDF's decoder cannot read
                                 // (iPhone HEIC/HEIF is the common case — issue #492 item 8).
-                                // A labelled placeholder keeps the packet laying out
-                                // instead of a blank cell or a failed render.
-                                cell.Item().Border(1f).Padding(12f).AlignCenter()
-                                    .Text(photo.FileName).FontSize(9f);
+                                // A labelled tile keeps the packet laying out instead of a
+                                // blank cell or a failed render.
+                                RenderPhotoTile(box, "Photo", "Preview unavailable", underline: false);
                             }
 
                             var caption = string.IsNullOrWhiteSpace(photo.Caption)
@@ -489,6 +506,23 @@ public static class PacketPdfRenderer
                     }
                 });
             }
+        });
+    }
+
+    /// <summary>A photo cell with no picture in it: a bordered tile carrying a label.</summary>
+    private static void RenderPhotoTile(IContainer container, string label, string detail, bool underline)
+    {
+        container.Border(1f).Background(Colors.Grey.Lighten4).AlignCenter().AlignMiddle().Column(tile =>
+        {
+            tile.Item().AlignCenter().Text(label).SemiBold().FontSize(10f);
+            tile.Item().AlignCenter().Text(text =>
+            {
+                var span = text.Span(detail).FontSize(9f);
+                if (underline)
+                {
+                    span.Underline();
+                }
+            });
         });
     }
 
