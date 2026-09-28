@@ -142,19 +142,30 @@
     private string HeroStyle =>
         $"width: 100%; text-align: center; cursor: pointer; background: {Hero.AppBarBackground ?? "var(--mud-palette-secondary)"};";
 
-    // "<dealer> - <location>" on one line (issue #744). The dealer is dropped when it is missing
-    // or repeats the location name, so a single-rooftop dealer does not read "Acme RV - Acme RV".
+    // "<dealer> - <location>" on one line (issue #744). Provisioning already stores LocationName in
+    // that shape (LocationNameGenerator.ForBusiness), so the dealer is prepended here only when it
+    // isn't already there — otherwise a name like "Nova RV Services - Hurricane" doubled up front.
     private string HeroName
     {
         get
         {
             var location = State.Config!.LocationName;
             var dealer = State.Config.DealershipName;
-            return string.IsNullOrWhiteSpace(dealer)
-                   || string.Equals(dealer, location, StringComparison.OrdinalIgnoreCase)
+            return string.IsNullOrWhiteSpace(dealer) || StartsWithWord(location, dealer)
                 ? location
                 : $"{dealer} - {location}";
         }
+    }
+
+    private static bool StartsWithWord(string text, string prefix)
+    {
+        if (!text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // "Nova" is not a word-boundary prefix of "Novato".
+        return text.Length == prefix.Length || !char.IsLetterOrDigit(text[prefix.Length]);
     }
 
     private string HeroDividerStyle => $"width: 64px; border-color: {HeroForeground}; opacity: 0.35;";
