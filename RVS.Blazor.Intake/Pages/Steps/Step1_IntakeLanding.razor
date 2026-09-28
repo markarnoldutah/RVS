@@ -51,8 +51,11 @@
            header bar, and the dealer's logo leads it: straight on their colour, which they chose to
            suit it, or on a white plate when the band stays Ink. The RV Intake mark stands in when
            there is no logo or it fails to load. Decorative either way: the names below say whose
-           form this is. *@
-        <MudPaper Elevation="3" Class="pa-8 rounded-lg" Style="@HeroStyle">
+           form this is.
+           The band also starts the wizard on a click, like Continue below it (issue #744): people
+           tap the big card that says "Start a Service Request". It stays a card, not a button, so
+           it is pointer-only; keyboard and screen-reader users reach Continue next. *@
+        <MudPaper Elevation="3" Class="pa-8 rounded-lg" Style="@HeroStyle" @onclick="HandleStart">
             <MudStack AlignItems="AlignItems.Center" Spacing="3">
                 @if (Hero.HasDealerLogo)
                 {
@@ -69,22 +72,14 @@
                 }
 
                 <MudText Typo="Typo.h4" Style="@HeroTextStyle(bold: true)">
-                    Start a service request
+                    Start a Service Request
                 </MudText>
 
                 <MudDivider Style="@HeroDividerStyle" />
 
                 <MudText Typo="Typo.h6" Style="@HeroTextStyle()">
-                    @State.Config.LocationName
+                    @HeroName
                 </MudText>
-
-                @if (!string.IsNullOrWhiteSpace(State.Config.DealershipName)
-                     && !string.Equals(State.Config.DealershipName, State.Config.LocationName, StringComparison.OrdinalIgnoreCase))
-                {
-                    <MudText Typo="Typo.body2" Style="@HeroTextStyle(opacity: "0.85")">
-                        @State.Config.DealershipName
-                    </MudText>
-                }
             </MudStack>
         </MudPaper>
 
@@ -145,7 +140,22 @@
     private string HeroForeground => Hero.AppBarForeground ?? "var(--mud-palette-secondary-text)";
 
     private string HeroStyle =>
-        $"width: 100%; text-align: center; background: {Hero.AppBarBackground ?? "var(--mud-palette-secondary)"};";
+        $"width: 100%; text-align: center; cursor: pointer; background: {Hero.AppBarBackground ?? "var(--mud-palette-secondary)"};";
+
+    // "<dealer> - <location>" on one line (issue #744). The dealer is dropped when it is missing
+    // or repeats the location name, so a single-rooftop dealer does not read "Acme RV - Acme RV".
+    private string HeroName
+    {
+        get
+        {
+            var location = State.Config!.LocationName;
+            var dealer = State.Config.DealershipName;
+            return string.IsNullOrWhiteSpace(dealer)
+                   || string.Equals(dealer, location, StringComparison.OrdinalIgnoreCase)
+                ? location
+                : $"{dealer} - {location}";
+        }
+    }
 
     private string HeroDividerStyle => $"width: 64px; border-color: {HeroForeground}; opacity: 0.35;";
 
