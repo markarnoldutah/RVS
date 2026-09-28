@@ -222,3 +222,52 @@ window.rvs_enterWizardStep = function (stepElement) {
 window.rvs_historyBack = function () {
     window.history.back();
 };
+
+/**
+ * Marks a file picker as open, so a page reloaded before it came back can say so (issue #736).
+ * On a phone short of memory, Android can kill the tab while the camera app is in front, and the
+ * photo is lost with it. Set on the click itself, in plain JS: a round trip through .NET might not
+ * finish before the camera takes over. Cleared when the input reports a choice or a cancel.
+ * @private
+ */
+var _rvs_pickerOpenKey = 'rvs_picker_open_at';
+
+function _rvs_isFileInput(target) {
+    return target && target.tagName === 'INPUT' && target.type === 'file';
+}
+
+function _rvs_clearPickerOpen(event) {
+    if (!_rvs_isFileInput(event.target)) return;
+    try { sessionStorage.removeItem(_rvs_pickerOpenKey); } catch (e) { /* storage blocked */ }
+}
+
+document.addEventListener('click', function (event) {
+    if (!_rvs_isFileInput(event.target)) return;
+    try { sessionStorage.setItem(_rvs_pickerOpenKey, String(Date.now())); } catch (e) { /* storage blocked */ }
+}, true);
+document.addEventListener('change', _rvs_clearPickerOpen, true);
+document.addEventListener('cancel', _rvs_clearPickerOpen, true);
+
+// A mark present as this script loads was left by the page before this one: the picker never came
+// back to it. Read once here, so a stale mark can never be mistaken for a reload later on.
+var _rvs_pickerOpenAtLoad = (function () {
+    try {
+        var openedAt = Number(sessionStorage.getItem(_rvs_pickerOpenKey));
+        sessionStorage.removeItem(_rvs_pickerOpenKey);
+        return openedAt;
+    } catch (e) {
+        return 0;
+    }
+})();
+
+/**
+ * Whether this page load replaced one that had a file picker open. Reports it once. A mark older
+ * than ten minutes is treated as stale: a picker dismissed on a browser without the cancel event
+ * leaves one behind, and a reload long after is not the picker's doing.
+ * @returns {boolean}
+ */
+window.rvs_takePickerReload = function () {
+    var openedAt = _rvs_pickerOpenAtLoad;
+    _rvs_pickerOpenAtLoad = 0;
+    return openedAt > 0 && Date.now() - openedAt < 10 * 60 * 1000;
+};

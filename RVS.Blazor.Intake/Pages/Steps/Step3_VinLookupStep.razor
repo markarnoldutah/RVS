@@ -177,7 +177,6 @@
 
 @implements IDisposable
 @code {
-    private const long MaxCameraCaptureSizeBytes = 10 * 1024 * 1024;
     private const double VinAutoFillThreshold = 0.7;
     private const double VinAutoLookupThreshold = 0.9;
 
@@ -361,28 +360,47 @@
         _recordingTimer?.Dispose();
     }
 
+    protected override async Task OnInitializedAsync()
+    {
+        // Issue #736: Android killed the tab while the camera was open, and the photo went with it.
+        if (await PickerReload.TakeAsync(JsRuntime))
+        {
+            _extractionMessage = "Your phone reloaded this page while the camera was open, so the VIN photo didn't come through. Please try again, or enter the VIN manually.";
+            _extractionSeverity = Severity.Warning;
+        }
+    }
+
     private async Task HandleCameraCapture(InputFileChangeEventArgs e)
     {
         var file = e.File;
         if (file is null) return;
 
         _extractionMessage = null;
+        _capturedImageUrl = null;
         _isExtracting = true;
         StateHasChanged();
 
-        var buffer = new byte[file.Size];
-        await using var stream = file.OpenReadStream(maxAllowedSize: MaxCameraCaptureSizeBytes);
-        _ = await stream.ReadAsync(buffer);
-        var base64 = Convert.ToBase64String(buffer);
-        _capturedImageUrl = $"data:{file.ContentType};base64,{base64}";
+        // Issue #736: shrunk in the browser and read whole. A full-size Android photo was over the
+        // API's limit, and a single read took only its first chunk.
+        var photo = await VinPhoto.ReadAsync(file, VinPhoto.ResizeInBrowser);
+        if (photo is null)
+        {
+            _isExtracting = false;
+            _extractionMessage = "We couldn't use that photo. Please try again, or enter the VIN manually.";
+            _extractionSeverity = Severity.Warning;
+            StateHasChanged();
+            return;
+        }
+
+        _capturedImageUrl = photo.DataUrl;
         StateHasChanged();
 
         try
         {
             var request = new VinExtractionRequestDto
             {
-                ImageBase64 = base64,
-                ContentType = file.ContentType
+                ImageBase64 = photo.Base64,
+                ContentType = photo.ContentType
             };
 
             var response = await IntakeApi.ExtractVinFromImageAsync(State.Slug, request);

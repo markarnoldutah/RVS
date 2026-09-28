@@ -230,7 +230,10 @@ public sealed class IntakeWizardState
     /// <summary>Approximate RV purchase date, free-text entry (Step 4).</summary>
     public string? ApproxPurchaseDate { get; set; }
 
-    /// <summary>AI-generated diagnostic questions (Step 6).</summary>
+    /// <summary>
+    /// AI-generated diagnostic questions (Step 6). Persisted with the answers: a reload that lost
+    /// them made Step 6 ask again and blank every answer (issue #736).
+    /// </summary>
     public List<DiagnosticQuestionDto> DiagnosticQuestions { get; set; } = [];
 
     /// <summary>Customer's diagnostic responses (Step 6).</summary>
@@ -369,6 +372,28 @@ public sealed class IntakeWizardState
         CurrentStep = target;
         NotifyStateChanged();
         await PersistAsync();
+    }
+
+    /// <summary>
+    /// Takes the diagnostic questions Step 6 fetched, with one response per question. An answer
+    /// already held for a question asked again is kept — a session saved before the questions
+    /// were persisted carries answers but no questions, and Step 6 fetches them anew.
+    /// </summary>
+    public void ApplyDiagnosticQuestions(DiagnosticQuestionsResponseDto response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        var previous = DiagnosticResponses
+            .GroupBy(r => r.QuestionText, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        DiagnosticQuestions = response.Questions;
+        SmartSuggestion = response.SmartSuggestion;
+        DiagnosticResponses = response.Questions
+            .Select(q => previous.TryGetValue(q.QuestionText, out var kept)
+                ? kept
+                : new DiagnosticResponseDto { QuestionText = q.QuestionText, SelectedOptions = [], FreeTextResponse = null })
+            .ToList();
     }
 
     /// <summary>Records <see cref="CurrentStep"/> as reached, if it is further than before.</summary>
@@ -549,6 +574,7 @@ public sealed class IntakeWizardState
             RvUsage = RvUsage,
             HasExtendedWarranty = HasExtendedWarranty,
             ApproxPurchaseDate = ApproxPurchaseDate,
+            DiagnosticQuestions = DiagnosticQuestions,
             DiagnosticResponses = DiagnosticResponses,
             SmartSuggestion = SmartSuggestion,
             CapabilityAssessment = CapabilityAssessment,
@@ -604,6 +630,7 @@ public sealed class IntakeWizardState
             RvUsage = data.RvUsage;
             HasExtendedWarranty = data.HasExtendedWarranty;
             ApproxPurchaseDate = data.ApproxPurchaseDate;
+            DiagnosticQuestions = data.DiagnosticQuestions;
             DiagnosticResponses = data.DiagnosticResponses;
             SmartSuggestion = data.SmartSuggestion;
             CapabilityAssessment = data.CapabilityAssessment;
@@ -933,7 +960,7 @@ public sealed class AttachmentFileInfo
 
 /// <summary>
 /// Serializable data transfer object for sessionStorage persistence.
-/// Excludes non-serializable properties like Config and DiagnosticQuestions.
+/// Excludes non-serializable properties like Config and the attachment bytes.
 /// </summary>
 internal sealed class IntakeWizardStateData
 {
@@ -980,6 +1007,9 @@ internal sealed class IntakeWizardStateData
     public string? RvUsage { get; set; }
     public string? HasExtendedWarranty { get; set; }
     public string? ApproxPurchaseDate { get; set; }
+    /// <summary>Step 6's questions (issue #736). Absent — and so empty — in a session saved before they were persisted.</summary>
+    public List<DiagnosticQuestionDto> DiagnosticQuestions { get; set; } = [];
+
     public List<DiagnosticResponseDto> DiagnosticResponses { get; set; } = [];
     public string? SmartSuggestion { get; set; }
     public CapabilityAssessmentResponseDto? CapabilityAssessment { get; set; }

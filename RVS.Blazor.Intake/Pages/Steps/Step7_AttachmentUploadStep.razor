@@ -7,6 +7,17 @@
             </MudText>
         </MudStack>
 
+        @if (_pickerReloaded)
+        {
+            @* Issue #736: Android killed the tab while the camera was open. *@
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
+                Your phone reloaded this page while the camera was open, so that photo or video
+                didn't come through, and anything already added needs adding again. If it happens
+                again, take the photo with your camera app first, then tap below and choose it
+                from your gallery.
+            </MudAlert>
+        }
+
         @if (State.Config is not null)
         {
             @* <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
@@ -112,7 +123,15 @@
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
 
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
     private List<string> _fileErrors = [];
+    private bool _pickerReloaded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _pickerReloaded = await PickerReload.TakeAsync(JS);
+    }
 
     private static readonly HashSet<string> AllowedMimeTypes =
     [
@@ -178,6 +197,7 @@
     private async Task HandleFilesSelected(InputFileChangeEventArgs e)
     {
         _fileErrors = [];
+        _pickerReloaded = false;
 
         var remainingSlots = MaxAttachments - State.Attachments.Count;
         if (remainingSlots <= 0)
