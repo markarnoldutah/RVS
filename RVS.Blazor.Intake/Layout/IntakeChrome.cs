@@ -8,7 +8,8 @@ namespace RVS.Blazor.Intake.Layout;
 
 /// <summary>
 /// What the Intake app's header bar shows (<c>Spec A-16</c>, issue #470): the dealer's logo and
-/// colour on that location's own intake page, the RV Intake mark on Denim everywhere else.
+/// colour on that location's own intake page and its submission confirmation, the RV Intake
+/// mark on Denim everywhere else.
 /// "Everywhere else" includes the homepage and the policy pages even mid-session — they are
 /// RV Intake's pages, not the dealer's.
 ///
@@ -121,6 +122,36 @@ public sealed record IntakeChrome(
         }
 
         var firstSegment = currentPath.Split(['?', '#', '/'], 2)[0];
+        if (string.Equals(firstSegment, ConfirmationPath, StringComparison.OrdinalIgnoreCase))
+        {
+            // The confirmation page ends the location's intake, so it keeps the dealer's chrome;
+            // the wizard names the location in its ?slug= query.
+            return string.Equals(ConfirmationSlugOf(currentPath), slug, StringComparison.OrdinalIgnoreCase);
+        }
+
         return string.Equals(firstSegment, slug, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private const string ConfirmationPath = "confirmation";
+
+    private static string? ConfirmationSlugOf(string currentPath)
+    {
+        var queryStart = currentPath.IndexOf('?');
+        if (queryStart < 0)
+        {
+            return null;
+        }
+
+        var query = currentPath[(queryStart + 1)..].Split('#', 2)[0];
+        foreach (var pair in query.Split('&'))
+        {
+            var parts = pair.Split('=', 2);
+            if (parts.Length == 2 && string.Equals(parts[0], "slug", StringComparison.OrdinalIgnoreCase))
+            {
+                return Uri.UnescapeDataString(parts[1]);
+            }
+        }
+
+        return null;
     }
 }
