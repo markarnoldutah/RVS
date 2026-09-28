@@ -306,7 +306,7 @@ public class ServiceRequestMapperTests
     {
         ServiceRequest? entity = null;
 
-        var act = () => entity!.ToCustomerStatusItemDto("555-0100");
+        var act = () => entity!.ToCustomerStatusItemDto(StatusLocation());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -322,7 +322,7 @@ public class ServiceRequestMapperTests
             AssetInfo = new AssetInfoEmbedded { Year = 2021, Manufacturer = "Forest River", Model = "XLR" }
         };
 
-        var dto = entity.ToCustomerStatusItemDto("  555-0100  ");
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation(phone: "  555-0100  "));
 
         dto.Unit.Should().Be("2021 Forest River XLR");
         dto.SubmittedAtUtc.Should().Be(submittedAt);
@@ -338,7 +338,7 @@ public class ServiceRequestMapperTests
             AssetInfo = new AssetInfoEmbedded { AssetId = "1HGBH41JXMN109186" }
         };
 
-        var dto = entity.ToCustomerStatusItemDto("555-0100");
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
 
         dto.Unit.Should().BeNull();
     }
@@ -351,7 +351,7 @@ public class ServiceRequestMapperTests
     {
         var entity = new ServiceRequest { Status = "New" };
 
-        var dto = entity.ToCustomerStatusItemDto(phone);
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation(phone: phone));
 
         dto.LocationPhone.Should().BeNull();
     }
@@ -369,7 +369,7 @@ public class ServiceRequestMapperTests
             CustomerSnapshot = new CustomerSnapshotEmbedded { FirstName = "Jane", LastName = "Doe" }
         };
 
-        var dto = entity.ToCustomerStatusItemDto("555-0100");
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
 
         var serialized = System.Text.Json.JsonSerializer.Serialize(dto);
         serialized.Should().NotContain(secret);
@@ -385,7 +385,7 @@ public class ServiceRequestMapperTests
         // Issue #741: the category is a controlled-vocabulary label, not customer free text.
         var entity = new ServiceRequest { Status = "New", IssueCategory = code };
 
-        var dto = entity.ToCustomerStatusItemDto("555-0100");
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
 
         dto.IssueCategory.Should().Be(expected);
     }
@@ -398,7 +398,7 @@ public class ServiceRequestMapperTests
     {
         var entity = new ServiceRequest { Status = "New", IssueCategory = code };
 
-        var dto = entity.ToCustomerStatusItemDto("555-0100");
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
 
         dto.IssueCategory.Should().BeNull();
     }
@@ -409,7 +409,7 @@ public class ServiceRequestMapperTests
         var entity = new ServiceRequest { Status = "WaitingOnParts" };
         entity.SetCustomerStatusNote("Slide motor on back order, ETA Friday.", "usr_mgr");
 
-        var dto = entity.ToCustomerStatusItemDto("555-0100");
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
 
         dto.StatusNote.Should().Be("Slide motor on back order, ETA Friday.");
     }
@@ -419,9 +419,65 @@ public class ServiceRequestMapperTests
     {
         var entity = new ServiceRequest { Status = "New" };
 
-        var dto = entity.ToCustomerStatusItemDto("555-0100");
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
 
         dto.StatusNote.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_ShouldCarryTheLocationsLogoAndName()
+    {
+        // Issue #793: each card shows its dealer's logo, so requests at different dealers are
+        // told apart at a glance.
+        var entity = new ServiceRequest { Status = "New" };
+        var location = StatusLocation(name: "  Salt Lake Service Center  ", logoUrl: "https://cdn.example.com/acme.png");
+
+        var dto = entity.ToCustomerStatusItemDto(location);
+
+        dto.LocationName.Should().Be("Salt Lake Service Center");
+        dto.LocationLogoUrl.Should().Be("https://cdn.example.com/acme.png");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("http://cdn.example.com/acme.png")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("/brand/logo.png")]
+    public void ToCustomerStatusItemDto_WhenLogoIsNotAnHttpsUrl_ShouldBeNull(string? logoUrl)
+    {
+        // The status page is served over https, so anything else would be blocked or unsafe.
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation(logoUrl: logoUrl));
+
+        dto.LocationLogoUrl.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToCustomerStatusItemDto_WhenLocationNameBlank_ShouldBeNull(string name)
+    {
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation(name: name));
+
+        dto.LocationName.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenLocationUnknown_ShouldLeaveLocationFieldsNull()
+    {
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto(location: null);
+
+        dto.LocationPhone.Should().BeNull();
+        dto.LocationName.Should().BeNull();
+        dto.LocationLogoUrl.Should().BeNull();
+        dto.Status.Should().Be("New");
     }
 
     [Fact]
@@ -579,7 +635,7 @@ public class ServiceRequestMapperTests
         var entity = new ServiceRequest();
         entity.CloseWithDisposition("Spam", "usr_mgr");
 
-        var dto = entity.ToCustomerStatusItemDto("555-0100");
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
 
         dto.Status.Should().Be("Cancelled");
         System.Text.Json.JsonSerializer.Serialize(dto).Should().NotContain("Spam");
@@ -886,6 +942,21 @@ public class ServiceRequestMapperTests
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static Location StatusLocation(
+        string? phone = "555-0100",
+        string name = "Salt Lake Service Center",
+        string? logoUrl = null) =>
+        new()
+        {
+            Id = "loc_1",
+            TenantId = "ten_1",
+            Name = name,
+            Slug = "salt-lake-service-center",
+            CreatedByUserId = "system",
+            Phone = phone,
+            Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl }
+        };
 
     private static ServiceRequestCreateRequestDto BuildValidCreateRequest() =>
         new()

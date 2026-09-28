@@ -99,14 +99,16 @@ public class CustomerIntakeDtoTests
     {
         // Spec X-1 shows unit, submission date, current status, and the location's phone
         // number; Spec C-9 adds the manager-authored status note; issue #741 adds the issue
-        // category's display name. Nothing customer-identifying and no free-text problem
-        // description crosses this boundary.
+        // category's display name; issue #793 adds the servicing location's name and logo so
+        // requests at different dealers are told apart. Nothing customer-identifying and no
+        // free-text problem description crosses this boundary.
         var properties = typeof(CustomerStatusItemResponseDto)
             .GetProperties()
             .Select(p => p.Name)
             .OrderBy(n => n);
 
-        properties.Should().Equal("IssueCategory", "LocationPhone", "Status", "StatusNote", "SubmittedAtUtc", "Unit");
+        properties.Should().Equal(
+            "IssueCategory", "LocationLogoUrl", "LocationName", "LocationPhone", "Status", "StatusNote", "SubmittedAtUtc", "Unit");
     }
 
     [Fact]
@@ -120,7 +122,9 @@ public class CustomerIntakeDtoTests
             Status = "InProgress",
             LocationPhone = "555-0100",
             StatusNote = "Waiting on a back-ordered slide motor, ETA Friday.",
-            IssueCategory = "Slides"
+            IssueCategory = "Slides",
+            LocationName = "Salt Lake Service Center",
+            LocationLogoUrl = "https://cdn.example.com/acme.png"
         };
 
         dto.Unit.Should().Be("2023 Thor Ace");
@@ -129,5 +133,7 @@ public class CustomerIntakeDtoTests
         dto.LocationPhone.Should().Be("555-0100");
         dto.StatusNote.Should().Be("Waiting on a back-ordered slide motor, ETA Friday.");
         dto.IssueCategory.Should().Be("Slides");
+        dto.LocationName.Should().Be("Salt Lake Service Center");
+        dto.LocationLogoUrl.Should().Be("https://cdn.example.com/acme.png");
     }
 }

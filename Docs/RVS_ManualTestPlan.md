@@ -145,6 +145,7 @@ A-7 prefill is deferred (Spec A-7, #673). These tests check that it stays off.
 
 - [ ] Open the status link. No login is needed, and the page shows the unit, the submission date, the current status and the location's phone number.
 - [ ] On a phone, tap the location's phone number. It opens the dialer (`tel:` link).
+- [ ] Each card shows the servicing location's logo and name (#793). For a location with no logo, the name shows alone. Submit requests with the same email at two dealerships and open either status link. Each card carries its own dealer's logo.
 - [ ] The page offers no way to reply, message or upload anything (X-1). It is display-only.
 - [ ] Walk the request through all six statuses from the manager app (New, In Progress, Waiting on Parts, Waiting on Customer, Completed, Cancelled). Reload after each one. Each status shows with its own colored badge, and none falls back to a plain grey default.
 - [ ] Add a customer status note in the manager app (see 3.4) and reload. The note appears. Clear it and reload. The page still reads cleanly, with no empty note box.
