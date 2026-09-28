@@ -123,6 +123,19 @@ public class RvsThemeTests
     }
 
     [Fact]
+    public void ManagerTheme_Dark_BackgroundGrayShouldBeRecessedDenim()
+    {
+        // The Service Board's columns sit on background-gray. MudBlazor's stock dark value is a
+        // neutral charcoal, and the board used to override it with a near-black GitHub grey
+        // (issue #728); a step below the Denim ground keeps the columns in the brand.
+        var palette = ManagerTheme.Theme.PaletteDark;
+
+        RvsBrand.InkDarkRecessed.Should().Be("#131F2D");
+        palette.BackgroundGray.Should().BeColor(RvsBrand.InkDarkRecessed);
+        palette.BackgroundGray.Should().NotBeColor(RvsBrand.InkDarkSurface);
+    }
+
+    [Fact]
     public void ManagerTheme_Dark_PrimaryShouldNotBeFullSaturationRust()
     {
         // Full Rust loses contrast against a dark background at small sizes.

@@ -121,10 +121,10 @@
                Width="min(640px, 100vw)"
                Overlay="true"
                Style="@FlyoutStyles.DrawerStyle(ThemeService.Mode)">
-        <div class="d-flex flex-column" style="@FlyoutStyles.ColumnStyle(ThemeService.Mode)">
+        <div class="d-flex flex-column" style="@FlyoutStyles.ColumnStyle">
             @* Sticky title header *@
             <MudPaper Elevation="0" Square="true" Class="px-4 py-3"
-                      Style="@FlyoutStyles.HeaderStyle(ThemeService.Mode)">
+                      Style="@FlyoutStyles.HeaderStyle">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="width: 100%;">
                     @if (_editingLocationId is null)
                     {
@@ -505,7 +505,7 @@
 
             @* Sticky footer *@
             <MudPaper Elevation="0" Square="true" Class="pa-3"
-                      Style="@FlyoutStyles.FooterStyle(ThemeService.Mode)">
+                      Style="@FlyoutStyles.FooterStyle">
                 <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
                     <MudButton OnClick="CloseDialog">Cancel</MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary"

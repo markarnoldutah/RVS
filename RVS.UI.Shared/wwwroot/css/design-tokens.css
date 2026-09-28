@@ -16,6 +16,7 @@
        -------------------------------------------------------- */
     --rvs-color-ink: #2F4C6B;               /* Denim */
     --rvs-color-ink-dark: #1B2A3C;          /* Denim, dark-mode ground */
+    --rvs-color-ink-dark-recessed: #131F2D; /* Denim, dark-mode recessed (board columns) */
     --rvs-color-paper: #F6F1E7;             /* Cream */
     --rvs-color-paper-neutral: #FAF8F3;     /* Cream, barely tinted */
     --rvs-color-primary: #A8431F;           /* Rust, text-safe — action */

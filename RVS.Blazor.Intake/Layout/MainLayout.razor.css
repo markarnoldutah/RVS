@@ -1,6 +1,9 @@
 #blazor-error-ui {
     color-scheme: light only;
-    background: lightyellow;
+    /* Warning fill with its audited text colour: plain lightyellow inherited the page text,
+       which in Manager's dark mode is cream — cream on pale yellow (issue #728). */
+    background: var(--mud-palette-warning);
+    color: var(--mud-palette-warning-text);
     bottom: 0;
     box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
     box-sizing: border-box;
@@ -11,6 +14,11 @@
     width: 100%;
     z-index: 1000;
 }
+
+    #blazor-error-ui a {
+        color: inherit;
+        text-decoration: underline;
+    }
 
     #blazor-error-ui .dismiss {
         cursor: pointer;

@@ -12,27 +12,38 @@ namespace RVS.UI.Shared.Tests.Manager;
 /// </summary>
 public class FlyoutStylesTests
 {
-    [Theory]
-    [InlineData(ThemeMode.Light)]
-    [InlineData(ThemeMode.Dark)]
-    [InlineData(ThemeMode.HighContrast)]
-    public void ColumnStyle_AnyMode_ResetsTextToPageTextColor(ThemeMode mode)
+    [Fact]
+    public void ColumnStyle_ResetsTextToPageTextColor()
     {
-        var style = FlyoutStyles.ColumnStyle(mode);
+        var style = FlyoutStyles.ColumnStyle;
 
         style.Should().Contain("color: var(--mud-palette-text-primary);");
         style.Should().NotContain("drawer-text");
+    }
+
+    [Fact]
+    public void ColumnStyle_KeepsFullHeightAndThePageBackground()
+    {
+        var style = FlyoutStyles.ColumnStyle;
+
+        style.Should().Contain("height: 100vh;");
+        style.Should().Contain("background: var(--mud-palette-background);");
+    }
+
+    [Fact]
+    public void HeaderAndFooter_ShareTheColumnBackground()
+    {
+        // Dark mode used to paint the column #181818 — a neutral grey against the Denim page.
+        FlyoutStyles.HeaderStyle.Should().Contain("background: var(--mud-palette-background);");
+        FlyoutStyles.FooterStyle.Should().Contain("background: var(--mud-palette-background);");
     }
 
     [Theory]
     [InlineData(ThemeMode.Light)]
     [InlineData(ThemeMode.Dark)]
     [InlineData(ThemeMode.HighContrast)]
-    public void ColumnStyle_AnyMode_KeepsFullHeightAndBackground(ThemeMode mode)
+    public void DrawerStyle_EdgeFollowsTheModesLineColour(ThemeMode mode)
     {
-        var style = FlyoutStyles.ColumnStyle(mode);
-
-        style.Should().Contain("height: 100vh;");
-        style.Should().Contain($"background: {FlyoutStyles.ColumnBackground(mode)};");
+        FlyoutStyles.DrawerStyle(mode).Should().Be($"border-left: 1px solid {ModeColors.Line(mode)};");
     }
 }
