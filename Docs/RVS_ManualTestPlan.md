@@ -213,7 +213,7 @@ Create the invites from the manager app (3.6) first.
 Open the packet inline in the email body, not the PDF, and check from top to bottom:
 
 - [ ] A small action bar above the masthead offers **In Progress**, **Waiting on Parts** and **Completed** as filled Rust buttons, with an outlined **Open Manager** button on the line below (see 3.3 for what they do).
-- [ ] The letterhead reads **RV Intake**. The top right shows `Intake #` with the reference code (the first hyphen-separated segment of the request id, upper-cased) and the Received time.
+- [ ] The letterhead reads **Service Intake Packet**, after the location's logo when it has one — not **RV Intake**. The top right shows `Intake #` with the reference code (the first hyphen-separated segment of the request id, upper-cased) and the Received time.
 - [ ] The Received time is in the location's own time zone with a short zone name on a 12-hour clock (e.g. `2026-09-24 8:30 AM MDT`). For a location with no time zone set, it shows `… UTC`.
 - [ ] One bold title line reads `Last, First : Year Make Model`.
 - [ ] A three-column Customer / Location / Unit band shows name, phone, email and preferred contact; the location; and year, manufacturer and `Serial# (VIN)`. With no VIN, only the Serial# line is dropped.

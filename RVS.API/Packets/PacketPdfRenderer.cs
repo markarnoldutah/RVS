@@ -183,14 +183,13 @@ public static class PacketPdfRenderer
         PacketPdfLayoutSection customer,
         PacketPdfLayoutSection origin)
     {
-        var branding = packet.Branding;
-
         container.Column(col =>
         {
             col.Spacing(3f);
 
-            // The dealer's logo, when the location sets one (Spec A-16, issue #470), and the brand
-            // letterhead top left; tracking number right, mirroring IDS.
+            // The dealer's logo, when the location sets one (Spec A-16, issue #470), and the
+            // letterhead top left; tracking number right, mirroring IDS. The letterhead names the
+            // document, not the brand (issue #794) — the brand name is in the footer.
             col.Item().Row(row =>
             {
                 row.RelativeItem().Row(brand =>
@@ -201,11 +200,7 @@ public static class PacketPdfRenderer
                         brand.ConstantItem(LogoWidthPt(logo)).Height(LogoHeightPt).AlignMiddle().Image(logo).FitArea();
                     }
 
-                    brand.RelativeItem().Column(left =>
-                    {
-                        left.Item().Text(branding.BrandName).Bold().FontSize(13f);
-                        left.Item().Text("SERVICE INTAKE PACKET").FontSize(8f);
-                    });
+                    brand.RelativeItem().Text("Service Intake Packet").Bold().FontSize(13f);
                 });
 
                 row.ConstantItem(170f).Column(right =>
@@ -220,6 +215,12 @@ public static class PacketPdfRenderer
                     right.Item().AlignRight().Text($"Received: {layout.ReceivedDisplay}").FontSize(9f);
                 });
             });
+
+            // Two lines of whitespace below the logo row (issue #794), 10 mm as in the HTML.
+            if (logo is not null)
+            {
+                col.Item().Height(LogoGapPt);
+            }
 
             // Title line: customer name (family-name-first) and unit descriptor on one line,
             // same size, bold (issue #580) — e.g. "Gribble, Dale : 2021 Winnebago View".
@@ -246,6 +247,9 @@ public static class PacketPdfRenderer
 
     /// <summary>The widest a dealer logo may run, in points — 60 mm, as in the HTML.</summary>
     private const float LogoMaxWidthPt = 170f;
+
+    /// <summary>The whitespace below the logo row, in points — 10 mm, two lines of body text, as in the HTML.</summary>
+    private const float LogoGapPt = 28f;
 
     /// <summary>
     /// Decodes the dealer logo, or returns <c>null</c> — and the masthead renders without one —
