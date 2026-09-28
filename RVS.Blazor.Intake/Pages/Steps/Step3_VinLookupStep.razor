@@ -360,16 +360,6 @@
         _recordingTimer?.Dispose();
     }
 
-    protected override async Task OnInitializedAsync()
-    {
-        // Issue #736: Android killed the tab while the camera was open, and the photo went with it.
-        if (await PickerReload.TakeAsync(JsRuntime))
-        {
-            _extractionMessage = "Your phone reloaded this page while the camera was open, so the VIN photo didn't come through. Please try again, or enter the VIN manually.";
-            _extractionSeverity = Severity.Warning;
-        }
-    }
-
     private async Task HandleCameraCapture(InputFileChangeEventArgs e)
     {
         var file = e.File;
