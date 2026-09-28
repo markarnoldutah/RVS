@@ -55,6 +55,14 @@ public static class AttachmentPreview
     }
 
     /// <summary>
+    /// Whether an attachment opens in the in-app carousel viewer (issue #795): photos and
+    /// videos do; the PDF and anything the browser cannot draw still open in a new tab.
+    /// </summary>
+    /// <param name="contentType">The attachment's stored MIME type.</param>
+    public static bool IsViewable(string? contentType) =>
+        Classify(contentType) is AttachmentPreviewKind.Image or AttachmentPreviewKind.Video;
+
+    /// <summary>
     /// The <c>src</c> for a video thumbnail: the read URL with a first-frame media fragment.
     /// The fragment never reaches the server, so the SAS signature is unaffected.
     /// </summary>

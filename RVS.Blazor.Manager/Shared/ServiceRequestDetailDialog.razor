@@ -496,14 +496,20 @@
                                     var readUrl = ReadUrlFor(att);
                                     <MudItem xs="6" sm="4" md="3">
                                         <div class="text-center">
-                                            @* Videos play in the inline player (issue #583); everything else is a
-                                               real link that opens in a new tab so the manager app stays put (issue #699). *@
-                                            @if (kind == AttachmentPreviewKind.Video)
+                                            @* Photos and videos open in the in-app carousel viewer (issues #583, #795);
+                                               everything else is a real link that opens in a new tab so the manager
+                                               app stays put (issue #699). *@
+                                            @if (AttachmentPreview.IsViewable(att.ContentType))
                                             {
-                                                <button type="button" class="attachment-thumb" title="Play @att.FileName"
-                                                        aria-label="Play @att.FileName"
-                                                        @onclick="@(() => PlayVideoAsync(att))">
-                                                    @if (readUrl is not null)
+                                                var verb = kind == AttachmentPreviewKind.Video ? "Play" : "View";
+                                                <button type="button" class="attachment-thumb" title="@verb @att.FileName"
+                                                        aria-label="@verb @att.FileName"
+                                                        @onclick="@(() => OpenViewerAsync(att))">
+                                                    @if (readUrl is null)
+                                                    {
+                                                        <MudIcon Icon="@GetAttachmentIcon(kind)" Size="Size.Large" Color="Color.Info" />
+                                                    }
+                                                    else if (kind == AttachmentPreviewKind.Video)
                                                     {
                                                         <video src="@AttachmentPreview.VideoThumbnailSrc(readUrl)"
                                                                preload="metadata" muted playsinline tabindex="-1"></video>
@@ -513,7 +519,7 @@
                                                     }
                                                     else
                                                     {
-                                                        <MudIcon Icon="@Icons.Material.Filled.Movie" Size="Size.Large" Color="Color.Info" />
+                                                        <img src="@readUrl" alt="@att.FileName" loading="lazy" />
                                                     }
                                                 </button>
                                             }
@@ -521,14 +527,7 @@
                                             {
                                                 <a class="attachment-thumb" href="@readUrl" target="_blank" rel="noopener noreferrer"
                                                    title="Open @att.FileName in a new tab">
-                                                    @if (kind == AttachmentPreviewKind.Image)
-                                                    {
-                                                        <img src="@readUrl" alt="@att.FileName" loading="lazy" />
-                                                    }
-                                                    else
-                                                    {
-                                                        <MudIcon Icon="@GetAttachmentIcon(kind)" Size="Size.Large" Color="Color.Info" />
-                                                    }
+                                                    <MudIcon Icon="@GetAttachmentIcon(kind)" Size="Size.Large" Color="Color.Info" />
                                                 </a>
                                             }
                                             else
@@ -1072,31 +1071,94 @@
     </div>
 </MudDrawer>
 
-@* Video playback dialog — videos are played inline instead of a raw SAS-URL navigation,
-   which prompts a download instead of playing for most browsers/containers (issue #583). *@
-<MudDialog @bind-Visible="_videoDialogOpen" Options="VideoDialogOptions">
+@* Media viewer — photos and videos open in an in-app carousel instead of a raw SAS-URL
+   navigation (issues #583, #795), which prompts a download instead of playing for most
+   browsers/containers. "Open in new tab" is a real link, so the tab opens inside the click. *@
+<MudDialog @bind-Visible="_viewerOpen" Options="ViewerDialogOptions">
     <TitleContent>
-        <MudText Typo="Typo.h6" Class="text-truncate">@_videoDialogFileName</MudText>
+        @if (ViewerCurrent is { } current)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.h6" Class="text-truncate">@current.FileName</MudText>
+                @if (_viewerItems.Count > 1)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Info" Style="white-space: nowrap;">
+                        @(_viewerIndex + 1) of @_viewerItems.Count
+                    </MudText>
+                }
+            </MudStack>
+        }
     </TitleContent>
     <DialogContent>
-        @if (_videoDialogUrl is not null)
+        @if (_viewerItems.Count > 0)
         {
-            <video src="@_videoDialogUrl" controls autoplay style="width: 100%; max-height: 70vh;">
-                Your browser does not support inline video playback.
-            </video>
+            <div class="media-viewer">
+                <MudCarousel TData="object" @bind-SelectedIndex="_viewerIndex"
+                             AutoCycle="false" EnableSwipeGesture="true"
+                             ShowArrows="@(_viewerItems.Count > 1)" ShowBullets="@(_viewerItems.Count > 1)">
+                    @for (var i = 0; i < _viewerItems.Count; i++)
+                    {
+                        var index = i;
+                        var item = _viewerItems[index];
+                        var url = ReadUrlFor(item);
+                        <MudCarouselItem Transition="Transition.Slide">
+                            <div class="media-viewer-slide">
+                                @if (url is null)
+                                {
+                                    <MudIcon Icon="@GetAttachmentIcon(AttachmentPreview.Classify(item.ContentType))"
+                                             Size="Size.Large" Color="Color.Info" />
+                                }
+                                else if (AttachmentPreview.Classify(item.ContentType) == AttachmentPreviewKind.Video)
+                                {
+                                    @* Only the current slide gets a live player, so moving away stops playback. *@
+                                    @if (index == _viewerIndex)
+                                    {
+                                        <video src="@url" controls autoplay playsinline>
+                                            Your browser does not support inline video playback.
+                                        </video>
+                                    }
+                                    else
+                                    {
+                                        <video src="@AttachmentPreview.VideoThumbnailSrc(url)"
+                                               preload="metadata" muted playsinline tabindex="-1"></video>
+                                    }
+                                }
+                                else
+                                {
+                                    <img src="@url" alt="@item.FileName" />
+                                }
+                            </div>
+                        </MudCarouselItem>
+                    }
+                </MudCarousel>
+            </div>
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="@(() => _videoDialogOpen = false)">Close</MudButton>
+        @if (ViewerCurrent is { } current && ReadUrlFor(current) is { } currentUrl)
+        {
+            <MudButton Href="@currentUrl" Target="_blank" Rel="noopener noreferrer"
+                       Variant="Variant.Text" StartIcon="@Icons.Material.Filled.OpenInNew">
+                Open in new tab
+            </MudButton>
+        }
+        <MudSpacer />
+        <MudButton OnClick="CloseViewer">Close</MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
-    private static readonly DialogOptions VideoDialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+    private static readonly DialogOptions ViewerDialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true
+    };
 
-    private bool _videoDialogOpen;
-    private string? _videoDialogUrl;
-    private string? _videoDialogFileName;
+    private bool _viewerOpen;
+    private int _viewerIndex;
+    private List<AttachmentDto> _viewerItems = [];
+
+    private AttachmentDto? ViewerCurrent =>
+        _viewerIndex >= 0 && _viewerIndex < _viewerItems.Count ? _viewerItems[_viewerIndex] : null;
 
     /// <summary>Read SAS URLs keyed by attachment id, prefetched on load (issue #699).</summary>
     private readonly Dictionary<string, string> _attachmentUrls = [];
@@ -2068,20 +2130,28 @@
     }
 
     /// <summary>
-    /// Opens a video attachment in an inline player instead of navigating to the raw SAS
-    /// URL, which most browsers treat as a download rather than something to play (issue
-    /// <c>#583</c>).
+    /// Opens the carousel viewer on <paramref name="attachment"/>, with every photo and video
+    /// on the request as its slides, in tile order (issue #795). Read URLs are normally
+    /// prefetched on load; any that are missing are fetched now.
     /// </summary>
-    private async Task PlayVideoAsync(AttachmentDto attachment)
+    private async Task OpenViewerAsync(AttachmentDto attachment)
     {
         if (_dealershipId is null || _sr is null) return;
 
+        var dealershipId = _dealershipId;
+        var srId = _sr.Id;
+        var items = OrderedAttachments().Where(a => AttachmentPreview.IsViewable(a.ContentType)).ToList();
+
         try
         {
-            _videoDialogUrl = ReadUrlFor(attachment)
-                ?? (await AttachmentClient.GetReadSasAsync(_dealershipId, _sr.Id, attachment.AttachmentId)).SasUrl;
-            _videoDialogFileName = attachment.FileName;
-            _videoDialogOpen = true;
+            var missing = items.Where(a => ReadUrlFor(a) is null).ToList();
+            var fetched = await Task.WhenAll(missing.Select(async a =>
+                (a.AttachmentId, (await AttachmentClient.GetReadSasAsync(dealershipId, srId, a.AttachmentId)).SasUrl)));
+            foreach (var (id, url) in fetched) _attachmentUrls[id] = url;
+
+            _viewerItems = items;
+            _viewerIndex = Math.Max(0, items.FindIndex(a => a.AttachmentId == attachment.AttachmentId));
+            _viewerOpen = true;
         }
         catch (Exception ex)
         {
@@ -2089,6 +2159,13 @@
         }
 
         StateHasChanged();
+    }
+
+    private void CloseViewer()
+    {
+        _viewerOpen = false;
+        _viewerItems = [];
+        _viewerIndex = 0;
     }
 
     /// <summary>
