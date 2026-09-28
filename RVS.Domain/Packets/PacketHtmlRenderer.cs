@@ -20,8 +20,8 @@ namespace RVS.Domain.Packets;
 ///
 /// Layout follows the Integrated Dealer Systems (IDS) work-order idiom so a service
 /// manager reads it on daily muscle memory: a right-aligned tracking number in the
-/// masthead (<c>Intake #</c>, mirroring IDS <c>W/O #</c>), a three-column Customer / Location
-/// / Unit band, then the curated <c>Issue</c> and the AI <c>Preliminary assessment</c> above
+/// masthead (<c>Intake #</c>, mirroring IDS <c>W/O #</c>), stacked Customer / Location / Unit
+/// blocks (issue <c>#800</c>), then the curated <c>Issue</c> and the AI <c>Preliminary assessment</c> above
 /// <c>Reported issue</c> (the verbatim customer text, pre-curation) so the concise problem
 /// recreation is read first and can be checked against the customer's own words, and a running
 /// page footer carrying the reference and page count. It deliberately omits everything IDS
@@ -38,10 +38,10 @@ namespace RVS.Domain.Packets;
 ///   must read as expert.</item>
 ///   <item>Email-client-safe layout: this HTML is used verbatim as the packet delivery
 ///   email body, and Gmail/Outlook silently drop <c>display:flex</c> and
-///   <c>display:grid</c>. Every horizontal band (masthead top, the Customer / Location /
-///   Unit identity band, the static footer) is therefore a presentational
-///   <c>&lt;table&gt;</c> with its column geometry carried in <c>style=</c> attributes so
-///   it still reads as columns when the <c>&lt;style&gt;</c> block is stripped.</item>
+///   <c>display:grid</c>. Every band (masthead top, the Customer / Location / Unit identity
+///   band, the static footer) is therefore a presentational <c>&lt;table&gt;</c> with its
+///   cell geometry carried in <c>style=</c> attributes so it keeps its shape when the
+///   <c>&lt;style&gt;</c> block is stripped.</item>
 /// </list>
 /// </summary>
 public static class PacketHtmlRenderer
@@ -65,7 +65,6 @@ public static class PacketHtmlRenderer
         // end-of-flow footer. Derived on the packet (issue #506) so the PDF renderer reads the
         // very same value rather than a second copy of the same expression.
         var received = packet.Origin.ReceivedDisplay;
-        var brandName = packet.Branding.BrandName;
 
         var sb = new StringBuilder(4096);
 
@@ -74,7 +73,7 @@ public static class PacketHtmlRenderer
         sb.Append("<meta charset=\"utf-8\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         sb.Append("<title>Service Packet ").Append(Text(packet.Origin.ReferenceCode)).Append("</title>\n");
-        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(packet.Origin.ReferenceCode, received, brandName)))
+        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(packet.Origin.ReferenceCode, received, packet.Branding.BrandName)))
             .Append("\n</style>\n");
         sb.Append("</head>\n<body>\n");
         sb.Append("<main class=\"packet\">\n");
@@ -92,7 +91,7 @@ public static class PacketHtmlRenderer
         AppendPhotos(sb, packet.Photos, managerAppServiceRequestUrl);
         AppendPasteBlock(sb, packet.PasteBlock);
         AppendStatusLink(sb, packet.StatusLink);
-        AppendFooter(sb, packet.Origin.ReferenceCode, received, brandName, packet.Branding.PoweredByLogoUrl, packet.AiDisclaimer);
+        AppendFooter(sb, packet.Origin.ReferenceCode, received, packet.Branding.PoweredByLogoUrl, packet.AiDisclaimer);
 
         sb.Append("</main>\n</body>\n</html>\n");
 
@@ -148,13 +147,12 @@ public static class PacketHtmlRenderer
 
     // ── Masthead: sections 1 (unit), 2 (customer), 3 (origin) ──────────────
     //
-    // IDS puts the tracking number top-right and identifies the job in a three-column
-    // Customer / Dates / Unit band. We mirror that: Intake # + full received timestamp in the
-    // refbox, the customer name (Last, First) above the year/make/model headline, then a
-    // Customer | Location | Unit band. The band and the refbox row are presentational
-    // <table>s, not flex/grid — mail clients drop those and the columns would stack. The
-    // Spec B-2 section markers stay in order (unit, customer, origin) so the ordering
-    // contract is unchanged.
+    // IDS puts the tracking number top-right. We mirror that: the letterhead, Intake # and
+    // full received timestamp in the refbox, the customer name (Last, First) above the
+    // year/make/model headline, then Customer, Location and Unit stacked (issue #800). The
+    // band and the refbox row are presentational <table>s, not flex/grid — mail clients drop
+    // those. The Spec B-2 section markers stay in order (unit, customer, origin) so the
+    // ordering contract is unchanged.
 
     private static void AppendMasthead(
         StringBuilder sb, ServicePacket packet, string received)
@@ -168,8 +166,8 @@ public static class PacketHtmlRenderer
         sb.Append("<header class=\"masthead\" style=\"border-bottom:2px solid #000;padding-bottom:3mm;\">\n");
 
         // Masthead top: the dealer's logo, when the location sets one (Spec A-16, issue #470),
-        // then the letterhead, both top left; tracking number right. The letterhead names the
-        // document, not the brand (issue #794) — the brand name is in the footers.
+        // top left; the letterhead above the tracking number, right (issue #800). The letterhead
+        // names the document, not the brand (issue #794) — the brand name is in the running footer.
         // A presentational <table>, never flexbox: this HTML is used verbatim as the packet
         // delivery email body, and Gmail/Outlook drop `display:flex`, which would collapse
         // this row into a single stacked column. Column geometry is carried inline so it
@@ -188,9 +186,9 @@ public static class PacketHtmlRenderer
                 .Append("\" alt=\"\" height=\"45\" style=\"height:12mm;width:auto;max-width:60mm;vertical-align:middle;margin-right:4mm;border:0;\">\n");
         }
 
-        sb.Append("<div class=\"letterhead\" style=\"font-size:13pt;font-weight:700;\">Service Intake Packet</div>\n");
         sb.Append("</td>\n");
         sb.Append("<td class=\"refbox\" style=\"vertical-align:top;text-align:right;white-space:nowrap;\">\n");
+        sb.Append("<div class=\"letterhead\" style=\"font-size:13pt;font-weight:700;\">Service Intake Packet</div>\n");
         sb.Append("<p class=\"rvsno\" style=\"margin:0;font-size:12pt;\">Intake #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
         // Received line carries the full timestamp — date + time in the dealership's own
         // zone when the location sets one, UTC otherwise (issue #506). It is the one Received
@@ -209,29 +207,29 @@ public static class PacketHtmlRenderer
         var titleLine = string.IsNullOrWhiteSpace(sortableName) ? descriptorText : $"{sortableName} : {descriptorText}";
         sb.Append("<p class=\"packet-title\">").Append(Text(titleLine)).Append("</p>\n");
 
-        // Three-column identity band — a presentational <table>, never CSS grid (same
-        // email-client reason as the masthead top). Each column carries its width and top
-        // alignment inline so the band still reads as three columns when the <style> block
-        // is discarded by a mail client.
-        sb.Append("<table role=\"presentation\" class=\"idcols\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:3mm;\">\n<tr>\n");
+        // Identity band — Customer, Location, Unit stacked top to bottom, one full-width row
+        // each (issue #800; three side-by-side columns until then). A presentational <table>,
+        // never CSS grid (same email-client reason as the masthead top), with each cell's
+        // geometry inline so the band keeps its shape when a mail client discards <style>.
+        sb.Append("<table role=\"presentation\" class=\"idcols\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:3mm;\">\n");
 
         sb.Append("<!-- section:customer -->\n");
-        sb.Append("<td class=\"col customer\" style=\"vertical-align:top;width:34%;padding-right:6mm;font-size:9.5pt;\">\n<h2>Customer</h2>\n");
+        sb.Append("<tr>\n<td class=\"col customer\" style=\"").Append(IdentityCellStyle).Append("\">\n<h2>Customer</h2>\n");
         sb.Append("<p class=\"name\" style=\"font-weight:700;margin:0 0 1mm;\">").Append(Text(customer.FullName)).Append("</p>\n");
         // The customer's phone and email are links so the manager can call or reply in one tap
         // (issue #735). The location's own phone is not: nobody calls their own front desk.
         AppendLinkRow(sb, "Phone", customer.Phone, TelHref(customer.Phone));
         AppendLinkRow(sb, "Email", customer.Email, MailtoHref(customer.Email));
         AppendRow(sb, "Preferred contact", customer.PreferredContact);
-        sb.Append("</td>\n");
+        sb.Append("</td>\n</tr>\n");
 
         sb.Append("<!-- section:origin -->\n");
-        sb.Append("<td class=\"col origin\" style=\"vertical-align:top;width:33%;padding-right:6mm;font-size:9.5pt;\">\n<h2>Location</h2>\n");
+        sb.Append("<tr>\n<td class=\"col origin\" style=\"").Append(IdentityCellStyle).Append("\">\n<h2>Location</h2>\n");
         AppendRow(sb, "Location", origin.LocationName);
         AppendRow(sb, "Location phone", origin.LocationPhone);
-        sb.Append("</td>\n");
+        sb.Append("</td>\n</tr>\n");
 
-        sb.Append("<td class=\"col unit\" style=\"vertical-align:top;width:33%;font-size:9.5pt;\">\n<h2>Unit</h2>\n");
+        sb.Append("<tr>\n<td class=\"col unit\" style=\"").Append(IdentityCellStyle).Append("\">\n<h2>Unit</h2>\n");
         var hasUnitRow = false;
         hasUnitRow |= AppendRow(sb, "Year", unit.Year?.ToString(CultureInfo.InvariantCulture));
         hasUnitRow |= AppendRow(sb, "Manufacturer", unit.Make);
@@ -247,10 +245,15 @@ public static class PacketHtmlRenderer
             sb.Append("<p class=\"empty\" style=\"font-style:italic;margin:0 0 1mm;\">Not recorded</p>\n");
         }
 
-        sb.Append("</td>\n");
-        sb.Append("</tr>\n</table>\n");
+        sb.Append("</td>\n</tr>\n</table>\n");
         sb.Append("</header>\n");
     }
+
+    /// <summary>
+    /// One identity-band cell: full width, with a 3 mm gap below it before the next section
+    /// (issue #800). Padding, not margin — mail clients ignore margins on table cells.
+    /// </summary>
+    private const string IdentityCellStyle = "vertical-align:top;width:100%;padding:0 0 3mm;font-size:9.5pt;";
 
     // ── 4. Category ────────────────────────────────────────────────────────
 
@@ -443,7 +446,7 @@ public static class PacketHtmlRenderer
 
         sb.Append("<!-- section:paste-block -->\n");
         sb.Append("<section class=\"paste-block\">\n");
-        sb.Append("<h2>Copy &amp; paste into your DMS</h2>\n");
+        sb.Append("<h2>Copy &amp; Paste Ready</h2>\n");
         // No mail client runs script, so a real copy-to-clipboard button cannot work here
         // (issue #735). user-select: all is the next best thing: one click selects the whole
         // block, fences included, ready for Ctrl/Cmd-C. Inline, so a stripped <style> keeps it;
@@ -487,21 +490,21 @@ public static class PacketHtmlRenderer
     private const int PoweredByLogoHeightPx = 20;
 
     private static void AppendFooter(
-        StringBuilder sb, string referenceCode, string received, string brandName, string? poweredByLogoUrl, string? aiDisclaimer)
+        StringBuilder sb, string referenceCode, string received, string? poweredByLogoUrl, string? aiDisclaimer)
     {
         // A static end-of-flow footer for engines that ignore @page margin boxes
-        // (Safari); the @page rule in the stylesheet repeats the same line on every
+        // (Safari); the @page rule in the stylesheet repeats the reference line on every
         // printed page where supported. A presentational <table> so the two ends stay on
         // one line in a mail client (no flexbox).
         sb.Append("<table role=\"presentation\" class=\"packet-foot\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:8mm;border-top:1px solid #000;font-size:8pt;\">\n<tr>\n");
-        sb.Append("<td style=\"padding-top:2mm;vertical-align:top;\">Intake #").Append(Text(referenceCode)).Append(" · ").Append(Text(received)).Append("</td>\n");
-        sb.Append("<td style=\"padding-top:2mm;vertical-align:top;text-align:right;\">").Append(Text(brandName)).Append(" — service intake packet</td>\n");
-        sb.Append("</tr>\n");
+        sb.Append("<td style=\"padding-top:2mm;vertical-align:middle;\">Intake #").Append(Text(referenceCode)).Append(" · ").Append(Text(received)).Append("</td>\n");
 
-        // "Powered by" the RV Intake mark, centred (issue #470): the packet is the dealer's, the
-        // platform signs it once, at the end. The mark is a hosted PNG with explicit size
-        // attributes for Outlook; with no URL the product is named in text instead.
-        sb.Append("<tr>\n<td colspan=\"2\" class=\"powered-by\" style=\"padding-top:3mm;vertical-align:middle;text-align:center;\">Powered by ");
+        // "Powered by" the RV Intake mark (issue #470), on the right of the reference line
+        // (issue #800 — it replaced "<brand> — service intake packet" there, and a centred row
+        // of its own below): the packet is the dealer's, the platform signs it once, at the end.
+        // The mark is a hosted PNG with explicit size attributes for Outlook; with no URL the
+        // product is named in text instead.
+        sb.Append("<td class=\"powered-by\" style=\"padding-top:2mm;vertical-align:middle;text-align:right;white-space:nowrap;\">Powered by ");
         if (IsHttpUrl(poweredByLogoUrl))
         {
             sb.Append("<img src=\"").Append(Attr(poweredByLogoUrl!)).Append("\" alt=\"").Append(PacketBranding.ProductName)
@@ -669,9 +672,10 @@ public static class PacketHtmlRenderer
 
         section, header { margin: 0 0 6mm; break-inside: avoid; }
 
-        /* Masthead — IDS-style letterhead + top-right tracking number + 3-column band.
-           Bands are presentational <table>s, not flex/grid: the same HTML is used as the
-           packet delivery email body and mail clients drop flex/grid layout. */
+        /* Masthead — logo top left, letterhead over the tracking number top right, then the
+           stacked Customer / Location / Unit band. Bands are presentational <table>s, not
+           flex/grid: the same HTML is used as the packet delivery email body and mail clients
+           drop flex/grid layout. */
         .masthead { border-bottom: 2px solid #000; padding-bottom: 3mm; }
         .masthead-top { width: 100%; border-collapse: collapse; }
         .masthead-top .brand { vertical-align: top; }
@@ -683,21 +687,11 @@ public static class PacketHtmlRenderer
         .refbox .received { margin: 0.5mm 0 0; font-size: 9pt; }
 
         .idcols { width: 100%; border-collapse: collapse; margin-top: 3mm; }
-        .idcols .col { vertical-align: top; font-size: 9.5pt; }
-        .idcols .col.customer, .idcols .col.origin { padding-right: 6mm; }
+        .idcols .col { vertical-align: top; width: 100%; padding: 0 0 3mm; font-size: 9.5pt; }
         .idcols .col h2 { font-size: 8.5pt; margin-bottom: 1.5mm; }
         .idcols .col p { margin: 0 0 1mm; }
         .idcols .col .name { font-weight: 700; }
         .idcols .col .empty { font-style: italic; }
-
-        /* Phone width: the band's three cells stack as full-width blocks, read top to bottom
-           (issue #780). Layout only — the type is unchanged. !important because the column
-           geometry is also inline, as the fallback for a mail client that strips this block;
-           a client that strips it keeps the three columns. Screen only, so print is untouched. */
-        @media screen and (max-width: 600px) {
-          .idcols, .idcols tbody, .idcols tr { display: block !important; width: 100% !important; }
-          .idcols .col { display: block !important; width: 100% !important; padding-right: 0 !important; margin-bottom: 3mm; }
-        }
 
         .row, .name { margin: 0 0 1mm; }
 
