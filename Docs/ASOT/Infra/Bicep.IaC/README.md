@@ -1048,7 +1048,7 @@ Staging sends from its own verified subdomain on its **own ACS resource**, never
 prod's. ACS tracks failures, the suppression list and send quota per resource and
 domain, and staging fails many sends (seeded recipients are `.example.com`), so
 sharing prod's resource would spend prod's bounce budget while it warms.
-`mail.staging` is a sibling of `mail`, not a child of it. Mailbox providers still
+`mail-staging` is a sibling of `mail`, not a child of it. Mailbox providers still
 weigh any subdomain partly against `rvintake.com`, so the staging subdomain is
 kept harmless by behaviour: staging mail that reaches a real inbox goes only to
 mailboxes we control.
@@ -1062,7 +1062,7 @@ mailboxes we control.
   **domain-ownership** TXT, **SPF** TXT (`v=spf1 include:… -all` — ACS fails
   verification on `~all`), and **DKIM** + **DKIM2** CNAMEs. Values come from
   `communicationServices.outputs.customDomainVerificationRecords`; `main.bicep`
-  builds the record-set names from the subdomain label (`mail` / `mail.staging`),
+  builds the record-set names from the subdomain label (`mail` / `mail-staging`),
   because ACS returns DKIM names as a bare selector and Domain/SPF names as the
   full FQDN — neither is zone-relative. There is nothing to transcribe.
 - Publishes **DMARC** at `_dmarc.mail` (prod) / `_dmarc.mail-staging` (staging) — `v=DMARC1; p=none; rua=mailto:<dmarcReportingAddress>`

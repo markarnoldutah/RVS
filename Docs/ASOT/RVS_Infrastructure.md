@@ -105,7 +105,7 @@ Prod's warmed custom domain is what carries the local cluster (`#527`).
 - **Access to prod.** ACS has no narrower send role, so a shared resource would give staging's app identity, and every developer, Contributor on prod's ACS.
 - **No saving.** A second ACS resource has no standing charge.
 
-`mail.staging` is a sibling of `mail`, not a child of it. Mailbox providers still weigh a subdomain's behaviour partly against its parent `rvintake.com`, so staging stays harmless by behaviour: staging mail that reaches a real inbox goes only to mailboxes the team controls.
+`mail-staging` is a sibling of `mail`, not a child of it. Mailbox providers still weigh a subdomain's behaviour partly against its parent `rvintake.com`, so staging stays harmless by behaviour: staging mail that reaches a real inbox goes only to mailboxes the team controls.
 
 **Outbound SMS sending number — toll-free (issue #600).** The advisor-initiated intake invite (A-14) sends by SMS. The decision is to use toll free: one shared toll-free number per environment, each ~$2/mo. The number resolves per location through `ISmsSenderNumberResolver` rather than being hardcoded; every location resolves to the environment's one number today.
 

@@ -117,7 +117,7 @@ Two domains, split by audience rather than by app. **Every hostname a human read
 | `rvintake.com` / `staging.rvintake.com` | Intake SWA (prod is the apex) |
 | `manager.rvintake.com` / `manager-staging.rvintake.com` | Manager SWA |
 | `go.rvintake.com` / `go-staging.rvintake.com` | API redirect endpoint (Spec A-13) |
-| `mail.rvintake.com` / `mail.staging.rvintake.com` | ACS sending domain |
+| `mail.rvintake.com` / `mail-staging.rvintake.com` | ACS sending domain |
 | `api.rvserviceflow.com` / `api-staging.rvserviceflow.com` | API origin — XHR only, never typed |
 
 The `RVS` acronym is unaffected: resource names, project names and document names all keep it.
