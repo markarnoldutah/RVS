@@ -58,6 +58,31 @@ public class AttachmentPreviewTests
         AttachmentPreview.Classify(contentType).Should().Be(AttachmentPreviewKind.File);
     }
 
+    // ── IsViewable ───────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("image/jpeg")]
+    [InlineData("image/png")]
+    [InlineData("video/mp4")]
+    [InlineData("video/quicktime")]
+    public void IsViewable_ImageOrVideo_ReturnsTrue(string contentType)
+    {
+        // Photos and videos share the in-app carousel viewer (issue #795).
+        AttachmentPreview.IsViewable(contentType).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("application/pdf")]
+    [InlineData("image/heic")]
+    [InlineData("application/octet-stream")]
+    public void IsViewable_PdfHeicOrOtherFile_ReturnsFalse(string? contentType)
+    {
+        // The PDF and anything the browser cannot draw still open in a new tab.
+        AttachmentPreview.IsViewable(contentType).Should().BeFalse();
+    }
+
     // ── VideoThumbnailSrc ────────────────────────────────────────────────────
 
     [Fact]
