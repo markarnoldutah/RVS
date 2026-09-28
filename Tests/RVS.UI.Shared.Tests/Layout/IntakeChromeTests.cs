@@ -54,11 +54,27 @@ public class IntakeChromeTests
     }
 
     [Theory]
+    [InlineData("confirmation?slug=" + Slug)]
+    [InlineData("confirmation?slug=ACME-RV-SLC&token=abc123")]
+    [InlineData("confirmation?token=abc123&slug=" + Slug + "&uploadFailures=2")]
+    public void Resolve_OnTheLocationsConfirmationPage_ShouldKeepTheDealersLogoAndColor(string path)
+    {
+        // The confirmation page ends that location's intake; the header must not revert mid-flow.
+        var chrome = IntakeChrome.Resolve(Config(), path, highContrast: false);
+
+        chrome.DealerLogoUrl.Should().Be(LogoUrl);
+        chrome.AppBarStyle.Should().Be("background-color:#1A5E20;color:#FFFFFF;");
+    }
+
+    [Theory]
     [InlineData("")]                  // the RV Intake homepage
     [InlineData("privacy")]
     [InlineData("terms")]
     [InlineData("status/abc123")]
     [InlineData("acme-rv-slc-2")]     // a different location whose slug starts the same way
+    [InlineData("confirmation")]
+    [InlineData("confirmation?slug=acme-rv-slc-2")]
+    [InlineData("confirmation?token=" + Slug)]
     public void Resolve_OffTheLocationsIntakePage_ShouldUseTheDefaults(string path)
     {
         // The policies and the homepage are RV Intake's, not the dealer's, even mid-session.
