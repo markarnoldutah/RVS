@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using RVS.API.Mappers;
 using RVS.Domain.DTOs;
+using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
 
 namespace RVS.API.Controllers;
@@ -11,7 +12,7 @@ namespace RVS.API.Controllers;
 /// Customer-facing status page accessed via magic-link token (<c>Spec X-1</c>).
 /// All routes are anonymous — no authentication required — and rate-limited per IP.
 /// The response carries the unit, issue category, submission date, current status, the servicing location's
-/// phone number, and any manager-authored status note (<c>Spec C-9</c>). It is display-only for
+/// name, logo and phone number, and any manager-authored status note (<c>Spec C-9</c>). It is display-only for
 /// the customer: there is no inbound path here — no reply, no message, no file upload.
 /// </summary>
 [ApiController]
@@ -43,8 +44,9 @@ public class StatusController : ControllerBase
     /// <summary>
     /// Returns the customer's service request status across all dealerships.
     /// Validates the magic-link token and retrieves one minimal summary per request:
-    /// unit, issue category, submission date, current status, and the servicing location's phone number
-    /// (<c>Spec X-1</c>). Free-text problem descriptions are never included, nor logged.
+    /// unit, issue category, submission date, current status, and the servicing location's name, logo
+    /// and phone number (<c>Spec X-1</c>; logo issue #793). Each location is looked up once, however
+    /// many of the customer's requests it services. Free-text problem descriptions are never included, nor logged.
     /// </summary>
     /// <param name="token">Magic-link token for customer identification.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -57,6 +59,7 @@ public class StatusController : ControllerBase
         var acct = await _globalCustomerAcctService.ValidateMagicLinkTokenAsync(token, ct);
 
         var serviceRequests = new List<CustomerStatusItemResponseDto>();
+        var locations = new Dictionary<(string TenantId, string LocationId), Location?>();
 
         foreach (var link in acct.LinkedProfiles)
         {
@@ -65,9 +68,14 @@ public class StatusController : ControllerBase
             foreach (var srId in profile.ServiceRequestIds)
             {
                 var sr = await _serviceRequestService.GetByIdAsync(link.TenantId, srId, ct);
-                var locationPhone = await ResolveLocationPhoneAsync(link.TenantId, sr.LocationId, ct);
+                var key = (link.TenantId, sr.LocationId);
+                if (!locations.TryGetValue(key, out var location))
+                {
+                    location = await ResolveLocationAsync(link.TenantId, sr.LocationId, ct);
+                    locations[key] = location;
+                }
 
-                serviceRequests.Add(sr.ToCustomerStatusItemDto(locationPhone));
+                serviceRequests.Add(sr.ToCustomerStatusItemDto(location));
             }
         }
 
@@ -78,12 +86,11 @@ public class StatusController : ControllerBase
         });
     }
 
-    private async Task<string?> ResolveLocationPhoneAsync(string tenantId, string locationId, CancellationToken ct)
+    private async Task<Location?> ResolveLocationAsync(string tenantId, string locationId, CancellationToken ct)
     {
         try
         {
-            var location = await _locationService.GetByIdAsync(tenantId, locationId, ct);
-            return location.Phone;
+            return await _locationService.GetByIdAsync(tenantId, locationId, ct);
         }
         catch (KeyNotFoundException)
         {

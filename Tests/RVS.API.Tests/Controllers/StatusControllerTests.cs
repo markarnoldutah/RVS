@@ -140,6 +140,106 @@ public class StatusControllerTests
     }
 
     [Fact]
+    public async Task GetStatus_ShouldCarryTheServicingLocationsLogoAndName()
+    {
+        ArrangeHappyPath();
+
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
+        var item = dto.ServiceRequests.Should().ContainSingle().Subject;
+        item.LocationName.Should().Be("Salt Lake Service Center");
+        item.LocationLogoUrl.Should().Be("https://cdn.example.com/acme.png");
+    }
+
+    [Fact]
+    public async Task GetStatus_WhenLocationNotFound_ShouldReturnNullLogoAndName()
+    {
+        ArrangeHappyPath();
+        _locationServiceMock.Setup(s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new KeyNotFoundException());
+
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
+        dto.ServiceRequests[0].LocationName.Should().BeNull();
+        dto.ServiceRequests[0].LocationLogoUrl.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetStatus_WithRequestsAtDifferentDealers_ShouldShowEachDealersOwnLogo()
+    {
+        // Issue #793: one customer, two dealerships — each card carries its own dealer's logo.
+        var acct = BuildGlobalCustomerAcct();
+        acct.LinkedProfiles.Add(new LinkedProfileEmbedded
+        {
+            TenantId = "ten_2",
+            ProfileId = "prof_2",
+            DealershipName = "Other Dealer",
+            FirstSeenAtUtc = DateTime.UtcNow,
+            RequestCount = 1
+        });
+        ArrangeHappyPath();
+        _globalAcctServiceMock.Setup(s => s.ValidateMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+        _profileServiceMock.Setup(s => s.GetByIdAsync("ten_2", "prof_2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CustomerProfile
+            {
+                Id = "prof_2",
+                TenantId = "ten_2",
+                Email = "jane@example.com",
+                GlobalCustomerAcctId = "gca_1",
+                CreatedByUserId = "intake",
+                ServiceRequestIds = ["sr_2"]
+            });
+        _srServiceMock.Setup(s => s.GetByIdAsync("ten_2", "sr_2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ServiceRequest { Id = "sr_2", TenantId = "ten_2", LocationId = "loc_2", Status = "InProgress", CreatedByUserId = "intake" });
+        _locationServiceMock.Setup(s => s.GetByIdAsync("ten_2", "loc_2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_2",
+                TenantId = "ten_2",
+                Name = "Nova RV Boise",
+                Slug = "nova-boise",
+                CreatedByUserId = "system",
+                Branding = new LocationBrandingEmbedded { LogoUrl = "https://cdn.example.com/nova.png" }
+            });
+
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
+        dto.ServiceRequests.Select(i => i.LocationLogoUrl).Should().Equal(
+            "https://cdn.example.com/acme.png", "https://cdn.example.com/nova.png");
+        dto.ServiceRequests.Select(i => i.LocationName).Should().Equal(
+            "Salt Lake Service Center", "Nova RV Boise");
+    }
+
+    [Fact]
+    public async Task GetStatus_WithSeveralRequestsAtOneLocation_ShouldLookTheLocationUpOnce()
+    {
+        ArrangeHappyPath();
+        var profile = BuildCustomerProfile();
+        profile.ServiceRequestIds = ["sr_1", "sr_1b"];
+        _profileServiceMock.Setup(s => s.GetByIdAsync("ten_1", "prof_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(profile);
+        var second = BuildServiceRequest();
+        _srServiceMock.Setup(s => s.GetByIdAsync("ten_1", "sr_1b", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(second);
+
+        var result = await _sut.GetStatus("valid-token", CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<CustomerStatusResponseDto>().Subject;
+        dto.ServiceRequests.Should().HaveCount(2)
+            .And.OnlyContain(i => i.LocationLogoUrl == "https://cdn.example.com/acme.png");
+        _locationServiceMock.Verify(
+            s => s.GetByIdAsync("ten_1", "loc_1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task GetStatus_WithNoLinkedProfiles_ShouldReturnEmptyServiceRequests()
     {
         var acct = new GlobalCustomerAcct
@@ -237,9 +337,11 @@ public class StatusControllerTests
     {
         Id = "loc_1",
         TenantId = "ten_1",
+        Name = "Salt Lake Service Center",
         Slug = "salt-lake-service-center",
         CreatedByUserId = "system",
         Phone = "555-0100",
+        Branding = new LocationBrandingEmbedded { LogoUrl = "https://cdn.example.com/acme.png" },
         Address = new AddressEmbedded
         {
             City = "Salt Lake City",

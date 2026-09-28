@@ -115,15 +115,17 @@ public static class ServiceRequestMapper
     /// <summary>
     /// Maps a <see cref="ServiceRequest"/> to the customer-facing status view
     /// (<c>Spec X-1</c> / <c>C-9</c>): the unit, the issue category's display name, the submission
-    /// date, the current status, the servicing location's phone number, and any manager-authored
-    /// status note. No customer identity and no free-text problem description are carried across
-    /// this boundary.
+    /// date, the current status, the servicing location's name, logo and phone number, and any
+    /// manager-authored status note. No customer identity and no free-text problem description
+    /// are carried across this boundary.
     /// </summary>
     /// <param name="entity">The service request.</param>
-    /// <param name="locationPhone">Phone number of the servicing location, if known.</param>
-    public static CustomerStatusItemResponseDto ToCustomerStatusItemDto(this ServiceRequest entity, string? locationPhone)
+    /// <param name="location">The servicing location, or <c>null</c> when it cannot be found.</param>
+    public static CustomerStatusItemResponseDto ToCustomerStatusItemDto(this ServiceRequest entity, Location? location)
     {
         ArgumentNullException.ThrowIfNull(entity);
+
+        var logoUrl = location?.Branding?.LogoUrl?.Trim();
 
         return new CustomerStatusItemResponseDto
         {
@@ -131,12 +133,17 @@ public static class ServiceRequestMapper
             IssueCategory = IssueCategoryVocabulary.GetName(entity.IssueCategory),
             SubmittedAtUtc = entity.CreatedAtUtc,
             Status = entity.Status,
-            LocationPhone = string.IsNullOrWhiteSpace(locationPhone) ? null : locationPhone.Trim(),
+            LocationPhone = TrimToNull(location?.Phone),
+            LocationName = TrimToNull(location?.Name),
+            LocationLogoUrl = LocationBrandingValidator.IsHttpsUrl(logoUrl) ? logoUrl : null,
             StatusNote = string.IsNullOrWhiteSpace(entity.CustomerStatusNote?.Text)
                 ? null
                 : entity.CustomerStatusNote.Text
         };
     }
+
+    private static string? TrimToNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// Builds the "year make model" display string for a unit, or <c>null</c> when none

@@ -129,6 +129,27 @@ else if (_statusResponse is not null)
                         <MudCard Elevation="3">
                             <MudCardContent>
                                 <MudStack Spacing="3">
+                                    @* Which dealer this request is with (issue #793), so a customer with
+                                       requests at several can tell the cards apart. The name stands in
+                                       when there is no logo, or it will not load. *@
+                                    @if (sr.LocationLogoUrl is not null || !string.IsNullOrWhiteSpace(sr.LocationName))
+                                    {
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                                            @if (sr.LocationLogoUrl is not null)
+                                            {
+                                                <DealerLogo Url="@sr.LocationLogoUrl"
+                                                            Alt="@(string.IsNullOrWhiteSpace(sr.LocationName) ? "Dealer logo" : string.Empty)"
+                                                            Height="40px" MaxWidth="180px" />
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(sr.LocationName))
+                                            {
+                                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                                                    @sr.LocationName
+                                                </MudText>
+                                            }
+                                        </MudStack>
+                                    }
+
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
                                         <MudChip T="string"
                                                  Label="true"
