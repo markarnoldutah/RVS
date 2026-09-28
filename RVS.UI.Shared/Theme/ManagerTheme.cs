@@ -53,6 +53,7 @@ public static class ManagerTheme
             DrawerText = "rgba(240,236,225,0.85)",
             DrawerIcon = "rgba(240,236,225,0.85)",
             Background = RvsBrand.InkDarkSurface,
+            BackgroundGray = RvsBrand.InkDarkRecessed,
             Surface = RvsBrand.InkDarkElevated,
             TextPrimary = RvsBrand.TextOnInk,
             TextSecondary = RvsBrand.TextSecondaryOnInk,

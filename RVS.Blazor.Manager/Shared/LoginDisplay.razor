@@ -133,12 +133,7 @@
         await RefreshKeepSignedInAsync();
     }
 
-    private string MenuItemTextColor => ThemeService.Mode switch
-    {
-        ThemeMode.Dark => "#FFFFFF",
-        ThemeMode.HighContrast => "#FFFF00",
-        _ => "var(--mud-palette-primary)"
-    };
+    private string MenuItemTextColor => ModeColors.Action(ThemeService.Mode);
 
     private async Task OnThemeModeChangedAsync(ThemeMode mode)
     {

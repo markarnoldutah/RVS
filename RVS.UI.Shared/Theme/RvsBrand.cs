@@ -53,6 +53,12 @@ public static class RvsBrand
     /// <summary>One step lighter than <see cref="InkDarkSurface"/> — dark-mode cards and panels.</summary>
     public const string InkDarkElevated = "#243B54";
 
+    /// <summary>
+    /// One step deeper than <see cref="InkDarkSurface"/> — dark-mode recessed areas such as the
+    /// Service Board's columns, which hold cards painted in the page ground (issue #728).
+    /// </summary>
+    public const string InkDarkRecessed = "#131F2D";
+
     /// <summary>Barely tinted paper — a console page background that is warm without reading as cream.</summary>
     public const string PaperNeutral = "#FAF8F3";
 

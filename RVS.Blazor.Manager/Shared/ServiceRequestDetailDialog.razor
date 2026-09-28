@@ -15,7 +15,7 @@
            Width="min(1000px, 100vw)"
            Overlay="true"
            Style="@FlyoutStyles.DrawerStyle(ThemeService.Mode)">
-    <div class="d-flex flex-column" style="@FlyoutStyles.ColumnStyle(ThemeService.Mode)">
+    <div class="d-flex flex-column" style="@FlyoutStyles.ColumnStyle">
         @* Sticky title header — full width *@
         <MudPaper Elevation="0" Square="true" Class="px-4 py-3"
                   Style="@HeaderFooterStyle">
@@ -1292,19 +1292,9 @@
 
     private void HandleThemeChanged() => InvokeAsync(StateHasChanged);
 
-    private string LabelColor => ThemeService.Mode switch
-    {
-        ThemeMode.Dark => "#9198A1",
-        ThemeMode.HighContrast => "#FFFF00",
-        _ => "var(--mud-palette-text-secondary)"
-    };
+    private string LabelColor => ModeColors.SecondaryText(ThemeService.Mode);
 
-    private string ValueColor => ThemeService.Mode switch
-    {
-        ThemeMode.Dark => "#FFFFFF",
-        ThemeMode.HighContrast => "#FFFF00",
-        _ => "var(--mud-palette-text-primary)"
-    };
+    private string ValueColor => ModeColors.Text(ThemeService.Mode);
 
     private Color SystemDotColor => ThemeService.Mode == ThemeMode.Dark ? Color.Dark : Color.Default;
 
@@ -1316,9 +1306,9 @@
 
     private string StatusNoteValueStyle => $"white-space: pre-wrap; color: {ValueColor};";
 
-    private string HeaderFooterStyle => FlyoutStyles.HeaderStyle(ThemeService.Mode);
+    private string HeaderFooterStyle => FlyoutStyles.HeaderStyle;
 
-    private string FooterStyle => FlyoutStyles.FooterStyle(ThemeService.Mode);
+    private string FooterStyle => FlyoutStyles.FooterStyle;
 
     private string LabelStyle => $"font-weight: 700; color: {LabelColor};";
 
