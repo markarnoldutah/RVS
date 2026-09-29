@@ -64,19 +64,140 @@ public static class PacketHtmlRenderer
         // One string, three surfaces: the masthead, the @page running footer, and the static
         // end-of-flow footer. Derived on the packet (issue #506) so the PDF renderer reads the
         // very same value rather than a second copy of the same expression.
-        var received = packet.Origin.ReceivedDisplay;
-
         var sb = new StringBuilder(4096);
+
+        AppendDocumentStart(sb, packet, "Service Packet ");
+        AppendPacket(sb, packet, managerAppServiceRequestUrl, problemLabel: null, startsNewSheet: false);
+        sb.Append("</body>\n</html>\n");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Renders every packet of a multi-problem submission (<c>Spec A-17</c>, issue #806) to one
+    /// HTML document: the body of the submission's single packet email (<c>Spec B-4</c>). An index
+    /// of the problems leads; then each packet follows in submission order, labelled "Problem i of
+    /// n" and starting a new sheet when printed, so each prints as the one-page packet it would
+    /// have been on its own. A single packet renders exactly as <see cref="Render"/> would.
+    /// </summary>
+    /// <param name="packets">The submission's packets, in the order the customer reported the problems.</param>
+    /// <param name="photosDropped">
+    /// <c>true</c> when the email's size budget left at least one photo attachment off (issue
+    /// <c>#521</c>). Each packet that has images then carries the note pointing at its own
+    /// request in the Manager app, since there is no telling from here whose photo it was.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="packets"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="packets"/> is empty.</exception>
+    public static string RenderCombined(IReadOnlyList<ServicePacket> packets, bool photosDropped = false)
+    {
+        ArgumentNullException.ThrowIfNull(packets);
+        if (packets.Count == 0)
+        {
+            throw new ArgumentException("At least one packet is required.", nameof(packets));
+        }
+
+        if (packets.Count == 1)
+        {
+            return Render(packets[0], photosDropped ? DroppedPhotoNoteUrl(packets[0]) : null);
+        }
+
+        var sb = new StringBuilder(4096 * packets.Count);
+
+        AppendDocumentStart(sb, packets[0], "Service Packets ");
+        AppendSubmissionIndex(sb, packets);
+        for (var i = 0; i < packets.Count; i++)
+        {
+            AppendPacket(
+                sb,
+                packets[i],
+                photosDropped ? DroppedPhotoNoteUrl(packets[i]) : null,
+                problemLabel: $"Problem {i + 1} of {packets.Count}",
+                startsNewSheet: i > 0);
+        }
+
+        sb.Append("</body>\n</html>\n");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// The Manager-app link for the dropped-photo note on <paramref name="packet"/>: its own
+    /// request, and only when it had an image to lose.
+    /// </summary>
+    private static string? DroppedPhotoNoteUrl(ServicePacket packet) =>
+        packet.Photos.Any(p => !p.IsVideo) ? packet.ManagerLinks?.RequestUrl : null;
+
+    /// <summary>
+    /// Opens the document through <c>&lt;body&gt;</c>. The title and the <c>@page</c> running
+    /// footer carry <paramref name="packet"/>'s reference — a combined document's first packet.
+    /// </summary>
+    private static void AppendDocumentStart(StringBuilder sb, ServicePacket packet, string titlePrefix)
+    {
+        // One string, three surfaces: the masthead, the @page running footer, and the static
+        // end-of-flow footer. Derived on the packet (issue #506) so the PDF renderer reads the
+        // very same value rather than a second copy of the same expression.
+        var received = packet.Origin.ReceivedDisplay;
 
         sb.Append("<!DOCTYPE html>\n");
         sb.Append("<html lang=\"en\">\n<head>\n");
         sb.Append("<meta charset=\"utf-8\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
-        sb.Append("<title>Service Packet ").Append(Text(packet.Origin.ReferenceCode)).Append("</title>\n");
+        sb.Append("<title>").Append(titlePrefix).Append(Text(packet.Origin.ReferenceCode)).Append("</title>\n");
         sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(packet.Origin.ReferenceCode, received, packet.Branding.BrandName)))
             .Append("\n</style>\n");
         sb.Append("</head>\n<body>\n");
-        sb.Append("<main class=\"packet\">\n");
+    }
+
+    // ── Submission index (Spec A-17, issue #806) ────────────────────────
+    //
+    // Delivery chrome for a multi-problem email, like the manager actions: a short list of what
+    // this visit reported, so the service manager sees the whole job before scrolling through
+    // one packet per problem. A presentational <table> for the same mail-client reason.
+
+    private static void AppendSubmissionIndex(StringBuilder sb, IReadOnlyList<ServicePacket> packets)
+    {
+        sb.Append("<!-- section:submission-index -->\n");
+        sb.Append("<main class=\"packet submission-index\">\n");
+        sb.Append("<table role=\"presentation\" width=\"100%\" style=\"width:100%;border-collapse:collapse;border:1px solid #000;\">\n");
+        sb.Append("<tr>\n<td colspan=\"3\" style=\"padding:2mm 3mm;font-weight:700;border-bottom:1px solid #000;\">")
+            .Append(packets.Count.ToString(CultureInfo.InvariantCulture))
+            .Append(" problems reported on this visit</td>\n</tr>\n");
+
+        for (var i = 0; i < packets.Count; i++)
+        {
+            var packet = packets[i];
+            var category = string.IsNullOrWhiteSpace(packet.IssueCategory) ? "Uncategorized" : packet.IssueCategory.Trim();
+
+            sb.Append("<tr>\n");
+            sb.Append("<td style=\"padding:1mm 3mm;white-space:nowrap;vertical-align:top;\">")
+                .Append((i + 1).ToString(CultureInfo.InvariantCulture)).Append(".</td>\n");
+            sb.Append("<td style=\"padding:1mm 3mm;width:100%;vertical-align:top;\"><strong>").Append(Text(category))
+                .Append("</strong></td>\n");
+            sb.Append("<td style=\"padding:1mm 3mm;white-space:nowrap;vertical-align:top;\">Intake #")
+                .Append(Text(packet.Origin.ReferenceCode)).Append("</td>\n");
+            sb.Append("</tr>\n");
+        }
+
+        sb.Append("</table>\n</main>\n");
+    }
+
+    /// <summary>
+    /// Appends one packet's <c>&lt;main&gt;</c>, in <c>Spec B-2</c> order. In a combined document
+    /// <paramref name="problemLabel"/> heads it, and every packet after the first starts a new sheet.
+    /// </summary>
+    private static void AppendPacket(
+        StringBuilder sb, ServicePacket packet, string? managerAppServiceRequestUrl, string? problemLabel, bool startsNewSheet)
+    {
+        var received = packet.Origin.ReceivedDisplay;
+
+        sb.Append(startsNewSheet
+            ? "<main class=\"packet\" style=\"page-break-before:always;break-before:page;\">\n"
+            : "<main class=\"packet\">\n");
+
+        if (problemLabel is not null)
+        {
+            sb.Append("<p class=\"problem-of\" style=\"margin:0 0 2mm;font-weight:700;\">").Append(Text(problemLabel)).Append("</p>\n");
+        }
 
         AppendManagerActions(sb, packet.ManagerLinks);
         AppendMasthead(sb, packet, received);
@@ -93,9 +214,7 @@ public static class PacketHtmlRenderer
         AppendStatusLink(sb, packet.StatusLink);
         AppendFooter(sb, packet.Origin.ReferenceCode, received, packet.Branding.PoweredByLogoUrl, packet.AiDisclaimer);
 
-        sb.Append("</main>\n</body>\n</html>\n");
-
-        return sb.ToString();
+        sb.Append("</main>\n");
     }
 
     // ── Manager-app status actions (Spec C-7, issue #498) ────────────────

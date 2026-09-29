@@ -78,20 +78,87 @@ public static class PacketEmailComposer
         };
     }
 
-    private static string BuildSubject(ServicePacket packet, string? customerLastName)
+    /// <summary>
+    /// Builds the one packet email for a multi-problem submission (<c>Spec A-17</c>, <c>B-4</c>,
+    /// issue #806). The subject names the unit once, then the problem count and every category
+    /// in order — <c>New SR: {last name}: {year} {make} {model} - {n} issues: {category}, …</c>.
+    /// The plain-text body is <see cref="BuildCombinedPlainTextBody"/>. A single packet composes
+    /// exactly as <see cref="Compose"/> would.
+    /// </summary>
+    /// <param name="packets">The submission's packets, in the order the customer reported the problems. The first supplies the unit.</param>
+    /// <param name="htmlBody">The combined HTML (<see cref="PacketHtmlRenderer.RenderCombined"/>), used verbatim.</param>
+    /// <param name="customerLastName">The customer's last name for the subject; blank becomes <c>Unknown</c>.</param>
+    /// <param name="recipients">The location's configured recipient addresses; blanks are dropped and at least one must remain.</param>
+    /// <param name="attachments">The merged PDF and/or original photos. <c>null</c> is treated as none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="packets"/> or <paramref name="recipients"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="packets"/> is empty, <paramref name="htmlBody"/> is blank, or no recipient remains.</exception>
+    public static PacketEmailMessage ComposeCombined(
+        IReadOnlyList<ServicePacket> packets,
+        string htmlBody,
+        string? customerLastName,
+        IReadOnlyList<string> recipients,
+        IReadOnlyList<PacketEmailAttachment>? attachments = null)
     {
-        var category = string.IsNullOrWhiteSpace(packet.IssueCategory)
-            ? UncategorizedLabel
-            : packet.IssueCategory.Trim();
+        ArgumentNullException.ThrowIfNull(packets);
+        if (packets.Count == 0)
+        {
+            throw new ArgumentException("At least one packet is required.", nameof(packets));
+        }
 
-        var vehicle = BuildVehicle(packet.Unit);
+        var message = Compose(packets[0], htmlBody, customerLastName, recipients, attachments);
+        if (packets.Count == 1)
+        {
+            return message;
+        }
 
-        var lastName = string.IsNullOrWhiteSpace(customerLastName)
-            ? UnknownLastNameLabel
-            : customerLastName.Trim();
+        var categories = string.Join(", ", packets.Select(p => CategoryLabel(p.IssueCategory)));
 
-        return $"{SubjectPrefix}: {lastName}: {vehicle} - {category}";
+        return message with
+        {
+            Subject = $"{SubjectPrefix}: {LastNameLabel(customerLastName)}: {BuildVehicle(packets[0].Unit)} - {packets.Count} issues: {categories}",
+            PlainTextBody = BuildCombinedPlainTextBody(packets),
+        };
     }
+
+    /// <summary>
+    /// The plain-text body of a multi-problem email: each packet's <see cref="BuildPlainTextBody"/>
+    /// in order, headed <c>PROBLEM i OF n</c>. ASCII like the paste blocks it carries (<c>Spec B-5</c>).
+    /// A single packet's body has no heading, as <see cref="Compose"/> sends it.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="packets"/> is null.</exception>
+    public static string BuildCombinedPlainTextBody(IReadOnlyList<ServicePacket> packets)
+    {
+        ArgumentNullException.ThrowIfNull(packets);
+
+        if (packets.Count == 1)
+        {
+            return BuildPlainTextBody(packets[0]);
+        }
+
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < packets.Count; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append("\n\n");
+            }
+
+            sb.Append("PROBLEM ").Append((i + 1).ToString(CultureInfo.InvariantCulture))
+                .Append(" OF ").Append(packets.Count.ToString(CultureInfo.InvariantCulture)).Append('\n');
+            sb.Append(BuildPlainTextBody(packets[i]));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string BuildSubject(ServicePacket packet, string? customerLastName) =>
+        $"{SubjectPrefix}: {LastNameLabel(customerLastName)}: {BuildVehicle(packet.Unit)} - {CategoryLabel(packet.IssueCategory)}";
+
+    private static string CategoryLabel(string? category) =>
+        string.IsNullOrWhiteSpace(category) ? UncategorizedLabel : category.Trim();
+
+    private static string LastNameLabel(string? customerLastName) =>
+        string.IsNullOrWhiteSpace(customerLastName) ? UnknownLastNameLabel : customerLastName.Trim();
 
     private static string BuildVehicle(PacketUnitHeader unit)
     {

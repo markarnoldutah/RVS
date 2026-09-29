@@ -111,12 +111,82 @@ public static class PacketPdfRenderer
     {
         ArgumentNullException.ThrowIfNull(packet);
 
-        var layout = PacketPdfLayout.Build(packet);
+        return RenderDocument([packet], photoImages, logoImage, $"Service Packet {packet.Origin.ReferenceCode}");
+    }
+
+    /// <summary>
+    /// Renders every packet of a multi-problem submission (<c>Spec A-17</c>, issue #806) to one
+    /// PDF, attached to the submission's single packet email (<c>Spec B-4</c>). Each packet is laid
+    /// out exactly as <see cref="Render"/> lays it out and starts its own sheet, in submission
+    /// order. A single packet renders byte-for-byte as <see cref="Render"/> would.
+    /// </summary>
+    /// <param name="packets">The submission's packets, in the order the customer reported the problems.</param>
+    /// <param name="photoImages">
+    /// Image bytes keyed by <see cref="PacketPhoto.Url"/> across every packet — read URLs are
+    /// unique, so one map serves them all. Photos with no entry render as a labelled placeholder.
+    /// </param>
+    /// <param name="logoImage">The dealer logo's bytes; the packets share a location, so they share it.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="packets"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="packets"/> is empty.</exception>
+    public static byte[] RenderCombined(
+        IReadOnlyList<ServicePacket> packets,
+        IReadOnlyDictionary<string, byte[]>? photoImages = null,
+        byte[]? logoImage = null)
+    {
+        ArgumentNullException.ThrowIfNull(packets);
+        if (packets.Count == 0)
+        {
+            throw new ArgumentException("At least one packet is required.", nameof(packets));
+        }
+
+        var title = packets.Count == 1
+            ? $"Service Packet {packets[0].Origin.ReferenceCode}"
+            : $"Service Packets {packets[0].Origin.ReferenceCode}";
+
+        return RenderDocument(packets, photoImages, logoImage, title);
+    }
+
+    private static byte[] RenderDocument(
+        IReadOnlyList<ServicePacket> packets,
+        IReadOnlyDictionary<string, byte[]>? photoImages,
+        byte[]? logoImage,
+        string title)
+    {
         var images = photoImages ?? NoImages;
+        var first = packets[0];
         // Document metadata dates stay UTC by PDF spec — deliberately not the location-local
         // Received line (issue #506). Converting them would make the bytes depend on the host's
         // time-zone database and break the determinism test below.
-        var submitted = packet.Origin.SubmittedAtUtc.UtcDateTime;
+        var submitted = first.Origin.SubmittedAtUtc.UtcDateTime;
+
+        return Document.Create(container =>
+            {
+                // One page block per packet: QuestPDF starts each on a fresh sheet, so every
+                // problem in a combined document prints as the packet it would be on its own.
+                foreach (var packet in packets)
+                {
+                    ComposePacketPages(container, packet, images, logoImage);
+                }
+            })
+            .WithMetadata(new DocumentMetadata
+            {
+                Title = title,
+                Author = first.Branding.BrandName,
+                Subject = "RV service intake packet",
+                // Pinned to the packet so the same packet renders byte-for-byte identically.
+                CreationDate = submitted,
+                ModifiedDate = submitted,
+            })
+            .GeneratePdf();
+    }
+
+    private static void ComposePacketPages(
+        IDocumentContainer container,
+        ServicePacket packet,
+        IReadOnlyDictionary<string, byte[]> images,
+        byte[]? logoImage)
+    {
+        var layout = PacketPdfLayout.Build(packet);
 
         var masthead = MastheadSectionIds
             .Select(id => layout.Sections.First(s => s.Id == id))
@@ -124,52 +194,39 @@ public static class PacketPdfRenderer
         var bodySections = layout.Sections.Where(s => !MastheadSectionIds.Contains(s.Id));
         var logo = packet.Branding.HasLogo ? TryDecodeLogo(logoImage) : null;
 
-        return Document.Create(container =>
+        container.Page(page =>
+        {
+            page.Size(PageWidthMm, PageHeightMm, Unit.Millimetre);
+            page.Margin(PageMarginMm, Unit.Millimetre);
+            page.DefaultTextStyle(text => text.FontSize(10.5f).FontColor(Colors.Black));
+
+            page.Content().Column(column =>
             {
-                container.Page(page =>
+                column.Spacing(18f);
+
+                column.Item().Element(e => RenderMasthead(
+                    e, packet, layout, logo, unit: masthead[0], customer: masthead[1], origin: masthead[2]));
+
+                foreach (var section in bodySections)
                 {
-                    page.Size(PageWidthMm, PageHeightMm, Unit.Millimetre);
-                    page.Margin(PageMarginMm, Unit.Millimetre);
-                    page.DefaultTextStyle(text => text.FontSize(10.5f).FontColor(Colors.Black));
+                    RenderSection(column, section, images);
+                }
 
-                    page.Content().Column(column =>
+                // The end-of-flow footer, matching the HTML's static one: "Powered by" the
+                // RV Intake mark, centred (issue #470), then the one AI disclosure
+                // (issue #780). Once, after the last section — not on every page.
+                column.Item().BorderTop(1f).PaddingTop(4f).Column(foot =>
+                {
+                    foot.Spacing(3f);
+                    foot.Item().AlignCenter().Element(RenderPoweredBy);
+
+                    if (layout.AiDisclaimer is not null)
                     {
-                        column.Spacing(18f);
-
-                        column.Item().Element(e => RenderMasthead(
-                            e, packet, layout, logo, unit: masthead[0], customer: masthead[1], origin: masthead[2]));
-
-                        foreach (var section in bodySections)
-                        {
-                            RenderSection(column, section, images);
-                        }
-
-                        // The end-of-flow footer, matching the HTML's static one: "Powered by" the
-                        // RV Intake mark, centred (issue #470), then the one AI disclosure
-                        // (issue #780). Once, after the last section — not on every page.
-                        column.Item().BorderTop(1f).PaddingTop(4f).Column(foot =>
-                        {
-                            foot.Spacing(3f);
-                            foot.Item().AlignCenter().Element(RenderPoweredBy);
-
-                            if (layout.AiDisclaimer is not null)
-                            {
-                                foot.Item().Text(layout.AiDisclaimer).Italic().FontSize(8f);
-                            }
-                        });
-                    });
+                        foot.Item().Text(layout.AiDisclaimer).Italic().FontSize(8f);
+                    }
                 });
-            })
-            .WithMetadata(new DocumentMetadata
-            {
-                Title = $"Service Packet {packet.Origin.ReferenceCode}",
-                Author = packet.Branding.BrandName,
-                Subject = "RV service intake packet",
-                // Pinned to the packet so the same packet renders byte-for-byte identically.
-                CreationDate = submitted,
-                ModifiedDate = submitted,
-            })
-            .GeneratePdf();
+            });
+        });
     }
 
     // ── Masthead: sections 1–3 as an IDS-style band ──────────────────────

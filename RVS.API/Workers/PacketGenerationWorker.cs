@@ -49,12 +49,14 @@ public sealed class PacketGenerationWorker : BackgroundService
 
     /// <summary>
     /// Whether <paramref name="outcome"/> expects the job to come back round: a failed attempt
-    /// with attempts remaining, or a wait for intake attachments that have not finished
-    /// uploading (issue #516). <c>null</c> — an unexpected fault — is never re-queued, so one
+    /// with attempts remaining, a wait for intake attachments that have not finished
+    /// uploading (issue #516), or a submission's lead waiting on its siblings' packets (issue #806). <c>null</c> — an unexpected fault — is never re-queued, so one
     /// poison job cannot spin.
     /// </summary>
     internal static bool ShouldRequeue(PacketGenerationOutcome? outcome) =>
-        outcome is PacketGenerationOutcome.Retry or PacketGenerationOutcome.WaitingForAttachments;
+        outcome is PacketGenerationOutcome.Retry
+            or PacketGenerationOutcome.WaitingForAttachments
+            or PacketGenerationOutcome.WaitingForSiblings;
 
     /// <summary>
     /// Runs one generation attempt for <paramref name="job"/> in its own DI scope. Returns the

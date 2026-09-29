@@ -1556,4 +1556,220 @@ public class PacketGenerationServiceTests
         sent.Should().NotBeNull();
         sent!.HtmlBody.Should().Contain("Received: 2026-09-05 8:30 AM MDT");
     }
+
+    // ── Several problems per visit (Spec A-17, B-4, issue #806) ─────────────
+    // Each sibling generates and stores its own packet. The first request owns the submission's
+    // one email: it waits for its siblings to settle, then sends every packet together.
+
+    private const string Sibling2Id = "b2b2b2b2-1111-2222-3333-444455556666";
+    private const string Sibling3Id = "c3c3c3c3-1111-2222-3333-444455556666";
+
+    private static ServiceRequest Grouped(string id, int position, string description, string category, DateTime? createdAtUtc = null) => new()
+    {
+        Id = id,
+        TenantId = TenantId,
+        LocationId = "loc_1",
+        Status = "New",
+        IssueDescription = description,
+        IssueCategory = category,
+        CustomerSnapshot = new CustomerSnapshotEmbedded { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
+        AssetInfo = new AssetInfoEmbedded { AssetId = "1HGBH41JXMN109186", Manufacturer = "Jayco", Model = "Eagle", Year = 2021 },
+        SubmissionId = SrId,
+        SubmissionPosition = position,
+        SubmissionCount = 3,
+        CreatedAtUtc = createdAtUtc ?? DateTime.UtcNow,
+    };
+
+    private static void MarkGenerated(ServiceRequest sr)
+    {
+        sr.PacketGeneration.MarkGenerating();
+        sr.PacketGeneration.MarkSucceeded($"packets/{TenantId}/{sr.Id}/v1.pdf", DateTime.UtcNow);
+    }
+
+    private static void MarkExhausted(ServiceRequest sr)
+    {
+        for (var i = 0; i < PacketGenerationEmbedded.MaxAttempts; i++)
+        {
+            sr.PacketGeneration.MarkGenerating();
+            sr.PacketGeneration.MarkFailed("boom");
+        }
+    }
+
+    private (ServiceRequest Lead, ServiceRequest Second, ServiceRequest Third, List<PacketEmailMessage> Sent) SetupSubmission(
+        DateTime? leadCreatedAtUtc = null)
+    {
+        var lead = Grouped(SrId, 1, "Slide will not retract", "Slides", leadCreatedAtUtc);
+        var second = Grouped(Sibling2Id, 2, "Fridge is warm", "Appliances");
+        var third = Grouped(Sibling3Id, 3, "Awning fabric torn", "Awning");
+
+        foreach (var sr in new[] { lead, second, third })
+        {
+            _srRepoMock.Setup(r => r.GetByIdAsync(TenantId, sr.Id, It.IsAny<CancellationToken>())).ReturnsAsync(sr);
+        }
+
+        _srRepoMock.Setup(r => r.GetBySubmissionIdAsync(TenantId, SrId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([lead, second, third]);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+
+        var sent = new List<PacketEmailMessage>();
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent.Add(m))
+            .Returns(Task.CompletedTask);
+
+        return (lead, second, third, sent);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenSingleIssueRequest_ShouldNotLookUpSiblings()
+    {
+        SetupRequest(BuildRequest());
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        _srRepoMock.Verify(r => r.GetBySubmissionIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenLeadAndASiblingIsStillGenerating_ShouldWaitWithoutSpendingAnAttempt()
+    {
+        var (lead, second, _, sent) = SetupSubmission();
+        MarkGenerated(second);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.WaitingForSiblings);
+        lead.PacketGeneration.AttemptCount.Should().Be(0);
+        sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenLeadAndEverySiblingHasGenerated_ShouldSendOneCombinedEmail()
+    {
+        var (_, second, third, sent) = SetupSubmission();
+        MarkGenerated(second);
+        MarkGenerated(third);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        var message = sent.Should().ContainSingle().Subject;
+        message.Subject.Should().Be("New SR: Doe: 2021 Jayco Eagle - 3 issues: Slides, Appliances, Awning");
+        message.HtmlBody.Should().Contain("Slide will not retract").And.Contain("Fridge is warm").And.Contain("Awning fabric torn");
+        message.PlainTextBody.Should().Contain("PROBLEM 3 OF 3");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenLeadSendsTheCombinedEmail_ShouldAttachOneMergedPdf()
+    {
+        var (_, second, third, sent) = SetupSubmission();
+        MarkGenerated(second);
+        MarkGenerated(third);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        var pdfs = sent.Single().Attachments.Where(a => a.ContentType == "application/pdf").ToList();
+        pdfs.Should().ContainSingle().Which.FileName.Should().Be("service-packets-A1B2C3D4.pdf");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenLeadSendsTheCombinedEmail_ShouldAttachEverySiblingsPhotos()
+    {
+        var (lead, second, third, sent) = SetupSubmission();
+        second.Attachments = [Image("att_fridge", "tenants/t/sr2/fridge.jpg")];
+        MarkGenerated(second);
+        MarkGenerated(third);
+        _photoResolverMock.Setup(r => r.ResolveAsync(It.Is<ServiceRequest>(sr => sr.Id == Sibling2Id), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string> { ["att_fridge"] = "https://blob/fridge.jpg?sas" });
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sent.Single().Attachments.Should().Contain(a => a.ContentType == "image/jpeg");
+        lead.Attachments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenLeadSendsTheCombinedEmail_ShouldRecordEachIncludedSiblingAsDelivered()
+    {
+        var (lead, second, third, _) = SetupSubmission();
+        MarkGenerated(second);
+        MarkGenerated(third);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        lead.PacketEmailDelivery.IsDeliveredFor(1).Should().BeTrue();
+        second.PacketEmailDelivery.IsDeliveredFor(1).Should().BeTrue();
+        third.PacketEmailDelivery.IsDeliveredFor(1).Should().BeTrue();
+        _srRepoMock.Verify(r => r.UpdateAsync(It.Is<ServiceRequest>(sr => sr.Id == Sibling2Id), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenASiblingExhaustedItsAttempts_ShouldSendTheOthersWithoutIt()
+    {
+        var (_, second, third, sent) = SetupSubmission();
+        MarkExhausted(second);
+        MarkGenerated(third);
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        var message = sent.Should().ContainSingle().Subject;
+        message.Subject.Should().EndWith("2 issues: Slides, Awning");
+        message.HtmlBody.Should().NotContain("Fridge is warm");
+        second.PacketEmailDelivery.Status.Should().Be("Pending");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheSiblingWaitHasRunOut_ShouldSendWithWhateverHasGenerated()
+    {
+        var (_, second, _, sent) = SetupSubmission(
+            leadCreatedAtUtc: DateTime.UtcNow - PacketGenerationService.SiblingWaitWindow - TimeSpan.FromSeconds(1));
+        MarkGenerated(second);
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        sent.Should().ContainSingle().Which.Subject.Should().EndWith("2 issues: Slides, Appliances");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenSiblingAndTheLeadHasNotSentYet_ShouldGenerateButLeaveTheEmailToTheLead()
+    {
+        var (_, second, _, sent) = SetupSubmission();
+
+        var outcome = await _sut.GenerateAsync(TenantId, Sibling2Id);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        second.PacketGeneration.Status.Should().Be("Succeeded");
+        sent.Should().BeEmpty();
+        second.PacketEmailDelivery.Status.Should().Be("Pending");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenSiblingAndTheLeadAlreadySentWithoutIt_ShouldSendItsOwnEmail()
+    {
+        var (lead, second, _, sent) = SetupSubmission();
+        MarkGenerated(lead);
+        lead.PacketEmailDelivery.MarkDelivered(1, DateTime.UtcNow);
+
+        await _sut.GenerateAsync(TenantId, Sibling2Id);
+
+        sent.Should().ContainSingle().Which.Subject.Should().Be("New SR: Doe: 2021 Jayco Eagle - Appliances");
+        second.PacketEmailDelivery.IsDeliveredFor(1).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenLeadIsRegeneratedAfterTheCombinedEmail_ShouldSendOnlyItsOwnPacket()
+    {
+        var (lead, second, third, sent) = SetupSubmission(leadCreatedAtUtc: DateTime.UtcNow.AddDays(-1));
+        MarkGenerated(lead);
+        lead.PacketEmailDelivery.MarkDelivered(1, DateTime.UtcNow);
+        second.PacketGeneration.ResetForRegeneration();
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        sent.Should().ContainSingle().Which.Subject.Should().Be("New SR: Doe: 2021 Jayco Eagle - Slides");
+        lead.PacketEmailDelivery.IsDeliveredFor(2).Should().BeTrue();
+    }
 }
+

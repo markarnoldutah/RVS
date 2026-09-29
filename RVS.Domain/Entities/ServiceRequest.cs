@@ -173,6 +173,34 @@ public class ServiceRequest : EntityBase
     public string? AdvisorUserId { get; init; }
 
     /// <summary>
+    /// The intake submission this request came from, when the customer reported several problems
+    /// at once (<c>Spec A-17</c>, issue #806): the id of the submission's first request, which
+    /// every sibling shares. <c>null</c> for a single-problem submission and for requests created
+    /// before the field existed.
+    /// </summary>
+    [JsonProperty("submissionId")]
+    public string? SubmissionId { get; init; }
+
+    /// <summary>This request's 1-based position in its submission (<c>Spec A-17</c>): the "2" of "2 of 3".</summary>
+    [JsonProperty("submissionPosition")]
+    public int SubmissionPosition { get; init; }
+
+    /// <summary>How many problems its submission reported (<c>Spec A-17</c>): the "3" of "2 of 3".</summary>
+    [JsonProperty("submissionCount")]
+    public int SubmissionCount { get; init; }
+
+    /// <summary>Whether this request is one of several reported in one submission (<c>Spec A-17</c>).</summary>
+    [JsonIgnore]
+    public bool IsInMultiIssueSubmission => SubmissionId is not null && SubmissionCount > 1;
+
+    /// <summary>
+    /// Whether this is the first request of a multi-problem submission (<c>Spec A-17</c>). The
+    /// lead owns the submission's combined packet email (<c>Spec B-4</c>).
+    /// </summary>
+    [JsonIgnore]
+    public bool IsSubmissionLead => IsInMultiIssueSubmission && SubmissionPosition == 1;
+
+    /// <summary>
     /// Board display order within a status column. Lower values appear first.
     /// Defaults to 0; updated when cards are reordered on the Service Board.
     /// </summary>
@@ -521,6 +549,15 @@ public class PacketGenerationEmbedded
     /// </summary>
     [JsonProperty("expectedAttachmentCount")]
     public int ExpectedAttachmentCount { get; set; }
+
+    /// <summary>
+    /// Whether generation has come to rest without anyone acting: the packet generated, or every
+    /// attempt failed. The lead of a multi-problem submission waits on this for each sibling
+    /// before sending the combined email (<c>Spec A-17</c>, <c>B-4</c>).
+    /// </summary>
+    [JsonIgnore]
+    public bool IsSettled =>
+        Status == "Succeeded" || (Status == "Failed" && AttemptCount >= MaxAttempts);
 
     /// <summary>Begins a new attempt: marks <c>Generating</c>, increments the attempt count, stamps the time.</summary>
     public void MarkGenerating()

@@ -270,6 +270,187 @@ public sealed class IntakeWizardState
     /// <summary>Uploaded attachment metadata (Step 7).</summary>
     public List<AttachmentFileInfo> Attachments { get; set; } = [];
 
+    // ── Several problems per visit (Spec A-17, issue #806) ─────────────
+    //
+    // The issue properties above always hold the active problem: Steps 5–7 bind to them and
+    // never know which problem they are editing. The drafts hold every problem; the active one
+    // is copied back from those properties whenever the list is read or another problem opens.
+
+    private List<IntakeIssueDraft> _issues = [new()];
+
+    /// <summary>The most problems one visit may report (<c>Spec A-17</c>).</summary>
+    public const int MaxIssues = IntakeIssuesValidator.MaxIssuesPerSubmission;
+
+    /// <summary>Index into <see cref="GetIssues"/> of the problem Steps 5–7 are editing.</summary>
+    public int ActiveIssueIndex { get; private set; }
+
+    /// <summary>How many problems this visit reports so far, counting the one being edited.</summary>
+    public int IssueCount => _issues.Count;
+
+    /// <summary>Whether the review step may offer <c>Add another problem</c>.</summary>
+    public bool CanAddIssue => _issues.Count < MaxIssues;
+
+    /// <summary>Every problem, in the order entered, with the active one brought up to date.</summary>
+    public IReadOnlyList<IntakeIssueDraft> GetIssues()
+    {
+        SaveActiveIssue();
+        return _issues;
+    }
+
+    /// <summary>
+    /// Opens a blank problem on Step 5, after the others (<c>Spec A-17</c>). RV usage describes
+    /// the visit, so it carries forward; everything Steps 5–7 ask per problem starts empty. Does
+    /// nothing once <see cref="MaxIssues"/> problems exist.
+    /// </summary>
+    public async Task StartNewIssueAsync()
+    {
+        if (!CanAddIssue)
+        {
+            return;
+        }
+
+        SaveActiveIssue();
+        _issues.Add(new IntakeIssueDraft());
+        ActiveIssueIndex = _issues.Count - 1;
+        LoadActiveIssue();
+
+        ReturnToStepAfterEdit = null;
+        await GoToStepAsync(5);
+    }
+
+    /// <summary>
+    /// Opens problem <paramref name="index"/> at <paramref name="step"/> (5–7) from the review
+    /// step, which Continue then returns to.
+    /// </summary>
+    public async Task EditIssueAsync(int index, int step)
+    {
+        if (index < 0 || index >= _issues.Count)
+        {
+            return;
+        }
+
+        SaveActiveIssue();
+        ActiveIssueIndex = index;
+        LoadActiveIssue();
+
+        ReturnToStepAfterEdit = TotalStepCount;
+        await GoToStepAsync(step);
+    }
+
+    /// <summary>Removes problem <paramref name="index"/>. The only problem is never removed.</summary>
+    public async Task RemoveIssueAsync(int index)
+    {
+        if (_issues.Count <= 1 || index < 0 || index >= _issues.Count)
+        {
+            return;
+        }
+
+        SaveActiveIssue();
+        _issues.RemoveAt(index);
+        if (index < ActiveIssueIndex || ActiveIssueIndex >= _issues.Count)
+        {
+            ActiveIssueIndex = Math.Max(0, ActiveIssueIndex - 1);
+        }
+
+        LoadActiveIssue();
+        await NotifyAndPersistAsync();
+    }
+
+    /// <summary>
+    /// Drops every problem after the first that the customer left blank — a problem they opened
+    /// with <c>Add another problem</c> and then backed out of. Run when the review step opens.
+    /// </summary>
+    public void PruneEmptyIssues()
+    {
+        SaveActiveIssue();
+
+        var pruned = false;
+        for (var i = _issues.Count - 1; i >= 1; i--)
+        {
+            if (!_issues[i].IsEmpty)
+            {
+                continue;
+            }
+
+            _issues.RemoveAt(i);
+            pruned = true;
+            if (i < ActiveIssueIndex || ActiveIssueIndex >= _issues.Count)
+            {
+                ActiveIssueIndex = Math.Max(0, ActiveIssueIndex - 1);
+            }
+        }
+
+        if (pruned)
+        {
+            LoadActiveIssue();
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>
+    /// Checks every problem as Step 5 would, for the review step: a problem added and then left
+    /// half-done must not reach the API. Each message names the problem.
+    /// </summary>
+    public List<string> ValidateAllIssues()
+    {
+        var errors = new List<string>();
+        var issues = GetIssues();
+        for (var i = 0; i < issues.Count; i++)
+        {
+            var label = $"Problem {i + 1}";
+            if (string.IsNullOrWhiteSpace(issues[i].IssueCategory))
+            {
+                errors.Add($"{label}: choose a category.");
+            }
+
+            if (string.IsNullOrWhiteSpace(issues[i].IssueDescription))
+            {
+                errors.Add($"{label}: describe the problem.");
+            }
+            else if (issues[i].IssueDescription.Length > MaxDescriptionLength)
+            {
+                errors.Add($"{label}: the description must not exceed {MaxDescriptionLength} characters.");
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>Copies the issue properties into the active draft.</summary>
+    private void SaveActiveIssue()
+    {
+        var draft = _issues[ActiveIssueIndex];
+        draft.IssueCategory = IssueCategory;
+        draft.IsCategorySuggestedByAi = IsCategorySuggestedByAi;
+        draft.IsUrgencySuggestedByAi = IsUrgencySuggestedByAi;
+        draft.IssueDescription = IssueDescription;
+        draft.IssueDescriptionVerbatim = IssueDescriptionVerbatim;
+        draft.Urgency = Urgency;
+        draft.DiagnosticQuestions = DiagnosticQuestions;
+        draft.DiagnosticResponses = DiagnosticResponses;
+        draft.SmartSuggestion = SmartSuggestion;
+        draft.CapabilityAssessment = CapabilityAssessment;
+        draft.Attachments = Attachments;
+    }
+
+    /// <summary>Copies the active draft into the issue properties.</summary>
+    private void LoadActiveIssue()
+    {
+        var draft = _issues[ActiveIssueIndex];
+        IssueCategory = draft.IssueCategory;
+        IsCategorySuggestedByAi = draft.IsCategorySuggestedByAi;
+        IsUrgencySuggestedByAi = draft.IsUrgencySuggestedByAi;
+        IssueDescription = draft.IssueDescription;
+        IssueDescriptionVerbatim = draft.IssueDescriptionVerbatim;
+        Urgency = draft.Urgency;
+        DiagnosticQuestions = draft.DiagnosticQuestions;
+        DiagnosticResponses = draft.DiagnosticResponses;
+        SmartSuggestion = draft.SmartSuggestion;
+        CapabilityAssessment = draft.CapabilityAssessment;
+        Attachments = draft.Attachments;
+        FieldErrors = [];
+    }
+
     /// <summary>Whether the service request has been submitted.</summary>
     public bool IsSubmitted { get; set; }
 
@@ -577,6 +758,11 @@ public sealed class IntakeWizardState
     /// </summary>
     public ServiceRequestCreateRequestDto BuildCreateRequest()
     {
+        // The first problem rides on the request's own issue fields, as a single-problem
+        // submission always has; the rest follow in AdditionalIssues (Spec A-17).
+        var issues = GetIssues();
+        var lead = issues[0];
+
         return new ServiceRequestCreateRequestDto
         {
             Customer = new CustomerInfoDto
@@ -595,38 +781,53 @@ public sealed class IntakeWizardState
                 Model = string.IsNullOrWhiteSpace(Model) ? null : Model.Trim(),
                 Year = Year
             },
-            IssueCategory = IssueCategory.Trim(),
-            IssueDescription = IssueDescription.Trim(),
-            IssueDescriptionVerbatim = string.IsNullOrWhiteSpace(IssueDescriptionVerbatim)
-                ? null
-                : IssueDescriptionVerbatim.Trim(),
-            Urgency = string.IsNullOrWhiteSpace(Urgency) ? null : Urgency.Trim(),
+            IssueCategory = lead.IssueCategory.Trim(),
+            IssueDescription = lead.IssueDescription.Trim(),
+            IssueDescriptionVerbatim = NullIfBlank(lead.IssueDescriptionVerbatim),
+            Urgency = NullIfBlank(lead.Urgency),
             RvUsage = string.IsNullOrWhiteSpace(RvUsage) ? null : RvUsage.Trim(),
             SmsOptOut = SmsOptOut,
             EmailOptOut = EmailOptOut,
             HasExtendedWarranty = string.IsNullOrWhiteSpace(HasExtendedWarranty) ? null : HasExtendedWarranty.Trim(),
             ApproxPurchaseDate = string.IsNullOrWhiteSpace(ApproxPurchaseDate) ? null : ApproxPurchaseDate.Trim(),
-            DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null,
-            CapabilityMismatchNote = BuildCapabilityMismatchNote(),
+            DiagnosticResponses = lead.DiagnosticResponses.Count > 0 ? lead.DiagnosticResponses : null,
+            CapabilityMismatchNote = BuildCapabilityMismatchNote(lead.CapabilityAssessment),
             IntakeSource = IntakeSource,
             InviteToken = string.IsNullOrWhiteSpace(InviteToken) ? null : InviteToken,
-            ExpectedAttachmentCount = PendingUploadCount
+            ExpectedAttachmentCount = lead.PendingUploadCount,
+            AdditionalIssues = issues.Count > 1
+                ? [.. issues.Skip(1).Select(ToIssueDto)]
+                : null,
         };
     }
 
+    private static IntakeIssueDto ToIssueDto(IntakeIssueDraft draft) => new()
+    {
+        IssueCategory = draft.IssueCategory.Trim(),
+        IssueDescription = draft.IssueDescription.Trim(),
+        IssueDescriptionVerbatim = NullIfBlank(draft.IssueDescriptionVerbatim),
+        Urgency = NullIfBlank(draft.Urgency),
+        DiagnosticResponses = draft.DiagnosticResponses.Count > 0 ? draft.DiagnosticResponses : null,
+        CapabilityMismatchNote = BuildCapabilityMismatchNote(draft.CapabilityAssessment),
+        ExpectedAttachmentCount = draft.PendingUploadCount,
+    };
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     /// <summary>
-    /// How many attachments still have to be uploaded to blob storage after submission — the
-    /// files buffered in the browser that have not been sent yet. Told to the API so packet
-    /// generation waits for them instead of rendering a photo-less packet (issue #516).
-    /// Files whose bytes were lost are excluded: they are already counted as upload failures
-    /// and will never arrive.
+    /// How many of the active problem's attachments still have to be uploaded to blob storage
+    /// after submission — the files buffered in the browser that have not been sent yet. Told to
+    /// the API so packet generation waits for them instead of rendering a photo-less packet
+    /// (issue #516). Files whose bytes were lost are excluded: they are already counted as upload
+    /// failures and will never arrive.
     /// </summary>
     public int PendingUploadCount =>
         Attachments.Count(a => a.FileData is not null && !a.IsUploaded);
 
-    private string? BuildCapabilityMismatchNote()
+    private static string? BuildCapabilityMismatchNote(CapabilityAssessmentResponseDto? assessment)
     {
-        if (CapabilityAssessment is not { Matched: false } ca || ca.MissingCapabilities.Count == 0)
+        if (assessment is not { Matched: false } ca || ca.MissingCapabilities.Count == 0)
             return null;
 
         var caps = string.Join(", ", ca.MissingCapabilities.Select(c => $"'{c}'"));
@@ -677,7 +878,9 @@ public sealed class IntakeWizardState
             CapabilityAssessment = CapabilityAssessment,
             IsSubmitted = IsSubmitted,
             CreatedServiceRequestId = CreatedServiceRequestId,
-            SubmissionMagicLinkToken = SubmissionMagicLinkToken
+            SubmissionMagicLinkToken = SubmissionMagicLinkToken,
+            Issues = [.. GetIssues()],
+            ActiveIssueIndex = ActiveIssueIndex,
         };
 
         var json = JsonSerializer.Serialize(data);
@@ -736,6 +939,23 @@ public sealed class IntakeWizardState
             IsSubmitted = data.IsSubmitted;
             CreatedServiceRequestId = data.CreatedServiceRequestId;
             SubmissionMagicLinkToken = data.SubmissionMagicLinkToken;
+
+            // A session saved before several problems were possible has no drafts: its one
+            // problem is the issue properties just restored.
+            if (data.Issues.Count == 0)
+            {
+                _issues = [new()];
+                ActiveIssueIndex = 0;
+                SaveActiveIssue();
+            }
+            else
+            {
+                _issues = data.Issues;
+                ActiveIssueIndex = Math.Clamp(data.ActiveIssueIndex, 0, _issues.Count - 1);
+                // The issue properties were persisted as the active problem, and the draft list
+                // carries it too; keep the properties, which hold its attachments' session state.
+                SaveActiveIssue();
+            }
 
             NotifyStateChanged();
         }
@@ -827,6 +1047,8 @@ public sealed class IntakeWizardState
         FailedUploadCount = 0;
         IsSubmitting = false;
         FieldErrors = [];
+        _issues = [new()];
+        ActiveIssueIndex = 0;
 
         await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", StorageKey);
 
@@ -1124,4 +1346,10 @@ internal sealed class IntakeWizardStateData
     public bool IsSubmitted { get; set; }
     public string? CreatedServiceRequestId { get; set; }
     public string? SubmissionMagicLinkToken { get; set; }
+
+    /// <summary>Every problem's Steps 5–7 answers (<c>Spec A-17</c>). Absent — and so empty — in a session saved before there could be several.</summary>
+    public List<IntakeIssueDraft> Issues { get; set; } = [];
+
+    /// <summary>Which of <see cref="Issues"/> the issue properties above hold.</summary>
+    public int ActiveIssueIndex { get; set; }
 }

@@ -84,127 +84,185 @@
             </MudStack>
         </MudPaper>
 
-        @* Issue Details *@
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-            <MudStack Spacing="2">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Issue Details</MudText>
-                    <MudSpacer />
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.Edit"
-                               OnClick="() => EditStep(5)"
-                               Style="text-transform: none;">Edit</MudButton>
-                </MudStack>
-                <MudSimpleTable Elevation="0" Class="review-table">
-                    <tbody>
-                        <tr><td><strong>Category</strong></td><td>@State.IssueCategory</td></tr>
-                        <tr><td><strong>Description</strong></td><td style="white-space: pre-wrap;">@State.IssueDescription</td></tr>
-                        @if (!string.IsNullOrWhiteSpace(State.Urgency))
-                        {
-                            <tr><td><strong>Urgency</strong></td><td>@State.Urgency</td></tr>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(State.RvUsage))
-                        {
-                            <tr><td><strong>RV Usage</strong></td><td>@State.RvUsage</td></tr>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(State.HasExtendedWarranty))
-                        {
-                            <tr><td><strong>Extended Warranty</strong></td><td>@State.HasExtendedWarranty</td></tr>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(State.ApproxPurchaseDate))
-                        {
-                            <tr><td><strong>Approx. Purchase Date</strong></td><td>@State.ApproxPurchaseDate</td></tr>
-                        }
-                    </tbody>
-                </MudSimpleTable>
-            </MudStack>
-        </MudPaper>
-
-        @* Diagnostic Responses *@
-        @if (State.DiagnosticResponses.Count > 0)
+        @* Spec A-17 (issue #806): one group per problem. With a single problem the groups read
+           exactly as the review always has; with several, each is headed and can be removed. *@
+        @{
+            var issues = State.GetIssues();
+            var isMultiIssue = issues.Count > 1;
+        }
+        @for (var index = 0; index < issues.Count; index++)
         {
+            var issueIndex = index;
+            var issue = issues[issueIndex];
+
+            @if (isMultiIssue)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">
+                        Problem @(issueIndex + 1) of @issues.Count
+                    </MudText>
+                    <MudSpacer />
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Default"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Delete"
+                               Disabled="_isSubmitting"
+                               OnClick="() => RemoveIssue(issueIndex)"
+                               aria-label="@($"Remove problem {issueIndex + 1}")"
+                               Style="text-transform: none;">Remove</MudButton>
+                </MudStack>
+            }
+
+            @* Issue Details *@
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Diagnostic Responses</MudText>
+                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Issue Details</MudText>
                         <MudSpacer />
                         <MudButton Variant="Variant.Outlined"
                                    Color="Color.Primary"
                                    Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Edit"
-                                   OnClick="() => EditStep(6)"
+                                   OnClick="() => EditIssue(issueIndex, 5)"
                                    Style="text-transform: none;">Edit</MudButton>
                     </MudStack>
-                    <MudStack Spacing="3">
-                        @foreach (var response in State.DiagnosticResponses)
-                        {
-                            <div>
-                                <MudText Typo="Typo.body1" Style="font-weight: 500;">
-                                    @response.QuestionText
-                                </MudText>
-                                @if (response.SelectedOptions.Count > 0)
+                    <MudSimpleTable Elevation="0" Class="review-table">
+                        <tbody>
+                            <tr><td><strong>Category</strong></td><td>@issue.IssueCategory</td></tr>
+                            <tr><td><strong>Description</strong></td><td style="white-space: pre-wrap;">@issue.IssueDescription</td></tr>
+                            @if (!string.IsNullOrWhiteSpace(issue.Urgency))
+                            {
+                                <tr><td><strong>Urgency</strong></td><td>@issue.Urgency</td></tr>
+                            }
+                            @* Asked once for the visit, so shown once, with the first problem. *@
+                            @if (issueIndex == 0)
+                            {
+                                @if (!string.IsNullOrWhiteSpace(State.RvUsage))
                                 {
-                                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
-                                        @foreach (var option in response.SelectedOptions)
-                                        {
-                                            <MudChip T="string" Color="Color.Primary"
-                                                     Variant="Variant.Outlined">
-                                                @option
-                                            </MudChip>
-                                        }
-                                    </MudStack>
+                                    <tr><td><strong>RV Usage</strong></td><td>@State.RvUsage</td></tr>
                                 }
-                                @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
+                                @if (!string.IsNullOrWhiteSpace(State.HasExtendedWarranty))
                                 {
-                                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);" Class="mt-1">
-                                        @response.FreeTextResponse
-                                    </MudText>
+                                    <tr><td><strong>Extended Warranty</strong></td><td>@State.HasExtendedWarranty</td></tr>
                                 }
-                            </div>
-                        }
-                    </MudStack>
+                                @if (!string.IsNullOrWhiteSpace(State.ApproxPurchaseDate))
+                                {
+                                    <tr><td><strong>Approx. Purchase Date</strong></td><td>@State.ApproxPurchaseDate</td></tr>
+                                }
+                            }
+                        </tbody>
+                    </MudSimpleTable>
                 </MudStack>
             </MudPaper>
+
+            @* Diagnostic Responses *@
+            @if (issue.DiagnosticResponses.Count > 0)
+            {
+                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Diagnostic Responses</MudText>
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Edit"
+                                       OnClick="() => EditIssue(issueIndex, 6)"
+                                       Style="text-transform: none;">Edit</MudButton>
+                        </MudStack>
+                        <MudStack Spacing="3">
+                            @foreach (var response in issue.DiagnosticResponses)
+                            {
+                                <div>
+                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                        @response.QuestionText
+                                    </MudText>
+                                    @if (response.SelectedOptions.Count > 0)
+                                    {
+                                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
+                                            @foreach (var option in response.SelectedOptions)
+                                            {
+                                                <MudChip T="string" Color="Color.Primary"
+                                                         Variant="Variant.Outlined">
+                                                    @option
+                                                </MudChip>
+                                            }
+                                        </MudStack>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
+                                    {
+                                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);" Class="mt-1">
+                                            @response.FreeTextResponse
+                                        </MudText>
+                                    }
+                                </div>
+                            }
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @* Attachments *@
+            @if (issue.Attachments.Count > 0)
+            {
+                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">
+                                Attachments (@issue.Attachments.Count)
+                            </MudText>
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Edit"
+                                       OnClick="() => EditIssue(issueIndex, 7)"
+                                       Style="text-transform: none;">Edit</MudButton>
+                        </MudStack>
+                        @* Issue #768: thumbnails, not file names — camera names like IMG_4521.jpg say nothing. *@
+                        <ul class="attachment-thumbs">
+                            @foreach (var attachment in issue.Attachments)
+                            {
+                                <li class="attachment-thumb" title="@attachment.FileName">
+                                    @if (attachment.ThumbnailDataUrl is not null)
+                                    {
+                                        <img src="@attachment.ThumbnailDataUrl" alt="@attachment.FileName" />
+                                    }
+                                    else
+                                    {
+                                        <MudIcon Icon="@AttachmentSlots.FileIcon(attachment.ContentType)" Color="Color.Primary" />
+                                        <span class="attachment-thumb-name">@attachment.FileName</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </MudStack>
+                </MudPaper>
+            }
         }
 
-        @* Attachments *@
-        @if (State.Attachments.Count > 0)
+        @* Spec A-17: another problem with the same RV, without re-entering contact or vehicle.
+           Outlined, so Submit stays the one filled action on the page. *@
+        @if (State.CanAddIssue)
         {
-            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-                <MudStack Spacing="2">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">
-                            Attachments (@State.Attachments.Count)
-                        </MudText>
-                        <MudSpacer />
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Primary"
-                                   Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.Edit"
-                                   OnClick="() => EditStep(7)"
-                                   Style="text-transform: none;">Edit</MudButton>
-                    </MudStack>
-                    @* Issue #768: thumbnails, not file names — camera names like IMG_4521.jpg say nothing. *@
-                    <ul class="attachment-thumbs">
-                        @foreach (var attachment in State.Attachments)
-                        {
-                            <li class="attachment-thumb" title="@attachment.FileName">
-                                @if (attachment.ThumbnailDataUrl is not null)
-                                {
-                                    <img src="@attachment.ThumbnailDataUrl" alt="@attachment.FileName" />
-                                }
-                                else
-                                {
-                                    <MudIcon Icon="@AttachmentSlots.FileIcon(attachment.ContentType)" Color="Color.Primary" />
-                                    <span class="attachment-thumb-name">@attachment.FileName</span>
-                                }
-                            </li>
-                        }
-                    </ul>
-                </MudStack>
-            </MudPaper>
+            <MudStack Spacing="1">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           Disabled="_isSubmitting"
+                           OnClick="AddIssue"
+                           Style="text-transform: none;">Add another problem</MudButton>
+                <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+                    Something else wrong with this RV? Add it here. Your contact and vehicle details carry over.
+                </MudText>
+            </MudStack>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+                You've added @IntakeWizardState.MaxIssues problems, the most one request can hold.
+                Call the service team about anything else.
+            </MudText>
         }
 
         @* Submit error *@
@@ -212,6 +270,15 @@
         {
             <MudAlert Severity="Severity.Error" Variant="Variant.Filled" role="alert">
                 @_submitError
+                @if (_issueErrors.Count > 0)
+                {
+                    <ul class="mt-1 mb-0">
+                        @foreach (var error in _issueErrors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                }
             </MudAlert>
         }
 
@@ -251,6 +318,13 @@
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback<int> OnEdit { get; set; }
+
+    /// <summary>Edit one problem at a step (5–7): the problem's index, then the step (<c>Spec A-17</c>).</summary>
+    [Parameter, EditorRequired] public EventCallback<(int Index, int Step)> OnEditIssue { get; set; }
+
+    /// <summary>Open a blank problem on Step 5 (<c>Spec A-17</c>).</summary>
+    [Parameter, EditorRequired] public EventCallback OnAddIssue { get; set; }
+
     [Parameter, EditorRequired] public EventCallback OnSubmitted { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private HttpClient Http { get; set; } = default!;
@@ -260,14 +334,40 @@
     private string? _submitError;
     private string? _uploadStatus;
     private double? _uploadProgress;
+    private List<string> _issueErrors = [];
+
+    protected override void OnInitialized()
+    {
+        // A problem opened with "Add another problem" and then backed out of is not one.
+        State.PruneEmptyIssues();
+    }
 
     private async Task EditStep(int step)
     {
         await OnEdit.InvokeAsync(step);
     }
 
+    private Task EditIssue(int index, int step) => OnEditIssue.InvokeAsync((index, step));
+
+    private Task AddIssue() => OnAddIssue.InvokeAsync();
+
+    private async Task RemoveIssue(int index)
+    {
+        _issueErrors = [];
+        _submitError = null;
+        await State.RemoveIssueAsync(index);
+    }
+
     private async Task HandleSubmit()
     {
+        // A problem added and then left half-done must not reach the API (Spec A-17).
+        _issueErrors = State.ValidateAllIssues();
+        if (_issueErrors.Count > 0)
+        {
+            _submitError = "Some problems need more detail before this can be sent:";
+            return;
+        }
+
         _isSubmitting = true;
         // Also gates the wizard header's Back button (issue #583): leaving Step 8 while this
         // upload loop is still running would tear down this component's StateHasChanged
@@ -293,42 +393,55 @@
             await State.PersistAsync();
             await StatusLinks.SaveAsync(result.MagicLinkToken, result.MagicLinkExpiresAtUtc);
 
-            var pendingFiles = State.Attachments
-                .Where(a => a.FileData is not null && !a.IsUploaded)
-                .ToList();
-
-            var skippedFiles = State.Attachments
-                .Where(a => a.FileData is null && !a.IsUploaded)
-                .ToList();
-
-            if (skippedFiles.Count > 0)
+            // Spec A-17: each problem's attachments go to its own request, the one at the same
+            // position in the response. A response without the id list comes from an API that
+            // predates several problems; it created one request, so only one problem can upload.
+            var issues = State.GetIssues();
+            var uploads = new List<(AttachmentFileInfo File, string ServiceRequestId)>();
+            var skippedFiles = new List<AttachmentFileInfo>();
+            for (var i = 0; i < issues.Count; i++)
             {
-                State.FailedUploadCount += skippedFiles.Count;
-                foreach (var skipped in skippedFiles)
+                var targetId = i < result.ServiceRequestIds.Count
+                    ? result.ServiceRequestIds[i]
+                    : i == 0 ? result.ServiceRequest.Id : null;
+
+                foreach (var attachment in issues[i].Attachments.Where(a => !a.IsUploaded))
                 {
-                    skipped.ErrorMessage = "File data was not available for upload. Please re-attach the file and try again.";
+                    if (attachment.FileData is null || targetId is null)
+                    {
+                        skippedFiles.Add(attachment);
+                    }
+                    else
+                    {
+                        uploads.Add((attachment, targetId));
+                    }
                 }
             }
 
-            if (pendingFiles.Count > 0)
+            foreach (var skipped in skippedFiles)
+            {
+                skipped.ErrorMessage = "File data was not available for upload. Please re-attach the file and try again.";
+            }
+
+            var failedUploadCount = skippedFiles.Count;
+
+            if (uploads.Count > 0)
             {
                 _uploadProgress = 0;
-                _uploadStatus = $"Uploading attachments (0/{pendingFiles.Count})…";
+                _uploadStatus = $"Uploading attachments (0/{uploads.Count})…";
                 StateHasChanged();
 
-                var failedUploadCount = 0;
-
-                for (var i = 0; i < pendingFiles.Count; i++)
+                for (var i = 0; i < uploads.Count; i++)
                 {
-                    var file = pendingFiles[i];
-                    _uploadStatus = $"Uploading attachments ({i + 1}/{pendingFiles.Count})…";
-                    _uploadProgress = (double)i / pendingFiles.Count * 100;
+                    var (file, serviceRequestId) = uploads[i];
+                    _uploadStatus = $"Uploading attachments ({i + 1}/{uploads.Count})…";
+                    _uploadProgress = (double)i / uploads.Count * 100;
                     StateHasChanged();
 
                     try
                     {
                         var sasResponse = await IntakeApi.GetUploadSasAsync(
-                            State.Slug, result.ServiceRequest.Id, file.FileName, file.ContentType);
+                            State.Slug, serviceRequestId, file.FileName, file.ContentType);
 
                         file.BlobName = sasResponse.BlobName;
 
@@ -342,7 +455,7 @@
                         var sasResult = await Http.SendAsync(sasRequest);
                         sasResult.EnsureSuccessStatusCode();
 
-                        await IntakeApi.ConfirmUploadAsync(State.Slug, result.ServiceRequest.Id, new AttachmentConfirmRequestDto
+                        await IntakeApi.ConfirmUploadAsync(State.Slug, serviceRequestId, new AttachmentConfirmRequestDto
                         {
                             BlobName = sasResponse.BlobName,
                             FileName = file.FileName,
@@ -362,10 +475,11 @@
                 _uploadProgress = 100;
                 StateHasChanged();
 
-                State.FailedUploadCount = failedUploadCount;
                 _uploadStatus = null;
                 _uploadProgress = null;
             }
+
+            State.FailedUploadCount = failedUploadCount;
 
             await OnSubmitted.InvokeAsync();
         }

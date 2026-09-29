@@ -161,7 +161,7 @@ public class IntakeControllerTests
     {
         var sr = BuildServiceRequest();
         _intakeServiceMock.Setup(s => s.ExecuteAsync("test-slug", It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((sr, "test-magic-token", new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc)));
+            .ReturnsAsync((sr, (IReadOnlyList<ServiceRequest>)[sr], "test-magic-token", new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc)));
 
         var request = new ServiceRequestCreateRequestDto
         {
@@ -206,6 +206,59 @@ public class IntakeControllerTests
         _intakeServiceMock.Verify(
             s => s.ExecuteAsync(It.IsAny<string>(), It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    // ── Several problems per visit (Spec A-17, issue #806) ───────────────────
+
+    [Fact]
+    public async Task SubmitServiceRequest_WhenSeveralIssues_ShouldReturnEveryRequestIdInOrder()
+    {
+        var lead = BuildServiceRequest();
+        IReadOnlyList<ServiceRequest> all = [lead, new ServiceRequest { Id = "sr_test_2", TenantId = "ten_test", CreatedByUserId = "intake" }];
+        _intakeServiceMock.Setup(s => s.ExecuteAsync("test-slug", It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((lead, all, "test-magic-token", (DateTime?)null));
+        var request = BuildSubmitRequest() with
+        {
+            AdditionalIssues = [new IntakeIssueDto { IssueCategory = "Awning", IssueDescription = "Awning torn" }],
+        };
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        var dto = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject
+            .Value.Should().BeOfType<IntakeSubmissionResponseDto>().Subject;
+        dto.ServiceRequest.Id.Should().Be("sr_test_1");
+        dto.ServiceRequestIds.Should().Equal("sr_test_1", "sr_test_2");
+    }
+
+    [Fact]
+    public async Task SubmitServiceRequest_WhenMoreThanTenIssues_ShouldReturn422AndNotSubmit()
+    {
+        var request = BuildSubmitRequest() with
+        {
+            AdditionalIssues = [.. Enumerable.Range(0, 10)
+                .Select(i => new IntakeIssueDto { IssueCategory = "Other", IssueDescription = $"Problem {i + 2}" })],
+        };
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject
+            .Value.Should().BeOfType<SerializableError>()
+            .Which.Should().ContainKey(nameof(ServiceRequestCreateRequestDto.AdditionalIssues));
+        VerifyNotSubmitted();
+    }
+
+    [Fact]
+    public async Task SubmitServiceRequest_WhenAnAdditionalIssueHasNoDescription_ShouldReturn422AndNotSubmit()
+    {
+        var request = BuildSubmitRequest() with
+        {
+            AdditionalIssues = [new IntakeIssueDto { IssueCategory = "Other", IssueDescription = " " }],
+        };
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+        VerifyNotSubmitted();
     }
 
     // ── Contact checks (issue #679) ──────────────────────────────────────────

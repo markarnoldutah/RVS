@@ -68,10 +68,20 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     }
 
     /// <inheritdoc />
-    public async Task<(ServiceRequest ServiceRequest, string? MagicLinkToken, DateTime? MagicLinkExpiresAtUtc)> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<(ServiceRequest ServiceRequest, IReadOnlyList<ServiceRequest> ServiceRequests, string? MagicLinkToken, DateTime? MagicLinkExpiresAtUtc)> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
         ArgumentNullException.ThrowIfNull(request);
+
+        // Spec A-17 (issue #806): up to ten problems, each checked before anything is written, so
+        // a bad one refuses the whole submission rather than leaving half of it behind.
+        var issuesResult = IntakeIssuesValidator.Validate(request);
+        if (!issuesResult.IsValid)
+        {
+            throw new ArgumentException(issuesResult.ErrorMessage, nameof(request));
+        }
+
+        var issues = request.AllIssues();
 
         // Issue #807: the customer gives a VIN, a serial number (a truck camper has no VIN), or
         // nothing at all when the rig is in storage and the dealer will collect it later.
@@ -214,13 +224,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         profile.MarkAsUpdated("intake");
         profile = await _customerProfileRepository.UpdateAsync(profile, cancellationToken);
 
-        // ── Step 4: Create ServiceRequest ────────────────────────────────────
-        // A-5: the category the customer submitted is authoritative. The AI suggestion is
-        // advisory and was already offered (and accepted or overridden) in the intake wizard;
-        // the server does not re-run categorization and override the choice here. Coerce to
-        // the controlled vocabulary so an unrecognised value can never reach the packet.
-        var issueCategory = IssueCategoryVocabulary.Normalize(request.IssueCategory);
-
+        // ── Step 4: Create one ServiceRequest per problem ────────────────────
         // A-13: the channel the customer arrived through, as forwarded by the intake app from
         // the go.rvintake.com redirect. Normalised rather than validated — an unrecognised or
         // malformed tag costs the request its channel, never the submission.
@@ -232,107 +236,133 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             intakeSource = IntakeSourceVocabulary.Advisor;
         }
 
-        var technicianSummary = BuildTechnicianSummary(request);
-
         var priorRequestCount = profile.TotalRequestCount;
 
-        var serviceRequest = new ServiceRequest
+        // A-17: several problems become sibling requests that share the first one's id as their
+        // submission id. A single problem is not grouped at all, so it stores exactly what it did.
+        var isMultiIssue = issues.Count > 1;
+        var leadId = Guid.NewGuid().ToString();
+
+        var serviceRequests = new List<ServiceRequest>(issues.Count);
+        for (var i = 0; i < issues.Count; i++)
         {
-            TenantId = tenantId,
-            LocationId = locationId,
-            CustomerProfileId = profile.Id,
-            Status = "New",
-            IssueCategory = issueCategory,
-            IssueDescription = request.IssueDescription.Trim(),
-            IssueDescriptionVerbatim = NullIfBlank(request.IssueDescriptionVerbatim),
-            TechnicianSummary = technicianSummary,
-            Urgency = request.Urgency?.Trim(),
-            RvUsage = request.RvUsage?.Trim(),
-            HasExtendedWarranty = request.HasExtendedWarranty?.Trim(),
-            ApproxPurchaseDate = request.ApproxPurchaseDate?.Trim(),
-            IntakeSource = intakeSource,
-            IntakeInviteId = invite?.Id,
-            AdvisorUserId = invite?.AdvisorUserId,
-            CustomerSnapshot = new CustomerSnapshotEmbedded
+            var issue = issues[i];
+
+            // A-5: the category the customer submitted is authoritative. The AI suggestion is
+            // advisory and was already offered (and accepted or overridden) in the intake wizard;
+            // the server does not re-run categorization and override the choice here. Coerce to
+            // the controlled vocabulary so an unrecognised value can never reach the packet.
+            var issueCategory = IssueCategoryVocabulary.Normalize(issue.IssueCategory);
+
+            var serviceRequest = new ServiceRequest
             {
-                FirstName = request.Customer.FirstName.Trim(),
-                LastName = request.Customer.LastName.Trim(),
-                Email = request.Customer.Email.Trim(),
-                Phone = request.Customer.Phone?.Trim(),
-                PreferredContact = PreferredContactMethod.Normalize(request.Customer.PreferredContact),
-                IsReturningCustomer = priorRequestCount > 0,
-                PriorRequestCount = priorRequestCount,
-            },
-            AssetInfo = new AssetInfoEmbedded
-            {
-                AssetId = assetId,
-                Manufacturer = request.Asset.Manufacturer?.Trim(),
-                Model = request.Asset.Model?.Trim(),
-                Year = request.Asset.Year,
-            },
-            DiagnosticResponses = request.DiagnosticResponses?
-                .Select(d => new DiagnosticResponseEmbedded
+                Id = i == 0 ? leadId : Guid.NewGuid().ToString(),
+                TenantId = tenantId,
+                LocationId = locationId,
+                CustomerProfileId = profile.Id,
+                Status = "New",
+                IssueCategory = issueCategory,
+                IssueDescription = issue.IssueDescription.Trim(),
+                IssueDescriptionVerbatim = NullIfBlank(issue.IssueDescriptionVerbatim),
+                TechnicianSummary = BuildTechnicianSummary(issue.CapabilityMismatchNote),
+                Urgency = issue.Urgency?.Trim(),
+                RvUsage = request.RvUsage?.Trim(),
+                HasExtendedWarranty = request.HasExtendedWarranty?.Trim(),
+                ApproxPurchaseDate = request.ApproxPurchaseDate?.Trim(),
+                IntakeSource = intakeSource,
+                IntakeInviteId = invite?.Id,
+                AdvisorUserId = invite?.AdvisorUserId,
+                SubmissionId = isMultiIssue ? leadId : null,
+                SubmissionPosition = isMultiIssue ? i + 1 : 0,
+                SubmissionCount = isMultiIssue ? issues.Count : 0,
+                CustomerSnapshot = new CustomerSnapshotEmbedded
                 {
-                    QuestionText = d.QuestionText.Trim(),
-                    SelectedOptions = d.SelectedOptions,
-                    FreeTextResponse = d.FreeTextResponse?.Trim(),
-                })
-                .ToList() ?? [],
-            // The client uploads and confirms its attachments after this call returns, so record
-            // how many to expect: packet generation waits for them rather than rendering a
-            // photo-less packet (issue #516). Clamped so a bad value cannot stall generation.
-            PacketGeneration = new PacketGenerationEmbedded
-            {
-                ExpectedAttachmentCount = Math.Max(0, request.ExpectedAttachmentCount),
-            },
-            CreatedByUserId = "intake",
-        };
-
-        serviceRequest = await _serviceRequestRepository.CreateAsync(serviceRequest, cancellationToken);
-        _logger.LogInformation("Intake Step 4: Created ServiceRequest {ServiceRequestId} in tenant {TenantId}",
-            serviceRequest.Id, tenantId);
-
-        // Spend the invite only now that the request it produced exists (Spec A-14).
-        if (invite is not null)
-        {
-            await RedeemInviteAsync(invite, serviceRequest.Id, cancellationToken);
-        }
-
-        // ── Step 5: Append AssetLedgerEntry (non-blocking on failure) ────────
-        // Only a VIN has a ledger: see tracksVehicleHistory above.
-        if (tracksVehicleHistory)
-        {
-            try
-            {
-                var ledgerEntry = new AssetLedgerEntry
+                    FirstName = request.Customer.FirstName.Trim(),
+                    LastName = request.Customer.LastName.Trim(),
+                    Email = request.Customer.Email.Trim(),
+                    Phone = request.Customer.Phone?.Trim(),
+                    PreferredContact = PreferredContactMethod.Normalize(request.Customer.PreferredContact),
+                    IsReturningCustomer = priorRequestCount > 0,
+                    PriorRequestCount = priorRequestCount,
+                },
+                AssetInfo = new AssetInfoEmbedded
                 {
                     AssetId = assetId,
-                    TenantId = tenantId,
-                    DealershipName = slugLookup.DealershipName,
-                    ServiceRequestId = serviceRequest.Id,
-                    GlobalCustomerAcctId = globalAcct.Id,
                     Manufacturer = request.Asset.Manufacturer?.Trim(),
                     Model = request.Asset.Model?.Trim(),
                     Year = request.Asset.Year,
-                    IssueCategory = issueCategory,
-                    IssueDescription = request.IssueDescription.Trim(),
-                    SubmittedAtUtc = serviceRequest.CreatedAtUtc,
-                };
+                },
+                DiagnosticResponses = issue.DiagnosticResponses?
+                    .Select(d => new DiagnosticResponseEmbedded
+                    {
+                        QuestionText = d.QuestionText.Trim(),
+                        SelectedOptions = d.SelectedOptions,
+                        FreeTextResponse = d.FreeTextResponse?.Trim(),
+                    })
+                    .ToList() ?? [],
+                // The client uploads and confirms its attachments after this call returns, so record
+                // how many to expect: packet generation waits for them rather than rendering a
+                // photo-less packet (issue #516). Clamped so a bad value cannot stall generation.
+                PacketGeneration = new PacketGenerationEmbedded
+                {
+                    ExpectedAttachmentCount = Math.Max(0, issue.ExpectedAttachmentCount),
+                },
+                CreatedByUserId = "intake",
+            };
 
-                await _assetLedgerRepository.AppendAsync(ledgerEntry, cancellationToken);
-                _logger.LogInformation("Intake Step 5: Appended AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}",
-                    assetId, serviceRequest.Id);
-            }
-            catch (Exception ex)
+            serviceRequest = await _serviceRequestRepository.CreateAsync(serviceRequest, cancellationToken);
+            serviceRequests.Add(serviceRequest);
+            _logger.LogInformation("Intake Step 4: Created ServiceRequest {ServiceRequestId} ({Position} of {Count}) in tenant {TenantId}",
+                serviceRequest.Id, i + 1, issues.Count, tenantId);
+        }
+
+        var leadRequest = serviceRequests[0];
+
+        // Spend the invite only now that the requests it produced exist (Spec A-14). A
+        // multi-problem submission spends it once, on its first request.
+        if (invite is not null)
+        {
+            await RedeemInviteAsync(invite, leadRequest.Id, cancellationToken);
+        }
+
+        // ── Step 5: Append AssetLedgerEntry per request (non-blocking on failure) ─
+        // Only a VIN has a ledger: see tracksVehicleHistory above.
+        if (tracksVehicleHistory)
+        {
+            foreach (var serviceRequest in serviceRequests)
             {
-                _logger.LogWarning(ex, "Intake Step 5: Failed to append AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}. Continuing intake.",
-                    assetId, serviceRequest.Id);
+                try
+                {
+                    var ledgerEntry = new AssetLedgerEntry
+                    {
+                        AssetId = assetId,
+                        TenantId = tenantId,
+                        DealershipName = slugLookup.DealershipName,
+                        ServiceRequestId = serviceRequest.Id,
+                        GlobalCustomerAcctId = globalAcct.Id,
+                        Manufacturer = request.Asset.Manufacturer?.Trim(),
+                        Model = request.Asset.Model?.Trim(),
+                        Year = request.Asset.Year,
+                        IssueCategory = serviceRequest.IssueCategory,
+                        IssueDescription = serviceRequest.IssueDescription,
+                        SubmittedAtUtc = serviceRequest.CreatedAtUtc,
+                    };
+
+                    await _assetLedgerRepository.AppendAsync(ledgerEntry, cancellationToken);
+                    _logger.LogInformation("Intake Step 5: Appended AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}",
+                        assetId, serviceRequest.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Intake Step 5: Failed to append AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}. Continuing intake.",
+                        assetId, serviceRequest.Id);
+                }
             }
         }
 
         // ── Step 6: Update linkages ──────────────────────────────────────────
-        profile.TotalRequestCount++;
-        profile.ServiceRequestIds.Add(serviceRequest.Id);
+        profile.TotalRequestCount += serviceRequests.Count;
+        profile.ServiceRequestIds.AddRange(serviceRequests.Select(sr => sr.Id));
         profile.MarkAsUpdated("intake");
         await _customerProfileRepository.UpdateAsync(profile, cancellationToken);
         _logger.LogInformation("Intake Step 6: Updated CustomerProfile {ProfileId} requestCount={Count}",
@@ -362,14 +392,14 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 ProfileId = profile.Id,
                 DealershipName = slugLookup.DealershipName,
                 FirstSeenAtUtc = DateTime.UtcNow,
-                RequestCount = 1,
+                RequestCount = serviceRequests.Count,
             });
         }
         else
         {
             var linked = globalAcct.LinkedProfiles
                 .First(lp => lp.TenantId == tenantId && lp.ProfileId == profile.Id);
-            linked.RequestCount++;
+            linked.RequestCount += serviceRequests.Count;
         }
 
         globalAcct.MarkAsUpdated("intake");
@@ -400,12 +430,12 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _ = FireAndForgetNotificationAsync(
             tenantId,
             locationId,
-            serviceRequest.CustomerSnapshot.PreferredContact,
+            leadRequest.CustomerSnapshot.PreferredContact,
             profile.SmsOptOut,
             profile.EmailOptOut,
             request.Customer.Email.Trim(),
             PhoneNumberNormalizer.Normalize(request.Customer.Phone),
-            serviceRequest.Id,
+            leadRequest.Id,
             request.Customer.FirstName.Trim(),
             slugLookup.DealershipName,
             statusUrl,
@@ -415,21 +445,26 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         // ── Step 8: Enqueue packet generation (never blocks the 201) ─────────
         // Spec A-8 / B-1 / X-7: the packet is generated asynchronously; nothing here may delay
         // or roll back the submission. The request already carries PacketGeneration = Pending.
-        try
+        // A-17 / B-4: the first request owns a multi-problem submission's combined email and
+        // waits for its siblings' packets, so it is queued last, behind them.
+        foreach (var serviceRequest in serviceRequests.Skip(1).Append(leadRequest))
         {
-            if (!_packetGenerationQueue.TryEnqueue(new PacketGenerationJob(tenantId, serviceRequest.Id, "intake")))
+            try
             {
-                _logger.LogWarning(
-                    "Intake Step 8: packet generation queue full; SR {ServiceRequestId} stays Pending and can be regenerated on demand",
-                    serviceRequest.Id);
+                if (!_packetGenerationQueue.TryEnqueue(new PacketGenerationJob(tenantId, serviceRequest.Id, "intake")))
+                {
+                    _logger.LogWarning(
+                        "Intake Step 8: packet generation queue full; SR {ServiceRequestId} stays Pending and can be regenerated on demand",
+                        serviceRequest.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Intake Step 8: failed to enqueue packet generation for SR {ServiceRequestId}", serviceRequest.Id);
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Intake Step 8: failed to enqueue packet generation for SR {ServiceRequestId}", serviceRequest.Id);
-        }
 
-        return (serviceRequest, globalAcct.MagicLinkToken, globalAcct.MagicLinkExpiresAtUtc);
+        return (leadRequest, serviceRequests, globalAcct.MagicLinkToken, globalAcct.MagicLinkExpiresAtUtc);
     }
 
     /// <summary>
@@ -444,10 +479,10 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     private static string? NullIfBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static string? BuildTechnicianSummary(ServiceRequestCreateRequestDto request) =>
-        string.IsNullOrWhiteSpace(request.CapabilityMismatchNote)
+    private static string? BuildTechnicianSummary(string? capabilityMismatchNote) =>
+        string.IsNullOrWhiteSpace(capabilityMismatchNote)
             ? null
-            : request.CapabilityMismatchNote.Trim();
+            : capabilityMismatchNote.Trim();
 
     /// <summary>
     /// Point-reads the invite named by <paramref name="token"/> and returns it only when it can

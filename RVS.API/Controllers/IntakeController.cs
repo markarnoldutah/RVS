@@ -589,16 +589,24 @@ public class IntakeController : ControllerBase
             ModelState.AddModelError("Customer.PreferredContact", preferenceValidation.ErrorMessage!);
         }
 
+        // Up to ten problems, each with a description (Spec A-17, issue #806).
+        var issuesValidation = IntakeIssuesValidator.Validate(request);
+        if (!issuesValidation.IsValid)
+        {
+            ModelState.AddModelError(nameof(request.AdditionalIssues), issuesValidation.ErrorMessage!);
+        }
+
         if (ModelState.ErrorCount > 0)
         {
             return UnprocessableEntity(ModelState);
         }
 
-        var (serviceRequest, magicLinkToken, magicLinkExpiresAtUtc) = await _intakeService.ExecuteAsync(locationSlug, request, ct);
+        var (serviceRequest, serviceRequests, magicLinkToken, magicLinkExpiresAtUtc) = await _intakeService.ExecuteAsync(locationSlug, request, ct);
 
         var response = new IntakeSubmissionResponseDto
         {
             ServiceRequest = serviceRequest.ToDetailDto(),
+            ServiceRequestIds = [.. serviceRequests.Select(sr => sr.Id)],
             MagicLinkToken = magicLinkToken,
             MagicLinkExpiresAtUtc = magicLinkExpiresAtUtc
         };

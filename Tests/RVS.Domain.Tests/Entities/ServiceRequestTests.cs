@@ -152,4 +152,43 @@ public class ServiceRequestTests
 
         sr.Disposition!.ReasonCode.Should().Be("CustomerWithdrew");
     }
+
+    // ── Several problems per visit (Spec A-17, issue #806) ──────────────
+
+    [Fact]
+    public void NewServiceRequest_ShouldNotBeInAMultiIssueSubmission()
+    {
+        var sr = new ServiceRequest();
+
+        sr.SubmissionId.Should().BeNull();
+        sr.IsInMultiIssueSubmission.Should().BeFalse();
+        sr.IsSubmissionLead.Should().BeFalse();
+    }
+
+    [Fact]
+    public void FirstRequestOfAMultiIssueSubmission_ShouldBeTheLead()
+    {
+        var sr = new ServiceRequest { SubmissionId = "lead", SubmissionPosition = 1, SubmissionCount = 3 };
+
+        sr.IsInMultiIssueSubmission.Should().BeTrue();
+        sr.IsSubmissionLead.Should().BeTrue();
+    }
+
+    [Fact]
+    public void LaterRequestOfAMultiIssueSubmission_ShouldNotBeTheLead()
+    {
+        var sr = new ServiceRequest { SubmissionId = "lead", SubmissionPosition = 2, SubmissionCount = 3 };
+
+        sr.IsInMultiIssueSubmission.Should().BeTrue();
+        sr.IsSubmissionLead.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SubmissionOfOne_ShouldNotCountAsMultiIssue()
+    {
+        var sr = new ServiceRequest { SubmissionId = "lead", SubmissionPosition = 1, SubmissionCount = 1 };
+
+        sr.IsInMultiIssueSubmission.Should().BeFalse();
+        sr.IsSubmissionLead.Should().BeFalse();
+    }
 }

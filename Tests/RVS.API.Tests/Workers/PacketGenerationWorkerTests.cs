@@ -81,6 +81,7 @@ public class PacketGenerationWorkerTests
     [Theory]
     [InlineData(PacketGenerationOutcome.Retry)]
     [InlineData(PacketGenerationOutcome.WaitingForAttachments)]
+    [InlineData(PacketGenerationOutcome.WaitingForSiblings)]
     public void ShouldRequeue_ForOutcomesThatExpectAnotherPass_ShouldBeTrue(PacketGenerationOutcome outcome)
     {
         PacketGenerationWorker.ShouldRequeue(outcome).Should().BeTrue();

@@ -66,6 +66,23 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<ServiceRequest>> GetBySubmissionIdAsync(string tenantId, string submissionId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(submissionId);
+
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.submissionId = @submissionId AND c.type = 'serviceRequest'")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@submissionId", submissionId);
+
+        // Ordered here rather than with ORDER BY, which would need a composite index for a
+        // result set of at most ten documents.
+        var results = await ExecuteQueryAsync(query, tenantId, nameof(GetBySubmissionIdAsync), cancellationToken);
+        return [.. results.OrderBy(sr => sr.SubmissionPosition)];
+    }
+
+    /// <inheritdoc />
     public async Task<PagedResult<ServiceRequest>> SearchAsync(
         string tenantId,
         ServiceRequestSearchRequestDto request,

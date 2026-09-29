@@ -178,7 +178,7 @@ public class IntakeOrchestrationServiceTests
         _globalAcctRepoMock.Setup(r => r.CreateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ConflictException("exists"));
 
-        var (serviceRequest, _, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+        var (serviceRequest, _, _, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         serviceRequest.Should().NotBeNull();
         _globalAcctRepoMock.Verify(r => r.UpdateAsync(
@@ -210,7 +210,7 @@ public class IntakeOrchestrationServiceTests
         _profileRepoMock.Setup(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ConflictException("exists"));
 
-        var (serviceRequest, _, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+        var (serviceRequest, _, _, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
         serviceRequest.CustomerProfileId.Should().Be("cp_winner");
     }
@@ -1590,6 +1590,219 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.AdvisorUserId.Should().BeNull();
         _inviteRepoMock.VerifyNoOtherCalls();
     }
+
+    // ── Several problems per visit (Spec A-17, issue #806) ───────────────────
+    // Contact and vehicle are entered once; each problem becomes its own service request, and
+    // the submission is still one confirmation, one invite redemption and one packet email.
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSingleIssue_ShouldNotGroupTheRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequests.Should().ContainSingle().Which.Should().BeSameAs(result.ServiceRequest);
+        result.ServiceRequest.SubmissionId.Should().BeNull();
+        result.ServiceRequest.SubmissionPosition.Should().Be(0);
+        result.ServiceRequest.SubmissionCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldCreateOneRequestPerIssueInOrder()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        result.ServiceRequests.Should().HaveCount(3);
+        result.ServiceRequests.Select(sr => sr.IssueDescription)
+            .Should().Equal("Slide won't retract", "Fridge is warm", "Awning fabric torn");
+        result.ServiceRequests.Select(sr => sr.IssueCategory)
+            .Should().Equal("Slides", "Appliances", "Awning");
+        result.ServiceRequest.Should().BeSameAs(result.ServiceRequests[0]);
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldLinkEveryRequestToTheLead()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        var leadId = result.ServiceRequests[0].Id;
+        result.ServiceRequests.Should().OnlyContain(sr => sr.SubmissionId == leadId && sr.SubmissionCount == 3);
+        result.ServiceRequests.Select(sr => sr.SubmissionPosition).Should().Equal(1, 2, 3);
+        result.ServiceRequests[0].IsSubmissionLead.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldShareContactVehicleAndVisitAnswers()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        result.ServiceRequests.Should().OnlyContain(sr =>
+            sr.CustomerSnapshot.Email == "jane@example.com"
+            && sr.AssetInfo.AssetId == "1HGBH41JXMN109186"
+            && sr.RvUsage == "Full-time"
+            && sr.CustomerProfileId == "cp_test");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldKeepEachIssuesOwnAnswers()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        var fridge = result.ServiceRequests[1];
+        fridge.Urgency.Should().Be("Today");
+        fridge.IssueDescriptionVerbatim.Should().Be("fridge is warm");
+        fridge.TechnicianSummary.Should().Be("No appliance repair here");
+        fridge.DiagnosticResponses.Should().ContainSingle(d => d.QuestionText == "Is the freezer cold?");
+        fridge.PacketGeneration.ExpectedAttachmentCount.Should().Be(2);
+        result.ServiceRequests[2].PacketGeneration.ExpectedAttachmentCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldCoerceEachCategoryToTheVocabulary()
+    {
+        SetupFullHappyPath();
+        var request = BuildMultiIssueRequest() with
+        {
+            AdditionalIssues = [new IntakeIssueDto { IssueCategory = "Structural", IssueDescription = "Crack" }],
+        };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequests[1].IssueCategory.Should().Be(IssueCategoryVocabulary.FallbackCode);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldSendOneConfirmationForTheLead()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            result.ServiceRequest.Id, It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldEnqueueEveryPacketWithTheLeadLast()
+    {
+        SetupFullHappyPath();
+        var enqueued = new List<PacketGenerationJob>();
+        _packetQueueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>()))
+            .Callback<PacketGenerationJob>(enqueued.Add)
+            .Returns(true);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        // The lead owns the combined email and waits on its siblings, so it goes to the back of
+        // the queue: by the time it runs, their packets have usually been generated.
+        enqueued.Select(j => j.ServiceRequestId).Should().Equal(
+            result.ServiceRequests[1].Id, result.ServiceRequests[2].Id, result.ServiceRequests[0].Id);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssuesWithAVin_ShouldAppendOneLedgerEntryPerIssue()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        foreach (var sr in result.ServiceRequests)
+        {
+            _ledgerRepoMock.Verify(r => r.AppendAsync(
+                It.Is<AssetLedgerEntry>(e => e.ServiceRequestId == sr.Id && e.IssueCategory == sr.IssueCategory),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldCountEveryRequestOnTheProfileAndAccount()
+    {
+        SetupFullHappyPath();
+        CustomerProfile? savedProfile = null;
+        _profileRepoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .Callback<CustomerProfile, CancellationToken>((p, _) => savedProfile = p)
+            .ReturnsAsync((CustomerProfile p, CancellationToken _) => p);
+        GlobalCustomerAcct? savedAcct = null;
+        _globalAcctRepoMock.Setup(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
+            .Callback<GlobalCustomerAcct, CancellationToken>((a, _) => savedAcct = a)
+            .ReturnsAsync((GlobalCustomerAcct a, CancellationToken _) => a);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        savedProfile!.TotalRequestCount.Should().Be(3);
+        savedProfile.ServiceRequestIds.Should().Equal(result.ServiceRequests.Select(sr => sr.Id));
+        savedAcct!.LinkedProfiles.Should().ContainSingle().Which.RequestCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssuesFromAnInvite_ShouldAttributeEveryRequestAndRedeemOnceWithTheLead()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite());
+        var request = BuildMultiIssueRequest() with { InviteToken = InviteTokenValue };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequests.Should().OnlyContain(sr =>
+            sr.IntakeInviteId == InviteToken.Hash(InviteTokenValue)
+            && sr.AdvisorUserId == "auth0|advisor"
+            && sr.IntakeSource == IntakeSourceVocabulary.Advisor);
+        _inviteRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<IntakeInvite>(i => i.ServiceRequestId == result.ServiceRequest.Id),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenMoreThanTenIssues_ShouldThrowArgumentExceptionAndCreateNothing()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with
+        {
+            AdditionalIssues = [.. Enumerable.Range(0, 10)
+                .Select(i => new IntakeIssueDto { IssueCategory = "Other", IssueDescription = $"Problem {i + 2}" })],
+        };
+
+        var act = () => _sut.ExecuteAsync("test-slug", request);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private static ServiceRequestCreateRequestDto BuildMultiIssueRequest() => BuildValidRequest() with
+    {
+        AdditionalIssues =
+        [
+            new IntakeIssueDto
+            {
+                IssueCategory = "Appliances",
+                IssueDescription = "Fridge is warm",
+                IssueDescriptionVerbatim = "fridge is warm",
+                Urgency = "Today",
+                CapabilityMismatchNote = "No appliance repair here",
+                ExpectedAttachmentCount = 2,
+                DiagnosticResponses = [new DiagnosticResponseDto { QuestionText = "Is the freezer cold?" }],
+            },
+            new IntakeIssueDto { IssueCategory = "Awning", IssueDescription = "Awning fabric torn" },
+        ],
+    };
 
     private const string InviteTokenValue = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 

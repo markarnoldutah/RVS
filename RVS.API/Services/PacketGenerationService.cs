@@ -58,6 +58,15 @@ public sealed class PacketGenerationService : IPacketGenerationService
     /// </summary>
     internal static readonly TimeSpan AttachmentUploadWindow = TimeSpan.FromMinutes(2);
 
+    /// <summary>
+    /// How long after a multi-problem submission is created its first request will hold the
+    /// combined packet email for its siblings' packets (<c>Spec A-17</c>, <c>B-4</c>, issue #806).
+    /// Each sibling may itself wait out <see cref="AttachmentUploadWindow"/> before generating, so
+    /// this allows for that and a couple of minutes of generation. Once it closes the email goes
+    /// with whatever has generated; a sibling that generates later is emailed on its own.
+    /// </summary>
+    internal static readonly TimeSpan SiblingWaitWindow = AttachmentUploadWindow + TimeSpan.FromMinutes(2);
+
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly ILocationRepository _locationRepository;
     private readonly IPacketPhotoUrlResolver _photoUrlResolver;
@@ -125,6 +134,26 @@ public sealed class PacketGenerationService : IPacketGenerationService
             return PacketGenerationOutcome.WaitingForAttachments;
         }
 
+        // A multi-problem submission sends one packet email (Spec A-17, B-4, issue #806), and its
+        // first request sends it. Hold off, like the attachment wait above, while a sibling's
+        // packet is still on its way, and send with whatever has generated once the window closes.
+        IReadOnlyList<ServiceRequest> siblings = [];
+        if (OwnsCombinedDelivery(request))
+        {
+            var submission = await _serviceRequestRepository.GetBySubmissionIdAsync(tenantId, request.SubmissionId!, cancellationToken);
+            siblings = [.. submission.Where(sr => sr.Id != request.Id)];
+
+            var unsettled = siblings.Count(sr => !sr.PacketGeneration.IsSettled);
+            if (unsettled > 0 && DateTime.UtcNow - request.CreatedAtUtc < SiblingWaitWindow)
+            {
+                _logger.LogInformation(
+                    "Packet generation deferred for SR {ServiceRequestId}: {UnsettledCount} of {SiblingCount} sibling packet(s) still generating, inside the {WindowSeconds}s wait window",
+                    request.Id, unsettled, siblings.Count, SiblingWaitWindow.TotalSeconds);
+
+                return PacketGenerationOutcome.WaitingForSiblings;
+            }
+        }
+
         // Record the attempt before doing the work so a mid-render crash still shows it was tried.
         request.PacketGeneration.MarkGenerating();
         request.MarkAsUpdated(SystemUserId);
@@ -134,61 +163,25 @@ public sealed class PacketGenerationService : IPacketGenerationService
         {
             var location = await _locationRepository.GetByIdAsync(tenantId, request.LocationId, cancellationToken);
 
-            var photoUrls = await _photoUrlResolver.ResolveAsync(request, cancellationToken);
-
-            // One download feeds both the assessment, which reads the photos (issue #772), and
-            // the PDF, which embeds them. It used to happen after the assessment, for the PDF only.
-            var downloadedPhotos = await DownloadPhotosAsync(request, photoUrls, cancellationToken);
-
-            await EnsurePreliminaryAssessmentAsync(request, downloadedPhotos, cancellationToken);
-
             // The dealer's logo (Spec A-16, issue #470). The PDF needs its bytes; the HTML only
             // names its URL, and does so only when the fetch succeeded, so the two renderings show
             // the logo or both leave it out. A logo that will not load never fails the packet.
             var logoUrl = location?.Branding is { HasLogo: true } branding ? branding.LogoUrl : null;
             var logoImage = logoUrl is null ? null : await _logoFetcher.FetchAsync(logoUrl, cancellationToken);
-
-            var pasteBlockCap = location?.PacketConfig.PasteBlockCharacterCap
-                ?? PacketConfigEmbedded.DefaultPasteBlockCharacterCap;
-
-            var context = new PacketCompositionContext
+            if (logoImage is null)
             {
-                LocationName = location?.Name,
-                LocationPhone = location?.Phone,
-                LocationTimeZoneId = location?.TimeZoneId,
-                // SpecifyKind, not a bare widening: CreatedAtUtc is a DateTime, and a Cosmos
-                // round-trip can hand it back with Kind=Unspecified, which DateTimeOffset reads
-                // as server-local. Harmless while the Received line was re-normalised to UTC;
-                // a wrong wall-clock hour once it is converted into a named zone (issue #506).
-                SubmittedAtUtc = new DateTimeOffset(
-                    DateTime.SpecifyKind(request.CreatedAtUtc, DateTimeKind.Utc)),
-                StatusLinkUrl = null,   // minted by #427
-                ManagerLinks = ManagerDeepLinks.Build(_managerAppUrlOptions.BaseUrl, request.Id),
-                PasteBlock = PasteBlockGenerator.Generate(
-                    request.IssueCategory,
-                    request.IssueDescription,
-                    statusLinkUrl: null,   // supplied by #427 once the status token is minted
-                    characterCap: pasteBlockCap,
-                    equipmentLines: PhotoFindingText.PasteLines(request.PreliminaryAssessment?.PhotoFindings)),
-                PhotoUrls = photoUrls,
-                LogoUrl = logoImage is null ? null : logoUrl,
-                PoweredByLogoUrl = PacketBranding.PoweredByLogoUrlFor(_intakeUrlOptions.BaseUrl),
-            };
+                logoUrl = null;
+            }
 
-            var packet = PacketComposer.Compose(request, context);
+            var own = await ComposeAsync(request, location, logoUrl, assess: true, cancellationToken);
+            var packet = own.Packet;
 
             // Render the HTML now too: it is the primary artifact and shares failure modes with
             // the PDF, so a broken packet is caught here rather than at email time (#437).
             var html = PacketHtmlRenderer.Render(packet);
             _logger.LogDebug("Packet generation: composed HTML packet ({Length} chars) for SR {ServiceRequestId}", html.Length, request.Id);
 
-            var photoImages = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-            foreach (var photo in downloadedPhotos)
-            {
-                photoImages[photo.Url] = photo.Bytes;
-            }
-
-            var pdf = PacketPdfRenderer.Render(packet, photoImages, logoImage);
+            var pdf = PacketPdfRenderer.Render(packet, own.PhotoImages, logoImage);
 
             var nextVersion = request.PacketGeneration.PacketVersion + 1;
             var pdfBlobPath = $"packets/{tenantId}/{request.Id}/v{nextVersion}.pdf";
@@ -207,7 +200,9 @@ public sealed class PacketGenerationService : IPacketGenerationService
 
             // Deliver the packet by email (Spec B-4, #437 send, #438 idempotency + retry). A
             // delivery failure never fails generation: the packet is generated and stored.
-            await DeliverPacketEmailAsync(request, location, packet, html, pdf, photoImages, photoUrls, cancellationToken);
+            // A submission's first request carries every settled sibling's packet (Spec A-17).
+            List<ComposedPacket> parts = [own, .. await ComposeSiblingsAsync(siblings, location, logoUrl, cancellationToken)];
+            await DeliverPacketEmailAsync(request, location, parts, html, pdf, logoImage, cancellationToken);
 
             return PacketGenerationOutcome.Succeeded;
         }
@@ -284,6 +279,132 @@ public sealed class PacketGenerationService : IPacketGenerationService
             ExpiresAtUtc = DateTime.UtcNow.Add(PdfLinkLifetime),
             PacketVersion = packet.PacketVersion
         };
+    }
+
+    /// <summary>
+    /// A composed packet with what delivery needs beside it: the request it came from, its photos'
+    /// read URLs by attachment id, and the downloaded image bytes by read URL.
+    /// </summary>
+    private sealed record ComposedPacket(
+        ServiceRequest Request,
+        ServicePacket Packet,
+        IReadOnlyDictionary<string, string> PhotoUrls,
+        IReadOnlyDictionary<string, byte[]> PhotoImages);
+
+    /// <summary>
+    /// Resolves and downloads <paramref name="request"/>'s photos and composes its packet.
+    /// <paramref name="assess"/> runs the preliminary assessment when the request has none yet —
+    /// true only for the request being generated; a sibling composed for the combined email
+    /// renders the assessment its own generation stored, or none.
+    /// </summary>
+    private async Task<ComposedPacket> ComposeAsync(
+        ServiceRequest request, Location? location, string? logoUrl, bool assess, CancellationToken cancellationToken)
+    {
+        var photoUrls = await _photoUrlResolver.ResolveAsync(request, cancellationToken);
+
+        // One download feeds both the assessment, which reads the photos (issue #772), and
+        // the PDF, which embeds them. It used to happen after the assessment, for the PDF only.
+        var downloadedPhotos = await DownloadPhotosAsync(request, photoUrls, cancellationToken);
+
+        if (assess)
+        {
+            await EnsurePreliminaryAssessmentAsync(request, downloadedPhotos, cancellationToken);
+        }
+
+        var pasteBlockCap = location?.PacketConfig.PasteBlockCharacterCap
+            ?? PacketConfigEmbedded.DefaultPasteBlockCharacterCap;
+
+        var context = new PacketCompositionContext
+        {
+            LocationName = location?.Name,
+            LocationPhone = location?.Phone,
+            LocationTimeZoneId = location?.TimeZoneId,
+            // SpecifyKind, not a bare widening: CreatedAtUtc is a DateTime, and a Cosmos
+            // round-trip can hand it back with Kind=Unspecified, which DateTimeOffset reads
+            // as server-local. Harmless while the Received line was re-normalised to UTC;
+            // a wrong wall-clock hour once it is converted into a named zone (issue #506).
+            SubmittedAtUtc = new DateTimeOffset(
+                DateTime.SpecifyKind(request.CreatedAtUtc, DateTimeKind.Utc)),
+            StatusLinkUrl = null,   // minted by #427
+            ManagerLinks = ManagerDeepLinks.Build(_managerAppUrlOptions.BaseUrl, request.Id),
+            PasteBlock = PasteBlockGenerator.Generate(
+                request.IssueCategory,
+                request.IssueDescription,
+                statusLinkUrl: null,   // supplied by #427 once the status token is minted
+                characterCap: pasteBlockCap,
+                equipmentLines: PhotoFindingText.PasteLines(request.PreliminaryAssessment?.PhotoFindings)),
+            PhotoUrls = photoUrls,
+            LogoUrl = logoUrl,
+            PoweredByLogoUrl = PacketBranding.PoweredByLogoUrlFor(_intakeUrlOptions.BaseUrl),
+        };
+
+        var photoImages = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var photo in downloadedPhotos)
+        {
+            photoImages[photo.Url] = photo.Bytes;
+        }
+
+        return new ComposedPacket(request, PacketComposer.Compose(request, context), photoUrls, photoImages);
+    }
+
+    /// <summary>
+    /// Composes the packet of every sibling whose own generation succeeded, in submission order,
+    /// for the combined email (<c>Spec A-17</c>). A sibling that cannot be composed is logged and
+    /// left out: the email still goes, and that request keeps its own stored packet.
+    /// </summary>
+    private async Task<List<ComposedPacket>> ComposeSiblingsAsync(
+        IReadOnlyList<ServiceRequest> siblings, Location? location, string? logoUrl, CancellationToken cancellationToken)
+    {
+        var parts = new List<ComposedPacket>();
+        foreach (var sibling in siblings.Where(sr => sr.PacketGeneration.Status == "Succeeded").OrderBy(sr => sr.SubmissionPosition))
+        {
+            try
+            {
+                parts.Add(await ComposeAsync(sibling, location, logoUrl, assess: false, cancellationToken));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex,
+                    "Combined packet email: could not compose sibling SR {ServiceRequestId}; sending without it",
+                    sibling.Id);
+            }
+        }
+
+        return parts;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="request"/> sends its submission's combined email: it is the first
+    /// request of a multi-problem submission and nothing has been emailed for it yet. A later
+    /// regeneration emails its own packet, like any other request.
+    /// </summary>
+    private static bool OwnsCombinedDelivery(ServiceRequest request) =>
+        request.IsSubmissionLead && request.PacketEmailDelivery.DeliveredPacketVersion == 0;
+
+    /// <summary>
+    /// Whether <paramref name="request"/>'s packet should wait to go out in its submission's
+    /// combined email instead of its own (<c>Spec A-17</c>): it is a later sibling, and the first
+    /// request has neither sent that email nor given up generating. Once the lead has sent, a
+    /// sibling that missed the email, or is regenerated, sends its own; the lead's send marks
+    /// the siblings it carried as delivered, so idempotency keeps those from sending twice.
+    /// </summary>
+    private async Task<bool> IsLeftToTheLeadAsync(ServiceRequest request, CancellationToken cancellationToken)
+    {
+        if (!request.IsInMultiIssueSubmission || request.IsSubmissionLead)
+        {
+            return false;
+        }
+
+        var lead = await _serviceRequestRepository.GetByIdAsync(request.TenantId, request.SubmissionId!, cancellationToken);
+        if (lead is null)
+        {
+            return false;
+        }
+
+        var leadGaveUp = lead.PacketGeneration is { Status: "Failed", IsSettled: true }
+            || lead.PacketEmailDelivery.Status == "Failed";
+
+        return lead.PacketEmailDelivery.DeliveredPacketVersion == 0 && !leadGaveUp;
     }
 
     /// <summary>
@@ -395,13 +516,14 @@ public sealed class PacketGenerationService : IPacketGenerationService
     private async Task DeliverPacketEmailAsync(
         ServiceRequest request,
         Location? location,
-        ServicePacket packet,
+        IReadOnlyList<ComposedPacket> parts,
         string html,
         byte[] pdf,
-        IReadOnlyDictionary<string, byte[]> photoImages,
-        IReadOnlyDictionary<string, string> photoUrls,
+        byte[]? logoImage,
         CancellationToken cancellationToken)
     {
+        var packet = parts[0].Packet;
+
         var config = location?.PacketConfig;
         if (config is null || !config.Enabled)
         {
@@ -422,6 +544,15 @@ public sealed class PacketGenerationService : IPacketGenerationService
             return;
         }
 
+        // A later sibling's first packet travels in the lead's combined email (Spec A-17).
+        if (await IsLeftToTheLeadAsync(request, cancellationToken))
+        {
+            _logger.LogInformation(
+                "Packet email for SR {ServiceRequestId} left to SR {LeadServiceRequestId}, which sends its submission's combined email",
+                request.Id, request.SubmissionId);
+            return;
+        }
+
         var packetVersion = request.PacketGeneration.PacketVersion;
 
         // Idempotency (Spec B-4): this exact packet has already been emailed — never double-send.
@@ -433,20 +564,34 @@ public sealed class PacketGenerationService : IPacketGenerationService
             return;
         }
 
+        // Several problems go out as one email: every packet in the HTML body and one merged
+        // PDF (Spec A-17, B-4). The request's own stored PDF is not the one attached then.
+        var combined = parts.Count > 1;
+        IReadOnlyList<ServicePacket> packets = [.. parts.Select(p => p.Packet)];
+        if (combined)
+        {
+            html = PacketHtmlRenderer.RenderCombined(packets);
+        }
+
         var attachments = new List<PacketEmailAttachment>();
         if (config.AttachPdf)
         {
             attachments.Add(new PacketEmailAttachment
             {
-                FileName = $"service-packet-{packet.Origin.ReferenceCode}.pdf",
+                FileName = combined
+                    ? $"service-packets-{packet.Origin.ReferenceCode}.pdf"
+                    : $"service-packet-{packet.Origin.ReferenceCode}.pdf",
                 ContentType = "application/pdf",
-                Content = pdf,
+                Content = combined ? RenderCombinedPdf(parts, logoImage) : pdf,
             });
         }
 
         if (config.IncludePhotos)
         {
-            attachments.AddRange(BuildPhotoAttachments(request, photoImages, photoUrls));
+            foreach (var part in parts)
+            {
+                attachments.AddRange(BuildPhotoAttachments(part.Request, part.PhotoImages, part.PhotoUrls));
+            }
         }
 
         // Trim the attachment set to what ACS will accept (Spec B-4, #521). Spec A-6 allows ten
@@ -454,7 +599,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         // request ceiling on their own; before this it failed every attempt and left the shop a
         // request with no packet. The PDF is not the problem (QuestPDF resamples embedded images,
         // keeping it at roughly 1.5–3 MB) and outranks the photos.
-        var plainTextBody = PacketEmailComposer.BuildPlainTextBody(packet);
+        var plainTextBody = PacketEmailComposer.BuildCombinedPlainTextBody(packets);
         var fit = PacketEmailSizeFitter.Fit(attachments, html, plainTextBody, _packetEmailOptions.MaxRequestBytes);
 
         if (fit.AnythingDropped)
@@ -479,7 +624,9 @@ public sealed class PacketGenerationService : IPacketGenerationService
             d => d.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase));
         if (droppedAPhoto)
         {
-            html = PacketHtmlRenderer.Render(packet, packet.ManagerLinks?.RequestUrl);
+            html = combined
+                ? PacketHtmlRenderer.RenderCombined(packets, photosDropped: true)
+                : PacketHtmlRenderer.Render(packet, packet.ManagerLinks?.RequestUrl);
         }
 
         if (fit.PdfDropped)
@@ -495,8 +642,8 @@ public sealed class PacketGenerationService : IPacketGenerationService
                 request.Id, packetVersion, request.TenantId, _packetEmailOptions.MaxRequestBytes);
         }
 
-        var message = PacketEmailComposer.Compose(
-            packet, html, request.CustomerSnapshot.LastName, recipients, fit.Attachments);
+        var message = PacketEmailComposer.ComposeCombined(
+            packets, html, request.CustomerSnapshot.LastName, recipients, fit.Attachments);
 
         // One correlation id spans every retry of this delivery. Packet generation runs off the
         // HTTP request thread, so fall back to the service request id when there is no ambient trace.
@@ -553,6 +700,33 @@ public sealed class PacketGenerationService : IPacketGenerationService
         // Persist the delivery outcome so a repeat run sees it and does not re-send.
         request.MarkAsUpdated(SystemUserId);
         await _serviceRequestRepository.UpdateAsync(request, cancellationToken);
+
+        // The siblings carried by a combined email are delivered too: record it on each, so a
+        // sibling's own later run sees its packet version already sent (Spec A-17).
+        if (combined && request.PacketEmailDelivery.Status == "Delivered")
+        {
+            foreach (var sibling in parts.Skip(1).Select(p => p.Request))
+            {
+                sibling.PacketEmailDelivery.MarkDelivered(sibling.PacketGeneration.PacketVersion, DateTime.UtcNow);
+                sibling.MarkAsUpdated(SystemUserId);
+                await _serviceRequestRepository.UpdateAsync(sibling, cancellationToken);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The merged PDF for a combined email: every part's packet, one per sheet, with each part's
+    /// downloaded photos (<c>Spec A-17</c>). Read URLs are unique, so the photo maps merge cleanly.
+    /// </summary>
+    private static byte[] RenderCombinedPdf(IReadOnlyList<ComposedPacket> parts, byte[]? logoImage)
+    {
+        var images = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var (url, bytes) in parts.SelectMany(p => p.PhotoImages))
+        {
+            images[url] = bytes;
+        }
+
+        return PacketPdfRenderer.RenderCombined([.. parts.Select(p => p.Packet)], images, logoImage);
     }
 
     /// <summary>

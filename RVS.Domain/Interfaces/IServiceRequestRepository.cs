@@ -27,6 +27,16 @@ public interface IServiceRequestRepository
     Task<IReadOnlyList<ServiceRequest>> GetByLocationAsync(string tenantId, string locationId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lists every service request of one multi-problem intake submission (<c>Spec A-17</c>),
+    /// ordered by <see cref="ServiceRequest.SubmissionPosition"/>. Single-partition on
+    /// <paramref name="tenantId"/>.
+    /// </summary>
+    /// <param name="tenantId">Tenant partition key.</param>
+    /// <param name="submissionId">The submission id — its first request's id.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyList<ServiceRequest>> GetBySubmissionIdAsync(string tenantId, string submissionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Searches service requests using up to 10 filter parameters with Cosmos DB continuation-token pagination.
     /// </summary>
     /// <param name="tenantId">Tenant partition key.</param>

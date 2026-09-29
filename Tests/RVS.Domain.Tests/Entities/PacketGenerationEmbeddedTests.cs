@@ -152,4 +152,56 @@ public class PacketGenerationEmbeddedTests
         pg.ExpectedAttachmentCount.Should().Be(
             3, "the count records what intake promised and is not re-derived on regeneration");
     }
+
+    // ── IsSettled (Spec A-17, issue #806) ───────────────────────────────
+    // The lead of a multi-problem submission waits for its siblings to settle: a packet that
+    // generated, or one that has run out of attempts and will not generate on its own.
+
+    [Fact]
+    public void IsSettled_WhenPending_ShouldBeFalse()
+    {
+        new PacketGenerationEmbedded().IsSettled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsSettled_WhenGenerating_ShouldBeFalse()
+    {
+        var pg = new PacketGenerationEmbedded();
+        pg.MarkGenerating();
+
+        pg.IsSettled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsSettled_WhenSucceeded_ShouldBeTrue()
+    {
+        var pg = new PacketGenerationEmbedded();
+        pg.MarkGenerating();
+        pg.MarkSucceeded("packets/t/sr/v1.pdf", DateTime.UtcNow);
+
+        pg.IsSettled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsSettled_WhenFailedWithAttemptsLeft_ShouldBeFalse()
+    {
+        var pg = new PacketGenerationEmbedded();
+        pg.MarkGenerating();
+        pg.MarkFailed("boom");
+
+        pg.IsSettled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsSettled_WhenFailedWithAttemptsExhausted_ShouldBeTrue()
+    {
+        var pg = new PacketGenerationEmbedded();
+        for (var i = 0; i < PacketGenerationEmbedded.MaxAttempts; i++)
+        {
+            pg.MarkGenerating();
+            pg.MarkFailed("boom");
+        }
+
+        pg.IsSettled.Should().BeTrue();
+    }
 }
