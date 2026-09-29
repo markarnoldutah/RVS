@@ -7,7 +7,8 @@ using RVS.Domain.Validation;
 namespace RVS.API.Integrations;
 
 /// <summary>
-/// Azure OpenAI GPT-4o Vision–powered VIN extraction service.
+/// Azure OpenAI GPT-4o Vision–powered VIN extraction service. Falls back to the vehicle serial
+/// number when the plate carries no VIN, as on a truck camper (issue #807).
 /// Sends the image to the chat completions endpoint and parses the structured JSON response.
 /// Returns <c>null</c> on any network error, timeout, or unparseable response — never throws.
 /// </summary>
@@ -24,10 +25,25 @@ public sealed class AzureOpenAiVinExtractionService : IVinExtractionService
         "stickers, and identification documents found on RVs and their chassis. " +
         "Extract the 17-character Vehicle Identification Number (VIN) from the image. " +
         "VINs contain only alphanumeric characters and never include the letters I, O, or Q. " +
-        "Return ONLY a JSON object: {\"vin\": \"<the VIN>\", \"confidence\": <0.0-1.0>}. " +
-        "If no VIN is visible, return {\"vin\": null, \"confidence\": 0.0}.";
+        "Some RVs have no VIN: a truck camper, for example, carries a manufacturer's plate with a shorter " +
+        "\"Vehicle Serial No.\" or \"Serial Number\". If there is no VIN but there is a vehicle serial number, " +
+        "extract the serial number instead, exactly as printed. Never return a model number, approval number, " +
+        "date, weight or phone number as the VIN. " +
+        "If the plate also shows the vehicle's manufacturer, model or year, report them too, exactly as printed: " +
+        "the manufacturer's brand name (e.g. \"Lance\", not its street address), the model designation, and the " +
+        "model year as four digits — or, when only a date of manufacture is shown (e.g. \"03/03\"), that year " +
+        "(2003). Use null for anything not printed on the plate; never guess from the RV's appearance. " +
+        "Return ONLY a JSON object: {\"vin\": \"<the VIN or serial number>\", \"manufacturer\": <string or null>, " +
+        "\"model\": <string or null>, \"year\": <number or null>, \"confidence\": <0.0-1.0>}. " +
+        "The confidence is for the VIN or serial number. " +
+        "If neither is visible, return {\"vin\": null, \"manufacturer\": null, \"model\": null, \"year\": null, \"confidence\": 0.0}.";
 
-    private const string UserPrompt = "Extract the VIN from this image.";
+    private const string UserPrompt = "Extract the VIN, or the vehicle serial number if there is no VIN, from this image.";
+
+    // Step 4 prefill (issue #807): plate text the customer can override, so anything doubtful is dropped.
+    private const int MaxDetailLength = 60;
+    private const int MinYear = 1900;
+    private static readonly string[] PlaceholderValues = ["N/A", "NA", "NONE", "UNKNOWN", "-", "NULL"];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -90,15 +106,21 @@ public sealed class AzureOpenAiVinExtractionService : IVinExtractionService
                 return null;
             }
 
-            var normalized = extracted.Vin.Trim().ToUpperInvariant();
-            var formatResult = VinValidator.ValidateFormat(normalized);
+            var normalized = VehicleIdentifierValidator.Normalize(extracted.Vin);
+            var formatResult = VehicleIdentifierValidator.Validate(normalized);
             if (!formatResult.IsValid)
             {
-                _logger.LogWarning("Azure OpenAI returned an invalid VIN format: {Vin}", normalized);
+                _logger.LogWarning("Azure OpenAI returned an invalid VIN or serial number: {Vin}", normalized);
                 return null;
             }
 
-            return new VinExtractionResult(normalized, extracted.Confidence, ProviderName);
+            return new VinExtractionResult(
+                normalized,
+                extracted.Confidence,
+                ProviderName,
+                CleanDetail(extracted.Manufacturer),
+                CleanDetail(extracted.Model),
+                ParseYear(extracted.Year));
         }
         catch (HttpRequestException ex)
         {
@@ -115,6 +137,56 @@ public sealed class AzureOpenAiVinExtractionService : IVinExtractionService
             _logger.LogWarning(ex, "Azure OpenAI VIN extraction returned unparseable response");
             return null;
         }
+    }
+
+    /// <summary>
+    /// A manufacturer or model read off the plate, or <c>null</c> when it is absent, a placeholder
+    /// such as "N/A", too long to be a name, or carries markup or control characters.
+    /// </summary>
+    private static string? CleanDetail(JsonElement? element)
+    {
+        var raw = element?.ValueKind switch
+        {
+            JsonValueKind.String => element.Value.GetString(),
+            JsonValueKind.Number => element.Value.GetRawText(),
+            _ => null
+        };
+
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var cleaned = string.Join(' ', raw.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        if (cleaned.Length > MaxDetailLength
+            || cleaned.Any(c => char.IsControl(c) || c is '<' or '>')
+            || PlaceholderValues.Contains(cleaned, StringComparer.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return cleaned;
+    }
+
+    /// <summary>
+    /// A four-digit year between 1900 and two years ahead, as a number or a numeric string;
+    /// otherwise <c>null</c>. Mirrors the Step 4 year rule.
+    /// </summary>
+    private static int? ParseYear(JsonElement? element)
+    {
+        int year;
+        switch (element?.ValueKind)
+        {
+            case JsonValueKind.Number when element.Value.TryGetInt32(out year):
+                break;
+            case JsonValueKind.String when int.TryParse(element.Value.GetString(), out year):
+                break;
+            default:
+                return null;
+        }
+
+        return year >= MinYear && year <= DateTime.UtcNow.Year + 2 ? year : null;
     }
 
     /// <summary>
@@ -184,5 +256,16 @@ public sealed class AzureOpenAiVinExtractionService : IVinExtractionService
 
         [JsonPropertyName("confidence")]
         public double Confidence { get; init; }
+
+        // Raw elements: a model such as 1121 or a year can come back as a number or a string, and
+        // one oddly-typed detail must not cost the customer the VIN.
+        [JsonPropertyName("manufacturer")]
+        public JsonElement? Manufacturer { get; init; }
+
+        [JsonPropertyName("model")]
+        public JsonElement? Model { get; init; }
+
+        [JsonPropertyName("year")]
+        public JsonElement? Year { get; init; }
     }
 }

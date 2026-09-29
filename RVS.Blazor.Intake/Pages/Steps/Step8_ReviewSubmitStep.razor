@@ -59,7 +59,14 @@
                 </MudStack>
                 <MudSimpleTable Elevation="0" Class="review-table">
                     <tbody>
-                        <tr><td><strong>VIN</strong></td><td>@State.Vin</td></tr>
+                        @if (State.VehicleSkipped)
+                        {
+                            <tr><td><strong>VIN</strong></td><td>Skipped. The service team will collect it.</td></tr>
+                        }
+                        else
+                        {
+                            <tr><td><strong>@(State.HasVin ? "VIN" : "Serial number")</strong></td><td>@State.Vin</td></tr>
+                        }
                         @if (!string.IsNullOrWhiteSpace(State.Manufacturer))
                         {
                             <tr><td><strong>Manufacturer</strong></td><td>@State.Manufacturer</td></tr>

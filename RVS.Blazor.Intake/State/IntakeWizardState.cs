@@ -180,8 +180,19 @@ public sealed class IntakeWizardState
     /// <summary>All known vehicles for the returning customer, enabling one-tap VIN selection in Step 3.</summary>
     public List<AssetInfoDto> KnownAssets { get; set; } = [];
 
-    /// <summary>Vehicle Identification Number (Step 3).</summary>
+    /// <summary>
+    /// The RV's VIN or, for a rig with none such as a truck camper, its serial number (Step 3, issue #807).
+    /// </summary>
     public string Vin { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The customer skipped the vehicle details — the rig is in storage — and the dealer will collect
+    /// them later (issue #807). Step 3 needs no identifier and Step 4's fields become optional.
+    /// </summary>
+    public bool VehicleSkipped { get; set; }
+
+    /// <summary>Whether <see cref="Vin"/> is a well-formed VIN rather than a serial number.</summary>
+    public bool HasVin => VehicleIdentifierValidator.IsVin(Vin);
 
     /// <summary>Vehicle manufacturer (Step 4).</summary>
     public string? Manufacturer { get; set; }
@@ -194,6 +205,12 @@ public sealed class IntakeWizardState
 
     /// <summary>Whether the VIN decode API call returned successfully (Step 3 → Step 4).</summary>
     public bool VinLookupSucceeded { get; set; }
+
+    /// <summary>
+    /// Whether Step 4 was pre-filled from the plate in the Step 3 photo, so Step 4 can ask the
+    /// customer to check it (issue #807).
+    /// </summary>
+    public bool VehicleDetailsFromPhoto { get; set; }
 
     /// <summary>Issue category selected from LookupSet (Step 5).</summary>
     public string IssueCategory { get; set; } = string.Empty;
@@ -458,6 +475,83 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
+    /// Pre-fills Step 4 with what the plate in the Step 3 photo showed (issue #807). Only the
+    /// values the plate carried are written; the rest keep whatever the customer already has.
+    /// Every field stays editable in Step 4.
+    /// </summary>
+    public void ApplyVehicleDetailsFromPhoto(string? manufacturer, string? model, int? year)
+    {
+        var applied = false;
+
+        if (!string.IsNullOrWhiteSpace(manufacturer))
+        {
+            Manufacturer = manufacturer.Trim();
+            applied = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            Model = model.Trim();
+            applied = true;
+        }
+
+        if (year.HasValue)
+        {
+            Year = year;
+            applied = true;
+        }
+
+        if (applied)
+        {
+            VehicleDetailsFromPhoto = true;
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>
+    /// Applies a successful Step 3 VIN decode. The decoder wins where it has a value; where it has
+    /// none, whatever the photo pre-filled is kept.
+    /// </summary>
+    public void ApplyVinDecode(VinDecodeResponseDto decoded)
+    {
+        ArgumentNullException.ThrowIfNull(decoded);
+
+        if (!string.IsNullOrWhiteSpace(decoded.Manufacturer))
+        {
+            Manufacturer = decoded.Manufacturer;
+        }
+
+        if (!string.IsNullOrWhiteSpace(decoded.Model))
+        {
+            Model = decoded.Model;
+        }
+
+        if (decoded.Year > 0)
+        {
+            Year = decoded.Year;
+        }
+
+        VinLookupSucceeded = true;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// The customer skips the vehicle: the rig is in storage and the dealer will collect its details
+    /// later (issue #807). Clears anything a decode or photo filled, so Step 4 starts empty and optional.
+    /// </summary>
+    public void SkipVehicle()
+    {
+        Vin = string.Empty;
+        VehicleSkipped = true;
+        VinLookupSucceeded = false;
+        VehicleDetailsFromPhoto = false;
+        Manufacturer = null;
+        Model = null;
+        Year = null;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
     /// Validates the current step and returns any error messages.
     /// Also populates <see cref="FieldErrors"/> with per-field error keys.
     /// </summary>
@@ -495,7 +589,8 @@ public sealed class IntakeWizardState
             },
             Asset = new AssetInfoDto
             {
-                AssetId = Vin.Trim().ToUpperInvariant(),
+                // Blank when the customer skipped: the dealer collects the vehicle later (issue #807).
+                AssetId = VehicleSkipped ? string.Empty : VehicleIdentifierValidator.Normalize(Vin),
                 Manufacturer = string.IsNullOrWhiteSpace(Manufacturer) ? null : Manufacturer.Trim(),
                 Model = string.IsNullOrWhiteSpace(Model) ? null : Model.Trim(),
                 Year = Year
@@ -562,10 +657,12 @@ public sealed class IntakeWizardState
             IsInvitePrefilled = IsInvitePrefilled,
             KnownAssets = KnownAssets,
             Vin = Vin,
+            VehicleSkipped = VehicleSkipped,
             Manufacturer = Manufacturer,
             Model = Model,
             Year = Year,
             VinLookupSucceeded = VinLookupSucceeded,
+            VehicleDetailsFromPhoto = VehicleDetailsFromPhoto,
             IssueCategory = IssueCategory,
             IsCategorySuggestedByAi = IsCategorySuggestedByAi,
             IssueDescription = IssueDescription,
@@ -618,10 +715,12 @@ public sealed class IntakeWizardState
             IsInvitePrefilled = data.IsInvitePrefilled;
             KnownAssets = data.KnownAssets;
             Vin = data.Vin;
+            VehicleSkipped = data.VehicleSkipped;
             Manufacturer = data.Manufacturer;
             Model = data.Model;
             Year = data.Year;
             VinLookupSucceeded = data.VinLookupSucceeded;
+            VehicleDetailsFromPhoto = data.VehicleDetailsFromPhoto;
             IssueCategory = data.IssueCategory;
             IsCategorySuggestedByAi = data.IsCategorySuggestedByAi;
             IssueDescription = data.IssueDescription;
@@ -701,10 +800,12 @@ public sealed class IntakeWizardState
         IsInvitePrefilled = false;
         KnownAssets = [];
         Vin = string.Empty;
+        VehicleSkipped = false;
         Manufacturer = null;
         Model = null;
         Year = null;
         VinLookupSucceeded = false;
+        VehicleDetailsFromPhoto = false;
         IssueCategory = string.Empty;
         IsCategorySuggestedByAi = false;
         IsUrgencySuggestedByAi = false;
@@ -828,19 +929,18 @@ public sealed class IntakeWizardState
     private List<string> ValidateVinLookup()
     {
         var errors = new List<string>();
-        if (string.IsNullOrWhiteSpace(Vin))
+        if (VehicleSkipped)
         {
-            errors.Add("VIN is required.");
-            FieldErrors["Vin"] = "VIN is required.";
+            return errors;
         }
-        else
+
+        // Issue #807: a VIN or any serial number. The check digit is not enforced — a VIN that
+        // will not decode falls through to manual entry in Step 4.
+        var result = VehicleIdentifierValidator.Validate(Vin);
+        if (!result.IsValid)
         {
-            var vinResult = ClientVinValidator.ValidateFormat(Vin);
-            if (!vinResult.IsValid)
-            {
-                errors.Add(vinResult.ErrorMessage!);
-                FieldErrors["Vin"] = vinResult.ErrorMessage!;
-            }
+            errors.Add(result.ErrorMessage!);
+            FieldErrors["Vin"] = result.ErrorMessage!;
         }
 
         return errors;
@@ -849,6 +949,10 @@ public sealed class IntakeWizardState
     private List<string> ValidateVehicleDetails()
     {
         var errors = new List<string>();
+        if (VehicleSkipped)
+        {
+            return errors;
+        }
 
         if (string.IsNullOrWhiteSpace(HasExtendedWarranty))
         {
@@ -992,12 +1096,16 @@ internal sealed class IntakeWizardStateData
     public bool IsInvitePrefilled { get; set; }
     public List<AssetInfoDto> KnownAssets { get; set; } = [];
     public string Vin { get; set; } = string.Empty;
+    public bool VehicleSkipped { get; set; }
     public string? Manufacturer { get; set; }
     public string? Model { get; set; }
     public int? Year { get; set; }
 
     /// <summary>Whether Step 3's VIN decode filled the vehicle, so Step 4 still says so after a refresh (issue #758).</summary>
     public bool VinLookupSucceeded { get; set; }
+
+    /// <summary>Whether Step 4 was pre-filled from the Step 3 photo's plate (issue #807).</summary>
+    public bool VehicleDetailsFromPhoto { get; set; }
 
     public string IssueCategory { get; set; } = string.Empty;
     public bool IsCategorySuggestedByAi { get; set; }

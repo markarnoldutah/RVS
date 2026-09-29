@@ -400,6 +400,25 @@ public class IntakeControllerTests
     }
 
     [Fact]
+    public async Task ExtractVin_WhenPlateCarriesVehicleDetails_ShouldReturnThemForStep4Prefill()
+    {
+        var imageBytes = new byte[] { 0xFF, 0xD8, 0xFF };
+        var request = new VinExtractionRequestDto { ImageBase64 = Convert.ToBase64String(imageBytes), ContentType = "image/jpeg" };
+
+        _vinExtractionServiceMock.Setup(s => s.ExtractVinFromImageAsync(imageBytes, "image/jpeg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VinExtractionResult("152263", 0.9, "AzureOpenAiVinExtractionService", "Lance", "1121", 2003));
+
+        var result = await _sut.ExtractVin("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<VinExtractionResultDto>>().Subject;
+        dto.Result!.Vin.Should().Be("152263");
+        dto.Result.Manufacturer.Should().Be("Lance");
+        dto.Result.Model.Should().Be("1121");
+        dto.Result.Year.Should().Be(2003);
+    }
+
+    [Fact]
     public async Task ExtractVin_WhenExtractionReturnsNull_ShouldReturnOkWithNullResultAndWarning()
     {
         var imageBytes = new byte[] { 0xFF, 0xD8, 0xFF };

@@ -658,8 +658,9 @@ public class IntakeWizardStateTests
 
         var errors = state.ValidateCurrentStep();
 
+        // Issue #807: any length is allowed now, but a serial number still needs a digit.
         errors.Should().ContainSingle()
-            .Which.Should().Contain("17");
+            .Which.Should().Contain("number");
     }
 
     [Fact]
@@ -672,6 +673,219 @@ public class IntakeWizardStateTests
         var errors = state.ValidateCurrentStep();
 
         errors.Should().BeEmpty();
+    }
+
+    // ── Serial numbers and skipped vehicles (issue #807) ────────────────────
+
+    [Theory]
+    [InlineData("152263")]
+    [InlineData("1HGBH41JXMN109187")] // bad check digit: decode fails, the step does not block
+    public async Task ValidateCurrentStep_Step3_SerialNumberOrUndecodableVin_ShouldReturnNoErrors(string vin)
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+        state.Vin = vin;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step3_SeventeenCharactersWithLetterO_ShouldReturnError()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+        state.Vin = "1HGBH41JXMN10918O";
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().ContainSingle().Which.Should().Contain("VIN");
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step3_WhenVehicleSkipped_ShouldReturnNoErrors()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+        state.VehicleSkipped = true;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step4_WhenVehicleSkipped_ShouldReturnNoErrors()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(4);
+        state.VehicleSkipped = true;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("1HGBH41JXMN109186", true)]
+    [InlineData("152263", false)]
+    [InlineData("", false)]
+    public void HasVin_ShouldBeTrueOnlyForAWellFormedVin(string vin, bool expected)
+    {
+        var state = CreateState();
+        state.Vin = vin;
+
+        state.HasVin.Should().Be(expected);
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WithASerialNumber_ShouldSendItNormalised()
+    {
+        var state = CreateState();
+        state.Vin = " 152 263 ";
+
+        var request = state.BuildCreateRequest();
+
+        request.Asset.AssetId.Should().Be("152263");
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WhenVehicleSkipped_ShouldSendABlankAssetIdAndWhateverWasEntered()
+    {
+        var state = CreateState();
+        state.VehicleSkipped = true;
+        state.Manufacturer = "Lance";
+
+        var request = state.BuildCreateRequest();
+
+        request.Asset.AssetId.Should().BeEmpty();
+        request.Asset.Manufacturer.Should().Be("Lance");
+        request.Asset.Model.Should().BeNull();
+        request.Asset.Year.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepASkippedVehicleAcrossAReload()
+    {
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug", VehicleSkipped = true };
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+
+        after.VehicleSkipped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetASkippedVehicle()
+    {
+        var state = CreateState();
+        state.VehicleSkipped = true;
+
+        await state.ClearAsync();
+
+        state.VehicleSkipped.Should().BeFalse();
+    }
+
+    // ── Step 4 prefill from the VIN / serial photo (issue #807) ─────────────
+
+    [Fact]
+    public void ApplyVehicleDetailsFromPhoto_ShouldFillWhatThePlateShowedAndFlagIt()
+    {
+        var state = CreateState();
+
+        state.ApplyVehicleDetailsFromPhoto("Lance", "1121", 2003);
+
+        state.Manufacturer.Should().Be("Lance");
+        state.Model.Should().Be("1121");
+        state.Year.Should().Be(2003);
+        state.VehicleDetailsFromPhoto.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApplyVehicleDetailsFromPhoto_ShouldKeepExistingValuesThePlateDidNotShow()
+    {
+        var state = CreateState();
+        state.Model = "Custom";
+        state.Year = 2005;
+
+        state.ApplyVehicleDetailsFromPhoto("Lance", null, null);
+
+        state.Manufacturer.Should().Be("Lance");
+        state.Model.Should().Be("Custom");
+        state.Year.Should().Be(2005);
+    }
+
+    [Fact]
+    public void ApplyVehicleDetailsFromPhoto_WhenThePlateShowedNothing_ShouldNotFlagIt()
+    {
+        var state = CreateState();
+
+        state.ApplyVehicleDetailsFromPhoto(null, "  ", null);
+
+        state.VehicleDetailsFromPhoto.Should().BeFalse();
+        state.Model.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyVinDecode_ShouldPreferDecodedValuesAndFallBackToThePhoto()
+    {
+        var state = CreateState();
+        state.ApplyVehicleDetailsFromPhoto("Photo Make", "Photo Model", 2019);
+
+        state.ApplyVinDecode(new VinDecodeResponseDto { Vin = "1HGBH41JXMN109186", Manufacturer = "Winnebago", Model = "", Year = 2020 });
+
+        state.Manufacturer.Should().Be("Winnebago");
+        state.Model.Should().Be("Photo Model");
+        state.Year.Should().Be(2020);
+        state.VinLookupSucceeded.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SkipVehicle_ShouldClearTheVehicleAndMarkItSkipped()
+    {
+        var state = CreateState();
+        state.Vin = "152263";
+        state.ApplyVehicleDetailsFromPhoto("Lance", "1121", 2003);
+        state.VinLookupSucceeded = true;
+
+        state.SkipVehicle();
+
+        state.VehicleSkipped.Should().BeTrue();
+        state.Vin.Should().BeEmpty();
+        state.Manufacturer.Should().BeNull();
+        state.Model.Should().BeNull();
+        state.Year.Should().BeNull();
+        state.VinLookupSucceeded.Should().BeFalse();
+        state.VehicleDetailsFromPhoto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepThePhotoPrefillFlagAcrossAReload()
+    {
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug" };
+        before.ApplyVehicleDetailsFromPhoto("Lance", "1121", 2003);
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+
+        after.VehicleDetailsFromPhoto.Should().BeTrue();
+        after.Manufacturer.Should().Be("Lance");
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetThePhotoPrefillFlag()
+    {
+        var state = CreateState();
+        state.ApplyVehicleDetailsFromPhoto("Lance", null, null);
+
+        await state.ClearAsync();
+
+        state.VehicleDetailsFromPhoto.Should().BeFalse();
     }
 
     [Fact]
