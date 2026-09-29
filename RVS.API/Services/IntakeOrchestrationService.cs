@@ -73,6 +73,23 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
         ArgumentNullException.ThrowIfNull(request);
 
+        // Issue #807: the customer gives a VIN, a serial number (a truck camper has no VIN), or
+        // nothing at all when the rig is in storage and the dealer will collect it later.
+        var assetId = VehicleIdentifierValidator.Normalize(request.Asset.AssetId);
+        if (assetId.Length > 0)
+        {
+            var identifierResult = VehicleIdentifierValidator.Validate(assetId);
+            if (!identifierResult.IsValid)
+            {
+                throw new ArgumentException(identifierResult.ErrorMessage, nameof(request));
+            }
+        }
+
+        // Only a VIN is unique enough to key ownership and the X-2 ledger on. A six-digit serial
+        // from one manufacturer can match another's, and transferring "ownership" on that match
+        // would take a rig away from the wrong customer.
+        var tracksVehicleHistory = VehicleIdentifierValidator.IsVin(assetId);
+
         // ── Step 1: Resolve slug → tenantId + locationId ─────────────────────
         var slugLookup = await _slugLookupRepository.GetBySlugAsync(slug.Trim().ToLowerInvariant(), cancellationToken)
             ?? throw new KeyNotFoundException($"Location slug '{slug}' not found.");
@@ -179,19 +196,21 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 profile.Id, tenantId);
         }
 
-        var assetId = request.Asset.AssetId.Trim();
-
-        var existingOwner = await _customerProfileRepository.GetByActiveAssetIdAsync(tenantId, assetId, cancellationToken);
-        if (existingOwner is not null && existingOwner.Id != profile.Id)
+        if (tracksVehicleHistory)
         {
-            existingOwner.DeactivateAsset(assetId);
-            existingOwner.MarkAsUpdated("intake");
-            await _customerProfileRepository.UpdateAsync(existingOwner, cancellationToken);
-            _logger.LogInformation("Intake Step 3: Transferred asset {AssetId} ownership from profile {OldProfileId} to {NewProfileId}",
-                assetId, existingOwner.Id, profile.Id);
+            var existingOwner = await _customerProfileRepository.GetByActiveAssetIdAsync(tenantId, assetId, cancellationToken);
+            if (existingOwner is not null && existingOwner.Id != profile.Id)
+            {
+                existingOwner.DeactivateAsset(assetId);
+                existingOwner.MarkAsUpdated("intake");
+                await _customerProfileRepository.UpdateAsync(existingOwner, cancellationToken);
+                _logger.LogInformation("Intake Step 3: Transferred asset {AssetId} ownership from profile {OldProfileId} to {NewProfileId}",
+                    assetId, existingOwner.Id, profile.Id);
+            }
+
+            profile.ActivateOrRefreshAsset(assetId, request.Asset.Manufacturer?.Trim(), request.Asset.Model?.Trim(), request.Asset.Year);
         }
 
-        profile.ActivateOrRefreshAsset(assetId, request.Asset.Manufacturer?.Trim(), request.Asset.Model?.Trim(), request.Asset.Year);
         profile.MarkAsUpdated("intake");
         profile = await _customerProfileRepository.UpdateAsync(profile, cancellationToken);
 
@@ -280,31 +299,35 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         }
 
         // ── Step 5: Append AssetLedgerEntry (non-blocking on failure) ────────
-        try
+        // Only a VIN has a ledger: see tracksVehicleHistory above.
+        if (tracksVehicleHistory)
         {
-            var ledgerEntry = new AssetLedgerEntry
+            try
             {
-                AssetId = assetId,
-                TenantId = tenantId,
-                DealershipName = slugLookup.DealershipName,
-                ServiceRequestId = serviceRequest.Id,
-                GlobalCustomerAcctId = globalAcct.Id,
-                Manufacturer = request.Asset.Manufacturer?.Trim(),
-                Model = request.Asset.Model?.Trim(),
-                Year = request.Asset.Year,
-                IssueCategory = issueCategory,
-                IssueDescription = request.IssueDescription.Trim(),
-                SubmittedAtUtc = serviceRequest.CreatedAtUtc,
-            };
+                var ledgerEntry = new AssetLedgerEntry
+                {
+                    AssetId = assetId,
+                    TenantId = tenantId,
+                    DealershipName = slugLookup.DealershipName,
+                    ServiceRequestId = serviceRequest.Id,
+                    GlobalCustomerAcctId = globalAcct.Id,
+                    Manufacturer = request.Asset.Manufacturer?.Trim(),
+                    Model = request.Asset.Model?.Trim(),
+                    Year = request.Asset.Year,
+                    IssueCategory = issueCategory,
+                    IssueDescription = request.IssueDescription.Trim(),
+                    SubmittedAtUtc = serviceRequest.CreatedAtUtc,
+                };
 
-            await _assetLedgerRepository.AppendAsync(ledgerEntry, cancellationToken);
-            _logger.LogInformation("Intake Step 5: Appended AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}",
-                assetId, serviceRequest.Id);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Intake Step 5: Failed to append AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}. Continuing intake.",
-                assetId, serviceRequest.Id);
+                await _assetLedgerRepository.AppendAsync(ledgerEntry, cancellationToken);
+                _logger.LogInformation("Intake Step 5: Appended AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}",
+                    assetId, serviceRequest.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Intake Step 5: Failed to append AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}. Continuing intake.",
+                    assetId, serviceRequest.Id);
+            }
         }
 
         // ── Step 6: Update linkages ──────────────────────────────────────────
@@ -324,7 +347,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             globalAcct.MagicLinkToken = GlobalCustomerAcctService.GenerateMagicLinkToken(normalizedEmail);
             globalAcct.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(90);
         }
-        if (!globalAcct.AllKnownAssetIds.Contains(assetId))
+        if (tracksVehicleHistory && !globalAcct.AllKnownAssetIds.Contains(assetId))
         {
             globalAcct.AllKnownAssetIds.Add(assetId);
         }

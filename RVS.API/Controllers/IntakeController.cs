@@ -239,7 +239,13 @@ public class IntakeController : ControllerBase
         return Ok(new AiOperationResponseDto<VinExtractionResultDto>
         {
             Success = true,
-            Result = new VinExtractionResultDto { Vin = result.Vin },
+            Result = new VinExtractionResultDto
+            {
+                Vin = result.Vin,
+                Manufacturer = result.Manufacturer,
+                Model = result.Model,
+                Year = result.Year
+            },
             Confidence = result.Confidence,
             Warnings = [],
             Provider = result.Provider,

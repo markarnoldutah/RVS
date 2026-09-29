@@ -1022,7 +1022,15 @@
                                 {
                                     <MudText Typo="Typo.body2" Style="@ValueStyle">@AssetYearMakeModel(_sr)</MudText>
                                 }
-                                <MudText Typo="Typo.body2" Style="@ValueStyleBreak">@_sr.Asset.AssetId</MudText>
+                                @if (string.IsNullOrWhiteSpace(_sr.Asset.AssetId))
+                                {
+                                    @* Issue #807: the customer skipped the vehicle; the dealer collects it and edits it in here. *@
+                                    <MudText Typo="Typo.body2" Style="@ValueStyle"><em>VIN / serial number not provided</em></MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Style="@ValueStyleBreak">@_sr.Asset.AssetId</MudText>
+                                }
                             </MudStack>
                         }
 

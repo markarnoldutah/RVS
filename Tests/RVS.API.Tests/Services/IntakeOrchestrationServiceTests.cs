@@ -661,6 +661,94 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.CustomerSnapshot.PriorRequestCount.Should().Be(0);
     }
 
+    // ── Serial numbers and skipped vehicles (issue #807) ────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_WhenAssetIdIsASerialNumber_ShouldStoreItOnTheServiceRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263"));
+
+        result.ServiceRequest.AssetInfo.AssetId.Should().Be("152263");
+        result.ServiceRequest.AssetInfo.Manufacturer.Should().Be("Grand Design");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenAssetIdIsASerialNumber_ShouldNotTransferOwnershipOrRecordItOnTheProfile()
+    {
+        SetupFullHappyPath();
+
+        CustomerProfile? capturedProfile = null;
+        _profileRepoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .Callback<CustomerProfile, CancellationToken>((p, _) => capturedProfile = p)
+            .ReturnsAsync((CustomerProfile p, CancellationToken _) => p);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263"));
+
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        capturedProfile.Should().NotBeNull();
+        capturedProfile!.AssetsOwned.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenAssetIdIsASerialNumber_ShouldNotAppendAssetLedgerEntryOrKnownAssetId()
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263"));
+
+        _ledgerRepoMock.Verify(r => r.AppendAsync(
+            It.IsAny<AssetLedgerEntry>(), It.IsAny<CancellationToken>()), Times.Never);
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("152263")),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ExecuteAsync_WhenVehicleIsSkipped_ShouldCreateTheServiceRequestWithABlankAssetId(string assetId)
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: assetId));
+
+        result.ServiceRequest.AssetInfo.AssetId.Should().BeEmpty();
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _ledgerRepoMock.Verify(r => r.AppendAsync(
+            It.IsAny<AssetLedgerEntry>(), It.IsAny<CancellationToken>()), Times.Never);
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains(string.Empty)),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldNormaliseTheAssetIdBeforeStoringIt()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: " 1hgbh41jxmn109186 "));
+
+        result.ServiceRequest.AssetInfo.AssetId.Should().Be("1HGBH41JXMN109186");
+    }
+
+    [Theory]
+    [InlineData("1234<5")]
+    [InlineData("1HGBH41JXMN10918O")]
+    public async Task ExecuteAsync_WhenAssetIdIsMalformed_ShouldThrowArgumentException(string assetId)
+    {
+        SetupFullHappyPath();
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: assetId));
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _srRepoMock.Verify(r => r.CreateAsync(
+            It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ── Step 5: AssetLedgerEntry (non-blocking) ──────────────────────────────
 
     [Fact]
@@ -1548,7 +1636,8 @@ public class IntakeOrchestrationServiceTests
         bool smsOptOut = false,
         bool emailOptOut = false,
         string? intakeSource = null,
-        string? inviteToken = null)
+        string? inviteToken = null,
+        string assetId = "1HGBH41JXMN109186")
     {
         return new ServiceRequestCreateRequestDto
         {
@@ -1562,7 +1651,7 @@ public class IntakeOrchestrationServiceTests
             },
             Asset = new AssetInfoDto
             {
-                AssetId = "1HGBH41JXMN109186",
+                AssetId = assetId,
                 Manufacturer = "Grand Design",
                 Model = "Momentum 395G",
                 Year = 2023,

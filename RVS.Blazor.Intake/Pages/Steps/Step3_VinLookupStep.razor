@@ -29,17 +29,17 @@
 
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">VIN</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Enter, speak, or snap a pic of your VIN</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">VIN or serial number</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Enter, speak, or snap a pic of your VIN. No VIN? A truck camper, for example, has a shorter serial number on its plate. Use that.</MudText>
                 <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="1">
                     <MudTextField T="string"
                                   Value="@State.Vin"
                                   ValueChanged="HandleVinChanged"
                                   Validation="@(new Func<string?, string?>(ValidateVin))"
-                                  MaxLength="17"
+                                  MaxLength="VehicleIdentifierValidator.MaxLength"
                                   Variant="Variant.Outlined"
                                   Margin="Margin.Dense"
-                                  Placeholder="17-character VIN"
+                                  Placeholder="VIN or serial number"
                                   Immediate="true"
                                   Adornment="Adornment.End"
                                   AdornmentIcon="@(_isRecording ? Icons.Material.Filled.MicOff : Icons.Material.Filled.Mic)"
@@ -54,7 +54,7 @@
                                OnClick="TriggerCameraCapture"
                                Disabled="@(_isRecording || _isTranscribing)"
                                Style="height: 63px; width: 60px; padding: 8px; margin-top: 4px;"
-                               aria-label="Capture VIN with camera" />
+                               aria-label="Capture VIN or serial number with camera" />
                 </MudStack>
                 <VoiceRecordingIndicator IsRecording="_isRecording"
                                           ElapsedSeconds="_recordingElapsedSeconds"
@@ -81,7 +81,7 @@
            this input, is only the fallback when the in-page camera will not start. *@
         @if (_cameraOpen)
         {
-            <CameraOverlay Caption="Fit the VIN plate or sticker in the frame"
+            <CameraOverlay Caption="Fit the VIN or serial number plate in the frame"
                            OnCaptured="HandleInPageCapture"
                            OnClose="() => _cameraOpen = false"
                            OnUseNativeCamera="UseNativeCamera" />
@@ -108,7 +108,7 @@
             <MudPaper Elevation="1" Class="pa-3">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;">
-                        <img src="@_capturedImageUrl" alt="Captured VIN photo"
+                        <img src="@_capturedImageUrl" alt="Captured VIN or serial number photo"
                              style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px;" />
                         @if (_isExtracting)
                         {
@@ -119,7 +119,7 @@
                     </div>
                     <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
                         <MudText Typo="Typo.body2">
-                            @(_isExtracting ? "Extracting VIN…" : "VIN photo captured")
+                            @(_isExtracting ? "Reading the photo…" : "Photo captured")
                         </MudText>
                     </MudStack>
                     <MudIconButton Icon="@Icons.Material.Filled.Close"
@@ -179,6 +179,15 @@
                     @:Continue
                 }
             </MudButton>
+            @* Issue #807: a rig in storage can't be read. The dealer collects its details later. *@
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       Disabled="@(_isLookingUp || _isExtracting || _isTranscribing)"
+                       OnClick="HandleSkip"
+                       Style="text-transform: none;">
+                Skip for now. My RV isn't with me
+            </MudButton>
         </MudStack>
     </MudStack>
     </MudForm>
@@ -216,17 +225,20 @@
     private int _recordingElapsedSeconds;
     private string _recordingAnnouncement = string.Empty;
 
+    // Issue #807: a VIN or any serial number. The check digit is not enforced here — a VIN that
+    // will not decode already has "Continue Anyway".
     private string? ValidateVin(string? value)
     {
         if (!_submitted) return null;
-        if (string.IsNullOrWhiteSpace(value)) return "VIN is required";
-        var result = ClientVinValidator.Validate(value);
+        var result = VehicleIdentifierValidator.Validate(value);
         return result.IsValid ? null : result.ErrorMessage;
     }
 
     private void HandleVinChanged(string? value)
     {
-        State.Vin = value?.Trim().ToUpperInvariant() ?? string.Empty;
+        State.Vin = VehicleIdentifierValidator.Normalize(value);
+        State.VehicleSkipped = false;
+        State.VinLookupSucceeded = false;
         _lookupFailed = false;
     }
 
@@ -286,7 +298,7 @@
         _cameraOpen = false;
         if (media.Bytes.Length > VinPhoto.MaxUploadBytes)
         {
-            _extractionMessage = "We couldn't use that photo. Please try again, or enter the VIN manually.";
+            _extractionMessage = "We couldn't use that photo. Please try again, or type the number in.";
             _extractionSeverity = Severity.Warning;
             return;
         }
@@ -330,7 +342,7 @@
                     }
                     else
                     {
-                        _transcriptionError = "Could not recognize a VIN from the audio. Please try again or type it manually.";
+                        _transcriptionError = "Could not recognize a VIN or serial number from the audio. Please try again or type it manually.";
                     }
                 }
                 else
@@ -340,7 +352,7 @@
             }
             catch (Exception)
             {
-                _transcriptionError = "Transcription failed. Please try again or type the VIN manually.";
+                _transcriptionError = "Transcription failed. Please try again or type it manually.";
             }
             finally
             {
@@ -407,7 +419,7 @@
         if (photo is null)
         {
             _isExtracting = false;
-            _extractionMessage = "We couldn't use that photo. Please try again, or enter the VIN manually.";
+            _extractionMessage = "We couldn't use that photo. Please try again, or type the number in.";
             _extractionSeverity = Severity.Warning;
             StateHasChanged();
             return;
@@ -436,26 +448,38 @@
             if (response is { Success: true, Result.Vin: { } vin } && response.Confidence >= VinAutoFillThreshold)
             {
                 HandleVinChanged(vin);
-                _extractionMessage = $"VIN extracted from photo: {vin}";
+                // Issue #807: whatever else the plate shows pre-fills Step 4, where the customer can change it.
+                State.ApplyVehicleDetailsFromPhoto(response.Result.Manufacturer, response.Result.Model, response.Result.Year);
                 _extractionSeverity = Severity.Success;
 
-                if (response.Confidence >= VinAutoLookupThreshold)
+                // Issue #807: a serial number has no check digit and nothing to decode, so the
+                // customer confirms it with Continue rather than the wizard moving on by itself.
+                if (!State.HasVin)
                 {
-                    StateHasChanged();
-                    await Task.Yield();
-                    await HandleLookup();
-                    return;
+                    _extractionMessage = $"Serial number read from photo: {State.Vin}. Check it, then tap Continue.";
+                }
+                else
+                {
+                    _extractionMessage = $"VIN extracted from photo: {State.Vin}";
+
+                    if (response.Confidence >= VinAutoLookupThreshold)
+                    {
+                        StateHasChanged();
+                        await Task.Yield();
+                        await HandleLookup();
+                        return;
+                    }
                 }
             }
             else
             {
-                _extractionMessage = "We couldn't read the VIN from the photo. Please enter it manually.";
+                _extractionMessage = "We couldn't read a VIN or serial number from the photo. Please type it in.";
                 _extractionSeverity = Severity.Info;
             }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _extractionMessage = "We couldn't read the VIN from the photo. Please enter it manually.";
+            _extractionMessage = "We couldn't read a VIN or serial number from the photo. Please type it in.";
             _extractionSeverity = Severity.Info;
         }
         finally
@@ -479,6 +503,16 @@
         await _form.Validate();
         if (!_form.IsValid) return;
 
+        // Issue #807: only a VIN can be decoded. A serial number goes straight to manual entry in
+        // Step 4, pre-filled with the number.
+        if (!State.HasVin)
+        {
+            State.VinLookupSucceeded = false;
+            await State.NotifyAndPersistAsync();
+            await OnNext.InvokeAsync();
+            return;
+        }
+
         _isLookingUp = true;
         StateHasChanged();
 
@@ -487,10 +521,7 @@
             var decoded = await IntakeApi.DecodeVinAsync(State.Slug, State.Vin);
             if (decoded is not null)
             {
-                State.Manufacturer = decoded.Manufacturer;
-                State.Model = decoded.Model;
-                State.Year = decoded.Year;
-                State.VinLookupSucceeded = true;
+                State.ApplyVinDecode(decoded);
                 await State.NotifyAndPersistAsync();
                 await OnNext.InvokeAsync();
             }
@@ -520,6 +551,19 @@
     /// </summary>
     private async Task HandleProceedAnyway()
     {
+        await State.NotifyAndPersistAsync();
+        await OnNext.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Moves on without a VIN or serial number: the rig is in storage and the dealer will collect
+    /// its details later (issue #807). Clears anything a decode filled, so Step 4 starts empty
+    /// and optional.
+    /// </summary>
+    private async Task HandleSkip()
+    {
+        State.SkipVehicle();
+        _lookupFailed = false;
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
     }
