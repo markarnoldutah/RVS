@@ -95,150 +95,155 @@
             var issueIndex = index;
             var issue = issues[issueIndex];
 
-            @if (isMultiIssue)
-            {
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
-                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">
-                        Issue @(issueIndex + 1) of @issues.Count
-                    </MudText>
-                    <MudSpacer />
-                    <MudButton Variant="Variant.Text"
-                               Color="Color.Default"
-                               Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.Delete"
-                               Disabled="_isSubmitting"
-                               OnClick="() => RemoveIssue(issueIndex)"
-                               aria-label="@($"Remove issue {issueIndex + 1}")"
-                               Style="text-transform: none;">Remove</MudButton>
-                </MudStack>
-            }
-
-            @* Issue Details *@
-            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-                <MudStack Spacing="2">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Issue Details</MudText>
-                        <MudSpacer />
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Primary"
-                                   Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.Edit"
-                                   OnClick="() => EditIssue(issueIndex, 5)"
-                                   Style="text-transform: none;">Edit</MudButton>
-                    </MudStack>
-                    <MudSimpleTable Elevation="0" Class="review-table">
-                        <tbody>
-                            <tr><td><strong>Category</strong></td><td>@issue.IssueCategory</td></tr>
-                            <tr><td><strong>Description</strong></td><td style="white-space: pre-wrap;">@issue.IssueDescription</td></tr>
-                            @if (!string.IsNullOrWhiteSpace(issue.Urgency))
-                            {
-                                <tr><td><strong>Urgency</strong></td><td>@issue.Urgency</td></tr>
-                            }
-                            @* Asked once for the visit, so shown once, with the first issue. *@
-                            @if (issueIndex == 0)
-                            {
-                                @if (!string.IsNullOrWhiteSpace(State.RvUsage))
-                                {
-                                    <tr><td><strong>RV Usage</strong></td><td>@State.RvUsage</td></tr>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(State.HasExtendedWarranty))
-                                {
-                                    <tr><td><strong>Extended Warranty</strong></td><td>@State.HasExtendedWarranty</td></tr>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(State.ApproxPurchaseDate))
-                                {
-                                    <tr><td><strong>Approx. Purchase Date</strong></td><td>@State.ApproxPurchaseDate</td></tr>
-                                }
-                            }
-                        </tbody>
-                    </MudSimpleTable>
-                </MudStack>
-            </MudPaper>
-
-            @* Diagnostic Responses *@
-            @if (issue.DiagnosticResponses.Count > 0)
-            {
-                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-                    <MudStack Spacing="2">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Diagnostic Responses</MudText>
-                            <MudSpacer />
-                            <MudButton Variant="Variant.Outlined"
-                                       Color="Color.Primary"
-                                       Size="Size.Small"
-                                       StartIcon="@Icons.Material.Filled.Edit"
-                                       OnClick="() => EditIssue(issueIndex, 6)"
-                                       Style="text-transform: none;">Edit</MudButton>
-                        </MudStack>
-                        <MudStack Spacing="3">
-                            @foreach (var response in issue.DiagnosticResponses)
-                            {
-                                <div>
-                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">
-                                        @response.QuestionText
-                                    </MudText>
-                                    @if (response.SelectedOptions.Count > 0)
-                                    {
-                                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
-                                            @foreach (var option in response.SelectedOptions)
-                                            {
-                                                <MudChip T="string" Color="Color.Primary"
-                                                         Variant="Variant.Outlined">
-                                                    @option
-                                                </MudChip>
-                                            }
-                                        </MudStack>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
-                                    {
-                                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);" Class="mt-1">
-                                            @response.FreeTextResponse
-                                        </MudText>
-                                    }
-                                </div>
-                            }
-                        </MudStack>
-                    </MudStack>
-                </MudPaper>
-            }
-
-            @* Attachments *@
-            @if (issue.Attachments.Count > 0)
-            {
-                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-                    <MudStack Spacing="2">
+            @* Issue #810: with several issues, each one's header and sections sit in a card of
+               their own, so the issues read apart at a glance. One issue gets no card, and reads
+               as the review always has. *@
+            <div class="@(isMultiIssue ? "issue-card" : null)">
+                <MudStack Spacing="4">
+                    @if (isMultiIssue)
+                    {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">
-                                Attachments (@issue.Attachments.Count)
+                                Issue @(issueIndex + 1) of @issues.Count
                             </MudText>
                             <MudSpacer />
-                            <MudButton Variant="Variant.Outlined"
-                                       Color="Color.Primary"
-                                       Size="Size.Small"
-                                       StartIcon="@Icons.Material.Filled.Edit"
-                                       OnClick="() => EditIssue(issueIndex, 7)"
-                                       Style="text-transform: none;">Edit</MudButton>
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                           Color="Color.Default"
+                                           Disabled="_isSubmitting"
+                                           OnClick="() => RemoveIssue(issueIndex)"
+                                           title="@($"Remove issue {issueIndex + 1}")"
+                                           aria-label="@($"Remove issue {issueIndex + 1}")" />
                         </MudStack>
-                        @* Issue #768: thumbnails, not file names — camera names like IMG_4521.jpg say nothing. *@
-                        <ul class="attachment-thumbs">
-                            @foreach (var attachment in issue.Attachments)
-                            {
-                                <li class="attachment-thumb" title="@attachment.FileName">
-                                    @if (attachment.ThumbnailDataUrl is not null)
+                    }
+
+                    @* Issue Details *@
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Issue Details</MudText>
+                                <MudSpacer />
+                                <MudButton Variant="Variant.Outlined"
+                                           Color="Color.Primary"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Edit"
+                                           OnClick="() => EditIssue(issueIndex, 5)"
+                                           Style="text-transform: none;">Edit</MudButton>
+                            </MudStack>
+                            <MudSimpleTable Elevation="0" Class="review-table">
+                                <tbody>
+                                    <tr><td><strong>Category</strong></td><td>@issue.IssueCategory</td></tr>
+                                    <tr><td><strong>Description</strong></td><td style="white-space: pre-wrap;">@issue.IssueDescription</td></tr>
+                                    @if (!string.IsNullOrWhiteSpace(issue.Urgency))
                                     {
-                                        <img src="@attachment.ThumbnailDataUrl" alt="@attachment.FileName" />
+                                        <tr><td><strong>Urgency</strong></td><td>@issue.Urgency</td></tr>
                                     }
-                                    else
+                                    @* Asked once for the visit, so shown once, with the first issue. *@
+                                    @if (issueIndex == 0)
                                     {
-                                        <MudIcon Icon="@AttachmentSlots.FileIcon(attachment.ContentType)" Color="Color.Primary" />
-                                        <span class="attachment-thumb-name">@attachment.FileName</span>
+                                        @if (!string.IsNullOrWhiteSpace(State.RvUsage))
+                                        {
+                                            <tr><td><strong>RV Usage</strong></td><td>@State.RvUsage</td></tr>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(State.HasExtendedWarranty))
+                                        {
+                                            <tr><td><strong>Extended Warranty</strong></td><td>@State.HasExtendedWarranty</td></tr>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(State.ApproxPurchaseDate))
+                                        {
+                                            <tr><td><strong>Approx. Purchase Date</strong></td><td>@State.ApproxPurchaseDate</td></tr>
+                                        }
                                     }
-                                </li>
-                            }
-                        </ul>
-                    </MudStack>
-                </MudPaper>
-            }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudStack>
+                    </MudPaper>
+
+                    @* Diagnostic Responses *@
+                    @if (issue.DiagnosticResponses.Count > 0)
+                    {
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Diagnostic Responses</MudText>
+                                    <MudSpacer />
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Edit"
+                                               OnClick="() => EditIssue(issueIndex, 6)"
+                                               Style="text-transform: none;">Edit</MudButton>
+                                </MudStack>
+                                <MudStack Spacing="3">
+                                    @foreach (var response in issue.DiagnosticResponses)
+                                    {
+                                        <div>
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                                @response.QuestionText
+                                            </MudText>
+                                            @if (response.SelectedOptions.Count > 0)
+                                            {
+                                                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
+                                                    @foreach (var option in response.SelectedOptions)
+                                                    {
+                                                        <MudChip T="string" Color="Color.Primary"
+                                                                 Variant="Variant.Outlined">
+                                                            @option
+                                                        </MudChip>
+                                                    }
+                                                </MudStack>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(response.FreeTextResponse))
+                                            {
+                                                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);" Class="mt-1">
+                                                    @response.FreeTextResponse
+                                                </MudText>
+                                            }
+                                        </div>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+                    }
+
+                    @* Attachments *@
+                    @if (issue.Attachments.Count > 0)
+                    {
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">
+                                        Attachments (@issue.Attachments.Count)
+                                    </MudText>
+                                    <MudSpacer />
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Edit"
+                                               OnClick="() => EditIssue(issueIndex, 7)"
+                                               Style="text-transform: none;">Edit</MudButton>
+                                </MudStack>
+                                @* Issue #768: thumbnails, not file names — camera names like IMG_4521.jpg say nothing. *@
+                                <ul class="attachment-thumbs">
+                                    @foreach (var attachment in issue.Attachments)
+                                    {
+                                        <li class="attachment-thumb" title="@attachment.FileName">
+                                            @if (attachment.ThumbnailDataUrl is not null)
+                                            {
+                                                <img src="@attachment.ThumbnailDataUrl" alt="@attachment.FileName" />
+                                            }
+                                            else
+                                            {
+                                                <MudIcon Icon="@AttachmentSlots.FileIcon(attachment.ContentType)" Color="Color.Primary" />
+                                                <span class="attachment-thumb-name">@attachment.FileName</span>
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudStack>
+            </div>
         }
 
         @* Spec A-17: another issue with the same RV, without re-entering contact or vehicle.

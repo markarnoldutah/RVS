@@ -801,6 +801,28 @@ public sealed class IntakeWizardState
         };
     }
 
+    /// <summary>
+    /// A request describing only the issue Steps 5–7 are editing, with the visit's contact and
+    /// vehicle: what Step 6 sends for follow-up questions (issue #810). <see cref="BuildCreateRequest"/>
+    /// leads with the first issue, so using it there asked about the first issue every time.
+    /// </summary>
+    public ServiceRequestCreateRequestDto BuildActiveIssueRequest()
+    {
+        var active = GetIssues()[ActiveIssueIndex];
+
+        return BuildCreateRequest() with
+        {
+            IssueCategory = active.IssueCategory.Trim(),
+            IssueDescription = active.IssueDescription.Trim(),
+            IssueDescriptionVerbatim = NullIfBlank(active.IssueDescriptionVerbatim),
+            Urgency = NullIfBlank(active.Urgency),
+            DiagnosticResponses = active.DiagnosticResponses.Count > 0 ? active.DiagnosticResponses : null,
+            CapabilityMismatchNote = BuildCapabilityMismatchNote(active.CapabilityAssessment),
+            ExpectedAttachmentCount = active.PendingUploadCount,
+            AdditionalIssues = null,
+        };
+    }
+
     private static IntakeIssueDto ToIssueDto(IntakeIssueDraft draft) => new()
     {
         IssueCategory = draft.IssueCategory.Trim(),

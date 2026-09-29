@@ -221,6 +221,51 @@ public class IntakeWizardStateMultiIssueTests
         fridge.CapabilityMismatchNote.Should().Contain("appliance-repair");
     }
 
+    // Issue #810: Step 6 asks for follow-up questions about the issue on screen. Sending the
+    // submission's request instead asked about the first issue every time.
+
+    [Fact]
+    public async Task BuildActiveIssueRequest_OnALaterIssue_ShouldDescribeThatIssueNotTheFirst()
+    {
+        var state = StateWithFirstIssue();
+        state.Manufacturer = "Jayco";
+        await state.StartNewIssueAsync();
+        state.IssueCategory = "Appliances";
+        state.IssueDescription = "Fridge is warm";
+
+        var request = state.BuildActiveIssueRequest();
+
+        request.IssueCategory.Should().Be("Appliances");
+        request.IssueDescription.Should().Be("Fridge is warm");
+        request.Asset.Manufacturer.Should().Be("Jayco");
+        request.AdditionalIssues.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BuildActiveIssueRequest_AfterReopeningTheFirstIssue_ShouldDescribeTheFirstIssue()
+    {
+        var state = StateWithFirstIssue();
+        await state.StartNewIssueAsync();
+        state.IssueCategory = "Appliances";
+        state.IssueDescription = "Fridge is warm";
+
+        await state.EditIssueAsync(0, 6);
+
+        state.BuildActiveIssueRequest().IssueDescription.Should().Be("Slide will not retract");
+    }
+
+    [Fact]
+    public async Task StartNewIssueAsync_ShouldLeaveNoQuestionsSoStep6AsksAfresh()
+    {
+        var state = StateWithFirstIssue();
+        state.DiagnosticQuestions = [new DiagnosticQuestionDto { QuestionText = "Does the slide motor hum?" }];
+
+        await state.StartNewIssueAsync();
+
+        state.DiagnosticQuestions.Should().BeEmpty();
+        state.GetIssues()[0].DiagnosticQuestions.Should().ContainSingle();
+    }
+
     [Fact]
     public async Task PersistAndRestore_ShouldKeepEveryIssueAndWhichOneIsOpen()
     {
