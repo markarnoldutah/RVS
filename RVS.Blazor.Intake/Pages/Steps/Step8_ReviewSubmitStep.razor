@@ -84,7 +84,7 @@
             </MudStack>
         </MudPaper>
 
-        @* Spec A-17 (issue #806): one group per problem. With a single problem the groups read
+        @* Spec A-17 (issue #806): one group per issue. With a single issue the groups read
            exactly as the review always has; with several, each is headed and can be removed. *@
         @{
             var issues = State.GetIssues();
@@ -99,7 +99,7 @@
             {
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
                     <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">
-                        Problem @(issueIndex + 1) of @issues.Count
+                        Issue @(issueIndex + 1) of @issues.Count
                     </MudText>
                     <MudSpacer />
                     <MudButton Variant="Variant.Text"
@@ -108,7 +108,7 @@
                                StartIcon="@Icons.Material.Filled.Delete"
                                Disabled="_isSubmitting"
                                OnClick="() => RemoveIssue(issueIndex)"
-                               aria-label="@($"Remove problem {issueIndex + 1}")"
+                               aria-label="@($"Remove issue {issueIndex + 1}")"
                                Style="text-transform: none;">Remove</MudButton>
                 </MudStack>
             }
@@ -134,7 +134,7 @@
                             {
                                 <tr><td><strong>Urgency</strong></td><td>@issue.Urgency</td></tr>
                             }
-                            @* Asked once for the visit, so shown once, with the first problem. *@
+                            @* Asked once for the visit, so shown once, with the first issue. *@
                             @if (issueIndex == 0)
                             {
                                 @if (!string.IsNullOrWhiteSpace(State.RvUsage))
@@ -241,7 +241,7 @@
             }
         }
 
-        @* Spec A-17: another problem with the same RV, without re-entering contact or vehicle.
+        @* Spec A-17: another issue with the same RV, without re-entering contact or vehicle.
            Outlined, so Submit stays the one filled action on the page. *@
         @if (State.CanAddIssue)
         {
@@ -251,7 +251,7 @@
                            StartIcon="@Icons.Material.Filled.Add"
                            Disabled="_isSubmitting"
                            OnClick="AddIssue"
-                           Style="text-transform: none;">Add another problem</MudButton>
+                           Style="text-transform: none;">Add another issue</MudButton>
                 <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
                     Something else wrong with this RV? Add it here. Your contact and vehicle details carry over.
                 </MudText>
@@ -260,7 +260,7 @@
         else
         {
             <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
-                You've added @IntakeWizardState.MaxIssues problems, the most one request can hold.
+                You've added @IntakeWizardState.MaxIssues issues, the most one request can hold.
                 Call the service team about anything else.
             </MudText>
         }
@@ -319,10 +319,10 @@
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback<int> OnEdit { get; set; }
 
-    /// <summary>Edit one problem at a step (5–7): the problem's index, then the step (<c>Spec A-17</c>).</summary>
+    /// <summary>Edit one issue at a step (5–7): the issue's index, then the step (<c>Spec A-17</c>).</summary>
     [Parameter, EditorRequired] public EventCallback<(int Index, int Step)> OnEditIssue { get; set; }
 
-    /// <summary>Open a blank problem on Step 5 (<c>Spec A-17</c>).</summary>
+    /// <summary>Open a blank issue on Step 5 (<c>Spec A-17</c>).</summary>
     [Parameter, EditorRequired] public EventCallback OnAddIssue { get; set; }
 
     [Parameter, EditorRequired] public EventCallback OnSubmitted { get; set; }
@@ -338,7 +338,7 @@
 
     protected override void OnInitialized()
     {
-        // A problem opened with "Add another problem" and then backed out of is not one.
+        // An issue opened with "Add another issue" and then backed out of is not one.
         State.PruneEmptyIssues();
     }
 
@@ -360,11 +360,11 @@
 
     private async Task HandleSubmit()
     {
-        // A problem added and then left half-done must not reach the API (Spec A-17).
+        // An issue added and then left half-done must not reach the API (Spec A-17).
         _issueErrors = State.ValidateAllIssues();
         if (_issueErrors.Count > 0)
         {
-            _submitError = "Some problems need more detail before this can be sent:";
+            _submitError = "Some issues need more detail before this can be sent:";
             return;
         }
 
@@ -393,9 +393,9 @@
             await State.PersistAsync();
             await StatusLinks.SaveAsync(result.MagicLinkToken, result.MagicLinkExpiresAtUtc);
 
-            // Spec A-17: each problem's attachments go to its own request, the one at the same
+            // Spec A-17: each issue's attachments go to its own request, the one at the same
             // position in the response. A response without the id list comes from an API that
-            // predates several problems; it created one request, so only one problem can upload.
+            // predates several issues; it created one request, so only one issue can upload.
             var issues = State.GetIssues();
             var uploads = new List<(AttachmentFileInfo File, string ServiceRequestId)>();
             var skippedFiles = new List<AttachmentFileInfo>();

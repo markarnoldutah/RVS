@@ -6,10 +6,10 @@ using RVS.UI.Shared.Tests.Fakes;
 namespace RVS.UI.Shared.Tests.State;
 
 /// <summary>
-/// Tests for several problems per visit in <see cref="IntakeWizardState"/> (<c>Spec A-17</c>,
-/// issue #806). Contact and vehicle are entered once; Steps 5–7 are answered once per problem.
+/// Tests for several issues per visit in <see cref="IntakeWizardState"/> (<c>Spec A-17</c>,
+/// issue #806). Contact and vehicle are entered once; Steps 5–7 are answered once per issue.
 /// The step components keep binding to the state's issue properties, which always hold the
-/// active problem; the others wait in <see cref="IntakeWizardState.GetIssues"/>.
+/// active issue; the others wait in <see cref="IntakeWizardState.GetIssues"/>.
 /// </summary>
 public class IntakeWizardStateMultiIssueTests
 {
@@ -31,7 +31,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public void NewState_ShouldHoldOneProblem()
+    public void NewState_ShouldHoldOneIssue()
     {
         var state = CreateState();
 
@@ -41,7 +41,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public async Task StartNewIssueAsync_ShouldKeepTheFirstProblemAndOpenABlankOneOnStep5()
+    public async Task StartNewIssueAsync_ShouldKeepTheFirstIssueAndOpenABlankOneOnStep5()
     {
         var state = StateWithFirstIssue();
         await state.GoToStepAsync(8);
@@ -68,30 +68,30 @@ public class IntakeWizardStateMultiIssueTests
 
         await state.StartNewIssueAsync();
 
-        // RV usage describes the visit, not the problem: asked once, carried forward, editable.
+        // RV usage describes the visit, not the issue: asked once, carried forward, editable.
         state.RvUsage.Should().Be("Full-time");
         state.FirstName.Should().Be("Jane");
     }
 
     [Fact]
-    public async Task StartNewIssueAsync_AtTenProblems_ShouldDoNothing()
+    public async Task StartNewIssueAsync_AtTenIssues_ShouldDoNothing()
     {
         var state = StateWithFirstIssue();
         for (var i = 1; i < 10; i++)
         {
             await state.StartNewIssueAsync();
-            state.IssueDescription = $"Problem {i + 1}";
+            state.IssueDescription = $"Issue {i + 1}";
         }
 
         state.CanAddIssue.Should().BeFalse();
         await state.StartNewIssueAsync();
 
         state.IssueCount.Should().Be(10);
-        state.IssueDescription.Should().Be("Problem 10");
+        state.IssueDescription.Should().Be("Issue 10");
     }
 
     [Fact]
-    public async Task GetIssues_ShouldReflectEditsToTheActiveProblem()
+    public async Task GetIssues_ShouldReflectEditsToTheActiveIssue()
     {
         var state = StateWithFirstIssue();
         await state.StartNewIssueAsync();
@@ -102,7 +102,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public async Task EditIssueAsync_ShouldLoadThatProblemAndComeBackToReview()
+    public async Task EditIssueAsync_ShouldLoadThatIssueAndComeBackToReview()
     {
         var state = StateWithFirstIssue();
         await state.StartNewIssueAsync();
@@ -120,7 +120,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public async Task RemoveIssueAsync_ShouldDropThatProblemAndKeepTheRest()
+    public async Task RemoveIssueAsync_ShouldDropThatIssueAndKeepTheRest()
     {
         var state = StateWithFirstIssue();
         await state.StartNewIssueAsync();
@@ -135,7 +135,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public async Task RemoveIssueAsync_ShouldNeverRemoveTheOnlyProblem()
+    public async Task RemoveIssueAsync_ShouldNeverRemoveTheOnlyIssue()
     {
         var state = StateWithFirstIssue();
 
@@ -146,7 +146,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public async Task PruneEmptyIssues_ShouldDropABlankProblemTheCustomerBackedOutOf()
+    public async Task PruneEmptyIssues_ShouldDropABlankIssueTheCustomerBackedOutOf()
     {
         var state = StateWithFirstIssue();
         await state.StartNewIssueAsync();
@@ -159,7 +159,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public void PruneEmptyIssues_ShouldKeepTheFirstProblemEvenWhenBlank()
+    public void PruneEmptyIssues_ShouldKeepTheFirstIssueEvenWhenBlank()
     {
         var state = CreateState();
 
@@ -169,7 +169,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public async Task ValidateAllIssues_ShouldNameEveryIncompleteProblem()
+    public async Task ValidateAllIssues_ShouldNameEveryIncompleteIssue()
     {
         var state = StateWithFirstIssue();
         await state.StartNewIssueAsync();
@@ -177,11 +177,11 @@ public class IntakeWizardStateMultiIssueTests
 
         var errors = state.ValidateAllIssues();
 
-        errors.Should().ContainSingle().Which.Should().Contain("Problem 2");
+        errors.Should().ContainSingle().Which.Should().Contain("Issue 2");
     }
 
     [Fact]
-    public void BuildCreateRequest_WithOneProblem_ShouldSendNoAdditionalIssues()
+    public void BuildCreateRequest_WithOneIssue_ShouldSendNoAdditionalIssues()
     {
         var request = StateWithFirstIssue().BuildCreateRequest();
 
@@ -191,7 +191,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public async Task BuildCreateRequest_WithSeveralProblems_ShouldSendTheFirstInlineAndTheRestInOrder()
+    public async Task BuildCreateRequest_WithSeveralIssues_ShouldSendTheFirstInlineAndTheRestInOrder()
     {
         var state = StateWithFirstIssue();
         await state.StartNewIssueAsync();
@@ -222,7 +222,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public async Task PersistAndRestore_ShouldKeepEveryProblemAndWhichOneIsOpen()
+    public async Task PersistAndRestore_ShouldKeepEveryIssueAndWhichOneIsOpen()
     {
         var jsRuntime = new InMemoryWebStorageJSRuntime();
         var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug" };
@@ -242,7 +242,7 @@ public class IntakeWizardStateMultiIssueTests
     }
 
     [Fact]
-    public async Task ClearAsync_ShouldReturnToASingleBlankProblem()
+    public async Task ClearAsync_ShouldReturnToASingleBlankIssue()
     {
         var state = StateWithFirstIssue();
         await state.StartNewIssueAsync();

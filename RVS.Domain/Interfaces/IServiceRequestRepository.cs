@@ -27,7 +27,7 @@ public interface IServiceRequestRepository
     Task<IReadOnlyList<ServiceRequest>> GetByLocationAsync(string tenantId, string locationId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists every service request of one multi-problem intake submission (<c>Spec A-17</c>),
+    /// Lists every service request of one multi-issue intake submission (<c>Spec A-17</c>),
     /// ordered by <see cref="ServiceRequest.SubmissionPosition"/>. Single-partition on
     /// <paramref name="tenantId"/>.
     /// </summary>

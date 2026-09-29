@@ -153,7 +153,7 @@ public class ServiceRequestTests
         sr.Disposition!.ReasonCode.Should().Be("CustomerWithdrew");
     }
 
-    // ── Several problems per visit (Spec A-17, issue #806) ──────────────
+    // ── Several issues per visit (Spec A-17, issue #806) ──────────────
 
     [Fact]
     public void NewServiceRequest_ShouldNotBeInAMultiIssueSubmission()

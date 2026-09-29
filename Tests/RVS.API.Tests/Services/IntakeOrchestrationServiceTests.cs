@@ -1591,8 +1591,8 @@ public class IntakeOrchestrationServiceTests
         _inviteRepoMock.VerifyNoOtherCalls();
     }
 
-    // ── Several problems per visit (Spec A-17, issue #806) ───────────────────
-    // Contact and vehicle are entered once; each problem becomes its own service request, and
+    // ── Several issues per visit (Spec A-17, issue #806) ───────────────────
+    // Contact and vehicle are entered once; each issue becomes its own service request, and
     // the submission is still one confirmation, one invite redemption and one packet email.
 
     [Fact]
@@ -1701,7 +1701,7 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenSeveralIssues_ShouldEnqueueEveryPacketWithTheLeadLast()
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldQueueOnePacketJobForTheFirstRequest()
     {
         SetupFullHappyPath();
         var enqueued = new List<PacketGenerationJob>();
@@ -1711,10 +1711,8 @@ public class IntakeOrchestrationServiceTests
 
         var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
 
-        // The lead owns the combined email and waits on its siblings, so it goes to the back of
-        // the queue: by the time it runs, their packets have usually been generated.
-        enqueued.Select(j => j.ServiceRequestId).Should().Equal(
-            result.ServiceRequests[1].Id, result.ServiceRequests[2].Id, result.ServiceRequests[0].Id);
+        // The submission is one packet, generated through its first request (Spec A-17, B-2).
+        enqueued.Select(j => j.ServiceRequestId).Should().Equal(result.ServiceRequests[0].Id);
     }
 
     [Fact]
@@ -1777,7 +1775,7 @@ public class IntakeOrchestrationServiceTests
         var request = BuildValidRequest() with
         {
             AdditionalIssues = [.. Enumerable.Range(0, 10)
-                .Select(i => new IntakeIssueDto { IssueCategory = "Other", IssueDescription = $"Problem {i + 2}" })],
+                .Select(i => new IntakeIssueDto { IssueCategory = "Other", IssueDescription = $"Issue {i + 2}" })],
         };
 
         var act = () => _sut.ExecuteAsync("test-slug", request);

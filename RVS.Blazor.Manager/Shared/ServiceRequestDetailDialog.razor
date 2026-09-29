@@ -343,11 +343,11 @@
                         else
                         {
                             <MudStack Spacing="3">
-                                @* Spec A-17 (#806): the customer reported this with other problems on one visit *@
+                                @* Spec A-17 (#806): the customer reported this with other issues on one visit *@
                                 @if (_sr.SubmissionCount > 1)
                                 {
                                     <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Outlined.Layers">
-                                        Problem @_sr.SubmissionPosition of @_sr.SubmissionCount reported on the same visit. The others are separate requests on the board.
+                                        Issue @_sr.SubmissionPosition of @_sr.SubmissionCount reported on the same visit. The others are separate requests on the board.
                                     </MudAlert>
                                 }
                                 <div>

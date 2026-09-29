@@ -589,7 +589,7 @@ public class IntakeController : ControllerBase
             ModelState.AddModelError("Customer.PreferredContact", preferenceValidation.ErrorMessage!);
         }
 
-        // Up to ten problems, each with a description (Spec A-17, issue #806).
+        // Up to ten issues, each with a description (Spec A-17, issue #806).
         var issuesValidation = IntakeIssuesValidator.Validate(request);
         if (!issuesValidation.IsValid)
         {

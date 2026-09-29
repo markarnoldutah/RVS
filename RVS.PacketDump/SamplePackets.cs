@@ -136,6 +136,47 @@ internal static class SamplePackets
     }
 
     /// <summary>
+    /// A three-issue visit (<c>Spec A-17</c>, issue #806), rendered as one packet through
+    /// <see cref="PacketHtmlRenderer.RenderCombined"/>: the full sample leads and supplies the
+    /// masthead, then two shorter issues. Each carries manager links so the per-issue status
+    /// buttons show in the HTML.
+    /// </summary>
+    public static IReadOnlyList<ServicePacket> Multi()
+    {
+        const string managerBaseUrl = "https://manager.rvintake.com";
+        var lead = Full();
+
+        ServicePacket Issue(string id, string reference, string category, string description, string? curated) => lead with
+        {
+            Origin = lead.Origin with { ReferenceCode = reference },
+            IssueCategory = category,
+            CuratedIssue = curated,
+            AiSummary = null,
+            IssueDescription = description,
+            Diagnostics =
+            [
+                new PacketDiagnosticEntry { Question = "When did you first notice it?", Answers = ["This week"] },
+            ],
+            Photos = [],
+            PasteBlock = PasteBlockGenerator.Generate(category, description, lead.StatusLink?.Url),
+            ManagerLinks = ManagerDeepLinks.Build(managerBaseUrl, id),
+        };
+
+        return
+        [
+            lead with { ManagerLinks = ManagerDeepLinks.Build(managerBaseUrl, "a1b2c3d4-0000-0000-0000-000000000001") },
+            Issue(
+                "b7c8d9e0-0000-0000-0000-000000000002", "B7C8D9E0", "Appliances & Refrigerator",
+                "fridge isnt getting cold on propane, works fine on shore power",
+                "Refrigerator cools on shore power but not on LP."),
+            Issue(
+                "c3d4e5f6-0000-0000-0000-000000000003", "C3D4E5F6", "Awning",
+                "the awning fabric has a tear near the roller about a foot long",
+                null),
+        ];
+    }
+
+    /// <summary>
     /// The maximally degraded packet the composer can still emit: no VIN, no category,
     /// no diagnostics, no AI summary, no photos, no paste block, no status link.
     /// </summary>

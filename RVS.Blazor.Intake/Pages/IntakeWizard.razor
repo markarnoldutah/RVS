@@ -321,12 +321,12 @@ else
     }
 
     /// <summary>
-    /// "Step 5 of 8", or "Problem 2 · Step 5 of 8" on the per-problem steps once the visit has
-    /// several problems, so the count never seems to start over (<c>Spec A-17</c>).
+    /// "Step 5 of 8", or "Issue 2 · Step 5 of 8" on the per-issue steps once the visit has
+    /// several issues, so the count never seems to start over (<c>Spec A-17</c>).
     /// </summary>
     private string StepProgressLabel =>
         _state.IssueCount > 1 && _state.CurrentStep is >= 5 and <= 7
-            ? $"Problem {_state.ActiveIssueIndex + 1} · Step {_state.CurrentStep} of {_state.TotalSteps}"
+            ? $"Issue {_state.ActiveIssueIndex + 1} · Step {_state.CurrentStep} of {_state.TotalSteps}"
             : $"Step {_state.CurrentStep} of {_state.TotalSteps}";
 
     private async Task HandleEditIssue((int Index, int Step) target)

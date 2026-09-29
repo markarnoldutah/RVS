@@ -73,7 +73,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
         ArgumentNullException.ThrowIfNull(request);
 
-        // Spec A-17 (issue #806): up to ten problems, each checked before anything is written, so
+        // Spec A-17 (issue #806): up to ten issues, each checked before anything is written, so
         // a bad one refuses the whole submission rather than leaving half of it behind.
         var issuesResult = IntakeIssuesValidator.Validate(request);
         if (!issuesResult.IsValid)
@@ -224,7 +224,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         profile.MarkAsUpdated("intake");
         profile = await _customerProfileRepository.UpdateAsync(profile, cancellationToken);
 
-        // ── Step 4: Create one ServiceRequest per problem ────────────────────
+        // ── Step 4: Create one ServiceRequest per issue ────────────────────
         // A-13: the channel the customer arrived through, as forwarded by the intake app from
         // the go.rvintake.com redirect. Normalised rather than validated — an unrecognised or
         // malformed tag costs the request its channel, never the submission.
@@ -238,8 +238,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         var priorRequestCount = profile.TotalRequestCount;
 
-        // A-17: several problems become sibling requests that share the first one's id as their
-        // submission id. A single problem is not grouped at all, so it stores exactly what it did.
+        // A-17: several issues become sibling requests that share the first one's id as their
+        // submission id. A single issue is not grouped at all, so it stores exactly what it did.
         var isMultiIssue = issues.Count > 1;
         var leadId = Guid.NewGuid().ToString();
 
@@ -319,7 +319,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         var leadRequest = serviceRequests[0];
 
         // Spend the invite only now that the requests it produced exist (Spec A-14). A
-        // multi-problem submission spends it once, on its first request.
+        // multi-issue submission spends it once, on its first request.
         if (invite is not null)
         {
             await RedeemInviteAsync(invite, leadRequest.Id, cancellationToken);
@@ -445,23 +445,20 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         // ── Step 8: Enqueue packet generation (never blocks the 201) ─────────
         // Spec A-8 / B-1 / X-7: the packet is generated asynchronously; nothing here may delay
         // or roll back the submission. The request already carries PacketGeneration = Pending.
-        // A-17 / B-4: the first request owns a multi-problem submission's combined email and
-        // waits for its siblings' packets, so it is queued last, behind them.
-        foreach (var serviceRequest in serviceRequests.Skip(1).Append(leadRequest))
+        // A-17 / B-2: a multi-issue submission is one packet, generated through its first
+        // request, so only that request is queued.
+        try
         {
-            try
+            if (!_packetGenerationQueue.TryEnqueue(new PacketGenerationJob(tenantId, leadRequest.Id, "intake")))
             {
-                if (!_packetGenerationQueue.TryEnqueue(new PacketGenerationJob(tenantId, serviceRequest.Id, "intake")))
-                {
-                    _logger.LogWarning(
-                        "Intake Step 8: packet generation queue full; SR {ServiceRequestId} stays Pending and can be regenerated on demand",
-                        serviceRequest.Id);
-                }
+                _logger.LogWarning(
+                    "Intake Step 8: packet generation queue full; SR {ServiceRequestId} stays Pending and can be regenerated on demand",
+                    leadRequest.Id);
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Intake Step 8: failed to enqueue packet generation for SR {ServiceRequestId}", serviceRequest.Id);
-            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Intake Step 8: failed to enqueue packet generation for SR {ServiceRequestId}", leadRequest.Id);
         }
 
         return (leadRequest, serviceRequests, globalAcct.MagicLinkToken, globalAcct.MagicLinkExpiresAtUtc);

@@ -64,4 +64,33 @@ public class ServicePacketTests
 
         packet.AiDisclaimer.Should().StartWith("AI disclosure: the Issue section is AI-generated");
     }
+
+    // ── One disclosure for several issues (Spec A-17, issue #806) ──────────
+
+    [Fact]
+    public void AiDisclaimerFor_ShouldNameEverySectionAnyIssueCarries()
+    {
+        ServicePacket[] packets =
+        [
+            Packet() with { CuratedIssue = "Generator shuts down under load." },
+            Packet() with { AiSummary = new PacketAiSummary { Text = "Likely overheating." } },
+        ];
+
+        ServicePacket.AiDisclaimerFor(packets).Should().StartWith(
+            "AI disclosure: the Issue and Preliminary assessment sections are AI-generated");
+    }
+
+    [Fact]
+    public void AiDisclaimerFor_WhenNoIssueHasAiContent_ShouldBeNull()
+    {
+        ServicePacket.AiDisclaimerFor([Packet(), Packet()]).Should().BeNull();
+    }
+
+    [Fact]
+    public void AiDisclaimerFor_OnePacket_ShouldMatchItsOwnDisclaimer()
+    {
+        var packet = Packet() with { AiSummary = new PacketAiSummary { Text = "Likely overheating." } };
+
+        ServicePacket.AiDisclaimerFor([packet]).Should().Be(packet.AiDisclaimer);
+    }
 }

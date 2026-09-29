@@ -5,7 +5,7 @@ using RVS.Domain.Validation;
 namespace RVS.Domain.Tests.Validation;
 
 /// <summary>
-/// Tests for <see cref="IntakeIssuesValidator"/> — up to ten problems per submission, each with a
+/// Tests for <see cref="IntakeIssuesValidator"/> — up to ten issues per submission, each with a
 /// description intake would accept on its own (<c>Spec A-17</c>, issue #806).
 /// </summary>
 public class IntakeIssuesValidatorTests
@@ -35,7 +35,7 @@ public class IntakeIssuesValidatorTests
     [Fact]
     public void Validate_TenIssuesInTotal_ShouldPass()
     {
-        var request = BuildRequest(additional: Enumerable.Range(0, 9).Select(i => Issue($"Problem {i + 2}")).ToList());
+        var request = BuildRequest(additional: Enumerable.Range(0, 9).Select(i => Issue($"Issue {i + 2}")).ToList());
 
         IntakeIssuesValidator.Validate(request).IsValid.Should().BeTrue();
     }
@@ -43,7 +43,7 @@ public class IntakeIssuesValidatorTests
     [Fact]
     public void Validate_ElevenIssuesInTotal_ShouldFail()
     {
-        var request = BuildRequest(additional: Enumerable.Range(0, 10).Select(i => Issue($"Problem {i + 2}")).ToList());
+        var request = BuildRequest(additional: Enumerable.Range(0, 10).Select(i => Issue($"Issue {i + 2}")).ToList());
 
         var result = IntakeIssuesValidator.Validate(request);
 
@@ -64,14 +64,14 @@ public class IntakeIssuesValidatorTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void Validate_BlankAdditionalDescription_ShouldFailNamingTheProblem(string description)
+    public void Validate_BlankAdditionalDescription_ShouldFailNamingTheIssue(string description)
     {
         var request = BuildRequest(additional: [Issue("Fridge will not cool"), Issue(description)]);
 
         var result = IntakeIssuesValidator.Validate(request);
 
         result.IsValid.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("Problem 3");
+        result.ErrorMessage.Should().Contain("Issue 3");
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class IntakeIssuesValidatorTests
         var result = IntakeIssuesValidator.Validate(request);
 
         result.IsValid.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("Problem 2");
+        result.ErrorMessage.Should().Contain("Issue 2");
     }
 
     [Fact]

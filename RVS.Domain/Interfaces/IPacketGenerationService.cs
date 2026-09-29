@@ -23,14 +23,6 @@ public enum PacketGenerationOutcome
     /// one of the <see cref="Entities.PacketGenerationEmbedded.MaxAttempts"/> attempts.
     /// </summary>
     WaitingForAttachments,
-
-    /// <summary>
-    /// Nothing was attempted: this is the first request of a multi-problem submission, it owns
-    /// the combined packet email, and a sibling's packet is still being generated inside the
-    /// wait window (<c>Spec A-17</c>, <c>B-4</c>, issue #806). The job should be re-enqueued;
-    /// this does not consume an attempt.
-    /// </summary>
-    WaitingForSiblings,
 }
 
 /// <summary>

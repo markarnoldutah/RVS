@@ -4,9 +4,9 @@ using RVS.Domain.DTOs;
 namespace RVS.Domain.Tests.DTOs;
 
 /// <summary>
-/// Tests for <see cref="ServiceRequestCreateRequestDto.AllIssues"/> — the first problem rides on
-/// the request's own issue fields, so a single-problem client sends exactly what it always has,
-/// and further problems follow in <see cref="ServiceRequestCreateRequestDto.AdditionalIssues"/>
+/// Tests for <see cref="ServiceRequestCreateRequestDto.AllIssues"/> — the first issue rides on
+/// the request's own issue fields, so a single-issue client sends exactly what it always has,
+/// and further issues follow in <see cref="ServiceRequestCreateRequestDto.AdditionalIssues"/>
 /// (<c>Spec A-17</c>, issue #806).
 /// </summary>
 public class ServiceRequestCreateRequestDtoTests

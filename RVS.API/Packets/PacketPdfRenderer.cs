@@ -115,17 +115,18 @@ public static class PacketPdfRenderer
     }
 
     /// <summary>
-    /// Renders every packet of a multi-problem submission (<c>Spec A-17</c>, issue #806) to one
-    /// PDF, attached to the submission's single packet email (<c>Spec B-4</c>). Each packet is laid
-    /// out exactly as <see cref="Render"/> lays it out and starts its own sheet, in submission
-    /// order. A single packet renders byte-for-byte as <see cref="Render"/> would.
+    /// Renders every issue of a multi-issue submission (<c>Spec A-17</c>, issue #806) as one PDF
+    /// in the work-order layout <see cref="PacketHtmlRenderer.RenderCombined"/> uses: the masthead
+    /// once, a list of the issues, then each issue under its own heading bar, flowing onto as many
+    /// pages as it takes, and one footer. It is the submission's stored packet and the email's
+    /// attachment (<c>Spec B-4</c>). A single packet renders byte-for-byte as <see cref="Render"/> would.
     /// </summary>
-    /// <param name="packets">The submission's packets, in the order the customer reported the problems.</param>
+    /// <param name="packets">One composed packet per issue, in the order the customer reported them. The first supplies the masthead.</param>
     /// <param name="photoImages">
-    /// Image bytes keyed by <see cref="PacketPhoto.Url"/> across every packet — read URLs are
+    /// Image bytes keyed by <see cref="PacketPhoto.Url"/> across every issue — read URLs are
     /// unique, so one map serves them all. Photos with no entry render as a labelled placeholder.
     /// </param>
-    /// <param name="logoImage">The dealer logo's bytes; the packets share a location, so they share it.</param>
+    /// <param name="logoImage">The dealer logo's bytes; the issues share a location, so they share it.</param>
     /// <exception cref="ArgumentNullException"><paramref name="packets"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="packets"/> is empty.</exception>
     public static byte[] RenderCombined(
@@ -139,11 +140,7 @@ public static class PacketPdfRenderer
             throw new ArgumentException("At least one packet is required.", nameof(packets));
         }
 
-        var title = packets.Count == 1
-            ? $"Service Packet {packets[0].Origin.ReferenceCode}"
-            : $"Service Packets {packets[0].Origin.ReferenceCode}";
-
-        return RenderDocument(packets, photoImages, logoImage, title);
+        return RenderDocument(packets, photoImages, logoImage, $"Service Packet {packets[0].Origin.ReferenceCode}");
     }
 
     private static byte[] RenderDocument(
@@ -153,25 +150,91 @@ public static class PacketPdfRenderer
         string title)
     {
         var images = photoImages ?? NoImages;
-        var first = packets[0];
+        var lead = packets[0];
+        var isMultiIssue = packets.Count > 1;
         // Document metadata dates stay UTC by PDF spec — deliberately not the location-local
         // Received line (issue #506). Converting them would make the bytes depend on the host's
         // time-zone database and break the determinism test below.
-        var submitted = first.Origin.SubmittedAtUtc.UtcDateTime;
+        var submitted = lead.Origin.SubmittedAtUtc.UtcDateTime;
+
+        var layouts = packets.Select(PacketPdfLayout.Build).ToList();
+        var leadLayout = layouts[0];
+        var masthead = MastheadSectionIds
+            .Select(id => leadLayout.Sections.First(s => s.Id == id))
+            .ToArray();
+        var logo = lead.Branding.HasLogo ? TryDecodeLogo(logoImage) : null;
+        var aiDisclaimer = ServicePacket.AiDisclaimerFor(packets);
 
         return Document.Create(container =>
             {
-                // One page block per packet: QuestPDF starts each on a fresh sheet, so every
-                // problem in a combined document prints as the packet it would be on its own.
-                foreach (var packet in packets)
+                container.Page(page =>
                 {
-                    ComposePacketPages(container, packet, images, logoImage);
-                }
+                    page.Size(PageWidthMm, PageHeightMm, Unit.Millimetre);
+                    page.Margin(PageMarginMm, Unit.Millimetre);
+                    page.DefaultTextStyle(text => text.FontSize(10.5f).FontColor(Colors.Black));
+
+                    page.Content().Column(column =>
+                    {
+                        column.Spacing(18f);
+
+                        column.Item().Element(e => RenderMasthead(
+                            e, lead, leadLayout, logo, unit: masthead[0], customer: masthead[1], origin: masthead[2]));
+
+                        if (isMultiIssue)
+                        {
+                            column.Item().Element(e => RenderIssueIndex(e, packets));
+                        }
+
+                        for (var i = 0; i < packets.Count; i++)
+                        {
+                            // With several issues the heading bar names the category, so the
+                            // issue's own category section would only repeat it (as in the HTML).
+                            // The status page is the customer's and lists every issue (Spec X-1),
+                            // so it is linked once, after the last issue.
+                            var bodySections = layouts[i].Sections
+                                .Where(s => !MastheadSectionIds.Contains(s.Id))
+                                .Where(s => !isMultiIssue || (s.Id != "category" && s.Id != StatusLinkSectionId));
+
+                            if (isMultiIssue)
+                            {
+                                var position = i + 1;
+                                var packet = packets[i];
+                                // Never strand a heading at the foot of a page, away from the issue it names.
+                                column.Item().EnsureSpace(IssueHeadingKeepWithNextPt)
+                                    .Element(e => RenderIssueHeading(e, packet, position, packets.Count));
+                            }
+
+                            foreach (var section in bodySections)
+                            {
+                                RenderSection(column, section, images);
+                            }
+                        }
+
+                        if (isMultiIssue && leadLayout.Sections.FirstOrDefault(s => s.Id == StatusLinkSectionId) is { } statusLink)
+                        {
+                            RenderSection(column, statusLink, images);
+                        }
+
+                        // The end-of-flow footer, matching the HTML's static one: "Powered by" the
+                        // RV Intake mark, centred (issue #470), then the one AI disclosure
+                        // (issue #780). Once, after the last section — not on every page.
+                        column.Item().BorderTop(1f).PaddingTop(4f).Column(foot =>
+                        {
+                            foot.Spacing(3f);
+                            foot.Item().AlignCenter().Element(RenderPoweredBy);
+
+                            if (aiDisclaimer is not null)
+                            {
+                                foot.Item().Text(aiDisclaimer).Italic().FontSize(8f);
+                            }
+                        });
+                    });
+                });
             })
             .WithMetadata(new DocumentMetadata
             {
                 Title = title,
-                Author = first.Branding.BrandName,
+                Author = lead.Branding.BrandName,
                 Subject = "RV service intake packet",
                 // Pinned to the packet so the same packet renders byte-for-byte identically.
                 CreationDate = submitted,
@@ -180,54 +243,50 @@ public static class PacketPdfRenderer
             .GeneratePdf();
     }
 
-    private static void ComposePacketPages(
-        IDocumentContainer container,
-        ServicePacket packet,
-        IReadOnlyDictionary<string, byte[]> images,
-        byte[]? logoImage)
+    // ── Several issues (Spec A-17, issue #806) ───────────────────────────
+
+    /// <summary>The layout id of the customer status link section (<c>Spec B-2</c> item 10).</summary>
+    private const string StatusLinkSectionId = "status-link";
+
+    /// <summary>Room, in points, an issue heading needs below it to start on the current page.</summary>
+    private const float IssueHeadingKeepWithNextPt = 120f;
+
+    private static void RenderIssueIndex(IContainer container, IReadOnlyList<ServicePacket> packets)
     {
-        var layout = PacketPdfLayout.Build(packet);
-
-        var masthead = MastheadSectionIds
-            .Select(id => layout.Sections.First(s => s.Id == id))
-            .ToArray();
-        var bodySections = layout.Sections.Where(s => !MastheadSectionIds.Contains(s.Id));
-        var logo = packet.Branding.HasLogo ? TryDecodeLogo(logoImage) : null;
-
-        container.Page(page =>
+        container.Column(column =>
         {
-            page.Size(PageWidthMm, PageHeightMm, Unit.Millimetre);
-            page.Margin(PageMarginMm, Unit.Millimetre);
-            page.DefaultTextStyle(text => text.FontSize(10.5f).FontColor(Colors.Black));
+            column.Spacing(4f);
+            column.Item().Text($"{packets.Count} issues").Bold().FontSize(11f);
+            column.Item().PaddingBottom(2f).LineHorizontal(1f);
 
-            page.Content().Column(column =>
+            for (var i = 0; i < packets.Count; i++)
             {
-                column.Spacing(18f);
-
-                column.Item().Element(e => RenderMasthead(
-                    e, packet, layout, logo, unit: masthead[0], customer: masthead[1], origin: masthead[2]));
-
-                foreach (var section in bodySections)
+                var packet = packets[i];
+                var position = i + 1;
+                column.Item().Row(row =>
                 {
-                    RenderSection(column, section, images);
-                }
-
-                // The end-of-flow footer, matching the HTML's static one: "Powered by" the
-                // RV Intake mark, centred (issue #470), then the one AI disclosure
-                // (issue #780). Once, after the last section — not on every page.
-                column.Item().BorderTop(1f).PaddingTop(4f).Column(foot =>
-                {
-                    foot.Spacing(3f);
-                    foot.Item().AlignCenter().Element(RenderPoweredBy);
-
-                    if (layout.AiDisclaimer is not null)
-                    {
-                        foot.Item().Text(layout.AiDisclaimer).Italic().FontSize(8f);
-                    }
+                    row.ConstantItem(18f).Text($"{position}.");
+                    row.RelativeItem().Text(IssueCategoryLabel(packet.IssueCategory)).Bold();
+                    row.AutoItem().Text($"Intake #{packet.Origin.ReferenceCode}");
                 });
-            });
+            }
         });
     }
+
+    private static void RenderIssueHeading(IContainer container, ServicePacket packet, int position, int count)
+    {
+        container
+            .BorderTop(2f).BorderBottom(1f).PaddingVertical(4f)
+            .Row(row =>
+            {
+                row.RelativeItem().Text($"Issue {position} of {count} · {IssueCategoryLabel(packet.IssueCategory)}")
+                    .Bold().FontSize(12f);
+                row.AutoItem().AlignMiddle().Text($"Intake #{packet.Origin.ReferenceCode}");
+            });
+    }
+
+    private static string IssueCategoryLabel(string? category) =>
+        string.IsNullOrWhiteSpace(category) ? "Uncategorized" : category.Trim();
 
     // ── Masthead: sections 1–3 as an IDS-style band ──────────────────────
 

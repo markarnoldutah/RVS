@@ -58,15 +58,6 @@ public sealed class PacketGenerationService : IPacketGenerationService
     /// </summary>
     internal static readonly TimeSpan AttachmentUploadWindow = TimeSpan.FromMinutes(2);
 
-    /// <summary>
-    /// How long after a multi-problem submission is created its first request will hold the
-    /// combined packet email for its siblings' packets (<c>Spec A-17</c>, <c>B-4</c>, issue #806).
-    /// Each sibling may itself wait out <see cref="AttachmentUploadWindow"/> before generating, so
-    /// this allows for that and a couple of minutes of generation. Once it closes the email goes
-    /// with whatever has generated; a sibling that generates later is emailed on its own.
-    /// </summary>
-    internal static readonly TimeSpan SiblingWaitWindow = AttachmentUploadWindow + TimeSpan.FromMinutes(2);
-
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly ILocationRepository _locationRepository;
     private readonly IPacketPhotoUrlResolver _photoUrlResolver;
@@ -121,47 +112,37 @@ public sealed class PacketGenerationService : IPacketGenerationService
         var request = await _serviceRequestRepository.GetByIdAsync(tenantId, serviceRequestId, cancellationToken)
             ?? throw new KeyNotFoundException($"Service request '{serviceRequestId}' not found.");
 
-        // Intake's photos land after the 201 that created this request (issue #516). Hold off
-        // while fewer than promised have arrived — before MarkGenerating, so polling never eats
+        // A multi-issue submission is one packet (Spec A-17, B-2, issue #806): whichever issue
+        // the job names, the whole submission is generated together, led by its first request.
+        var members = await LoadSubmissionAsync(request, cancellationToken);
+        var lead = members[0];
+        var isMultiIssue = members.Count > 1;
+
+        // Intake's photos land after the 201 that created the requests (issue #516). Hold off
+        // while any issue has fewer than promised — before MarkGenerating, so polling never eats
         // one of the three attempts — and render regardless once the window closes.
-        if (IsWaitingForAttachments(request))
+        var waiting = members.FirstOrDefault(IsWaitingForAttachments);
+        if (waiting is not null)
         {
             _logger.LogInformation(
                 "Packet generation deferred for SR {ServiceRequestId}: {ArrivedCount} of {ExpectedCount} attachment(s) uploaded, still inside the {WindowSeconds}s upload window",
-                request.Id, request.Attachments.Count, request.PacketGeneration.ExpectedAttachmentCount,
+                waiting.Id, waiting.Attachments.Count, waiting.PacketGeneration.ExpectedAttachmentCount,
                 AttachmentUploadWindow.TotalSeconds);
 
             return PacketGenerationOutcome.WaitingForAttachments;
         }
 
-        // A multi-problem submission sends one packet email (Spec A-17, B-4, issue #806), and its
-        // first request sends it. Hold off, like the attachment wait above, while a sibling's
-        // packet is still on its way, and send with whatever has generated once the window closes.
-        IReadOnlyList<ServiceRequest> siblings = [];
-        if (OwnsCombinedDelivery(request))
-        {
-            var submission = await _serviceRequestRepository.GetBySubmissionIdAsync(tenantId, request.SubmissionId!, cancellationToken);
-            siblings = [.. submission.Where(sr => sr.Id != request.Id)];
-
-            var unsettled = siblings.Count(sr => !sr.PacketGeneration.IsSettled);
-            if (unsettled > 0 && DateTime.UtcNow - request.CreatedAtUtc < SiblingWaitWindow)
-            {
-                _logger.LogInformation(
-                    "Packet generation deferred for SR {ServiceRequestId}: {UnsettledCount} of {SiblingCount} sibling packet(s) still generating, inside the {WindowSeconds}s wait window",
-                    request.Id, unsettled, siblings.Count, SiblingWaitWindow.TotalSeconds);
-
-                return PacketGenerationOutcome.WaitingForSiblings;
-            }
-        }
-
         // Record the attempt before doing the work so a mid-render crash still shows it was tried.
-        request.PacketGeneration.MarkGenerating();
-        request.MarkAsUpdated(SystemUserId);
-        await _serviceRequestRepository.UpdateAsync(request, cancellationToken);
+        foreach (var member in members)
+        {
+            member.PacketGeneration.MarkGenerating();
+            member.MarkAsUpdated(SystemUserId);
+            await _serviceRequestRepository.UpdateAsync(member, cancellationToken);
+        }
 
         try
         {
-            var location = await _locationRepository.GetByIdAsync(tenantId, request.LocationId, cancellationToken);
+            var location = await _locationRepository.GetByIdAsync(tenantId, lead.LocationId, cancellationToken);
 
             // The dealer's logo (Spec A-16, issue #470). The PDF needs its bytes; the HTML only
             // names its URL, and does so only when the fetch succeeded, so the two renderings show
@@ -173,62 +154,92 @@ public sealed class PacketGenerationService : IPacketGenerationService
                 logoUrl = null;
             }
 
-            var own = await ComposeAsync(request, location, logoUrl, assess: true, cancellationToken);
-            var packet = own.Packet;
+            var parts = new List<ComposedPacket>(members.Count);
+            foreach (var member in members)
+            {
+                parts.Add(await ComposeAsync(member, location, logoUrl, cancellationToken));
+            }
+
+            IReadOnlyList<ServicePacket> packets = [.. parts.Select(p => p.Packet)];
 
             // Render the HTML now too: it is the primary artifact and shares failure modes with
             // the PDF, so a broken packet is caught here rather than at email time (#437).
-            var html = PacketHtmlRenderer.Render(packet);
-            _logger.LogDebug("Packet generation: composed HTML packet ({Length} chars) for SR {ServiceRequestId}", html.Length, request.Id);
+            var html = PacketHtmlRenderer.RenderCombined(packets);
+            _logger.LogDebug("Packet generation: composed HTML packet ({Length} chars) for SR {ServiceRequestId}", html.Length, lead.Id);
 
-            var pdf = PacketPdfRenderer.Render(packet, own.PhotoImages, logoImage);
+            var pdf = PacketPdfRenderer.RenderCombined(packets, MergePhotoImages(parts), logoImage);
 
-            var nextVersion = request.PacketGeneration.PacketVersion + 1;
-            var pdfBlobPath = $"packets/{tenantId}/{request.Id}/v{nextVersion}.pdf";
+            // One stored document for the submission, kept under its first request and linked
+            // from every issue, so each issue's manager download opens the same packet.
+            var nextVersion = lead.PacketGeneration.PacketVersion + 1;
+            var pdfBlobPath = $"packets/{tenantId}/{lead.Id}/v{nextVersion}.pdf";
             using (var pdfStream = new MemoryStream(pdf, writable: false))
             {
                 await _blobStorage.UploadAsync(AttachmentsContainer, pdfBlobPath, pdfStream, "application/pdf", cancellationToken);
             }
 
-            request.PacketGeneration.MarkSucceeded(pdfBlobPath, DateTime.UtcNow);
-            request.MarkAsUpdated(SystemUserId);
-            await _serviceRequestRepository.UpdateAsync(request, cancellationToken);
+            var generatedAtUtc = DateTime.UtcNow;
+            foreach (var member in members)
+            {
+                member.PacketGeneration.MarkSucceeded(pdfBlobPath, generatedAtUtc);
+                member.MarkAsUpdated(SystemUserId);
+                await _serviceRequestRepository.UpdateAsync(member, cancellationToken);
+            }
 
             _logger.LogInformation(
-                "Packet generation succeeded for SR {ServiceRequestId} (version {PacketVersion}, attempt {AttemptCount})",
-                request.Id, request.PacketGeneration.PacketVersion, request.PacketGeneration.AttemptCount);
+                "Packet generation succeeded for SR {ServiceRequestId} with {IssueCount} issue(s) (version {PacketVersion}, attempt {AttemptCount})",
+                lead.Id, members.Count, lead.PacketGeneration.PacketVersion, lead.PacketGeneration.AttemptCount);
 
             // Deliver the packet by email (Spec B-4, #437 send, #438 idempotency + retry). A
-            // delivery failure never fails generation: the packet is generated and stored.
-            // A submission's first request carries every settled sibling's packet (Spec A-17).
-            List<ComposedPacket> parts = [own, .. await ComposeSiblingsAsync(siblings, location, logoUrl, cancellationToken)];
-            await DeliverPacketEmailAsync(request, location, parts, html, pdf, logoImage, cancellationToken);
+            // delivery failure never fails generation: the packet is generated and stored. A
+            // multi-issue packet is emailed once; a regeneration re-renders it without sending
+            // it again, and the manager app can download it to forward by hand (Spec A-17).
+            if (isMultiIssue && lead.PacketEmailDelivery.DeliveredPacketVersion > 0)
+            {
+                _logger.LogInformation(
+                    "Packet email skipped for SR {ServiceRequestId} v{PacketVersion}: a regenerated multi-issue packet is not emailed again",
+                    lead.Id, lead.PacketGeneration.PacketVersion);
+            }
+            else
+            {
+                await DeliverPacketEmailAsync(lead, location, parts, html, pdf, members, cancellationToken);
+            }
 
             return PacketGenerationOutcome.Succeeded;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            request.PacketGeneration.MarkFailed(TrimError($"{ex.GetType().Name}: {ex.Message}"));
+            var error = TrimError($"{ex.GetType().Name}: {ex.Message}");
+            foreach (var member in members)
+            {
+                member.PacketGeneration.MarkFailed(error);
+            }
 
-            var exhausted = request.PacketGeneration.AttemptCount >= PacketGenerationEmbedded.MaxAttempts;
-            if (exhausted && !request.PacketGeneration.AlertRaised)
+            var exhausted = lead.PacketGeneration.AttemptCount >= PacketGenerationEmbedded.MaxAttempts;
+            if (exhausted && !lead.PacketGeneration.AlertRaised)
             {
                 _logger.LogCritical(
                     PacketGenerationExhausted, ex,
-                    "Packet generation exhausted after {AttemptCount} attempts for SR {ServiceRequestId} in tenant {TenantId}",
-                    request.PacketGeneration.AttemptCount, request.Id, tenantId);
-                request.PacketGeneration.MarkAlertRaised();
+                    "Packet generation exhausted after {AttemptCount} attempts for SR {ServiceRequestId} ({IssueCount} issue(s)) in tenant {TenantId}",
+                    lead.PacketGeneration.AttemptCount, lead.Id, members.Count, tenantId);
+                foreach (var member in members)
+                {
+                    member.PacketGeneration.MarkAlertRaised();
+                }
             }
             else
             {
                 _logger.LogWarning(
                     ex,
-                    "Packet generation attempt {AttemptCount} failed for SR {ServiceRequestId} in tenant {TenantId}",
-                    request.PacketGeneration.AttemptCount, request.Id, tenantId);
+                    "Packet generation attempt {AttemptCount} failed for SR {ServiceRequestId} ({IssueCount} issue(s)) in tenant {TenantId}",
+                    lead.PacketGeneration.AttemptCount, lead.Id, members.Count, tenantId);
             }
 
-            request.MarkAsUpdated(SystemUserId);
-            await _serviceRequestRepository.UpdateAsync(request, cancellationToken);
+            foreach (var member in members)
+            {
+                member.MarkAsUpdated(SystemUserId);
+                await _serviceRequestRepository.UpdateAsync(member, cancellationToken);
+            }
 
             return exhausted ? PacketGenerationOutcome.Exhausted : PacketGenerationOutcome.Retry;
         }
@@ -243,16 +254,58 @@ public sealed class PacketGenerationService : IPacketGenerationService
         var request = await _serviceRequestRepository.GetByIdAsync(tenantId, serviceRequestId, cancellationToken)
             ?? throw new KeyNotFoundException($"Service request '{serviceRequestId}' not found.");
 
-        request.PacketGeneration.ResetForRegeneration();
-        request.MarkAsUpdated(_userContext.UserId);
-        await _serviceRequestRepository.UpdateAsync(request, cancellationToken);
+        // Regenerating any issue of a multi-issue submission regenerates its one packet (Spec A-17).
+        var members = await LoadSubmissionAsync(request, cancellationToken);
+        foreach (var member in members)
+        {
+            member.PacketGeneration.ResetForRegeneration();
+            member.MarkAsUpdated(_userContext.UserId);
+            await _serviceRequestRepository.UpdateAsync(member, cancellationToken);
+        }
 
-        if (!_queue.TryEnqueue(new PacketGenerationJob(tenantId, request.Id, "regeneration")))
+        var lead = members[0];
+        if (!_queue.TryEnqueue(new PacketGenerationJob(tenantId, lead.Id, "regeneration")))
         {
             _logger.LogWarning(
                 "Packet regeneration for SR {ServiceRequestId} could not be enqueued; it stays Pending and will need another regenerate request",
-                request.Id);
+                lead.Id);
         }
+    }
+
+    /// <summary>
+    /// The requests that share <paramref name="request"/>'s packet, first request first: every
+    /// issue of its submission (<c>Spec A-17</c>), or just <paramref name="request"/> when it was
+    /// reported on its own or its submission cannot be read back.
+    /// </summary>
+    private async Task<IReadOnlyList<ServiceRequest>> LoadSubmissionAsync(ServiceRequest request, CancellationToken cancellationToken)
+    {
+        if (!request.IsInMultiIssueSubmission)
+        {
+            return [request];
+        }
+
+        var members = await _serviceRequestRepository.GetBySubmissionIdAsync(request.TenantId, request.SubmissionId!, cancellationToken);
+        if (members.Count == 0 || members[0].Id != request.SubmissionId)
+        {
+            _logger.LogWarning(
+                "Submission {SubmissionId} of SR {ServiceRequestId} could not be read back whole; generating the request on its own",
+                request.SubmissionId, request.Id);
+            return [request];
+        }
+
+        return members;
+    }
+
+    /// <summary>Every issue's downloaded photos, keyed by read URL; the URLs are unique across issues.</summary>
+    private static Dictionary<string, byte[]> MergePhotoImages(IEnumerable<ComposedPacket> parts)
+    {
+        var images = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var (url, bytes) in parts.SelectMany(p => p.PhotoImages))
+        {
+            images[url] = bytes;
+        }
+
+        return images;
     }
 
     /// <inheritdoc />
@@ -292,13 +345,11 @@ public sealed class PacketGenerationService : IPacketGenerationService
         IReadOnlyDictionary<string, byte[]> PhotoImages);
 
     /// <summary>
-    /// Resolves and downloads <paramref name="request"/>'s photos and composes its packet.
-    /// <paramref name="assess"/> runs the preliminary assessment when the request has none yet —
-    /// true only for the request being generated; a sibling composed for the combined email
-    /// renders the assessment its own generation stored, or none.
+    /// Resolves and downloads <paramref name="request"/>'s photos, runs its preliminary assessment
+    /// if it has none yet, and composes its packet — one issue's part of the document.
     /// </summary>
     private async Task<ComposedPacket> ComposeAsync(
-        ServiceRequest request, Location? location, string? logoUrl, bool assess, CancellationToken cancellationToken)
+        ServiceRequest request, Location? location, string? logoUrl, CancellationToken cancellationToken)
     {
         var photoUrls = await _photoUrlResolver.ResolveAsync(request, cancellationToken);
 
@@ -306,10 +357,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         // the PDF, which embeds them. It used to happen after the assessment, for the PDF only.
         var downloadedPhotos = await DownloadPhotosAsync(request, photoUrls, cancellationToken);
 
-        if (assess)
-        {
-            await EnsurePreliminaryAssessmentAsync(request, downloadedPhotos, cancellationToken);
-        }
+        await EnsurePreliminaryAssessmentAsync(request, downloadedPhotos, cancellationToken);
 
         var pasteBlockCap = location?.PacketConfig.PasteBlockCharacterCap
             ?? PacketConfigEmbedded.DefaultPasteBlockCharacterCap;
@@ -345,66 +393,6 @@ public sealed class PacketGenerationService : IPacketGenerationService
         }
 
         return new ComposedPacket(request, PacketComposer.Compose(request, context), photoUrls, photoImages);
-    }
-
-    /// <summary>
-    /// Composes the packet of every sibling whose own generation succeeded, in submission order,
-    /// for the combined email (<c>Spec A-17</c>). A sibling that cannot be composed is logged and
-    /// left out: the email still goes, and that request keeps its own stored packet.
-    /// </summary>
-    private async Task<List<ComposedPacket>> ComposeSiblingsAsync(
-        IReadOnlyList<ServiceRequest> siblings, Location? location, string? logoUrl, CancellationToken cancellationToken)
-    {
-        var parts = new List<ComposedPacket>();
-        foreach (var sibling in siblings.Where(sr => sr.PacketGeneration.Status == "Succeeded").OrderBy(sr => sr.SubmissionPosition))
-        {
-            try
-            {
-                parts.Add(await ComposeAsync(sibling, location, logoUrl, assess: false, cancellationToken));
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex,
-                    "Combined packet email: could not compose sibling SR {ServiceRequestId}; sending without it",
-                    sibling.Id);
-            }
-        }
-
-        return parts;
-    }
-
-    /// <summary>
-    /// Whether <paramref name="request"/> sends its submission's combined email: it is the first
-    /// request of a multi-problem submission and nothing has been emailed for it yet. A later
-    /// regeneration emails its own packet, like any other request.
-    /// </summary>
-    private static bool OwnsCombinedDelivery(ServiceRequest request) =>
-        request.IsSubmissionLead && request.PacketEmailDelivery.DeliveredPacketVersion == 0;
-
-    /// <summary>
-    /// Whether <paramref name="request"/>'s packet should wait to go out in its submission's
-    /// combined email instead of its own (<c>Spec A-17</c>): it is a later sibling, and the first
-    /// request has neither sent that email nor given up generating. Once the lead has sent, a
-    /// sibling that missed the email, or is regenerated, sends its own; the lead's send marks
-    /// the siblings it carried as delivered, so idempotency keeps those from sending twice.
-    /// </summary>
-    private async Task<bool> IsLeftToTheLeadAsync(ServiceRequest request, CancellationToken cancellationToken)
-    {
-        if (!request.IsInMultiIssueSubmission || request.IsSubmissionLead)
-        {
-            return false;
-        }
-
-        var lead = await _serviceRequestRepository.GetByIdAsync(request.TenantId, request.SubmissionId!, cancellationToken);
-        if (lead is null)
-        {
-            return false;
-        }
-
-        var leadGaveUp = lead.PacketGeneration is { Status: "Failed", IsSettled: true }
-            || lead.PacketEmailDelivery.Status == "Failed";
-
-        return lead.PacketEmailDelivery.DeliveredPacketVersion == 0 && !leadGaveUp;
     }
 
     /// <summary>
@@ -512,6 +500,11 @@ public sealed class PacketGenerationService : IPacketGenerationService
     /// exponential backoff between tries; every attempt logs under a delivery scope carrying the
     /// correlation id, and exhausting all attempts logs a <c>LogCritical</c> alert once. A delivery
     /// failure never fails generation — the packet is already generated and stored.
+    ///
+    /// A multi-issue packet (<c>Spec A-17</c>) goes out as one message led by
+    /// <paramref name="request"/>, its first issue: <paramref name="html"/> and
+    /// <paramref name="pdf"/> already carry every issue, and each issue's photos are attached.
+    /// A successful send is recorded on every one of <paramref name="members"/>.
     /// </summary>
     private async Task DeliverPacketEmailAsync(
         ServiceRequest request,
@@ -519,10 +512,11 @@ public sealed class PacketGenerationService : IPacketGenerationService
         IReadOnlyList<ComposedPacket> parts,
         string html,
         byte[] pdf,
-        byte[]? logoImage,
+        IReadOnlyList<ServiceRequest> members,
         CancellationToken cancellationToken)
     {
         var packet = parts[0].Packet;
+        IReadOnlyList<ServicePacket> packets = [.. parts.Select(p => p.Packet)];
 
         var config = location?.PacketConfig;
         if (config is null || !config.Enabled)
@@ -544,15 +538,6 @@ public sealed class PacketGenerationService : IPacketGenerationService
             return;
         }
 
-        // A later sibling's first packet travels in the lead's combined email (Spec A-17).
-        if (await IsLeftToTheLeadAsync(request, cancellationToken))
-        {
-            _logger.LogInformation(
-                "Packet email for SR {ServiceRequestId} left to SR {LeadServiceRequestId}, which sends its submission's combined email",
-                request.Id, request.SubmissionId);
-            return;
-        }
-
         var packetVersion = request.PacketGeneration.PacketVersion;
 
         // Idempotency (Spec B-4): this exact packet has already been emailed — never double-send.
@@ -564,25 +549,14 @@ public sealed class PacketGenerationService : IPacketGenerationService
             return;
         }
 
-        // Several problems go out as one email: every packet in the HTML body and one merged
-        // PDF (Spec A-17, B-4). The request's own stored PDF is not the one attached then.
-        var combined = parts.Count > 1;
-        IReadOnlyList<ServicePacket> packets = [.. parts.Select(p => p.Packet)];
-        if (combined)
-        {
-            html = PacketHtmlRenderer.RenderCombined(packets);
-        }
-
         var attachments = new List<PacketEmailAttachment>();
         if (config.AttachPdf)
         {
             attachments.Add(new PacketEmailAttachment
             {
-                FileName = combined
-                    ? $"service-packets-{packet.Origin.ReferenceCode}.pdf"
-                    : $"service-packet-{packet.Origin.ReferenceCode}.pdf",
+                FileName = $"service-packet-{packet.Origin.ReferenceCode}.pdf",
                 ContentType = "application/pdf",
-                Content = combined ? RenderCombinedPdf(parts, logoImage) : pdf,
+                Content = pdf,
             });
         }
 
@@ -624,9 +598,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
             d => d.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase));
         if (droppedAPhoto)
         {
-            html = combined
-                ? PacketHtmlRenderer.RenderCombined(packets, photosDropped: true)
-                : PacketHtmlRenderer.Render(packet, packet.ManagerLinks?.RequestUrl);
+            html = PacketHtmlRenderer.RenderCombined(packets, photosDropped: true);
         }
 
         if (fit.PdfDropped)
@@ -701,32 +673,16 @@ public sealed class PacketGenerationService : IPacketGenerationService
         request.MarkAsUpdated(SystemUserId);
         await _serviceRequestRepository.UpdateAsync(request, cancellationToken);
 
-        // The siblings carried by a combined email are delivered too: record it on each, so a
-        // sibling's own later run sees its packet version already sent (Spec A-17).
-        if (combined && request.PacketEmailDelivery.Status == "Delivered")
+        // Every issue of a multi-issue packet went out in that one message (Spec A-17).
+        if (request.PacketEmailDelivery.Status == "Delivered")
         {
-            foreach (var sibling in parts.Skip(1).Select(p => p.Request))
+            foreach (var member in members.Where(m => m.Id != request.Id))
             {
-                sibling.PacketEmailDelivery.MarkDelivered(sibling.PacketGeneration.PacketVersion, DateTime.UtcNow);
-                sibling.MarkAsUpdated(SystemUserId);
-                await _serviceRequestRepository.UpdateAsync(sibling, cancellationToken);
+                member.PacketEmailDelivery.MarkDelivered(member.PacketGeneration.PacketVersion, DateTime.UtcNow);
+                member.MarkAsUpdated(SystemUserId);
+                await _serviceRequestRepository.UpdateAsync(member, cancellationToken);
             }
         }
-    }
-
-    /// <summary>
-    /// The merged PDF for a combined email: every part's packet, one per sheet, with each part's
-    /// downloaded photos (<c>Spec A-17</c>). Read URLs are unique, so the photo maps merge cleanly.
-    /// </summary>
-    private static byte[] RenderCombinedPdf(IReadOnlyList<ComposedPacket> parts, byte[]? logoImage)
-    {
-        var images = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        foreach (var (url, bytes) in parts.SelectMany(p => p.PhotoImages))
-        {
-            images[url] = bytes;
-        }
-
-        return PacketPdfRenderer.RenderCombined([.. parts.Select(p => p.Packet)], images, logoImage);
     }
 
     /// <summary>

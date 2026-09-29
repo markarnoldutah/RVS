@@ -30,12 +30,12 @@ public interface IIntakeOrchestrationService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// A tuple containing the submission's first <see cref="ServiceRequest"/>, every request the
-    /// submission created in the order the customer reported the problems (one per problem,
+    /// submission created in the order the customer reported the issues (one per issue,
     /// <c>Spec A-17</c>; the first is <c>ServiceRequest</c>), the magic-link token (generated or
     /// reused) for checking request status, and when that token expires.
     /// </returns>
     /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
-    /// <exception cref="ArgumentException">Thrown when the problems fail <see cref="Validation.IntakeIssuesValidator"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when the issues fail <see cref="Validation.IntakeIssuesValidator"/>.</exception>
     Task<(ServiceRequest ServiceRequest, IReadOnlyList<ServiceRequest> ServiceRequests, string? MagicLinkToken, DateTime? MagicLinkExpiresAtUtc)> ExecuteAsync(string slug, ServiceRequestCreateRequestDto request, CancellationToken cancellationToken = default);
 
     /// <summary>

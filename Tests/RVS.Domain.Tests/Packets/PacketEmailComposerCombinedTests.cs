@@ -6,9 +6,9 @@ namespace RVS.Domain.Tests.Packets;
 
 /// <summary>
 /// Tests for <see cref="PacketEmailComposer.ComposeCombined"/> — the one packet email a
-/// multi-problem submission sends (<c>Spec A-17</c>, <c>B-4</c>, issue #806). The subject trades
-/// the single category for the problem count and every category; the plain-text body carries
-/// each problem's paste block in order.
+/// multi-issue submission sends (<c>Spec A-17</c>, <c>B-4</c>, issue #806). The subject trades
+/// the single category for the issue count and every category; the plain-text body carries
+/// each issue's paste block in order.
 /// </summary>
 public class PacketEmailComposerCombinedTests
 {
@@ -85,7 +85,7 @@ public class PacketEmailComposerCombinedTests
 
         var body = PacketEmailComposer.BuildCombinedPlainTextBody(packets);
 
-        body.Should().Contain("PROBLEM 1 OF 2").And.Contain("PROBLEM 2 OF 2");
+        body.Should().Contain("ISSUE 1 OF 2").And.Contain("ISSUE 2 OF 2");
         body.IndexOf("Slide will not retract", StringComparison.Ordinal)
             .Should().BeLessThan(body.IndexOf("Awning fabric torn", StringComparison.Ordinal));
         body.Should().MatchRegex(@"^[\x00-\x7F]*$", "a DMS field mangles anything but ASCII (Spec B-5)");

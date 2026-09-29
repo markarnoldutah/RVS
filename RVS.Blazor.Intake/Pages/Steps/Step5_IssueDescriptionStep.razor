@@ -433,7 +433,7 @@
                     State.IsUrgencySuggestedByAi = true;
                 }
 
-                // RV usage is asked once per visit (Spec A-17): a later problem's description
+                // RV usage is asked once per visit (Spec A-17): a later issue's description
                 // must not overwrite what the first one settled.
                 if (result.Result.RvUsage is not null
                     && (State.ActiveIssueIndex == 0 || string.IsNullOrWhiteSpace(State.RvUsage)))

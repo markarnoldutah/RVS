@@ -235,10 +235,10 @@ public class IntakeSourceReportServiceTests
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    // A visit that reported several problems is one submission from one link, however many
+    // A visit that reported several issues is one submission from one link, however many
     // requests it produced (Spec A-17, issue #806) — or the conversion rate overstates the channel.
     [Fact]
-    public async Task GetForLocationAsync_ShouldCountAMultiProblemVisitAsOneSubmission()
+    public async Task GetForLocationAsync_ShouldCountAMultiIssueVisitAsOneSubmission()
     {
         ServiceRequest Sibling(string id, int position) => new()
         {

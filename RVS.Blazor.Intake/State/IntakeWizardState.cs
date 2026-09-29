@@ -270,27 +270,27 @@ public sealed class IntakeWizardState
     /// <summary>Uploaded attachment metadata (Step 7).</summary>
     public List<AttachmentFileInfo> Attachments { get; set; } = [];
 
-    // ── Several problems per visit (Spec A-17, issue #806) ─────────────
+    // ── Several issues per visit (Spec A-17, issue #806) ─────────────
     //
-    // The issue properties above always hold the active problem: Steps 5–7 bind to them and
-    // never know which problem they are editing. The drafts hold every problem; the active one
-    // is copied back from those properties whenever the list is read or another problem opens.
+    // The issue properties above always hold the active issue: Steps 5–7 bind to them and
+    // never know which issue they are editing. The drafts hold every issue; the active one
+    // is copied back from those properties whenever the list is read or another issue opens.
 
     private List<IntakeIssueDraft> _issues = [new()];
 
-    /// <summary>The most problems one visit may report (<c>Spec A-17</c>).</summary>
+    /// <summary>The most issues one visit may report (<c>Spec A-17</c>).</summary>
     public const int MaxIssues = IntakeIssuesValidator.MaxIssuesPerSubmission;
 
-    /// <summary>Index into <see cref="GetIssues"/> of the problem Steps 5–7 are editing.</summary>
+    /// <summary>Index into <see cref="GetIssues"/> of the issue Steps 5–7 are editing.</summary>
     public int ActiveIssueIndex { get; private set; }
 
-    /// <summary>How many problems this visit reports so far, counting the one being edited.</summary>
+    /// <summary>How many issues this visit reports so far, counting the one being edited.</summary>
     public int IssueCount => _issues.Count;
 
-    /// <summary>Whether the review step may offer <c>Add another problem</c>.</summary>
+    /// <summary>Whether the review step may offer <c>Add another issue</c>.</summary>
     public bool CanAddIssue => _issues.Count < MaxIssues;
 
-    /// <summary>Every problem, in the order entered, with the active one brought up to date.</summary>
+    /// <summary>Every issue, in the order entered, with the active one brought up to date.</summary>
     public IReadOnlyList<IntakeIssueDraft> GetIssues()
     {
         SaveActiveIssue();
@@ -298,9 +298,9 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
-    /// Opens a blank problem on Step 5, after the others (<c>Spec A-17</c>). RV usage describes
-    /// the visit, so it carries forward; everything Steps 5–7 ask per problem starts empty. Does
-    /// nothing once <see cref="MaxIssues"/> problems exist.
+    /// Opens a blank issue on Step 5, after the others (<c>Spec A-17</c>). RV usage describes
+    /// the visit, so it carries forward; everything Steps 5–7 ask per issue starts empty. Does
+    /// nothing once <see cref="MaxIssues"/> issues exist.
     /// </summary>
     public async Task StartNewIssueAsync()
     {
@@ -319,7 +319,7 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
-    /// Opens problem <paramref name="index"/> at <paramref name="step"/> (5–7) from the review
+    /// Opens issue <paramref name="index"/> at <paramref name="step"/> (5–7) from the review
     /// step, which Continue then returns to.
     /// </summary>
     public async Task EditIssueAsync(int index, int step)
@@ -337,7 +337,7 @@ public sealed class IntakeWizardState
         await GoToStepAsync(step);
     }
 
-    /// <summary>Removes problem <paramref name="index"/>. The only problem is never removed.</summary>
+    /// <summary>Removes issue <paramref name="index"/>. The only issue is never removed.</summary>
     public async Task RemoveIssueAsync(int index)
     {
         if (_issues.Count <= 1 || index < 0 || index >= _issues.Count)
@@ -357,8 +357,8 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
-    /// Drops every problem after the first that the customer left blank — a problem they opened
-    /// with <c>Add another problem</c> and then backed out of. Run when the review step opens.
+    /// Drops every issue after the first that the customer left blank — an issue they opened
+    /// with <c>Add another issue</c> and then backed out of. Run when the review step opens.
     /// </summary>
     public void PruneEmptyIssues()
     {
@@ -388,8 +388,8 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
-    /// Checks every problem as Step 5 would, for the review step: a problem added and then left
-    /// half-done must not reach the API. Each message names the problem.
+    /// Checks every issue as Step 5 would, for the review step: an issue added and then left
+    /// half-done must not reach the API. Each message names the issue.
     /// </summary>
     public List<string> ValidateAllIssues()
     {
@@ -397,7 +397,7 @@ public sealed class IntakeWizardState
         var issues = GetIssues();
         for (var i = 0; i < issues.Count; i++)
         {
-            var label = $"Problem {i + 1}";
+            var label = $"Issue {i + 1}";
             if (string.IsNullOrWhiteSpace(issues[i].IssueCategory))
             {
                 errors.Add($"{label}: choose a category.");
@@ -405,7 +405,7 @@ public sealed class IntakeWizardState
 
             if (string.IsNullOrWhiteSpace(issues[i].IssueDescription))
             {
-                errors.Add($"{label}: describe the problem.");
+                errors.Add($"{label}: describe the issue.");
             }
             else if (issues[i].IssueDescription.Length > MaxDescriptionLength)
             {
@@ -758,7 +758,7 @@ public sealed class IntakeWizardState
     /// </summary>
     public ServiceRequestCreateRequestDto BuildCreateRequest()
     {
-        // The first problem rides on the request's own issue fields, as a single-problem
+        // The first issue rides on the request's own issue fields, as a single-issue
         // submission always has; the rest follow in AdditionalIssues (Spec A-17).
         var issues = GetIssues();
         var lead = issues[0];
@@ -816,7 +816,7 @@ public sealed class IntakeWizardState
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
-    /// How many of the active problem's attachments still have to be uploaded to blob storage
+    /// How many of the active issue's attachments still have to be uploaded to blob storage
     /// after submission — the files buffered in the browser that have not been sent yet. Told to
     /// the API so packet generation waits for them instead of rendering a photo-less packet
     /// (issue #516). Files whose bytes were lost are excluded: they are already counted as upload
@@ -940,8 +940,8 @@ public sealed class IntakeWizardState
             CreatedServiceRequestId = data.CreatedServiceRequestId;
             SubmissionMagicLinkToken = data.SubmissionMagicLinkToken;
 
-            // A session saved before several problems were possible has no drafts: its one
-            // problem is the issue properties just restored.
+            // A session saved before several issues were possible has no drafts: its one
+            // issue is the issue properties just restored.
             if (data.Issues.Count == 0)
             {
                 _issues = [new()];
@@ -952,7 +952,7 @@ public sealed class IntakeWizardState
             {
                 _issues = data.Issues;
                 ActiveIssueIndex = Math.Clamp(data.ActiveIssueIndex, 0, _issues.Count - 1);
-                // The issue properties were persisted as the active problem, and the draft list
+                // The issue properties were persisted as the active issue, and the draft list
                 // carries it too; keep the properties, which hold its attachments' session state.
                 SaveActiveIssue();
             }
@@ -1347,7 +1347,7 @@ internal sealed class IntakeWizardStateData
     public string? CreatedServiceRequestId { get; set; }
     public string? SubmissionMagicLinkToken { get; set; }
 
-    /// <summary>Every problem's Steps 5–7 answers (<c>Spec A-17</c>). Absent — and so empty — in a session saved before there could be several.</summary>
+    /// <summary>Every issue's Steps 5–7 answers (<c>Spec A-17</c>). Absent — and so empty — in a session saved before there could be several.</summary>
     public List<IntakeIssueDraft> Issues { get; set; } = [];
 
     /// <summary>Which of <see cref="Issues"/> the issue properties above hold.</summary>

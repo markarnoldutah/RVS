@@ -79,13 +79,13 @@ public static class PacketEmailComposer
     }
 
     /// <summary>
-    /// Builds the one packet email for a multi-problem submission (<c>Spec A-17</c>, <c>B-4</c>,
-    /// issue #806). The subject names the unit once, then the problem count and every category
+    /// Builds the one packet email for a multi-issue submission (<c>Spec A-17</c>, <c>B-4</c>,
+    /// issue #806). The subject names the unit once, then the issue count and every category
     /// in order — <c>New SR: {last name}: {year} {make} {model} - {n} issues: {category}, …</c>.
     /// The plain-text body is <see cref="BuildCombinedPlainTextBody"/>. A single packet composes
     /// exactly as <see cref="Compose"/> would.
     /// </summary>
-    /// <param name="packets">The submission's packets, in the order the customer reported the problems. The first supplies the unit.</param>
+    /// <param name="packets">The submission's packets, in the order the customer reported the issues. The first supplies the unit.</param>
     /// <param name="htmlBody">The combined HTML (<see cref="PacketHtmlRenderer.RenderCombined"/>), used verbatim.</param>
     /// <param name="customerLastName">The customer's last name for the subject; blank becomes <c>Unknown</c>.</param>
     /// <param name="recipients">The location's configured recipient addresses; blanks are dropped and at least one must remain.</param>
@@ -121,8 +121,8 @@ public static class PacketEmailComposer
     }
 
     /// <summary>
-    /// The plain-text body of a multi-problem email: each packet's <see cref="BuildPlainTextBody"/>
-    /// in order, headed <c>PROBLEM i OF n</c>. ASCII like the paste blocks it carries (<c>Spec B-5</c>).
+    /// The plain-text body of a multi-issue email: each packet's <see cref="BuildPlainTextBody"/>
+    /// in order, headed <c>ISSUE i OF n</c>. ASCII like the paste blocks it carries (<c>Spec B-5</c>).
     /// A single packet's body has no heading, as <see cref="Compose"/> sends it.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="packets"/> is null.</exception>
@@ -143,7 +143,7 @@ public static class PacketEmailComposer
                 sb.Append("\n\n");
             }
 
-            sb.Append("PROBLEM ").Append((i + 1).ToString(CultureInfo.InvariantCulture))
+            sb.Append("ISSUE ").Append((i + 1).ToString(CultureInfo.InvariantCulture))
                 .Append(" OF ").Append(packets.Count.ToString(CultureInfo.InvariantCulture)).Append('\n');
             sb.Append(BuildPlainTextBody(packets[i]));
         }

@@ -52,15 +52,15 @@ public sealed record ServiceRequestDetailResponseDto
     public string? AdvisorUserId { get; init; }
 
     /// <summary>
-    /// The multi-problem intake submission this request belongs to (<c>Spec A-17</c>): its first
+    /// The multi-issue intake submission this request belongs to (<c>Spec A-17</c>): its first
     /// request's id. <c>null</c> for a request reported on its own.
     /// </summary>
     public string? SubmissionId { get; init; }
 
-    /// <summary>This request's 1-based position in its submission — the "2" of "Problem 2 of 3". <c>0</c> when not grouped.</summary>
+    /// <summary>This request's 1-based position in its submission — the "2" of "Issue 2 of 3". <c>0</c> when not grouped.</summary>
     public int SubmissionPosition { get; init; }
 
-    /// <summary>How many problems its submission reported — the "3" of "Problem 2 of 3". <c>0</c> when not grouped.</summary>
+    /// <summary>How many issues its submission reported — the "3" of "Issue 2 of 3". <c>0</c> when not grouped.</summary>
     public int SubmissionCount { get; init; }
 
     /// <summary>

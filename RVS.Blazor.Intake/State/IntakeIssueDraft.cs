@@ -4,9 +4,9 @@ using RVS.Domain.DTOs;
 namespace RVS.Blazor.Intake.State;
 
 /// <summary>
-/// One problem's Steps 5–7 answers while the customer is still in the wizard (<c>Spec A-17</c>,
-/// issue #806). The problem being edited lives in <see cref="IntakeWizardState"/>'s own issue
-/// properties, which the step components bind to; the drafts hold every problem, and the active
+/// One issue's Steps 5–7 answers while the customer is still in the wizard (<c>Spec A-17</c>,
+/// issue #806). The issue being edited lives in <see cref="IntakeWizardState"/>'s own issue
+/// properties, which the step components bind to; the drafts hold every issue, and the active
 /// one is refreshed from those properties whenever the list is read.
 /// </summary>
 public sealed class IntakeIssueDraft
@@ -23,13 +23,13 @@ public sealed class IntakeIssueDraft
     public CapabilityAssessmentResponseDto? CapabilityAssessment { get; set; }
 
     /// <summary>
-    /// This problem's attachments. Not persisted, like the wizard's own: their bytes live only in
-    /// the current page, and a reload loses them for every problem alike.
+    /// This issue's attachments. Not persisted, like the wizard's own: their bytes live only in
+    /// the current page, and a reload loses them for every issue alike.
     /// </summary>
     [JsonIgnore]
     public List<AttachmentFileInfo> Attachments { get; set; } = [];
 
-    /// <summary>Whether the customer has entered nothing for this problem yet.</summary>
+    /// <summary>Whether the customer has entered nothing for this issue yet.</summary>
     [JsonIgnore]
     public bool IsEmpty =>
         string.IsNullOrWhiteSpace(IssueCategory)

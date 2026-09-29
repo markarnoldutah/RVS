@@ -208,7 +208,7 @@ public class IntakeControllerTests
             Times.Never);
     }
 
-    // ── Several problems per visit (Spec A-17, issue #806) ───────────────────
+    // ── Several issues per visit (Spec A-17, issue #806) ───────────────────
 
     [Fact]
     public async Task SubmitServiceRequest_WhenSeveralIssues_ShouldReturnEveryRequestIdInOrder()
@@ -236,7 +236,7 @@ public class IntakeControllerTests
         var request = BuildSubmitRequest() with
         {
             AdditionalIssues = [.. Enumerable.Range(0, 10)
-                .Select(i => new IntakeIssueDto { IssueCategory = "Other", IssueDescription = $"Problem {i + 2}" })],
+                .Select(i => new IntakeIssueDto { IssueCategory = "Other", IssueDescription = $"Issue {i + 2}" })],
         };
 
         var result = await _sut.SubmitServiceRequest("test-slug", request);

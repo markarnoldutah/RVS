@@ -86,33 +86,47 @@ public sealed record ServicePacket
     /// <c>null</c> when the packet carries no AI content. Derived here so the HTML and PDF
     /// renderers read the very same sentence.
     /// </summary>
-    public string? AiDisclaimer
+    public string? AiDisclaimer => BuildAiDisclaimer(CuratedIssue is not null, AiSummary is not null);
+
+    /// <summary>
+    /// The one AI disclosure for a packet that carries several issues (<c>Spec A-17</c>): it
+    /// names every machine-written section any of them carries. For one packet it is that
+    /// packet's own <see cref="AiDisclaimer"/>.
+    /// </summary>
+    public static string? AiDisclaimerFor(IEnumerable<ServicePacket> packets)
     {
-        get
+        ArgumentNullException.ThrowIfNull(packets);
+
+        var list = packets as IReadOnlyCollection<ServicePacket> ?? [.. packets];
+        return BuildAiDisclaimer(
+            list.Any(p => p.CuratedIssue is not null),
+            list.Any(p => p.AiSummary is not null));
+    }
+
+    private static string? BuildAiDisclaimer(bool hasCuratedIssue, bool hasAiSummary)
+    {
+        var sections = new List<string>(2);
+        if (hasCuratedIssue)
         {
-            var sections = new List<string>(2);
-            if (CuratedIssue is not null)
-            {
-                sections.Add("Issue");
-            }
-
-            if (AiSummary is not null)
-            {
-                sections.Add("Preliminary assessment");
-            }
-
-            if (sections.Count == 0)
-            {
-                return null;
-            }
-
-            var subject = sections.Count == 1
-                ? $"the {sections[0]} section is"
-                : $"the {sections[0]} and {sections[1]} sections are";
-
-            return $"AI disclosure: {subject} AI-generated from the customer's submission and may contain errors. "
-                + "The Reported issue and diagnostic answers are the customer's own words.";
+            sections.Add("Issue");
         }
+
+        if (hasAiSummary)
+        {
+            sections.Add("Preliminary assessment");
+        }
+
+        if (sections.Count == 0)
+        {
+            return null;
+        }
+
+        var subject = sections.Count == 1
+            ? $"the {sections[0]} section is"
+            : $"the {sections[0]} and {sections[1]} sections are";
+
+        return $"AI disclosure: {subject} AI-generated from the customer's submission and may contain errors. "
+            + "The Reported issue and diagnostic answers are the customer's own words.";
     }
 }
 

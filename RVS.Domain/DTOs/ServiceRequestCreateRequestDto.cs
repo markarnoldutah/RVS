@@ -69,15 +69,15 @@ public sealed record ServiceRequestCreateRequestDto
     public int ExpectedAttachmentCount { get; init; }
 
     /// <summary>
-    /// The second and later problems of a submission (<c>Spec A-17</c>, issue #806), in the order
-    /// the customer entered them. The first problem is the issue fields on this record, so a
-    /// client that reports one problem sends exactly what it always has. At most
-    /// <see cref="Validation.IntakeIssuesValidator.MaxIssuesPerSubmission"/> problems in total.
+    /// The second and later issues of a submission (<c>Spec A-17</c>, issue #806), in the order
+    /// the customer entered them. The first issue is the issue fields on this record, so a
+    /// client that reports one issue sends exactly what it always has. At most
+    /// <see cref="Validation.IntakeIssuesValidator.MaxIssuesPerSubmission"/> issues in total.
     /// </summary>
     public List<IntakeIssueDto>? AdditionalIssues { get; init; }
 
     /// <summary>
-    /// Every problem in this submission, the first one built from this record's own issue fields,
+    /// Every issue in this submission, the first one built from this record's own issue fields,
     /// then <see cref="AdditionalIssues"/> in order.
     /// </summary>
     public IReadOnlyList<IntakeIssueDto> AllIssues()

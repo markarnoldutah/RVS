@@ -13,7 +13,7 @@ using RVS.PacketDump;
 //
 // Switches:
 //   --format html|pdf|both   (default both; also --html / --pdf)
-//   --variant full|minimal|both   (default both; also --full / --minimal)
+//   --variant full|minimal|multi|both|all   (default both; also --full / --minimal / --multi)
 //   -h | --help | -? | /?    print the full switch list and exit
 //
 // Open an HTML file in a browser and use its print dialog (Cmd/Ctrl-P) to choose paper
@@ -28,15 +28,21 @@ if (options.ShowHelp)
     return;
 }
 
-var variants = new List<(string Name, ServicePacket Packet)>();
-if (options.Variant is "full" or "both")
+var variants = new List<(string Name, IReadOnlyList<ServicePacket> Packets)>();
+if (options.Variant is "full" or "both" or "all")
 {
-    variants.Add(("full", SamplePackets.Full()));
+    variants.Add(("full", [SamplePackets.Full()]));
 }
 
-if (options.Variant is "minimal" or "both")
+if (options.Variant is "minimal" or "both" or "all")
 {
-    variants.Add(("minimal", SamplePackets.Minimal()));
+    variants.Add(("minimal", [SamplePackets.Minimal()]));
+}
+
+// Several issues on one visit, one packet (Spec A-17, issue #806).
+if (options.Variant is "multi" or "all")
+{
+    variants.Add(("multi", SamplePackets.Multi()));
 }
 
 var formats = new List<string>();
@@ -50,7 +56,7 @@ if (options.Format is "pdf" or "both")
     formats.Add("pdf");
 }
 
-foreach (var (name, packet) in variants)
+foreach (var (name, packets) in variants)
 {
     foreach (var format in formats)
     {
@@ -60,13 +66,13 @@ foreach (var (name, packet) in variants)
 
         if (format == "html")
         {
-            var html = PacketHtmlRenderer.Render(packet);
+            var html = PacketHtmlRenderer.RenderCombined(packets);
             File.WriteAllText(path, html);
             Console.WriteLine($"wrote {Path.GetFullPath(path)}  ({html.Length:N0} chars)");
         }
         else
         {
-            var pdf = PacketPdfRenderer.Render(packet);
+            var pdf = PacketPdfRenderer.RenderCombined(packets);
             File.WriteAllBytes(path, pdf);
             Console.WriteLine($"wrote {Path.GetFullPath(path)}  ({pdf.Length:N0} bytes)");
         }
