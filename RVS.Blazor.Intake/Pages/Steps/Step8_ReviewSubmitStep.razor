@@ -334,6 +334,7 @@
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private HttpClient Http { get; set; } = default!;
     [Inject] private StatusLinkStore StatusLinks { get; set; } = default!;
+    [Inject] private RememberedDetailsStore RememberedDetails { get; set; } = default!;
 
     private bool _isSubmitting;
     private string? _submitError;
@@ -397,6 +398,12 @@
             State.SubmissionMagicLinkToken = result.MagicLinkToken;
             await State.PersistAsync();
             await StatusLinks.SaveAsync(result.MagicLinkToken, result.MagicLinkExpiresAtUtc);
+
+            // Issue #811: only on the customer's say-so, and never on an advisor invite.
+            if (State.RememberDetails && State.CanRememberDetails)
+            {
+                await RememberedDetails.SaveAsync(State.ToRememberedDetails());
+            }
 
             // Spec A-17: each issue's attachments go to its own request, the one at the same
             // position in the response. A response without the id list comes from an API that

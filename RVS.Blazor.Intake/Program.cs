@@ -39,6 +39,9 @@ builder.Services.AddScoped<IntakeWizardState>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<StatusLinkStore>();
 
+// The customer's contact details and VIN, remembered on this device only when they opt in (issue #811)
+builder.Services.AddScoped<RememberedDetailsStore>();
+
 // Theme switcher — scoped (one per browser tab lifetime)
 builder.Services.AddScoped<ThemeService>();
 

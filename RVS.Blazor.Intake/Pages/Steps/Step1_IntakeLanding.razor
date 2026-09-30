@@ -132,6 +132,7 @@
     [Parameter, EditorRequired] public EventCallback OnStart { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private ThemeService ThemeService { get; set; } = default!;
+    [Inject] private RememberedDetailsStore RememberedDetails { get; set; } = default!;
 
     // The hero follows the header bar's surface rules (Spec A-16, issue #470): the dealer's colour
     // and a contrast-chosen foreground when set, Ink and its own text colour otherwise.
@@ -233,6 +234,7 @@
             }
 
             await ApplyInvitePrefillAsync();
+            await ApplyRememberedDetailsAsync();
         }
         catch (HttpRequestException)
         {
@@ -272,6 +274,26 @@
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or NotSupportedException)
         {
             // Blank form.
+        }
+    }
+
+    /// <summary>
+    /// Issue #811: fills contact details and the VIN from what this device remembered, when the
+    /// customer opted in on an earlier visit. Never on an advisor invite (Spec A-14), and only
+    /// into blank fields.
+    /// </summary>
+    private async Task ApplyRememberedDetailsAsync()
+    {
+        if (!State.CanRememberDetails || State.IsRememberedPrefilled)
+        {
+            return;
+        }
+
+        var details = await RememberedDetails.GetAsync();
+        if (details is not null)
+        {
+            State.ApplyRememberedDetails(details);
+            await State.PersistAsync();
         }
     }
 
