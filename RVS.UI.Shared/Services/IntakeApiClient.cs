@@ -25,20 +25,14 @@ public sealed class IntakeApiClient
     /// Gets the intake form configuration for a location.
     /// </summary>
     /// <param name="locationSlug">The location slug.</param>
-    /// <param name="token">Optional magic-link token for customer prefill.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<IntakeConfigResponseDto> GetConfigAsync(
         string locationSlug,
-        string? token = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
 
         var url = $"api/intake/{Uri.EscapeDataString(locationSlug)}/config";
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            url += $"?token={Uri.EscapeDataString(token)}";
-        }
 
         return await _httpClient.GetFromJsonAsync<IntakeConfigResponseDto>(url, cancellationToken)
             ?? throw new InvalidOperationException("Failed to deserialize intake config response.");

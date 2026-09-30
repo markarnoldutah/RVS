@@ -5,7 +5,7 @@ using Microsoft.JSInterop;
 namespace RVS.Blazor.Intake.State;
 
 /// <summary>
-/// What "Remember my details on this device" keeps (issues #811, #819, Spec A-7): contact
+/// What "Remember my details on this device" keeps (issues #811, #819): contact
 /// details, the preferred contact method, and the RV's VIN or serial number with its
 /// manufacturer, model and year. Opt-outs are deliberately not kept. The fields added by #819
 /// are optional so an entry saved before them still reads.
@@ -23,7 +23,7 @@ public sealed record RememberedDetails(
 
 /// <summary>
 /// Keeps the customer's <see cref="RememberedDetails"/> on this device, only when they asked for
-/// it on Step 2 (issue #811, Spec A-7).
+/// it on Step 2 (issue #811).
 /// <para>
 /// Persisted in <c>localStorage</c> so it survives to the next visit, which for an RV customer
 /// is often next season. Opt-in because a shared browser — a counter tablet, a family laptop —

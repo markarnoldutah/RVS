@@ -751,7 +751,7 @@ public class IntakeOrchestrationServiceTests
     [InlineData(null)]
     [InlineData("   ")]
     [InlineData("Camper Mfg. Co.")]
-    public async Task ExecuteAsync_WhenSerialNumberHasNoManufacturer_ShouldNotAppendAssetLedgerEntryOrKnownAssetId(string? manufacturer)
+    public async Task ExecuteAsync_WhenSerialNumberHasNoManufacturer_ShouldNotAppendAssetLedgerEntry(string? manufacturer)
     {
         SetupFullHappyPath();
 
@@ -761,9 +761,6 @@ public class IntakeOrchestrationServiceTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _ledgerRepoMock.Verify(r => r.AppendAsync(
             It.IsAny<AssetLedgerEntry>(), It.IsAny<CancellationToken>()), Times.Never);
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Any(id => id.Contains("152263"))),
-            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Serial numbers keyed on manufacturer (issue #808) ───────────────────
@@ -792,7 +789,7 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenSerialNumberHasManufacturer_ShouldAppendLedgerEntryAndKnownAssetIdUnderTheCompositeKey()
+    public async Task ExecuteAsync_WhenSerialNumberHasManufacturer_ShouldAppendLedgerEntryUnderTheCompositeKey()
     {
         SetupFullHappyPath();
 
@@ -801,9 +798,6 @@ public class IntakeOrchestrationServiceTests
         _ledgerRepoMock.Verify(r => r.AppendAsync(
             It.Is<AssetLedgerEntry>(e => e.AssetId == "LANCE:152263" && e.Manufacturer == "Lance"),
             It.IsAny<CancellationToken>()), Times.Once);
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("LANCE:152263") && !a.AllKnownAssetIds.Contains("152263")),
-            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
     [Fact]
@@ -875,9 +869,6 @@ public class IntakeOrchestrationServiceTests
         _ledgerRepoMock.Verify(r => r.AppendAsync(
             It.Is<AssetLedgerEntry>(e => e.AssetId == "1HGBH41JXMN109186"),
             It.IsAny<CancellationToken>()), Times.Once);
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("1HGBH41JXMN109186")),
-            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
     [Theory]
@@ -894,9 +885,6 @@ public class IntakeOrchestrationServiceTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _ledgerRepoMock.Verify(r => r.AppendAsync(
             It.IsAny<AssetLedgerEntry>(), It.IsAny<CancellationToken>()), Times.Never);
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains(string.Empty)),
-            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1102,18 +1090,6 @@ public class IntakeOrchestrationServiceTests
         _profileRepoMock.Verify(r => r.UpdateAsync(
             It.Is<CustomerProfile>(p => p.ServiceRequestIds.Count > 0),
             It.IsAny<CancellationToken>()), Times.AtLeastOnce);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ShouldAddAssetIdToGlobalAcctAllKnownAssetIds()
-    {
-        SetupFullHappyPath();
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("1HGBH41JXMN109186")),
-            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -2229,216 +2205,6 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task GetIntakeConfigAsync_WhenNoToken_ShouldReturnNullPrefills()
-    {
-        SetupConfigHappyPath();
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug");
-
-        result.PrefillCustomer.Should().BeNull();
-        result.PrefillAsset.Should().BeNull();
-        result.TokenExpired.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenExpired_ShouldReturnNullPrefills()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: true, assetIds: ["1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("expired-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "expired-token");
-
-        result.PrefillCustomer.Should().BeNull();
-        result.PrefillAsset.Should().BeNull();
-        result.TokenExpired.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenValidButNoAssets_ShouldReturnCustomerPrefillOnly()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: []);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.PrefillCustomer.Should().NotBeNull();
-        result.PrefillCustomer!.FirstName.Should().Be("Jane");
-        result.PrefillAsset.Should().BeNull();
-        result.TokenExpired.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenValidWithAssetHistory_ShouldReturnPrefillAsset()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        var oldLedgerEntries = new List<AssetLedgerEntry>
-        {
-            new()
-            {
-                AssetId = "OLD_VIN",
-                Manufacturer = "Thor",
-                Model = "Aria 4000",
-                Year = 2019,
-                GlobalCustomerAcctId = acct.Id,
-            }
-        };
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(oldLedgerEntries);
-
-        // The most recently added asset ID is the last in the list
-        var ledgerEntries = new List<AssetLedgerEntry>
-        {
-            new()
-            {
-                AssetId = "1HGBH41JXMN109186",
-                Manufacturer = "Grand Design",
-                Model = "Momentum 395G",
-                Year = 2023,
-                GlobalCustomerAcctId = acct.Id,
-            }
-        };
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ledgerEntries);
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.PrefillAsset.Should().NotBeNull();
-        result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
-        result.PrefillAsset.Manufacturer.Should().Be("Grand Design");
-        result.PrefillAsset.Model.Should().Be("Momentum 395G");
-        result.PrefillAsset.Year.Should().Be(2023);
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenValidWithMultipleAssets_ShouldReturnAllKnownAssets()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>
-            {
-                new() { AssetId = "OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
-            });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>
-            {
-                new() { AssetId = "1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
-            });
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.KnownAssets.Should().HaveCount(2);
-        result.KnownAssets[0].AssetId.Should().Be("OLD_VIN");
-        result.KnownAssets[0].Manufacturer.Should().Be("Thor");
-        result.KnownAssets[1].AssetId.Should().Be("1HGBH41JXMN109186");
-        result.KnownAssets[1].Manufacturer.Should().Be("Grand Design");
-        result.PrefillAsset.Should().NotBeNull();
-        result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenAssetLedgerEmpty_ShouldReturnNullPrefillAssetButIncludeKnownAsset()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>());
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.PrefillCustomer.Should().NotBeNull();
-        result.PrefillAsset.Should().BeNull();
-        result.KnownAssets.Should().HaveCount(1);
-        result.KnownAssets[0].AssetId.Should().Be("1HGBH41JXMN109186");
-        result.KnownAssets[0].Manufacturer.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenSomeAssetsHaveNoLedgerEntries_ShouldIncludeAllKnownAssets()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186", "NO_LEDGER"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>
-            {
-                new() { AssetId = "OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
-            });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>
-            {
-                new() { AssetId = "1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
-            });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("NO_LEDGER", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>());
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.KnownAssets.Should().HaveCount(3);
-        result.KnownAssets[0].AssetId.Should().Be("OLD_VIN");
-        result.KnownAssets[0].Manufacturer.Should().Be("Thor");
-        result.KnownAssets[1].AssetId.Should().Be("1HGBH41JXMN109186");
-        result.KnownAssets[1].Manufacturer.Should().Be("Grand Design");
-        result.KnownAssets[2].AssetId.Should().Be("NO_LEDGER");
-        result.KnownAssets[2].Manufacturer.Should().BeNull();
-        result.PrefillAsset.Should().NotBeNull();
-        result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenKnownAssetIsASerialNumber_ShouldReturnTheSerialNumberNotTheHistoryKey()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["LANCE:152263", "NORTHERNLITE:9876"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("LANCE:152263", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>
-            {
-                new() { AssetId = "LANCE:152263", Manufacturer = "Lance", Model = "855S", Year = 2021, GlobalCustomerAcctId = acct.Id }
-            });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("NORTHERNLITE:9876", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>());
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.KnownAssets.Select(a => a.AssetId).Should().Equal("152263", "9876");
-        result.PrefillAsset!.AssetId.Should().Be("152263");
-        result.PrefillAsset.Manufacturer.Should().Be("Lance");
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenNotFoundInDb_ShouldReturnNullPrefills()
-    {
-        SetupConfigHappyPath();
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("unknown-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((GlobalCustomerAcct?)null);
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "unknown-token");
-
-        result.PrefillCustomer.Should().BeNull();
-        result.PrefillAsset.Should().BeNull();
-        result.TokenExpired.Should().BeFalse();
-    }
-
-    [Fact]
     public async Task GetIntakeConfigAsync_WhenLocationHasPhone_ShouldIncludeLocationPhone()
     {
         SetupConfigHappyPath();
@@ -2698,22 +2464,6 @@ public class IntakeOrchestrationServiceTests
         result.Matched.Should().BeTrue();
         result.RequiredCapabilities.Should().BeEmpty();
         result.MissingCapabilities.Should().BeEmpty();
-    }
-
-    private static GlobalCustomerAcct BuildGlobalAcctWithMagicLink(bool expired, List<string> assetIds)
-    {
-        return new GlobalCustomerAcct
-        {
-            Id = "gca_test",
-            Email = "jane@example.com",
-            FirstName = "Jane",
-            LastName = "Doe",
-            Phone = "801-555-1234",
-            MagicLinkToken = expired ? "expired-token" : "valid-token",
-            MagicLinkExpiresAtUtc = expired ? DateTime.UtcNow.AddDays(-1) : DateTime.UtcNow.AddDays(29),
-            AllKnownAssetIds = assetIds,
-            CreatedByUserId = "intake",
-        };
     }
 
     private void SetupAccessGate(bool loginsEnabled, int disabledDaysAgo)

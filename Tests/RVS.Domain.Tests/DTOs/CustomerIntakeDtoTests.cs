@@ -83,7 +83,6 @@ public class CustomerIntakeDtoTests
 
         dto.AcceptedFileTypes.Should().BeEmpty();
         dto.IssueCategories.Should().BeEmpty();
-        dto.PrefillCustomer.Should().BeNull();
     }
 
     [Fact]

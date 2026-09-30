@@ -41,15 +41,6 @@
     }
     else if (State.Config is not null)
     {
-        @if (State.Config.TokenExpired)
-        {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Style="width: 100%;"
-                      Icon="@Icons.Material.Filled.Schedule">
-                Your link has expired. You can still submit a service request below, but your information won't be pre-filled.
-                Contact the dealership if you need a new link.
-            </MudAlert>
-        }
-
         @* Hero band — the same lockup the public landing page opens with, on Ink. On a location that
            sets branding (Spec A-16, issue #470) the band takes the dealer's colour, so it matches the
            header bar, and the dealer's logo leads it: straight on their colour, which they chose to
@@ -218,29 +209,12 @@
 
         try
         {
-            State.Config = await IntakeApi.GetConfigAsync(State.Slug, State.Token);
+            State.Config = await IntakeApi.GetConfigAsync(State.Slug);
 
             // Spec A-19: an expired slug shows the notice, so there is no form to prefill.
             if (State.Config.IntakeExpired)
             {
                 return;
-            }
-
-            // A-7 returning-customer prefill is deferred (Spec A-7, #673): nothing RVS sends puts
-            // ?token= on the intake URL, so this path is unreachable today. Kept for when A-7 returns.
-            if (State.Config.PrefillCustomer is not null)
-            {
-                State.ApplyPrefill(State.Config.PrefillCustomer);
-            }
-
-            if (State.Config.PrefillAsset is not null)
-            {
-                State.ApplyAssetPrefill(State.Config.PrefillAsset);
-            }
-
-            if (State.Config.KnownAssets is { Count: > 0 })
-            {
-                State.KnownAssets = State.Config.KnownAssets;
             }
 
             await ApplyInvitePrefillAsync();

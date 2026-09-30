@@ -83,11 +83,12 @@ Version 1.0 was written against the build of September 10. Since then:
 - [ ] After a VIN fills from a photo, edit it by hand. Your edit is kept and not overwritten.
 - [ ] Try the VIN-photo capture with no network. The form falls back to manual VIN entry and still lets you submit.
 
-### 1.2c Returning customer (A-7, deferred)
+### 1.2c Returning customer (A-7, cancelled)
 
-A-7 prefill is deferred (Spec A-7, #673). These tests check that it stays off.
+A-7's token-based prefill is cancelled and removed (Spec A-7, #815). Only opt-in device memory (#811) fills the form, and nothing comes from the server. These tests check that.
 
-- [ ] Submit once as a new customer. Then start a second intake at the same location with the **same email**. Name, phone and VINs are **not** prefilled, and every field starts empty.
+- [ ] Submit once as a new customer with *Remember my details* **unticked**. Then start a second intake at the same location with the **same email**. Name, phone and VINs are **not** prefilled, and every field starts empty.
+- [ ] Open the intake link with `?token=anything` on the end. It behaves exactly like the bare link: no "link expired" notice, no "pre-filled from your previous visit" banner, and no *Previously seen RVs* list on the RV Lookup step.
 - [ ] On the second intake, leave both opt-outs unticked after having ticked *Do not send text messages* on the first. In Cosmos `customer-profiles`, the SMS opt-out is **still set**, because intake sets an opt-out but never clears one.
 - [ ] On that second intake, choose **Text** as the preferred contact. The submission is accepted (no 422), and the confirmation goes by **email**.
 
@@ -425,7 +426,7 @@ These are Spec requirements the current build does not meet. Run the check anywa
 | B-4 | A hard bounce disables that recipient and notifies the owner | Disabling is built, but nothing receives a bounce yet, so it never fires | — (follow-up to closed #439; see `RVS_PacketComposition.md`) |
 | B-6 | Status-link time-to-live and optional logo | Both save from the Locations drawer. Neither is used by the packet or the status token yet | #505 (logo) |
 | A-6 | Attachments: jpeg, png, mp4, m4a, wav | The upload step accepts jpeg, png, gif, webp, heic/heif, mp4, mov, webm and pdf, and **not** m4a or wav | — (decide: amend the Spec or the build) |
-| A-7 | Returning-customer prefill | **Deferred** by decision. 1.2c checks that it stays off | #673 |
+| A-7 | Returning-customer prefill | **Cancelled**; token path removed, superseded by device memory (#811). 1.2c checks nothing comes from the server | #673, #815 |
 | A-2 | Nothing clears an email opt-out | Known gap by decision. A dealer-side toggle is not built | Spec A-2 |
 | A-13 | Submissions by source, shown to the dealer | The report exists only as `GET api/locations/{id}/intake-sources`. There is no dealer screen | — |
 

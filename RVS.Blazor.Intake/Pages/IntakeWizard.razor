@@ -96,7 +96,6 @@ else
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
-    [SupplyParameterFromQuery(Name = "token")] public string? Token { get; set; }
 
     // Spec A-13 (issue #599): the channel tag the go.rvintake.com redirect puts on the intake
     // URL. Carried through the wizard and sent with the submission so the resulting service
@@ -148,7 +147,6 @@ else
     {
         _state.OnChange += StateHasChanged;
        _state.Slug = Slug;
-       _state.Token = Token;
        _state.IntakeSource = Src;
        _state.InviteToken = Inv;
 
@@ -159,7 +157,6 @@ else
         {
             await _state.ClearAsync();
             _state.Slug = Slug;
-           _state.Token = Token;
            _state.IntakeSource = Src;
            _state.InviteToken = Inv;
         }
@@ -181,7 +178,7 @@ else
         }
 
         // Issue #740: a refresh past Step 1 restores the session but not the config.
-        await _state.EnsureConfigAsync(ct => IntakeApi.GetConfigAsync(_state.Slug, _state.Token, ct));
+        await _state.EnsureConfigAsync(ct => IntakeApi.GetConfigAsync(_state.Slug, ct));
 
         _initializing = false;
 
@@ -202,7 +199,6 @@ else
     protected override async Task OnParametersSetAsync()
     {
         _state.Slug = Slug;
-        _state.Token = Token;
         if (!string.IsNullOrWhiteSpace(Src))
         {
             _state.IntakeSource = Src;

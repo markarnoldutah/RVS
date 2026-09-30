@@ -2,7 +2,7 @@ namespace RVS.Domain.Validation;
 
 /// <summary>
 /// Builds the asset ID that keys a rig's vehicle history: ownership on the
-/// <c>CustomerProfile</c>, the X-2 asset ledger and <c>GlobalCustomerAcct.AllKnownAssetIds</c>.
+/// <c>CustomerProfile</c> and the X-2 asset ledger.
 /// A VIN keys history on its own. A serial number is not unique across manufacturers, so it
 /// keys history only together with the manufacturer, as <c>LANCE:152263</c> (issue #808).
 /// </summary>

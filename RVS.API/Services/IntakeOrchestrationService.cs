@@ -391,10 +391,6 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             globalAcct.MagicLinkToken = GlobalCustomerAcctService.GenerateMagicLinkToken(normalizedEmail);
             globalAcct.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(90);
         }
-        if (historyKey is not null && !globalAcct.AllKnownAssetIds.Contains(historyKey))
-        {
-            globalAcct.AllKnownAssetIds.Add(historyKey);
-        }
 
         var alreadyLinked = globalAcct.LinkedProfiles
             .Any(lp => lp.TenantId == tenantId && lp.ProfileId == profile.Id);
@@ -592,7 +588,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     }
 
     /// <inheritdoc />
-    public async Task<IntakeConfigResponseDto> GetIntakeConfigAsync(string slug, string? magicLinkToken = null, CancellationToken cancellationToken = default)
+    public async Task<IntakeConfigResponseDto> GetIntakeConfigAsync(string slug, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
 
@@ -614,67 +610,6 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 .ToList();
         }
 
-        CustomerInfoDto? prefillCustomer = null;
-        AssetInfoDto? prefillAsset = null;
-        var knownAssets = new List<AssetInfoDto>();
-        var tokenExpired = false;
-
-        // A-7 returning-customer prefill is deferred (Spec A-7, #673). Nothing RVS sends puts ?token=
-        // on the intake URL, so this branch is unreachable; it stays for when A-7 returns.
-        if (!string.IsNullOrWhiteSpace(magicLinkToken))
-        {
-            var acct = await _globalCustomerAcctRepository.GetByMagicLinkTokenAsync(magicLinkToken, cancellationToken);
-            if (acct is not null && acct.MagicLinkExpiresAtUtc > DateTime.UtcNow)
-            {
-                prefillCustomer = new CustomerInfoDto
-                {
-                    FirstName = acct.FirstName,
-                    LastName = acct.LastName,
-                    Email = acct.Email,
-                    Phone = acct.Phone
-                };
-
-                // Resolve known vehicles for one-tap selection (capped to avoid excessive lookups;
-                // RV customers typically own 1–3 vehicles)
-                if (acct.AllKnownAssetIds is { Count: > 0 })
-                {
-                    const int maxAssetLookups = 10;
-                    AssetInfoDto? lastEnrichedAsset = null;
-                    foreach (var historyKey in acct.AllKnownAssetIds.TakeLast(maxAssetLookups))
-                    {
-                        // A serial-number rig is keyed MANUFACTURER:SERIAL (issue #808); the
-                        // customer sees the serial number, never the key.
-                        var assetId = VehicleHistoryKey.ToIdentifier(historyKey);
-                        var entries = await _assetLedgerRepository.GetByAssetIdAsync(historyKey, cancellationToken);
-                        var mostRecent = entries.LastOrDefault();
-                        if (mostRecent is not null)
-                        {
-                            var assetDto = new AssetInfoDto
-                            {
-                                AssetId = assetId,
-                                Manufacturer = mostRecent.Manufacturer,
-                                Model = mostRecent.Model,
-                                Year = mostRecent.Year,
-                            };
-                            knownAssets.Add(assetDto);
-                            lastEnrichedAsset = assetDto;
-                        }
-                        else
-                        {
-                            knownAssets.Add(new AssetInfoDto { AssetId = assetId });
-                        }
-                    }
-
-                    // Prefill the most recently used vehicle that has full details
-                    prefillAsset = lastEnrichedAsset;
-                }
-            }
-            else if (acct is not null && acct.MagicLinkExpiresAtUtc.HasValue && acct.MagicLinkExpiresAtUtc.Value <= DateTime.UtcNow)
-            {
-                tokenExpired = true;
-            }
-        }
-
         return new IntakeConfigResponseDto
         {
             LocationName = slugLookup.LocationName,
@@ -688,10 +623,6 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             MaxAttachments = intakeConfig.MaxAttachments,
             AllowAnonymousIntake = intakeConfig.AllowAnonymousIntake,
             IssueCategories = issueCategories,
-            PrefillCustomer = prefillCustomer,
-            PrefillAsset = prefillAsset,
-            KnownAssets = knownAssets,
-            TokenExpired = tokenExpired,
             IntakeExpired = intakeExpired,
         };
     }

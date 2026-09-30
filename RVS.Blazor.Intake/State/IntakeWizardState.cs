@@ -47,9 +47,6 @@ public sealed class IntakeWizardState
     /// <summary>Location slug from URL route.</summary>
     public string Slug { get; set; } = string.Empty;
 
-    /// <summary>Optional magic-link token from the intake URL query string.</summary>
-    public string? Token { get; set; }
-
     /// <summary>
     /// Distribution channel the customer arrived through (<c>Spec A-13</c>, issue #599) — the
     /// <c>src</c> query parameter the go.rvintake.com redirect put on the intake URL. Forwarded
@@ -168,25 +165,19 @@ public sealed class IntakeWizardState
         }
     }
 
-    /// <summary>Whether the customer info was prefilled from a magic-link token.</summary>
-    public bool IsPrefilled { get; set; }
-
-    /// <summary>
-    /// Whether the invite prefill has been applied (<c>Spec A-14</c>). Separate from
-    /// <see cref="IsPrefilled"/>, which marks A-7's returning-customer match.
-    /// </summary>
+    /// <summary>Whether the invite prefill has been applied (<c>Spec A-14</c>).</summary>
     public bool IsInvitePrefilled { get; set; }
 
     /// <summary>
-    /// Whether the customer ticked "Remember my details on this device" on Step 2 (issue #811,
-    /// Spec A-7). Unticked by default: a shared browser must not keep one customer's details for
+    /// Whether the customer ticked "Remember my details on this device" on Step 2 (issue #811).
+    /// Unticked by default: a shared browser must not keep one customer's details for
     /// the next. The submission saves them only while this is set.
     /// </summary>
     public bool RememberDetails { get; set; }
 
     /// <summary>
     /// Whether the fields were filled from details this device remembered, so Step 1 does not
-    /// apply them twice. Separate from <see cref="IsPrefilled"/> and <see cref="IsInvitePrefilled"/>.
+    /// apply them twice. Separate from <see cref="IsInvitePrefilled"/>.
     /// </summary>
     public bool IsRememberedPrefilled { get; set; }
 
@@ -196,9 +187,6 @@ public sealed class IntakeWizardState
     /// to the next one.
     /// </summary>
     public bool CanRememberDetails => string.IsNullOrWhiteSpace(InviteToken);
-
-    /// <summary>All known vehicles for the returning customer, enabling one-tap VIN selection in Step 3.</summary>
-    public List<AssetInfoDto> KnownAssets { get; set; } = [];
 
     /// <summary>
     /// The RV's VIN or, for a rig with none such as a truck camper, its serial number (Step 3, issue #807).
@@ -629,25 +617,9 @@ public sealed class IntakeWizardState
     private void RaiseMaxStepReached() => MaxStepReached = Math.Max(MaxStepReached, CurrentStep);
 
     /// <summary>
-    /// Applies customer prefill data from the intake config (magic-link token).
-    /// </summary>
-    public void ApplyPrefill(CustomerInfoDto prefill)
-    {
-        ArgumentNullException.ThrowIfNull(prefill);
-        FirstName = prefill.FirstName;
-        LastName = prefill.LastName;
-        Email = prefill.Email;
-        Phone = prefill.Phone;
-        PreferredContact = prefill.PreferredContact;
-        IsPrefilled = true;
-        NotifyStateChanged();
-    }
-
-    /// <summary>
     /// Applies an A-14 advisor invite's prefill (<c>Spec A-14</c>, issues #664, #693): the first
-    /// name, phone and email the advisor entered. Separate from <see cref="ApplyPrefill"/>, A-7's returning-customer
-    /// path, and it does not set <see cref="IsPrefilled"/>. Fills only blank fields, because the
-    /// invite is re-fetched after a reload and must not undo what the customer typed since.
+    /// name, phone and email the advisor entered. Fills only blank fields, because the invite is
+    /// re-fetched after a reload and must not undo what the customer typed since.
     /// </summary>
     public void ApplyInvitePrefill(IntakeInvitePrefillResponseDto prefill)
     {
@@ -751,20 +723,6 @@ public sealed class IntakeWizardState
 
     private static string? TrimToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    /// <summary>
-    /// Applies asset prefill data from the intake config (magic-link token).
-    /// Sets the most recently used vehicle information so the customer doesn't re-enter it.
-    /// </summary>
-    public void ApplyAssetPrefill(AssetInfoDto prefillAsset)
-    {
-        ArgumentNullException.ThrowIfNull(prefillAsset);
-        Vin = prefillAsset.AssetId;
-        Manufacturer = prefillAsset.Manufacturer;
-        Model = prefillAsset.Model;
-        Year = prefillAsset.Year;
-        NotifyStateChanged();
-    }
 
     /// <summary>
     /// Pre-fills Step 4 with what the plate in the Step 3 photo showed (issue #807). Only the
@@ -987,11 +945,9 @@ public sealed class IntakeWizardState
             PreferredContact = PreferredContact,
             SmsOptOut = SmsOptOut,
             EmailOptOut = EmailOptOut,
-            IsPrefilled = IsPrefilled,
             IsInvitePrefilled = IsInvitePrefilled,
             RememberDetails = RememberDetails,
             IsRememberedPrefilled = IsRememberedPrefilled,
-            KnownAssets = KnownAssets,
             Vin = Vin,
             VehicleSkipped = VehicleSkipped,
             Manufacturer = Manufacturer,
@@ -1049,11 +1005,9 @@ public sealed class IntakeWizardState
             PreferredContact = data.PreferredContact;
             SmsOptOut = data.SmsOptOut;
             EmailOptOut = data.EmailOptOut;
-            IsPrefilled = data.IsPrefilled;
             IsInvitePrefilled = data.IsInvitePrefilled;
             RememberDetails = data.RememberDetails;
             IsRememberedPrefilled = data.IsRememberedPrefilled;
-            KnownAssets = data.KnownAssets;
             Vin = data.Vin;
             VehicleSkipped = data.VehicleSkipped;
             Manufacturer = data.Manufacturer;
@@ -1153,11 +1107,9 @@ public sealed class IntakeWizardState
         PreferredContact = null;
         SmsOptOut = false;
         EmailOptOut = false;
-        IsPrefilled = false;
         IsInvitePrefilled = false;
         RememberDetails = false;
         IsRememberedPrefilled = false;
-        KnownAssets = [];
         Vin = string.Empty;
         VehicleSkipped = false;
         Manufacturer = null;
@@ -1195,19 +1147,13 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
-    /// Builds the URL to navigate to when starting over, preserving the location slug and optional token.
+    /// Builds the URL to navigate to when starting over, preserving the location slug.
     /// </summary>
-    public static string BuildStartOverUrl(string slug, string? token)
+    public static string BuildStartOverUrl(string slug)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
 
-        var url = $"/{Uri.EscapeDataString(slug)}";
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            url += $"?token={Uri.EscapeDataString(token)}";
-        }
-
-        return url;
+        return $"/{Uri.EscapeDataString(slug)}";
     }
 
     /// <summary>
@@ -1453,7 +1399,6 @@ internal sealed class IntakeWizardStateData
     public string? PreferredContact { get; set; }
     public bool SmsOptOut { get; set; }
     public bool EmailOptOut { get; set; }
-    public bool IsPrefilled { get; set; }
     public bool IsInvitePrefilled { get; set; }
 
     /// <summary>Step 2's "Remember my details on this device" (issue #811).</summary>
@@ -1462,7 +1407,6 @@ internal sealed class IntakeWizardStateData
     /// <summary>Whether Step 2 was filled from remembered details (issue #811).</summary>
     public bool IsRememberedPrefilled { get; set; }
 
-    public List<AssetInfoDto> KnownAssets { get; set; } = [];
     public string Vin { get; set; } = string.Empty;
     public bool VehicleSkipped { get; set; }
     public string? Manufacturer { get; set; }

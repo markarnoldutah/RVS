@@ -58,20 +58,18 @@ public class IntakeController : ControllerBase
 
     /// <summary>
     /// Returns the intake form configuration for the specified location slug.
-    /// Includes dealership name, accepted file types, issue categories, and optional customer prefill.
+    /// Includes dealership name, accepted file types and issue categories.
     /// </summary>
     /// <param name="locationSlug">Location slug for resolving the intake context.</param>
-    /// <param name="token">Optional magic-link token to prefill customer data (A-7 — deferred and
-    /// unreachable, since nothing RVS sends carries it; Spec A-7, #673).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <example>
-    /// GET /api/intake/camping-world-slc/config?token=abc123
+    /// GET /api/intake/camping-world-slc/config
     /// </example>
     [HttpGet("config")]
     public async Task<ActionResult<IntakeConfigResponseDto>> GetConfig(
-        string locationSlug, [FromQuery] string? token = null, CancellationToken ct = default)
+        string locationSlug, CancellationToken ct = default)
     {
-        var config = await _intakeService.GetIntakeConfigAsync(locationSlug, token, ct);
+        var config = await _intakeService.GetIntakeConfigAsync(locationSlug, ct);
 
         return Ok(config);
     }

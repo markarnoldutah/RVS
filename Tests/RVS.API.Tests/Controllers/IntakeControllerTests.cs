@@ -57,7 +57,7 @@ public class IntakeControllerTests
             MaxAttachments = 10,
             AllowAnonymousIntake = true
         };
-        _intakeServiceMock.Setup(s => s.GetIntakeConfigAsync("camping-world-slc", null, It.IsAny<CancellationToken>()))
+        _intakeServiceMock.Setup(s => s.GetIntakeConfigAsync("camping-world-slc", It.IsAny<CancellationToken>()))
             .ReturnsAsync(config);
 
         var result = await _sut.GetConfig("camping-world-slc");
@@ -66,32 +66,6 @@ public class IntakeControllerTests
         var dto = okResult.Value.Should().BeOfType<IntakeConfigResponseDto>().Subject;
         dto.LocationName.Should().Be("Salt Lake");
         dto.DealershipName.Should().Be("Camping World");
-    }
-
-    [Fact]
-    public async Task GetConfig_WithMagicLinkToken_ShouldPassTokenToService()
-    {
-        var config = new IntakeConfigResponseDto
-        {
-            LocationName = "Test",
-            LocationSlug = "test-slug",
-            DealershipName = "Test Dealer",
-            PrefillCustomer = new CustomerInfoDto
-            {
-                FirstName = "Jane",
-                LastName = "Doe",
-                Email = "jane@example.com"
-            }
-        };
-        _intakeServiceMock.Setup(s => s.GetIntakeConfigAsync("test-slug", "magic-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(config);
-
-        var result = await _sut.GetConfig("test-slug", "magic-token");
-
-        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var dto = okResult.Value.Should().BeOfType<IntakeConfigResponseDto>().Subject;
-        dto.PrefillCustomer.Should().NotBeNull();
-        dto.PrefillCustomer!.FirstName.Should().Be("Jane");
     }
 
     // ── Spec A-14: invite prefill ────────────────────────────────────────────

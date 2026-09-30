@@ -17,7 +17,6 @@ public class IntakeWizardStateTests
         state.CurrentStep.Should().Be(1);
         state.TotalSteps.Should().Be(8);
         state.Slug.Should().BeEmpty();
-        state.Token.Should().BeNull();
         state.Config.Should().BeNull();
         state.FirstName.Should().BeEmpty();
         state.LastName.Should().BeEmpty();
@@ -26,7 +25,6 @@ public class IntakeWizardStateTests
         state.PreferredContact.Should().BeNull();
         state.SmsOptOut.Should().BeFalse();
         state.EmailOptOut.Should().BeFalse();
-        state.IsPrefilled.Should().BeFalse();
         state.Vin.Should().BeEmpty();
         state.VinLookupSucceeded.Should().BeFalse();
         state.IsSubmitted.Should().BeFalse();
@@ -109,39 +107,6 @@ public class IntakeWizardStateTests
         state.CurrentStep.Should().Be(1);
     }
 
-    [Fact]
-    public void ApplyPrefill_ShouldSetCustomerFields()
-    {
-        var state = CreateState();
-        var prefill = new CustomerInfoDto
-        {
-            FirstName = "Jane",
-            LastName = "Doe",
-            Email = "jane@example.com",
-            Phone = "555-1234",
-            PreferredContact = "Text"
-        };
-
-        state.ApplyPrefill(prefill);
-
-        state.FirstName.Should().Be("Jane");
-        state.LastName.Should().Be("Doe");
-        state.Email.Should().Be("jane@example.com");
-        state.Phone.Should().Be("555-1234");
-        state.PreferredContact.Should().Be("Text");
-        state.IsPrefilled.Should().BeTrue();
-    }
-
-    [Fact]
-    public void ApplyPrefill_NullPrefill_ShouldThrow()
-    {
-        var state = CreateState();
-
-        var act = () => state.ApplyPrefill(null!);
-
-        act.Should().Throw<ArgumentNullException>();
-    }
-
     // ── Spec A-14: invite prefill ────────────────────────────────────────────
 
     [Fact]
@@ -166,18 +131,6 @@ public class IntakeWizardStateTests
         state.LastName.Should().BeEmpty();
         state.Email.Should().BeEmpty();
         state.PreferredContact.Should().BeNull();
-    }
-
-    [Fact]
-    public void ApplyInvitePrefill_ShouldNotLookLikeAReturningCustomerMatch()
-    {
-        // A-7's magic-link prefill (IsPrefilled) greets a known customer; an invite knows only
-        // what the advisor typed, and is a separate path.
-        var state = CreateState();
-
-        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
-
-        state.IsPrefilled.Should().BeFalse();
     }
 
     [Fact]
@@ -323,36 +276,6 @@ public class IntakeWizardStateTests
 
         state.InviteToken.Should().BeNull();
         state.IsInvitePrefilled.Should().BeFalse();
-    }
-
-    [Fact]
-    public void ApplyAssetPrefill_ShouldSetAssetFields()
-    {
-        var state = CreateState();
-        var prefillAsset = new AssetInfoDto
-        {
-            AssetId = "1HGBH41JXMN109186",
-            Manufacturer = "Grand Design",
-            Model = "Momentum 395G",
-            Year = 2023
-        };
-
-        state.ApplyAssetPrefill(prefillAsset);
-
-        state.Vin.Should().Be("1HGBH41JXMN109186");
-        state.Manufacturer.Should().Be("Grand Design");
-        state.Model.Should().Be("Momentum 395G");
-        state.Year.Should().Be(2023);
-    }
-
-    [Fact]
-    public void ApplyAssetPrefill_NullPrefill_ShouldThrow()
-    {
-        var state = CreateState();
-
-        var act = () => state.ApplyAssetPrefill(null!);
-
-        act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
@@ -1277,16 +1200,6 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public void Token_ShouldBeSettable()
-    {
-        var state = CreateState();
-
-        state.Token = "dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ";
-
-        state.Token.Should().Be("dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ");
-    }
-
-    [Fact]
     public void SubmissionMagicLinkToken_ShouldDefaultToNull()
     {
         var state = CreateState();
@@ -1373,12 +1286,7 @@ public class IntakeWizardStateTests
         var fired = false;
         state.OnChange += () => fired = true;
 
-        state.ApplyPrefill(new CustomerInfoDto
-        {
-            FirstName = "Jane",
-            LastName = "Doe",
-            Email = "jane@example.com"
-        });
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
 
         fired.Should().BeTrue();
     }
@@ -1399,31 +1307,7 @@ public class IntakeWizardStateTests
     [Fact]
     public void BuildStartOverUrl_ShouldReturnIntakeUrlWithSlug()
     {
-        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", null);
-
-        url.Should().Be("/camping-world-slc");
-    }
-
-    [Fact]
-    public void BuildStartOverUrl_WithToken_ShouldIncludeTokenQueryParam()
-    {
-        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ");
-
-        url.Should().Be("/camping-world-slc?token=dK3mRw9x%3AXv2pLqN8aTcBfY7mZs4eWQ");
-    }
-
-    [Fact]
-    public void BuildStartOverUrl_WithWhitespaceToken_ShouldOmitTokenQueryParam()
-    {
-        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "   ");
-
-        url.Should().Be("/camping-world-slc");
-    }
-
-    [Fact]
-    public void BuildStartOverUrl_WithEmptyToken_ShouldOmitTokenQueryParam()
-    {
-        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "");
+        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc");
 
         url.Should().Be("/camping-world-slc");
     }
@@ -1431,7 +1315,7 @@ public class IntakeWizardStateTests
     [Fact]
     public void BuildStartOverUrl_ShouldEncodeSlug()
     {
-        var url = IntakeWizardState.BuildStartOverUrl("slug with spaces", null);
+        var url = IntakeWizardState.BuildStartOverUrl("slug with spaces");
 
         url.Should().Be("/slug%20with%20spaces");
     }
@@ -1439,7 +1323,7 @@ public class IntakeWizardStateTests
     [Fact]
     public void BuildStartOverUrl_NullSlug_ShouldThrow()
     {
-        var act = () => IntakeWizardState.BuildStartOverUrl(null!, null);
+        var act = () => IntakeWizardState.BuildStartOverUrl(null!);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -1447,7 +1331,7 @@ public class IntakeWizardStateTests
     [Fact]
     public void BuildStartOverUrl_EmptySlug_ShouldThrow()
     {
-        var act = () => IntakeWizardState.BuildStartOverUrl("", null);
+        var act = () => IntakeWizardState.BuildStartOverUrl("");
 
         act.Should().Throw<ArgumentException>();
     }
