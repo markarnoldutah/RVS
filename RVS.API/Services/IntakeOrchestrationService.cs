@@ -95,10 +95,12 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             }
         }
 
-        // Only a VIN is unique enough to key ownership and the X-2 ledger on. A six-digit serial
-        // from one manufacturer can match another's, and transferring "ownership" on that match
-        // would take a rig away from the wrong customer.
-        var tracksVehicleHistory = VehicleIdentifierValidator.IsVin(assetId);
+        // Vehicle history (ownership and the X-2 ledger) is keyed on the VIN, or on manufacturer
+        // plus serial number, e.g. LANCE:152263 (issue #808). A six-digit serial alone can match
+        // another manufacturer's, and transferring "ownership" on that match would take a rig
+        // away from the wrong customer, so a serial with no manufacturer records no history.
+        // The request and packet keep the identifier as entered; the key is internal.
+        var historyKey = VehicleHistoryKey.For(assetId, request.Asset.Manufacturer);
 
         // ── Step 1: Resolve slug → tenantId + locationId ─────────────────────
         var slugLookup = await _slugLookupRepository.GetBySlugAsync(slug.Trim().ToLowerInvariant(), cancellationToken)
@@ -206,19 +208,19 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 profile.Id, tenantId);
         }
 
-        if (tracksVehicleHistory)
+        if (historyKey is not null)
         {
-            var existingOwner = await _customerProfileRepository.GetByActiveAssetIdAsync(tenantId, assetId, cancellationToken);
+            var existingOwner = await _customerProfileRepository.GetByActiveAssetIdAsync(tenantId, historyKey, cancellationToken);
             if (existingOwner is not null && existingOwner.Id != profile.Id)
             {
-                existingOwner.DeactivateAsset(assetId);
+                existingOwner.DeactivateAsset(historyKey);
                 existingOwner.MarkAsUpdated("intake");
                 await _customerProfileRepository.UpdateAsync(existingOwner, cancellationToken);
                 _logger.LogInformation("Intake Step 3: Transferred asset {AssetId} ownership from profile {OldProfileId} to {NewProfileId}",
-                    assetId, existingOwner.Id, profile.Id);
+                    historyKey, existingOwner.Id, profile.Id);
             }
 
-            profile.ActivateOrRefreshAsset(assetId, request.Asset.Manufacturer?.Trim(), request.Asset.Model?.Trim(), request.Asset.Year);
+            profile.ActivateOrRefreshAsset(historyKey, request.Asset.Manufacturer?.Trim(), request.Asset.Model?.Trim(), request.Asset.Year);
         }
 
         profile.MarkAsUpdated("intake");
@@ -326,8 +328,8 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         }
 
         // ── Step 5: Append AssetLedgerEntry per request (non-blocking on failure) ─
-        // Only a VIN has a ledger: see tracksVehicleHistory above.
-        if (tracksVehicleHistory)
+        // Only a rig with a history key has a ledger: see historyKey above.
+        if (historyKey is not null)
         {
             foreach (var serviceRequest in serviceRequests)
             {
@@ -335,7 +337,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 {
                     var ledgerEntry = new AssetLedgerEntry
                     {
-                        AssetId = assetId,
+                        AssetId = historyKey,
                         TenantId = tenantId,
                         DealershipName = slugLookup.DealershipName,
                         ServiceRequestId = serviceRequest.Id,
@@ -350,12 +352,12 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
                     await _assetLedgerRepository.AppendAsync(ledgerEntry, cancellationToken);
                     _logger.LogInformation("Intake Step 5: Appended AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}",
-                        assetId, serviceRequest.Id);
+                        historyKey, serviceRequest.Id);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Intake Step 5: Failed to append AssetLedgerEntry for asset {AssetId}, SR {ServiceRequestId}. Continuing intake.",
-                        assetId, serviceRequest.Id);
+                        historyKey, serviceRequest.Id);
                 }
             }
         }
@@ -377,9 +379,9 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             globalAcct.MagicLinkToken = GlobalCustomerAcctService.GenerateMagicLinkToken(normalizedEmail);
             globalAcct.MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(90);
         }
-        if (tracksVehicleHistory && !globalAcct.AllKnownAssetIds.Contains(assetId))
+        if (historyKey is not null && !globalAcct.AllKnownAssetIds.Contains(historyKey))
         {
-            globalAcct.AllKnownAssetIds.Add(assetId);
+            globalAcct.AllKnownAssetIds.Add(historyKey);
         }
 
         var alreadyLinked = globalAcct.LinkedProfiles
@@ -625,15 +627,18 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
                 {
                     const int maxAssetLookups = 10;
                     AssetInfoDto? lastEnrichedAsset = null;
-                    foreach (var assetId in acct.AllKnownAssetIds.TakeLast(maxAssetLookups))
+                    foreach (var historyKey in acct.AllKnownAssetIds.TakeLast(maxAssetLookups))
                     {
-                        var entries = await _assetLedgerRepository.GetByAssetIdAsync(assetId, cancellationToken);
+                        // A serial-number rig is keyed MANUFACTURER:SERIAL (issue #808); the
+                        // customer sees the serial number, never the key.
+                        var assetId = VehicleHistoryKey.ToIdentifier(historyKey);
+                        var entries = await _assetLedgerRepository.GetByAssetIdAsync(historyKey, cancellationToken);
                         var mostRecent = entries.LastOrDefault();
                         if (mostRecent is not null)
                         {
                             var assetDto = new AssetInfoDto
                             {
-                                AssetId = mostRecent.AssetId,
+                                AssetId = assetId,
                                 Manufacturer = mostRecent.Manufacturer,
                                 Model = mostRecent.Model,
                                 Year = mostRecent.Year,

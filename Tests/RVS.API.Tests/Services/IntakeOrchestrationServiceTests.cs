@@ -675,7 +675,7 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenAssetIdIsASerialNumber_ShouldNotTransferOwnershipOrRecordItOnTheProfile()
+    public async Task ExecuteAsync_WhenSerialNumberHasNoManufacturer_ShouldNotTransferOwnershipOrRecordItOnTheProfile()
     {
         SetupFullHappyPath();
 
@@ -684,7 +684,7 @@ public class IntakeOrchestrationServiceTests
             .Callback<CustomerProfile, CancellationToken>((p, _) => capturedProfile = p)
             .ReturnsAsync((CustomerProfile p, CancellationToken _) => p);
 
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263"));
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: null));
 
         _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -692,18 +692,137 @@ public class IntakeOrchestrationServiceTests
         capturedProfile!.AssetsOwned.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task ExecuteAsync_WhenAssetIdIsASerialNumber_ShouldNotAppendAssetLedgerEntryOrKnownAssetId()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    [InlineData("Camper Mfg. Co.")]
+    public async Task ExecuteAsync_WhenSerialNumberHasNoManufacturer_ShouldNotAppendAssetLedgerEntryOrKnownAssetId(string? manufacturer)
     {
         SetupFullHappyPath();
 
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263"));
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: manufacturer));
 
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _ledgerRepoMock.Verify(r => r.AppendAsync(
             It.IsAny<AssetLedgerEntry>(), It.IsAny<CancellationToken>()), Times.Never);
         _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("152263")),
+            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Any(id => id.Contains("152263"))),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── Serial numbers keyed on manufacturer (issue #808) ───────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSerialNumberHasManufacturer_ShouldRecordOwnershipUnderTheCompositeKey()
+    {
+        SetupFullHappyPath();
+        _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "LANCE:152263", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CustomerProfile?)null);
+
+        CustomerProfile? capturedProfile = null;
+        _profileRepoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .Callback<CustomerProfile, CancellationToken>((p, _) => capturedProfile = p)
+            .ReturnsAsync((CustomerProfile p, CancellationToken _) => p);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: "Lance Camper Mfg. Corp."));
+
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            "ten_test", "LANCE:152263", It.IsAny<CancellationToken>()), Times.Once);
+        capturedProfile.Should().NotBeNull();
+        var owned = capturedProfile!.AssetsOwned.Should().ContainSingle().Subject;
+        owned.AssetId.Should().Be("LANCE:152263");
+        owned.Status.Should().Be(AssetOwnershipStatus.Active);
+        owned.Manufacturer.Should().Be("Lance Camper Mfg. Corp.");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSerialNumberHasManufacturer_ShouldAppendLedgerEntryAndKnownAssetIdUnderTheCompositeKey()
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: "Lance"));
+
+        _ledgerRepoMock.Verify(r => r.AppendAsync(
+            It.Is<AssetLedgerEntry>(e => e.AssetId == "LANCE:152263" && e.Manufacturer == "Lance"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("LANCE:152263") && !a.AllKnownAssetIds.Contains("152263")),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSerialNumberHasManufacturer_ShouldKeepTheSerialNumberAsEnteredOnTheServiceRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152 263", manufacturer: "Lance"));
+
+        result.ServiceRequest.AssetInfo.AssetId.Should().Be("152263");
+        result.ServiceRequest.AssetInfo.Manufacturer.Should().Be("Lance");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSameSerialIsOwnedUnderAnotherManufacturer_ShouldNotTransferOwnership()
+    {
+        SetupFullHappyPath();
+        var otherOwner = BuildProfile("cp_other");
+        otherOwner.AssetsOwned.Add(new AssetOwnershipEmbedded
+        {
+            AssetId = "NORTHERNLITE:152263",
+            Status = AssetOwnershipStatus.Active,
+            RequestCount = 1,
+        });
+        _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "NORTHERNLITE:152263", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(otherOwner);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: "Lance"));
+
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            It.IsAny<string>(), "NORTHERNLITE:152263", It.IsAny<CancellationToken>()), Times.Never);
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.Id == "cp_other"),
+            It.IsAny<CancellationToken>()), Times.Never);
+        otherOwner.AssetsOwned.Single().Status.Should().Be(AssetOwnershipStatus.Active);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSameSerialAndManufacturerIsOwnedByAnotherProfile_ShouldTransferOwnership()
+    {
+        SetupFullHappyPath();
+        var otherOwner = BuildProfile("cp_other");
+        otherOwner.AssetsOwned.Add(new AssetOwnershipEmbedded
+        {
+            AssetId = "LANCE:152263",
+            Status = AssetOwnershipStatus.Active,
+            RequestCount = 1,
+        });
+        _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "LANCE:152263", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(otherOwner);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: "Lance Camper"));
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.Id == "cp_other"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        otherOwner.AssetsOwned.Single().Status.Should().Be(AssetOwnershipStatus.Inactive);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenVin_ShouldKeyHistoryOnTheVinWhateverTheManufacturer()
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(manufacturer: "Lance"));
+
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            "ten_test", "1HGBH41JXMN109186", It.IsAny<CancellationToken>()), Times.Once);
+        _ledgerRepoMock.Verify(r => r.AppendAsync(
+            It.Is<AssetLedgerEntry>(e => e.AssetId == "1HGBH41JXMN109186"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("1HGBH41JXMN109186")),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
     [Theory]
@@ -1848,7 +1967,8 @@ public class IntakeOrchestrationServiceTests
         bool emailOptOut = false,
         string? intakeSource = null,
         string? inviteToken = null,
-        string assetId = "1HGBH41JXMN109186")
+        string assetId = "1HGBH41JXMN109186",
+        string? manufacturer = "Grand Design")
     {
         return new ServiceRequestCreateRequestDto
         {
@@ -1863,7 +1983,7 @@ public class IntakeOrchestrationServiceTests
             Asset = new AssetInfoDto
             {
                 AssetId = assetId,
-                Manufacturer = "Grand Design",
+                Manufacturer = manufacturer,
                 Model = "Momentum 395G",
                 Year = 2023,
             },
@@ -2191,6 +2311,29 @@ public class IntakeOrchestrationServiceTests
         result.KnownAssets[2].Manufacturer.Should().BeNull();
         result.PrefillAsset.Should().NotBeNull();
         result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenKnownAssetIsASerialNumber_ShouldReturnTheSerialNumberNotTheHistoryKey()
+    {
+        SetupConfigHappyPath();
+        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["LANCE:152263", "NORTHERNLITE:9876"]);
+        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(acct);
+
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("LANCE:152263", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AssetLedgerEntry>
+            {
+                new() { AssetId = "LANCE:152263", Manufacturer = "Lance", Model = "855S", Year = 2021, GlobalCustomerAcctId = acct.Id }
+            });
+        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("NORTHERNLITE:9876", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AssetLedgerEntry>());
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
+
+        result.KnownAssets.Select(a => a.AssetId).Should().Equal("152263", "9876");
+        result.PrefillAsset!.AssetId.Should().Be("152263");
+        result.PrefillAsset.Manufacturer.Should().Be("Lance");
     }
 
     [Fact]

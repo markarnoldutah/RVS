@@ -177,7 +177,7 @@ Create the invites from the manager app (3.6) first.
 
 - [ ] Every intake page, the site root included, shows *Powered by **Arnold Digital Solutions*** in the footer, with links to `/privacy`, `/terms` and `/sms-terms`.
 - [ ] All three policy pages load with no login, link to each other and end with the contact address `support@arnolddigitalsolutions.com`.
-- [ ] The privacy policy states retention as the Spec does: contact details and requests are kept while the dealership uses RV Intake or until the customer asks for deletion, and the VIN-keyed service history is kept indefinitely.
+- [ ] The privacy policy states retention as the Spec does: contact details and requests are kept while the dealership uses RV Intake or until the customer asks for deletion, and the service history, identified by a unique identifier such as VIN or serial number, is kept indefinitely.
 
 ### 1.10 Look, feel and accessibility (THEME-1)
 

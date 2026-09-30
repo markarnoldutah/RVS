@@ -128,6 +128,8 @@ The opt-out check before a text reads `customer-profiles` in the tenant's partit
 
 Append-only. `assetId`, `tenantId`, `serviceRequestId`, `globalCustomerAcctId`, make/model/year, issue, status and `submittedAt`.
 
+`assetId` is the vehicle-history key from `VehicleHistoryKey.For` (Spec A-3): the VIN, or `MANUFACTURER:SERIAL` (e.g. `LANCE:152263`) for a rig with only a serial number (issue #808). The same key is used for `CustomerProfile.assetsOwned[].assetId` and `GlobalCustomerAcct.allKnownAssetIds[]`. `ServiceRequest.assetInfo.assetId` is not a key: it holds the VIN or serial number as entered. A serial number with no usable manufacturer gets no key, so no entry, ownership record or known asset ID. Entries written under #807 are not backfilled.
+
 Written once per intake submission by `IntakeOrchestrationService`, best-effort — a failure is swallowed and does not roll back the request. Written but not read while A-7 is deferred (#673): vehicle prefill is its only reader, and it is unreachable.
 
 This is Spec X-2. Nothing else reads it, and that is correct. It exists so the record is there later. The optional `section10A` outcome block it used to carry was archived scope and was removed in #457; the entry itself stays.

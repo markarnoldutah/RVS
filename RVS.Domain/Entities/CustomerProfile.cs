@@ -201,7 +201,7 @@ public class CustomerProfile : EntityBase
     /// Deactivates the active ownership entry for the specified asset.
     /// No-op if the asset is not actively owned by this profile.
     /// </summary>
-    /// <param name="assetId">Asset identifier (VIN), e.g. <c>1FTFW1ET5EKE12345</c>.</param>
+    /// <param name="assetId">Vehicle-history key, e.g. <c>1FTFW1ET5EKE12345</c> or <c>LANCE:152263</c>.</param>
     public void DeactivateAsset(string assetId)
     {
         var active = GetActiveInteraction(assetId);
@@ -262,7 +262,8 @@ public class CustomerProfile : EntityBase
 public class AssetOwnershipEmbedded
 {
     /// <summary>
-    /// Asset identifier — the 17-character Vehicle Identification Number (VIN).
+    /// Vehicle-history key from <see cref="Validation.VehicleHistoryKey"/>: the VIN, or
+    /// <c>MANUFACTURER:SERIAL</c> for a rig with only a serial number (issue #808).
     /// </summary>
     [JsonProperty("assetId")]
     public string AssetId { get; set; } = string.Empty;
