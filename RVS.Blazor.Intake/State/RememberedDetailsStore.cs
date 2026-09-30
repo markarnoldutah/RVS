@@ -5,15 +5,21 @@ using Microsoft.JSInterop;
 namespace RVS.Blazor.Intake.State;
 
 /// <summary>
-/// What "Remember my details on this device" keeps (issue #811, Spec A-7): contact details and
-/// the RV's VIN or serial number. Contact preferences and opt-outs are deliberately not kept.
+/// What "Remember my details on this device" keeps (issues #811, #819, Spec A-7): contact
+/// details, the preferred contact method, and the RV's VIN or serial number with its
+/// manufacturer, model and year. Opt-outs are deliberately not kept. The fields added by #819
+/// are optional so an entry saved before them still reads.
 /// </summary>
 public sealed record RememberedDetails(
     [property: JsonPropertyName("firstName")] string FirstName,
     [property: JsonPropertyName("lastName")] string LastName,
     [property: JsonPropertyName("email")] string Email,
     [property: JsonPropertyName("phone")] string? Phone,
-    [property: JsonPropertyName("vin")] string? Vin);
+    [property: JsonPropertyName("vin")] string? Vin,
+    [property: JsonPropertyName("preferredContact")] string? PreferredContact = null,
+    [property: JsonPropertyName("manufacturer")] string? Manufacturer = null,
+    [property: JsonPropertyName("model")] string? Model = null,
+    [property: JsonPropertyName("year")] int? Year = null);
 
 /// <summary>
 /// Keeps the customer's <see cref="RememberedDetails"/> on this device, only when they asked for
@@ -83,7 +89,7 @@ public sealed class RememberedDetailsStore
         return details;
     }
 
-    /// <summary>Forgets the remembered details — the customer unticked the box or said "Not you?".</summary>
+    /// <summary>Forgets the remembered details — the customer unticked the box.</summary>
     public Task ForgetAsync() =>
         TryAsync(() => _jsRuntime.InvokeVoidAsync("localStorage.removeItem", StorageKey).AsTask());
 
