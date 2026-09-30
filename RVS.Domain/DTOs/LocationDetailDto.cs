@@ -35,6 +35,9 @@ public sealed record LocationDetailDto
     /// <summary>Customer-facing branding (<c>Spec A-16</c>, issue #470).</summary>
     public LocationBrandingDto Branding { get; init; } = new();
 
+    /// <summary>Questions added to every intake's diagnostic step (<c>Spec A-18</c>, issue #785).</summary>
+    public List<string> DealerQuestions { get; init; } = [];
+
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
 }

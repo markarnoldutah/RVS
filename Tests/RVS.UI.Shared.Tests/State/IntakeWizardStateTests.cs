@@ -1772,6 +1772,79 @@ public class IntakeWizardStateTests
         state.DiagnosticResponses[1].FreeTextResponse.Should().Be("A click");
     }
 
+    // ── Dealer questions (Spec A-18, issue #785) ────────────────────────
+
+    private static IntakeConfigResponseDto ConfigWithDealerQuestions(params string[] questions) => new()
+    {
+        LocationName = "Salt Lake",
+        LocationSlug = "acme-rv",
+        DealershipName = "Acme RV",
+        DealerQuestions = [.. questions]
+    };
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WhenTheLocationHasNoDealerQuestions_ShouldShowOnlyTheAiQuestions()
+    {
+        var state = CreateState();
+        state.Config = ConfigWithDealerQuestions();
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Select(q => q.QuestionText).Should().Equal(
+            "Is the slide-out moving at all?", "Do you hear the motor?");
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_ShouldAddTheDealerQuestionsAfterTheAiQuestionsAsFreeText()
+    {
+        var state = CreateState();
+        state.Config = ConfigWithDealerQuestions("Where is the RV stored?", "Do you need a loaner?");
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Select(q => q.QuestionText).Should().Equal(
+            "Is the slide-out moving at all?", "Do you hear the motor?",
+            "Where is the RV stored?", "Do you need a loaner?");
+        state.DiagnosticQuestions.Skip(2).Should().OnlyContain(q => q.AllowFreeText && q.Options.Count == 0);
+        state.DiagnosticResponses.Select(r => r.QuestionText).Should().Equal(
+            state.DiagnosticQuestions.Select(q => q.QuestionText));
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WhenTheAiAlreadyAskedADealerQuestion_ShouldAskItOnce()
+    {
+        // An answer is keyed by its question's text, so the same question twice would share one answer.
+        var state = CreateState();
+        state.Config = ConfigWithDealerQuestions("do you hear the motor?");
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WhenTheAiReturnsNoQuestions_ShouldStillShowTheDealerQuestions()
+    {
+        // Step 6 applies an empty response when the AI call fails, so the dealer's questions still show.
+        var state = CreateState();
+        state.Config = ConfigWithDealerQuestions("Where is the RV stored?");
+
+        state.ApplyDiagnosticQuestions(new DiagnosticQuestionsResponseDto());
+
+        state.DiagnosticQuestions.Select(q => q.QuestionText).Should().Equal("Where is the RV stored?");
+        state.DiagnosticResponses.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WhenConfigIsUnset_ShouldShowOnlyTheAiQuestions()
+    {
+        var state = CreateState();
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Should().HaveCount(2);
+    }
+
     [Fact]
     public void ApplyDiagnosticQuestions_WithNullResponse_ShouldThrow()
     {

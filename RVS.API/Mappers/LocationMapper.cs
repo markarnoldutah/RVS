@@ -1,6 +1,7 @@
 using RVS.Domain.Branding;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Mappers;
 
@@ -29,6 +30,7 @@ public static class LocationMapper
             EnabledCapabilities = [.. entity.EnabledCapabilities],
             PacketConfig = entity.PacketConfig.ToDto(),
             Branding = entity.Branding.ToDto(),
+            DealerQuestions = [.. entity.DealerQuestions],
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
@@ -88,7 +90,8 @@ public static class LocationMapper
             IntakeConfig = dto.IntakeConfig is not null ? dto.IntakeConfig.ToEmbedded() : new IntakeFormConfigEmbedded(),
             EnabledCapabilities = dto.EnabledCapabilities is not null ? [.. dto.EnabledCapabilities] : [],
             PacketConfig = dto.PacketConfig is not null ? dto.PacketConfig.ToEmbedded() : new PacketConfigEmbedded(),
-            Branding = dto.Branding is not null ? dto.Branding.ToEmbedded() : new LocationBrandingEmbedded()
+            Branding = dto.Branding is not null ? dto.Branding.ToEmbedded() : new LocationBrandingEmbedded(),
+            DealerQuestions = DealerQuestionsValidator.Normalize(dto.DealerQuestions)
         };
     }
 
@@ -148,6 +151,11 @@ public static class LocationMapper
         if (dto.Branding is not null)
         {
             entity.Branding = dto.Branding.ToEmbedded();
+        }
+
+        if (dto.DealerQuestions is not null)
+        {
+            entity.DealerQuestions = DealerQuestionsValidator.Normalize(dto.DealerQuestions);
         }
 
         entity.MarkAsUpdated(updatedByUserId);

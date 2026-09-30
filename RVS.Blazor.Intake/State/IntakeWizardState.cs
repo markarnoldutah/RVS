@@ -596,6 +596,8 @@ public sealed class IntakeWizardState
     /// Takes the diagnostic questions Step 6 fetched, with one response per question. An answer
     /// already held for a question asked again is kept — a session saved before the questions
     /// were persisted carries answers but no questions, and Step 6 fetches them anew.
+    /// The location's own questions (<see cref="IntakeConfigResponseDto.DealerQuestions"/>) follow
+    /// the AI's as free-text questions, skipping one the AI already asked (<c>Spec A-18</c>, issue #785).
     /// </summary>
     public void ApplyDiagnosticQuestions(DiagnosticQuestionsResponseDto response)
     {
@@ -605,9 +607,18 @@ public sealed class IntakeWizardState
             .GroupBy(r => r.QuestionText, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
 
-        DiagnosticQuestions = response.Questions;
+        var questions = response.Questions.ToList();
+        foreach (var dealerQuestion in Config?.DealerQuestions ?? [])
+        {
+            if (!questions.Any(q => string.Equals(q.QuestionText, dealerQuestion, StringComparison.OrdinalIgnoreCase)))
+            {
+                questions.Add(new DiagnosticQuestionDto { QuestionText = dealerQuestion, AllowFreeText = true });
+            }
+        }
+
+        DiagnosticQuestions = questions;
         SmartSuggestion = response.SmartSuggestion;
-        DiagnosticResponses = response.Questions
+        DiagnosticResponses = questions
             .Select(q => previous.TryGetValue(q.QuestionText, out var kept)
                 ? kept
                 : new DiagnosticResponseDto { QuestionText = q.QuestionText, SelectedOptions = [], FreeTextResponse = null })

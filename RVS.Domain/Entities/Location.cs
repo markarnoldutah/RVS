@@ -79,6 +79,14 @@ public class Location : EntityBase
     public LocationBrandingEmbedded Branding { get; set; } = new();
 
     /// <summary>
+    /// Up to two questions the dealer asks on every intake, shown on the diagnostic step after the
+    /// AI's and answered in free text (<c>Spec A-18</c>, issue #785). Empty — the default — leaves
+    /// the step as the AI builds it.
+    /// </summary>
+    [JsonProperty("dealerQuestions")]
+    public List<string> DealerQuestions { get; set; } = [];
+
+    /// <summary>
     /// Read-time migration (issue #470): the logo lived at <c>packetConfig.logoUrl</c> (#435)
     /// until branding had a home of its own. A stored legacy logo moves into
     /// <see cref="Branding"/> unless branding already has one, and is never written back, so

@@ -22,6 +22,12 @@ public sealed record IntakeConfigResponseDto
     /// </summary>
     public LocationBrandingDto Branding { get; init; } = new();
 
+    /// <summary>
+    /// The location's own questions, shown on the diagnostic step after the AI's and answered in
+    /// free text (<c>Spec A-18</c>, issue #785). Empty when the location has added none.
+    /// </summary>
+    public List<string> DealerQuestions { get; init; } = [];
+
     public List<string> AcceptedFileTypes { get; init; } = [];
     public int MaxFileSizeMb { get; init; }
     public int MaxAttachments { get; init; }
