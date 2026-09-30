@@ -1,0 +1,40 @@
+/* Photo tiles on the mobile request page (issue #743) — square, cropped to fill, the same
+   treatment as the detail dialog's attachment thumbnails. */
+.sr-media {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+    background: var(--mud-palette-background-gray);
+    color: inherit;
+}
+
+a.sr-media:focus-visible {
+    border-color: var(--mud-palette-primary);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--mud-palette-primary);
+}
+
+.sr-media img,
+.sr-media video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+
+.sr-media-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--mud-palette-white);
+    background: var(--mud-palette-overlay-dark);
+    pointer-events: none;
+}

@@ -184,6 +184,8 @@ This matters more than it looks. If setting status requires an interactive login
 
 Cost is not small: a persistent-session / refresh-token mechanism, an installable PWA so the tap is one hop, and deep-link routes with an `action` query parameter. This does not reuse the anonymous customer-status-token machinery (X-5) — it is authenticated, session-based work.
 
+**The request link opens a phone-first page (issue #743).** A manager reading the packet on a phone at a job needs to act there, not on a desktop board. `/sr/{id}` is one single-column page, usable at 390px, that works the same on every device, so the email does no device detection: the unit and customer, **Call / Text / Email** buttons for the customer (the preferred method marked), the six C-3 statuses as one-tap buttons, the C-9 customer note, the customer's description, the photos, the packet PDF, and **Open on the board** for the full desktop view. The status links (`?action=…`) land on the same page with their one-tap confirm on top. Voice entry for the note is the phone keyboard's own dictation, so there is no manager-side transcription endpoint. The page adds nothing the detail view (C-2) does not already allow, and disposition (C-4) and resend (C-5) stay on the board. It is a quicker way into the same few actions, not a second workspace.
+
 ### C-8 — Status vocabulary decision
 
 **Decided (issue #428, closes Q5): one fixed set, adopted from the code.** The statuses are `New`, `InProgress`, `WaitingOnParts`, `WaitingOnCustomer`, `Completed`, `Cancelled` (C-3), the set already implemented in `StatusTransitions`. Every location uses it as-is.
