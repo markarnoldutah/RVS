@@ -38,7 +38,8 @@ public class GlobalCustomerAcct : EntityBase
     public List<LinkedProfileEmbedded> LinkedProfiles { get; set; } = [];
 
     /// <summary>
-    /// All asset identifiers ever associated with this person across all dealerships.
+    /// All vehicle-history keys ever associated with this person across all dealerships:
+    /// VINs, or <c>MANUFACTURER:SERIAL</c> for serial-number rigs (issue #808).
     /// </summary>
     [JsonProperty("allKnownAssetIds")]
     public List<string> AllKnownAssetIds { get; set; } = [];

@@ -18,7 +18,8 @@ public class AssetLedgerEntry
     public string Id { get; init; } = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// Asset identifier — the 17-character Vehicle Identification Number (VIN).
+    /// Vehicle-history key from <see cref="Validation.VehicleHistoryKey"/>: the VIN, or
+    /// <c>MANUFACTURER:SERIAL</c> for a rig with only a serial number (issue #808).
     /// Partition key — immutable after creation.
     /// </summary>
     [JsonProperty("assetId")]
