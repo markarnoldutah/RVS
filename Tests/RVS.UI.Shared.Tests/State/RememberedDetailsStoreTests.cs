@@ -5,13 +5,15 @@ using RVS.UI.Shared.Tests.Fakes;
 namespace RVS.UI.Shared.Tests.State;
 
 /// <summary>
-/// A customer who ticks "Remember my details on this device" gets their name, email, phone and
-/// VIN filled in on their next visit (issue #811). These pin down the device side of that.
+/// A customer who ticks "Remember my details on this device" gets their name, email, phone,
+/// preferred contact method and vehicle filled in on their next visit (issues #811, #819).
+/// These pin down the device side of that.
 /// </summary>
 public class RememberedDetailsStoreTests
 {
     private static readonly RememberedDetails Jane =
-        new("Jane", "Doe", "jane@example.com", "(801) 555-1234", "1FTFW1ET5DFC10312");
+        new("Jane", "Doe", "jane@example.com", "(801) 555-1234", "1FTFW1ET5DFC10312",
+            "Text", "Grand Design", "Reflection 312BHTS", 2021);
 
     private readonly InMemoryWebStorageJSRuntime _js = new("localStorage");
     private readonly RememberedDetailsStore _sut;
@@ -63,6 +65,18 @@ public class RememberedDetailsStoreTests
         var details = await _sut.GetAsync();
 
         details.Should().Be(Jane with { Vin = null });
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenEntryPredatesPreferredContactAndVehicle_ShouldStillReturnIt()
+    {
+        // Issue #819: details saved under #811 carry no preferred contact or vehicle details.
+        _js.Items[RememberedDetailsStore.StorageKey] =
+            """{"firstName":"Jane","lastName":"Doe","email":"jane@example.com","phone":null,"vin":"SERIAL123"}""";
+
+        var details = await _sut.GetAsync();
+
+        details.Should().Be(new RememberedDetails("Jane", "Doe", "jane@example.com", null, "SERIAL123"));
     }
 
     [Fact]

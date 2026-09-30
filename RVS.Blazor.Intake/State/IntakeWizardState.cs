@@ -185,8 +185,8 @@ public sealed class IntakeWizardState
     public bool RememberDetails { get; set; }
 
     /// <summary>
-    /// Whether Step 2's fields were filled from details this device remembered, so the step can
-    /// offer "Not you?". Separate from <see cref="IsPrefilled"/> and <see cref="IsInvitePrefilled"/>.
+    /// Whether the fields were filled from details this device remembered, so Step 1 does not
+    /// apply them twice. Separate from <see cref="IsPrefilled"/> and <see cref="IsInvitePrefilled"/>.
     /// </summary>
     public bool IsRememberedPrefilled { get; set; }
 
@@ -673,9 +673,10 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
-    /// Fills Step 2 and the Step 3 identifier from details this device remembered (issue #811).
-    /// Fills only blank fields, like the invite prefill, and leaves the contact preferences to the
-    /// customer. The customer opted in last time, so the box starts ticked.
+    /// Fills Step 2, the Step 3 identifier and Step 4 from details this device remembered (issues
+    /// #811, #819). Fills only blank fields, like the invite prefill, and leaves the opt-outs to the
+    /// customer; a remembered preferred contact method is skipped if it is now opted out. The
+    /// customer opted in last time, so the box starts ticked.
     /// </summary>
     public void ApplyRememberedDetails(RememberedDetails details)
     {
@@ -701,9 +702,31 @@ public sealed class IntakeWizardState
             Phone = details.Phone;
         }
 
+        if (string.IsNullOrWhiteSpace(PreferredContact)
+            && !string.IsNullOrWhiteSpace(details.PreferredContact)
+            && IsContactMethodAvailable(details.PreferredContact))
+        {
+            PreferredContact = details.PreferredContact;
+        }
+
         if (string.IsNullOrWhiteSpace(Vin) && !string.IsNullOrWhiteSpace(details.Vin))
         {
             Vin = details.Vin;
+        }
+
+        if (string.IsNullOrWhiteSpace(Manufacturer) && !string.IsNullOrWhiteSpace(details.Manufacturer))
+        {
+            Manufacturer = details.Manufacturer;
+        }
+
+        if (string.IsNullOrWhiteSpace(Model) && !string.IsNullOrWhiteSpace(details.Model))
+        {
+            Model = details.Model;
+        }
+
+        if (!Year.HasValue && details.Year.HasValue)
+        {
+            Year = details.Year;
         }
 
         RememberDetails = true;
@@ -712,31 +735,22 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
-    /// "Not you?" on Step 2 (issue #811): blanks the contact details and identifier and turns
-    /// device memory off. The caller also forgets what the device kept.
-    /// </summary>
-    public void ClearRememberedDetails()
-    {
-        FirstName = string.Empty;
-        LastName = string.Empty;
-        Email = string.Empty;
-        Phone = null;
-        Vin = string.Empty;
-        RememberDetails = false;
-        IsRememberedPrefilled = false;
-        NotifyStateChanged();
-    }
-
-    /// <summary>
-    /// What the device should remember for next time (issue #811): the contact details as
-    /// submitted and the VIN or serial number, unless the customer skipped the vehicle.
+    /// What the device should remember for next time (issues #811, #819): the contact details and
+    /// preferred contact method as submitted, and the vehicle, unless the customer skipped it.
     /// </summary>
     public RememberedDetails ToRememberedDetails() => new(
         FirstName.Trim(),
         LastName.Trim(),
         Email.Trim(),
-        string.IsNullOrWhiteSpace(Phone) ? null : Phone.Trim(),
-        VehicleSkipped || string.IsNullOrWhiteSpace(Vin) ? null : Vin.Trim());
+        TrimToNull(Phone),
+        VehicleSkipped ? null : TrimToNull(Vin),
+        TrimToNull(PreferredContact),
+        VehicleSkipped ? null : TrimToNull(Manufacturer),
+        VehicleSkipped ? null : TrimToNull(Model),
+        VehicleSkipped ? null : Year);
+
+    private static string? TrimToNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// Applies asset prefill data from the intake config (magic-link token).

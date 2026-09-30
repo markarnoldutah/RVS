@@ -5,15 +5,16 @@ using RVS.UI.Shared.Tests.Fakes;
 namespace RVS.UI.Shared.Tests.State;
 
 /// <summary>
-/// Opt-in device memory of the customer's contact details and VIN (issue #811, Spec A-7).
-/// It fills only blank fields, is never offered on an advisor invite, and "Not you?" undoes it.
+/// Opt-in device memory of the customer's contact details, preferred contact method and vehicle
+/// (issues #811, #819, Spec A-7). It fills only blank fields and is never offered on an advisor invite.
 /// </summary>
 public class IntakeWizardStateRememberedDetailsTests
 {
     private const string InviteToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     private static readonly RememberedDetails Jane =
-        new("Jane", "Doe", "jane@example.com", "(801) 555-1234", "1FTFW1ET5DFC10312");
+        new("Jane", "Doe", "jane@example.com", "(801) 555-1234", "1FTFW1ET5DFC10312",
+            "Text", "Grand Design", "Reflection 312BHTS", 2021);
 
     private static IntakeWizardState CreateState() => new(new NullJSRuntime());
 
@@ -38,6 +39,49 @@ public class IntakeWizardStateRememberedDetailsTests
         state.Email.Should().Be("jane@example.com");
         state.Phone.Should().Be("(801) 555-1234");
         state.Vin.Should().Be("1FTFW1ET5DFC10312");
+    }
+
+    [Fact]
+    public void ApplyRememberedDetails_ShouldFillPreferredContactAndVehicleDetails()
+    {
+        // Issue #819: a serial number, or a VIN that will not decode, never reaches the decoder,
+        // so Step 4 is only filled if the device kept what the customer entered last time.
+        var state = CreateState();
+
+        state.ApplyRememberedDetails(Jane);
+
+        state.PreferredContact.Should().Be("Text");
+        state.Manufacturer.Should().Be("Grand Design");
+        state.Model.Should().Be("Reflection 312BHTS");
+        state.Year.Should().Be(2021);
+    }
+
+    [Fact]
+    public void ApplyRememberedDetails_ShouldNotOverwriteChosenPreferredContactOrVehicleDetails()
+    {
+        var state = CreateState();
+        state.PreferredContact = "Phone";
+        state.Manufacturer = "Keystone";
+        state.Model = "Montana";
+        state.Year = 2019;
+
+        state.ApplyRememberedDetails(Jane);
+
+        state.PreferredContact.Should().Be("Phone");
+        state.Manufacturer.Should().Be("Keystone");
+        state.Model.Should().Be("Montana");
+        state.Year.Should().Be(2019);
+    }
+
+    [Fact]
+    public void ApplyRememberedDetails_WhenThePreferredChannelIsOptedOut_ShouldLeavePreferredContactBlank()
+    {
+        var state = CreateState();
+        state.SmsOptOut = true;
+
+        state.ApplyRememberedDetails(Jane);
+
+        state.PreferredContact.Should().BeNull();
     }
 
     [Fact]
@@ -79,13 +123,12 @@ public class IntakeWizardStateRememberedDetailsTests
     }
 
     [Fact]
-    public void ApplyRememberedDetails_ShouldLeaveContactPreferencesForTheCustomer()
+    public void ApplyRememberedDetails_ShouldLeaveOptOutsForTheCustomer()
     {
         var state = CreateState();
 
         state.ApplyRememberedDetails(Jane);
 
-        state.PreferredContact.Should().BeNull();
         state.SmsOptOut.Should().BeFalse();
         state.EmailOptOut.Should().BeFalse();
     }
@@ -120,31 +163,18 @@ public class IntakeWizardStateRememberedDetailsTests
     }
 
     [Fact]
-    public void ClearRememberedDetails_ShouldBlankWhatWasFilledAndOptOut()
-    {
-        var state = CreateState();
-        state.ApplyRememberedDetails(Jane);
-
-        state.ClearRememberedDetails();
-
-        state.FirstName.Should().BeEmpty();
-        state.LastName.Should().BeEmpty();
-        state.Email.Should().BeEmpty();
-        state.Phone.Should().BeNull();
-        state.Vin.Should().BeEmpty();
-        state.RememberDetails.Should().BeFalse();
-        state.IsRememberedPrefilled.Should().BeFalse();
-    }
-
-    [Fact]
-    public void ToRememberedDetails_ShouldCarryContactDetailsAndVin()
+    public void ToRememberedDetails_ShouldCarryContactDetailsPreferredContactAndVehicle()
     {
         var state = CreateState();
         state.FirstName = " Jane ";
         state.LastName = "Doe";
         state.Email = "jane@example.com";
         state.Phone = "(801) 555-1234";
+        state.PreferredContact = "Text";
         state.Vin = "1FTFW1ET5DFC10312";
+        state.Manufacturer = " Grand Design ";
+        state.Model = "Reflection 312BHTS";
+        state.Year = 2021;
 
         var details = state.ToRememberedDetails();
 
@@ -152,17 +182,23 @@ public class IntakeWizardStateRememberedDetailsTests
     }
 
     [Fact]
-    public void ToRememberedDetails_WhenTheVehicleWasSkipped_ShouldCarryNoVin()
+    public void ToRememberedDetails_WhenTheVehicleWasSkipped_ShouldCarryNoVehicle()
     {
         var state = CreateState();
         state.FirstName = "Jane";
         state.Email = "jane@example.com";
         state.Vin = "1FTFW1ET5DFC10312";
+        state.Manufacturer = "Grand Design";
+        state.Model = "Reflection 312BHTS";
+        state.Year = 2021;
         state.VehicleSkipped = true;
 
         var details = state.ToRememberedDetails();
 
         details.Vin.Should().BeNull();
+        details.Manufacturer.Should().BeNull();
+        details.Model.Should().BeNull();
+        details.Year.Should().BeNull();
     }
 
     [Fact]
