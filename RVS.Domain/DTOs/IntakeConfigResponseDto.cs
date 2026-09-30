@@ -51,4 +51,11 @@ public sealed record IntakeConfigResponseDto
     /// The UI should inform the customer that their link expired while still allowing anonymous intake.
     /// </summary>
     public bool TokenExpired { get; init; }
+
+    /// <summary>
+    /// True when the location's tenant has been disabled for longer than the capture window, so
+    /// the slug no longer accepts new requests (<c>Spec A-19</c>, issue #478). The intake app shows
+    /// a neutral notice in place of the wizard. Why the tenant is disabled never reaches the wire.
+    /// </summary>
+    public bool IntakeExpired { get; init; }
 }

@@ -93,6 +93,23 @@ public sealed class ExceptionHandlingMiddlewareTests
     }
 
     [Fact]
+    public async Task IntakeExpiredException_Returns410_WithProblemDetails()
+    {
+        var context = CreateHttpContext();
+        RequestDelegate next = _ => throw new IntakeExpiredException();
+
+        await _middleware.InvokeAsync(context, next);
+
+        var problem = await DeserializeProblemDetails(context);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status410Gone);
+        context.Response.ContentType.Should().Contain("application/problem+json");
+        problem.Type.Should().Be("https://api.rvserviceflow.com/errors/intake-expired");
+        problem.Title.Should().Be("Gone");
+        problem.Status.Should().Be(410);
+        problem.Detail.Should().Be("This location isn't accepting online service requests right now.");
+    }
+
+    [Fact]
     public async Task ConflictException_Returns409_WithProblemDetails()
     {
         var context = CreateHttpContext();
