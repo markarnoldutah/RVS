@@ -290,6 +290,46 @@
                             </MudPaper>
                         }
 
+                        @* Dealer questions — Spec A-18 (issue #785). Both optional; with none set the
+                           intake's diagnostic step is exactly what the AI builds. *@
+                        <MudStack Spacing="1" Class="mt-2">
+                            <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Intake Questions</MudText>
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                                Up to @DealerQuestionsValidator.MaxQuestions questions you want answered on every service
+                                request. Customers see them after the diagnostic questions RV Intake suggests, and answer
+                                in their own words. Leave blank to ask none.
+                            </MudText>
+                        </MudStack>
+
+                        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                            <MudStack Spacing="4">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Question 1</MudText>
+                                    <MudTextField T="string" @bind-Value="_form.DealerQuestion1"
+                                                  Validation="@(new Func<string?, string?>(ValidateDealerQuestion))"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Immediate="true"
+                                                  Clearable="true"
+                                                  MaxLength="DealerQuestionsValidator.MaxQuestionLength"
+                                                  Placeholder="e.g., Where is the RV parked right now?"
+                                                  autocomplete="off" />
+                                </MudStack>
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Question 2</MudText>
+                                    <MudTextField T="string" @bind-Value="_form.DealerQuestion2"
+                                                  Validation="@(new Func<string?, string?>(ValidateSecondDealerQuestion))"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Immediate="true"
+                                                  Clearable="true"
+                                                  MaxLength="DealerQuestionsValidator.MaxQuestionLength"
+                                                  Placeholder="e.g., Will you need a loaner tow vehicle?"
+                                                  autocomplete="off" />
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+
                         @* Service packet email — Spec B-6 / C-6 (issue #447). Defaults work as they
                            come, so the only thing a new location needs here is a recipient. *@
                         <MudStack Spacing="1" Class="mt-2">
@@ -566,6 +606,17 @@
     private string? ValidateName(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "Enter a location name" : null;
 
+    private static string? ValidateDealerQuestion(string? value) =>
+        DealerQuestionsValidator.ValidateQuestion(value).ErrorMessage;
+
+    // Step 6 keys an answer by its question's text, so the second may not repeat the first.
+    private string? ValidateSecondDealerQuestion(string? value) =>
+        ValidateDealerQuestion(value)
+        ?? (!string.IsNullOrWhiteSpace(value)
+            && string.Equals(value.Trim(), _form.DealerQuestion1?.Trim(), StringComparison.OrdinalIgnoreCase)
+                ? "Ask something different from question 1"
+                : null);
+
     private static string? ValidateLogoUrl(string? value) =>
         LocationBrandingValidator.ValidateLogoUrl(value).ErrorMessage;
 
@@ -780,7 +831,9 @@
             StatusLinkTtlDays = location.PacketConfig.StatusLinkTtlDays,
             LogoUrl = location.Branding.LogoUrl,
             HeaderColor = location.Branding.HeaderColor,
-            AccentColor = location.Branding.AccentColor
+            AccentColor = location.Branding.AccentColor,
+            DealerQuestion1 = location.DealerQuestions.ElementAtOrDefault(0),
+            DealerQuestion2 = location.DealerQuestions.ElementAtOrDefault(1)
         };
         ResetPacketEditor();
         _dialogOpen = true;
@@ -854,7 +907,9 @@
                 // Sent whole: a non-null PacketConfig replaces the stored one wholesale.
                 PacketConfig = packetConfig,
                 // Also sent whole, so clearing a field here clears it (Spec A-16, issue #470).
-                Branding = BuildBranding()
+                Branding = BuildBranding(),
+                // Sent whole as well, so clearing a question removes it (Spec A-18, issue #785).
+                DealerQuestions = DealerQuestionsValidator.Normalize([_form.DealerQuestion1, _form.DealerQuestion2])
             };
 
             if (_editingLocationId is not null)
@@ -962,5 +1017,9 @@
         public string? LogoUrl { get; set; }
         public string? HeaderColor { get; set; }
         public string? AccentColor { get; set; }
+
+        // Dealer questions (Spec A-18, issue #785): blank means none.
+        public string? DealerQuestion1 { get; set; }
+        public string? DealerQuestion2 { get; set; }
     }
 }

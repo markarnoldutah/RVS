@@ -2396,6 +2396,35 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task GetIntakeConfigAsync_WhenLocationHasDealerQuestions_ShouldReturnThemForStep6()
+    {
+        SetupConfigHappyPath();
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                CreatedByUserId = "admin",
+                DealerQuestions = ["Where is the RV stored?", "Do you need a loaner?"],
+            });
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.DealerQuestions.Should().Equal("Where is the RV stored?", "Do you need a loaner?");
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenLocationHasNoDealerQuestions_ShouldReturnNone()
+    {
+        SetupConfigHappyPath();
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.DealerQuestions.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task GetIntakeConfigAsync_WhenLocationHasNoBranding_ShouldReturnEmptyBrandingSoTheDefaultsApply()
     {
         SetupConfigHappyPath();

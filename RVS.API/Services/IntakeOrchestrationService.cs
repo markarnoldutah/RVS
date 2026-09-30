@@ -669,6 +669,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             DealershipName = slugLookup.DealershipName,
             LocationPhone = location?.Phone,
             Branding = location?.Branding.ToDto() ?? new LocationBrandingDto(),
+            DealerQuestions = location is null ? [] : [.. location.DealerQuestions],
             AcceptedFileTypes = intakeConfig.AcceptedFileTypes,
             MaxFileSizeMb = intakeConfig.MaxFileSizeMb,
             MaxAttachments = intakeConfig.MaxAttachments,

@@ -6,6 +6,7 @@ using RVS.Domain.Entities;
 using RVS.Domain.Exceptions;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Tests.Services;
 
@@ -607,6 +608,50 @@ public class LocationServiceTests
         result.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
         result.Branding.HeaderColor.Should().Be("#1A5E20");
         result.Branding.AccentColor.Should().Be("#0D47A1");
+    }
+
+    // ── Dealer questions (Spec A-18, issue #785) ────────────────────────
+
+    [Fact]
+    public async Task CreateAsync_WhenMoreThanTwoDealerQuestions_ShouldThrowArgumentExceptionAndNotPersist()
+    {
+        var location = BuildLocation();
+        location.DealerQuestions = ["One?", "Two?", "Three?"];
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenADealerQuestionIsTooLong_ShouldThrowArgumentException()
+    {
+        var updated = BuildLocation();
+        updated.DealerQuestions = [new string('a', DealerQuestionsValidator.MaxQuestionLength + 1)];
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldPersistDealerQuestionsOntoTheExistingLocation()
+    {
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.DealerQuestions = ["Where is the RV stored?", "Do you need a loaner?"];
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.DealerQuestions.Should().Equal("Where is the RV stored?", "Do you need a loaner?");
     }
 
     [Fact]

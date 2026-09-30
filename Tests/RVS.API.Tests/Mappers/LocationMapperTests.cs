@@ -899,4 +899,71 @@ public class LocationMapperTests
         entity.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/keep.png");
         entity.Branding.HeaderColor.Should().Be("#1A5E20");
     }
+
+    // ── Dealer questions (Spec A-18, issue #785) ────────────────────────
+
+    [Fact]
+    public void ToDetailDto_ShouldCarryTheDealerQuestions()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            DealerQuestions = ["Where is the RV stored?", "Do you need a loaner?"]
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.DealerQuestions.Should().Equal("Where is the RV stored?", "Do you need a loaner?");
+    }
+
+    [Fact]
+    public void ToEntity_WhenNoDealerQuestions_ShouldHaveNone()
+    {
+        var entity = BuildValidCreateRequest().ToEntity("ten_1", "usr_1");
+
+        entity.DealerQuestions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ToEntity_ShouldTrimTheDealerQuestionsAndDropBlankOnes()
+    {
+        var dto = BuildValidCreateRequest() with { DealerQuestions = ["  Where is the RV stored?  ", "   "] };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.DealerQuestions.Should().Equal("Where is the RV stored?");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenDealerQuestionsProvided_ShouldReplaceThemWholesale()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            DealerQuestions = ["Old one?", "Old two?"]
+        };
+        var dto = BuildValidCreateRequest() with { DealerQuestions = [" New one? ", ""] };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.DealerQuestions.Should().Equal("New one?");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenDealerQuestionsNull_ShouldLeaveExistingUnchanged()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            DealerQuestions = ["Where is the RV stored?"]
+        };
+        var dto = BuildValidCreateRequest() with { DealerQuestions = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.DealerQuestions.Should().Equal("Where is the RV stored?");
+    }
 }

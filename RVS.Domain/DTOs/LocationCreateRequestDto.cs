@@ -48,4 +48,11 @@ public sealed record LocationCreateRequestDto
     /// a non-null value replaces it wholesale, so a blank field clears it.
     /// </summary>
     public LocationBrandingDto? Branding { get; init; }
+
+    /// <summary>
+    /// Up to two questions added to every intake's diagnostic step (<c>Spec A-18</c>, issue #785).
+    /// Pass null on update to leave the existing questions unchanged; a non-null value replaces
+    /// them wholesale, and blank entries are dropped.
+    /// </summary>
+    public List<string>? DealerQuestions { get; init; }
 }

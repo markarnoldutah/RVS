@@ -31,14 +31,16 @@
                 </MudText>
             </MudStack>
         }
-        else if (_error is not null)
-        {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
-                @_error You can skip this step and continue.
-            </MudAlert>
-        }
         else
         {
+            @if (_error is not null)
+            {
+                @* The location's own questions (Spec A-18) still show below when the AI call fails. *@
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
+                    @_error @ErrorFollowUp
+                </MudAlert>
+            }
+
             @if (!string.IsNullOrWhiteSpace(State.SmartSuggestion))
             {
                 <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true"
@@ -96,7 +98,7 @@
                                               T="string"
                                               Immediate="true"
                                               DebounceInterval="300"
-                                              Placeholder="Additional details..."
+                                              Placeholder="@FreeTextPlaceholder(question)"
                                               Lines="2"
                                               Variant="Variant.Outlined"
                                               Margin="Margin.Dense" />
@@ -145,12 +147,23 @@
         catch (Exception)
         {
             _error = "Unable to generate diagnostic questions.";
+
+            // No AI questions, but the location's own still apply (Spec A-18, issue #785).
+            State.ApplyDiagnosticQuestions(new DiagnosticQuestionsResponseDto());
         }
         finally
         {
             _isLoading = false;
         }
     }
+
+    // A dealer question (Spec A-18) has no options, so its text box is the whole answer.
+    private static string FreeTextPlaceholder(DiagnosticQuestionDto question) =>
+        question.Options.Count > 0 ? "Additional details..." : "Your answer";
+
+    private string ErrorFollowUp => State.DiagnosticQuestions.Count > 0
+        ? "You can answer the questions below, or skip them and continue."
+        : "You can skip this step and continue.";
 
     private DiagnosticResponseDto? GetResponse(int index)
     {
