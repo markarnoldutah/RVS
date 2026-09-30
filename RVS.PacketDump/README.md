@@ -34,7 +34,7 @@ dotnet run --project RVS.PacketDump -- --help
 | Switch | Values | Default |
 |---|---|---|
 | `--format` (or `--html` / `--pdf`) | `html`, `pdf`, `both` | `both` |
-| `--variant` (or `--full` / `--minimal`) | `full`, `minimal`, `both` | `both` |
+| `--variant` (or `--full` / `--minimal` / `--multi`) | `full`, `minimal`, `multi`, `both`, `all` | `both` |
 | `-h`, `--help`, `-?`, `/?` | prints usage and exits | — |
 | _positional_ | output path — a directory, or a file ending `.html` / `.pdf` | current directory |
 

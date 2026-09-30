@@ -49,8 +49,15 @@ public sealed class IntakeSourceReportService : IIntakeSourceReportService
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentException.ThrowIfNullOrWhiteSpace(locationId);
 
-        var submissions = await _serviceRequestRepository.GetForAnalyticsAsync(
+        var requests = await _serviceRequestRepository.GetForAnalyticsAsync(
             tenantId, fromUtc, toUtc, locationId, cancellationToken);
+
+        // One submission per visit: a customer who reported several issues produced several
+        // requests from one link (Spec A-17, issue #806). Counting each would overstate the
+        // channel and could push its conversion rate past one.
+        var submissions = requests
+            .DistinctBy(r => r.SubmissionId ?? r.Id, StringComparer.Ordinal)
+            .ToList();
 
         var hits = await ReadHitsAsync(locationId, fromUtc, toUtc, cancellationToken);
 

@@ -86,6 +86,30 @@ public class ServiceRequestMapperTests
     }
 
     [Fact]
+    public void ToDetailDto_ShouldMapTheSubmissionLink()
+    {
+        var entity = new ServiceRequest { TenantId = "ten_1", SubmissionId = "sr_lead", SubmissionPosition = 2, SubmissionCount = 3 };
+
+        var dto = entity.ToDetailDto();
+
+        dto.SubmissionId.Should().Be("sr_lead");
+        dto.SubmissionPosition.Should().Be(2);
+        dto.SubmissionCount.Should().Be(3);
+    }
+
+    [Fact]
+    public void ToSummaryDto_ShouldMapTheSubmissionLink()
+    {
+        var entity = new ServiceRequest { TenantId = "ten_1", SubmissionId = "sr_lead", SubmissionPosition = 2, SubmissionCount = 3 };
+
+        var dto = entity.ToSummaryDto();
+
+        dto.SubmissionId.Should().Be("sr_lead");
+        dto.SubmissionPosition.Should().Be(2);
+        dto.SubmissionCount.Should().Be(3);
+    }
+
+    [Fact]
     public void ToDetailDto_ShouldMapCustomerSnapshotToCustomerInfoDto()
     {
         var entity = new ServiceRequest

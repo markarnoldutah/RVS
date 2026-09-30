@@ -47,6 +47,9 @@ public static class ServiceRequestMapper
             IntakeSource = entity.IntakeSource,
             IntakeInviteId = entity.IntakeInviteId,
             AdvisorUserId = entity.AdvisorUserId,
+            SubmissionId = entity.SubmissionId,
+            SubmissionPosition = entity.SubmissionPosition,
+            SubmissionCount = entity.SubmissionCount,
             CustomerStatusNote = entity.CustomerStatusNote is { } note
                 ? new CustomerStatusNoteDto { Text = note.Text, UpdatedAtUtc = note.UpdatedAtUtc }
                 : null,
@@ -107,6 +110,9 @@ public static class ServiceRequestMapper
             AssignedTechnicianId = entity.AssignedTechnicianId,
             Priority = entity.Priority,
             BoardSequence = entity.BoardSequence,
+            SubmissionId = entity.SubmissionId,
+            SubmissionPosition = entity.SubmissionPosition,
+            SubmissionCount = entity.SubmissionCount,
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };

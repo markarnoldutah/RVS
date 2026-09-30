@@ -199,6 +199,16 @@
                                                     @boardItem.Summary.IssueCategory
                                                 </MudChip>
                                             }
+                                            @* Spec A-17 (#806): one of several issues reported on one visit *@
+                                            @if (boardItem.Summary.SubmissionCount > 1)
+                                            {
+                                                <MudChip T="string" Size="Size.Small"
+                                                         Variant="Variant.Outlined"
+                                                         Icon="@Icons.Material.Outlined.Layers"
+                                                         Style="@($"color: {ChipFontColor};")">
+                                                    @($"{boardItem.Summary.SubmissionPosition} of {boardItem.Summary.SubmissionCount}")
+                                                </MudChip>
+                                            }
                                                     @if (boardItem.Status is "WaitingOnParts" or "WaitingOnCustomer" or "Completed" or "Cancelled")
                                                     {
                                                         <MudChip T="string" Size="Size.Small"

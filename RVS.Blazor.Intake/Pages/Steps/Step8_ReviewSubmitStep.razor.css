@@ -40,3 +40,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Issue #810: one card per issue when a visit reports several, so each issue's header,
+   remove button and sections read as one unit. Theme tokens only, so the dealer accent and
+   high contrast follow. */
+.issue-card {
+    padding: 16px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    background: var(--mud-palette-surface);
+    box-shadow: var(--mud-elevation-2);
+}

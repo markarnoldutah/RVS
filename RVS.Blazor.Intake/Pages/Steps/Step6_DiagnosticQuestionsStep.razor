@@ -134,7 +134,9 @@
         _isLoading = true;
         try
         {
-            var request = State.BuildCreateRequest();
+            // The issue on screen, not the submission, whose issue fields lead with the first
+            // issue (issue #810).
+            var request = State.BuildActiveIssueRequest();
             var response = await IntakeApi.GetDiagnosticQuestionsAsync(State.Slug, request);
 
             State.ApplyDiagnosticQuestions(response);

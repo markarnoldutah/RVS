@@ -235,6 +235,35 @@ public class IntakeSourceReportServiceTests
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
+    // A visit that reported several issues is one submission from one link, however many
+    // requests it produced (Spec A-17, issue #806) — or the conversion rate overstates the channel.
+    [Fact]
+    public async Task GetForLocationAsync_ShouldCountAMultiIssueVisitAsOneSubmission()
+    {
+        ServiceRequest Sibling(string id, int position) => new()
+        {
+            Id = id,
+            TenantId = TenantId,
+            LocationId = LocationId,
+            IntakeSource = "qr",
+            SubmissionId = "sr_lead",
+            SubmissionPosition = position,
+            SubmissionCount = 3,
+        };
+        _srRepoMock.Setup(r => r.GetForAnalyticsAsync(
+                It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                Sibling("sr_lead", 1), Sibling("sr_2", 2), Sibling("sr_3", 3),
+                new ServiceRequest { Id = "sr_single", TenantId = TenantId, LocationId = LocationId, IntakeSource = "qr" },
+            ]);
+
+        var report = await _sut.GetForLocationAsync(TenantId, LocationId);
+
+        report.TotalSubmissions.Should().Be(2);
+        report.Rows.Should().ContainSingle(r => r.Source == "qr").Which.Submissions.Should().Be(2);
+    }
+
     private void GivenSubmissions(params string?[] sources)
     {
         var requests = sources

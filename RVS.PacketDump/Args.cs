@@ -30,10 +30,13 @@ internal static class Args
           --format <html|pdf|both> Which renderer(s) to run. Default: both.
           --html                   Shorthand for --format html.
           --pdf                    Shorthand for --format pdf.
-          --variant <full|minimal|both>
-                                   Which sample packet(s) to render. Default: both.
+          --variant <full|minimal|multi|both|all>
+                                   Which sample packet(s) to render. Default: both
+                                   (full and minimal); all adds multi, a three-issue
+                                   visit rendered as one packet.
           --full                   Shorthand for --variant full.
           --minimal                Shorthand for --variant minimal.
+          --multi                  Shorthand for --variant multi.
           -h, --help, -?, /?       Print this help and exit.
 
         Examples:
@@ -72,6 +75,9 @@ internal static class Args
                 case "--minimal":
                     variant = "minimal";
                     break;
+                case "--multi":
+                    variant = "multi";
+                    break;
                 case "--variant" when i + 1 < args.Length:
                     variant = args[++i].ToLowerInvariant();
                     break;
@@ -103,7 +109,7 @@ internal static class Args
             variant ??= "full";
         }
 
-        variant = Normalise(variant, "both", "full", "minimal");
+        variant = Normalise(variant, "both", "full", "minimal", "multi", "all");
         format = Normalise(format, "both", "html", "pdf");
 
         return new Options(target, variant, format);

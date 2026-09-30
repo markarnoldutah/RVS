@@ -23,6 +23,18 @@ public sealed record ServiceRequestSummaryResponseDto
     public string? AssignedTechnicianId { get; init; }
     public string? Priority { get; init; }
     public int BoardSequence { get; init; }
+
+    /// <summary>
+    /// The multi-issue intake submission this request belongs to (<c>Spec A-17</c>): its first
+    /// request's id. <c>null</c> for a request reported on its own.
+    /// </summary>
+    public string? SubmissionId { get; init; }
+
+    /// <summary>This request's 1-based position in its submission — the "2" of "Issue 2 of 3". <c>0</c> when not grouped.</summary>
+    public int SubmissionPosition { get; init; }
+
+    /// <summary>How many issues its submission reported — the "3" of "Issue 2 of 3". <c>0</c> when not grouped.</summary>
+    public int SubmissionCount { get; init; }
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }
 }

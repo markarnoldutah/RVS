@@ -173,6 +173,34 @@ public class ServiceRequest : EntityBase
     public string? AdvisorUserId { get; init; }
 
     /// <summary>
+    /// The intake submission this request came from, when the customer reported several issues
+    /// at once (<c>Spec A-17</c>, issue #806): the id of the submission's first request, which
+    /// every sibling shares. <c>null</c> for a single-issue submission and for requests created
+    /// before the field existed.
+    /// </summary>
+    [JsonProperty("submissionId")]
+    public string? SubmissionId { get; init; }
+
+    /// <summary>This request's 1-based position in its submission (<c>Spec A-17</c>): the "2" of "2 of 3".</summary>
+    [JsonProperty("submissionPosition")]
+    public int SubmissionPosition { get; init; }
+
+    /// <summary>How many issues its submission reported (<c>Spec A-17</c>): the "3" of "2 of 3".</summary>
+    [JsonProperty("submissionCount")]
+    public int SubmissionCount { get; init; }
+
+    /// <summary>Whether this request is one of several reported in one submission (<c>Spec A-17</c>).</summary>
+    [JsonIgnore]
+    public bool IsInMultiIssueSubmission => SubmissionId is not null && SubmissionCount > 1;
+
+    /// <summary>
+    /// Whether this is the first request of a multi-issue submission (<c>Spec A-17</c>). The
+    /// lead owns the submission's combined packet email (<c>Spec B-4</c>).
+    /// </summary>
+    [JsonIgnore]
+    public bool IsSubmissionLead => IsInMultiIssueSubmission && SubmissionPosition == 1;
+
+    /// <summary>
     /// Board display order within a status column. Lower values appear first.
     /// Defaults to 0; updated when cards are reordered on the Service Board.
     /// </summary>

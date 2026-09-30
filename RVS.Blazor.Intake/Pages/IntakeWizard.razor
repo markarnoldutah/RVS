@@ -37,7 +37,7 @@ else
                 </MudButton>
                 <MudSpacer />
                 <MudText Typo="Typo.caption">
-                    Step @_state.CurrentStep of @_state.TotalSteps
+                    @StepProgressLabel
                 </MudText>
             </MudStack>
         </MudPaper>
@@ -78,6 +78,8 @@ else
             case 8:
                 <Step8_ReviewSubmitStep State="_state"
                                         OnEdit="HandleEditStep"
+                                        OnEditIssue="HandleEditIssue"
+                                        OnAddIssue="HandleAddIssue"
                                         OnSubmitted="HandleSubmitted" />
                 break;
         }
@@ -315,6 +317,29 @@ else
         _validationErrors = [];
         _state.ReturnToStepAfterEdit = _state.CurrentStep;
         await _state.GoToStepAsync(step);
+        PushStep();
+    }
+
+    /// <summary>
+    /// "Step 5 of 8", or "Issue 2 · Step 5 of 8" on the per-issue steps once the visit has
+    /// several issues, so the count never seems to start over (<c>Spec A-17</c>).
+    /// </summary>
+    private string StepProgressLabel =>
+        _state.IssueCount > 1 && _state.CurrentStep is >= 5 and <= 7
+            ? $"Issue {_state.ActiveIssueIndex + 1} · Step {_state.CurrentStep} of {_state.TotalSteps}"
+            : $"Step {_state.CurrentStep} of {_state.TotalSteps}";
+
+    private async Task HandleEditIssue((int Index, int Step) target)
+    {
+        _validationErrors = [];
+        await _state.EditIssueAsync(target.Index, target.Step);
+        PushStep();
+    }
+
+    private async Task HandleAddIssue()
+    {
+        _validationErrors = [];
+        await _state.StartNewIssueAsync();
         PushStep();
     }
 

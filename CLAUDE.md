@@ -56,7 +56,7 @@ Solution file is [RVS.slnx](RVS.slnx) (new SLNX format — `dotnet` CLI handles 
 | [RVS.Blazor.Manager](RVS.Blazor.Manager/) | Blazor **WASM** — authenticated dealer manager desktop (OIDC/Auth0, PKCE). |
 | [RVS.UI.Shared](RVS.UI.Shared/) | Shared typed API clients (`IntakeApiClient`, `ServiceRequestApiClient`, `LookupApiClient`, `AttachmentApiClient`, and `AnalyticsApiClient` — archived scope), client-side validators, badge components. **`ThemeService` is not here** — each Blazor app has its own copy. |
 | [RVS.Data.Cosmos.Seed](RVS.Data.Cosmos.Seed/) | Idempotent seeder — creates 11 containers with partition keys/unique keys/indexing, seeds test data. |
-| [RVS.PacketDump](RVS.PacketDump/) | Dev utility — renders sample `ServicePacket`s to standalone `.html` (`PacketHtmlRenderer`) and `.pdf` (`PacketPdfRenderer`) files for print-testing at Letter/A4. `--format html\|pdf\|both`, `--variant full\|minimal\|both`. Not deployable. |
+| [RVS.PacketDump](RVS.PacketDump/) | Dev utility — renders sample `ServicePacket`s to standalone `.html` (`PacketHtmlRenderer`) and `.pdf` (`PacketPdfRenderer`) files for print-testing at Letter/A4. `--format html\|pdf\|both`, `--variant full\|minimal\|multi\|both\|all` (`multi` is a three-issue visit rendered as one packet, Spec A-17). Not deployable. |
 | [Tests/RVS.Domain.Tests](Tests/RVS.Domain.Tests/) | Pure logic: mappers, validators, entities. |
 | [Tests/RVS.API.Tests](Tests/RVS.API.Tests/) | Services, middleware, controllers (with Moq). |
 | [Tests/RVS.UI.Shared.Tests](Tests/RVS.UI.Shared.Tests/) | Shared API client tests. |

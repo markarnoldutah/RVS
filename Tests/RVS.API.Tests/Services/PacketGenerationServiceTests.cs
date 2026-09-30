@@ -1556,4 +1556,203 @@ public class PacketGenerationServiceTests
         sent.Should().NotBeNull();
         sent!.HtmlBody.Should().Contain("Received: 2026-09-05 8:30 AM MDT");
     }
+
+    // ── Several issues per visit (Spec A-17, B-2, B-4, issue #806) ──────────
+    // The issues stay separate requests, but the packet is one document: the submission is
+    // generated as a unit through its first request, stored once for every issue, and emailed
+    // once. A regeneration re-renders it without emailing again.
+
+    private const string Sibling2Id = "b2b2b2b2-1111-2222-3333-444455556666";
+    private const string Sibling3Id = "c3c3c3c3-1111-2222-3333-444455556666";
+    private const string SubmissionPdfPath = $"packets/{TenantId}/{SrId}/v1.pdf";
+
+    private static ServiceRequest Grouped(string id, int position, string description, string category) => new()
+    {
+        Id = id,
+        TenantId = TenantId,
+        LocationId = "loc_1",
+        Status = "New",
+        IssueDescription = description,
+        IssueCategory = category,
+        CustomerSnapshot = new CustomerSnapshotEmbedded { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
+        AssetInfo = new AssetInfoEmbedded { AssetId = "1HGBH41JXMN109186", Manufacturer = "Jayco", Model = "Eagle", Year = 2021 },
+        SubmissionId = SrId,
+        SubmissionPosition = position,
+        SubmissionCount = 3,
+        CreatedAtUtc = DateTime.UtcNow,
+    };
+
+    private (ServiceRequest Lead, ServiceRequest Second, ServiceRequest Third, List<PacketEmailMessage> Sent) SetupSubmission()
+    {
+        var lead = Grouped(SrId, 1, "Slide will not retract", "Slides");
+        var second = Grouped(Sibling2Id, 2, "Fridge is warm", "Appliances");
+        var third = Grouped(Sibling3Id, 3, "Awning fabric torn", "Awning");
+
+        foreach (var sr in new[] { lead, second, third })
+        {
+            _srRepoMock.Setup(r => r.GetByIdAsync(TenantId, sr.Id, It.IsAny<CancellationToken>())).ReturnsAsync(sr);
+        }
+
+        _srRepoMock.Setup(r => r.GetBySubmissionIdAsync(TenantId, SrId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([lead, second, third]);
+        _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LocationWithRecipients());
+
+        var sent = new List<PacketEmailMessage>();
+        _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<PacketEmailMessage, CancellationToken>((m, _) => sent.Add(m))
+            .Returns(Task.CompletedTask);
+
+        return (lead, second, third, sent);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenSingleIssueRequest_ShouldNotLookUpASubmission()
+    {
+        SetupRequest(BuildRequest());
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        _srRepoMock.Verify(r => r.GetBySubmissionIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenAnyIssueIsStillUploading_ShouldWaitWithoutSpendingAnAttempt()
+    {
+        var (lead, second, third, sent) = SetupSubmission();
+        second.PacketGeneration.ExpectedAttachmentCount = 1;
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.WaitingForAttachments);
+        new[] { lead, second, third }.Should().OnlyContain(sr => sr.PacketGeneration.AttemptCount == 0);
+        sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ForASubmission_ShouldStoreOnePdfForEveryIssue()
+    {
+        var (lead, second, third, _) = SetupSubmission();
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        _blobMock.Verify(b => b.UploadAsync(
+            AttachmentsContainer, It.IsAny<string>(), It.IsAny<Stream>(), "application/pdf", It.IsAny<CancellationToken>()), Times.Once);
+        new[] { lead, second, third }.Should().OnlyContain(sr =>
+            sr.PacketGeneration.Status == "Succeeded" && sr.PacketGeneration.PdfBlobPath == SubmissionPdfPath);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ForASubmission_ShouldAssessEveryIssue()
+    {
+        var (lead, second, third, _) = SetupSubmission();
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        _assessmentMock.Verify(a => a.AssessAsync(
+            It.IsAny<ServiceRequest>(), It.IsAny<IReadOnlyList<AssessmentPhoto>?>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+        new[] { lead, second, third }.Should().OnlyContain(sr => sr.PreliminaryAssessment != null);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheJobNamesALaterIssue_ShouldGenerateTheWholeSubmission()
+    {
+        var (lead, second, third, sent) = SetupSubmission();
+
+        var outcome = await _sut.GenerateAsync(TenantId, Sibling2Id);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        new[] { lead, second, third }.Should().OnlyContain(sr => sr.PacketGeneration.PdfBlobPath == SubmissionPdfPath);
+        sent.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ForASubmission_ShouldSendOneEmailListingEveryIssue()
+    {
+        var (_, _, _, sent) = SetupSubmission();
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        var message = sent.Should().ContainSingle().Subject;
+        message.Subject.Should().Be("New SR: Doe: 2021 Jayco Eagle - 3 issues: Slides, Appliances, Awning");
+        message.HtmlBody.Should().Contain("Issue 2 of 3").And.Contain("Slide will not retract")
+            .And.Contain("Fridge is warm").And.Contain("Awning fabric torn");
+        message.PlainTextBody.Should().Contain("ISSUE 3 OF 3");
+        message.Attachments.Where(a => a.ContentType == "application/pdf")
+            .Should().ContainSingle().Which.FileName.Should().Be("service-packet-A1B2C3D4.pdf");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ForASubmission_ShouldAttachEveryIssuesPhotos()
+    {
+        var (_, second, _, sent) = SetupSubmission();
+        second.Attachments = [Image("att_fridge", "tenants/t/sr2/fridge.jpg")];
+        _photoResolverMock.Setup(r => r.ResolveAsync(It.Is<ServiceRequest>(sr => sr.Id == Sibling2Id), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string> { ["att_fridge"] = "https://blob/fridge.jpg?sas" });
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        sent.Single().Attachments.Should().Contain(a => a.ContentType == "image/jpeg");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheSubmissionEmailIsSent_ShouldRecordEveryIssueAsDelivered()
+    {
+        var (lead, second, third, _) = SetupSubmission();
+
+        await _sut.GenerateAsync(TenantId, SrId);
+
+        new[] { lead, second, third }.Should().OnlyContain(sr => sr.PacketEmailDelivery.IsDeliveredFor(1));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenASubmissionIsRegenerated_ShouldReRenderWithoutEmailingAgain()
+    {
+        var (lead, second, third, sent) = SetupSubmission();
+        await _sut.GenerateAsync(TenantId, SrId);
+        sent.Clear();
+
+        var outcome = await _sut.GenerateAsync(TenantId, Sibling3Id);
+
+        outcome.Should().Be(PacketGenerationOutcome.Succeeded);
+        sent.Should().BeEmpty();
+        new[] { lead, second, third }.Should().OnlyContain(sr =>
+            sr.PacketGeneration.PdfBlobPath == $"packets/{TenantId}/{SrId}/v2.pdf");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenTheSubmissionFailsToRender_ShouldRecordTheFailureOnEveryIssue()
+    {
+        var (lead, second, third, sent) = SetupSubmission();
+        _blobMock.Setup(b => b.UploadAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("storage down"));
+
+        var outcome = await _sut.GenerateAsync(TenantId, SrId);
+
+        outcome.Should().Be(PacketGenerationOutcome.Retry);
+        new[] { lead, second, third }.Should().OnlyContain(sr =>
+            sr.PacketGeneration.Status == "Failed" && sr.PacketGeneration.AttemptCount == 1);
+        sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RequestRegenerationAsync_ForALaterIssue_ShouldResetEveryIssueAndQueueTheFirst()
+    {
+        var (lead, second, third, _) = SetupSubmission();
+        foreach (var sr in new[] { lead, second, third })
+        {
+            sr.PacketGeneration.MarkGenerating();
+            sr.PacketGeneration.MarkFailed("boom");
+        }
+
+        _queueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>())).Returns(true);
+
+        await _sut.RequestRegenerationAsync(TenantId, Sibling2Id);
+
+        new[] { lead, second, third }.Should().OnlyContain(sr => sr.PacketGeneration.Status == "Pending");
+        _queueMock.Verify(q => q.TryEnqueue(It.Is<PacketGenerationJob>(j => j.ServiceRequestId == SrId)), Times.Once);
+        _queueMock.Verify(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>()), Times.Once);
+    }
 }

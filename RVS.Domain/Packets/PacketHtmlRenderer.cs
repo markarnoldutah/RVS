@@ -61,42 +61,172 @@ public static class PacketHtmlRenderer
     {
         ArgumentNullException.ThrowIfNull(packet);
 
+        return RenderDocument([packet], [managerAppServiceRequestUrl]);
+    }
+
+    /// <summary>
+    /// Renders every issue of a multi-issue submission (<c>Spec A-17</c>, issue #806) as one
+    /// packet, laid out like a dealer's work order: the masthead — unit, customer, location and
+    /// the first issue's Intake # — once at the top, a short list of the issues, then each issue
+    /// in submission order under its own heading, with its own status buttons and paste block,
+    /// flowing onto as many sheets as it takes. One footer and one AI disclosure close it. A
+    /// single packet renders exactly as <see cref="Render"/> would.
+    /// </summary>
+    /// <param name="packets">
+    /// One composed packet per issue, in the order the customer reported them. The first supplies
+    /// the masthead; the rest contribute their issue sections only.
+    /// </param>
+    /// <param name="photosDropped">
+    /// <c>true</c> when the email's size budget left at least one photo attachment off (issue
+    /// <c>#521</c>). Each issue that has images then carries the note pointing at its own
+    /// request in the Manager app, since there is no telling from here whose photo it was.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="packets"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="packets"/> is empty.</exception>
+    public static string RenderCombined(IReadOnlyList<ServicePacket> packets, bool photosDropped = false)
+    {
+        ArgumentNullException.ThrowIfNull(packets);
+        if (packets.Count == 0)
+        {
+            throw new ArgumentException("At least one packet is required.", nameof(packets));
+        }
+
+        return RenderDocument(packets, [.. packets.Select(p => photosDropped ? DroppedPhotoNoteUrl(p) : null)]);
+    }
+
+    /// <summary>
+    /// The Manager-app link for the dropped-photo note on <paramref name="packet"/>: its own
+    /// request, and only when it had an image to lose.
+    /// </summary>
+    private static string? DroppedPhotoNoteUrl(ServicePacket packet) =>
+        packet.Photos.Any(p => !p.IsVideo) ? packet.ManagerLinks?.RequestUrl : null;
+
+    private static string RenderDocument(IReadOnlyList<ServicePacket> packets, IReadOnlyList<string?> droppedPhotoNoteUrls)
+    {
+        var lead = packets[0];
+        var isMultiIssue = packets.Count > 1;
+
         // One string, three surfaces: the masthead, the @page running footer, and the static
         // end-of-flow footer. Derived on the packet (issue #506) so the PDF renderer reads the
         // very same value rather than a second copy of the same expression.
-        var received = packet.Origin.ReceivedDisplay;
+        var received = lead.Origin.ReceivedDisplay;
 
-        var sb = new StringBuilder(4096);
+        var sb = new StringBuilder(4096 * packets.Count);
 
         sb.Append("<!DOCTYPE html>\n");
         sb.Append("<html lang=\"en\">\n<head>\n");
         sb.Append("<meta charset=\"utf-8\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
-        sb.Append("<title>Service Packet ").Append(Text(packet.Origin.ReferenceCode)).Append("</title>\n");
-        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(packet.Origin.ReferenceCode, received, packet.Branding.BrandName)))
+        sb.Append("<title>Service Packet ").Append(Text(lead.Origin.ReferenceCode)).Append("</title>\n");
+        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(lead.Origin.ReferenceCode, received, lead.Branding.BrandName)))
             .Append("\n</style>\n");
         sb.Append("</head>\n<body>\n");
         sb.Append("<main class=\"packet\">\n");
 
-        AppendManagerActions(sb, packet.ManagerLinks);
-        AppendMasthead(sb, packet, received);
-        AppendCategory(sb, packet.IssueCategory);
-        // The curated issue and the AI assessment sit above the verbatim complaint: a service
-        // manager should see the concise recreation of the problem first, then the customer's
-        // own words, then the diagnostic detail (issue #431 follow-up, #601; Spec B-2).
-        AppendCuratedIssue(sb, packet.CuratedIssue);
-        AppendAiSummary(sb, packet.AiSummary);
-        AppendDescription(sb, packet.IssueDescription);
-        AppendDiagnostics(sb, packet.Diagnostics);
-        AppendPhotos(sb, packet.Photos, managerAppServiceRequestUrl);
-        AppendPasteBlock(sb, packet.PasteBlock);
-        AppendStatusLink(sb, packet.StatusLink);
-        AppendFooter(sb, packet.Origin.ReferenceCode, received, packet.Branding.PoweredByLogoUrl, packet.AiDisclaimer);
+        // A single issue keeps its status buttons above the masthead, as it always has. With
+        // several, each issue's buttons sit under its own heading instead (Spec A-17).
+        if (!isMultiIssue)
+        {
+            AppendManagerActions(sb, lead.ManagerLinks);
+        }
+
+        AppendMasthead(sb, lead, received);
+
+        if (isMultiIssue)
+        {
+            AppendIssueIndex(sb, packets);
+        }
+
+        for (var i = 0; i < packets.Count; i++)
+        {
+            var packet = packets[i];
+            if (isMultiIssue)
+            {
+                // The heading carries the category, so the issue's own category section would
+                // only repeat it.
+                AppendIssueHeading(sb, packet, i + 1, packets.Count);
+                AppendManagerActions(sb, packet.ManagerLinks);
+            }
+            else
+            {
+                AppendCategory(sb, packet.IssueCategory);
+            }
+
+            // The curated issue and the AI assessment sit above the verbatim complaint: a service
+            // manager should see the concise recreation of the issue first, then the customer's
+            // own words, then the diagnostic detail (issue #431 follow-up, #601; Spec B-2).
+            AppendCuratedIssue(sb, packet.CuratedIssue);
+            AppendAiSummary(sb, packet.AiSummary);
+            AppendDescription(sb, packet.IssueDescription);
+            AppendDiagnostics(sb, packet.Diagnostics);
+            AppendPhotos(sb, packet.Photos, droppedPhotoNoteUrls[i]);
+            AppendPasteBlock(sb, packet.PasteBlock);
+
+            // The status page is the customer's and lists every issue (Spec X-1), so a
+            // multi-issue packet links it once, after the last issue.
+            if (!isMultiIssue)
+            {
+                AppendStatusLink(sb, packet.StatusLink);
+            }
+        }
+
+        if (isMultiIssue)
+        {
+            AppendStatusLink(sb, lead.StatusLink);
+        }
+
+        AppendFooter(sb, lead.Origin.ReferenceCode, received, lead.Branding.PoweredByLogoUrl, ServicePacket.AiDisclaimerFor(packets));
 
         sb.Append("</main>\n</body>\n</html>\n");
 
         return sb.ToString();
     }
+
+    // ── Several issues (Spec A-17, issue #806) ───────────────────────────
+    //
+    // A work order lists its lines under one header, so a multi-issue packet does too: an index
+    // of the issues under the masthead, then a heading bar per issue naming its position,
+    // category and its own Intake # (each issue is its own request, and its own line in the
+    // DMS). Presentational <table>s with inline geometry, for the same mail-client reason as the
+    // masthead.
+
+    private static void AppendIssueIndex(StringBuilder sb, IReadOnlyList<ServicePacket> packets)
+    {
+        sb.Append("<!-- section:issue-index -->\n");
+        sb.Append("<section class=\"issue-index\">\n");
+        sb.Append("<h2>").Append(packets.Count.ToString(CultureInfo.InvariantCulture)).Append(" issues</h2>\n");
+        sb.Append("<table role=\"presentation\" width=\"100%\" style=\"width:100%;border-collapse:collapse;\">\n");
+
+        for (var i = 0; i < packets.Count; i++)
+        {
+            var packet = packets[i];
+            sb.Append("<tr>\n");
+            sb.Append("<td style=\"padding:0 3mm 1mm 0;white-space:nowrap;vertical-align:top;\">")
+                .Append((i + 1).ToString(CultureInfo.InvariantCulture)).Append(".</td>\n");
+            sb.Append("<td style=\"padding:0 3mm 1mm 0;width:100%;vertical-align:top;\"><strong>")
+                .Append(Text(CategoryLabel(packet.IssueCategory))).Append("</strong></td>\n");
+            sb.Append("<td style=\"padding:0 0 1mm;white-space:nowrap;vertical-align:top;\">Intake #")
+                .Append(Text(packet.Origin.ReferenceCode)).Append("</td>\n");
+            sb.Append("</tr>\n");
+        }
+
+        sb.Append("</table>\n</section>\n");
+    }
+
+    private static void AppendIssueHeading(StringBuilder sb, ServicePacket packet, int position, int count)
+    {
+        sb.Append("<!-- section:issue -->\n");
+        sb.Append("<table role=\"presentation\" class=\"issue-head\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin:8mm 0 4mm;border-top:2px solid #000;border-bottom:1px solid #000;\">\n<tr>\n");
+        sb.Append("<td style=\"padding:2mm 0;font-size:12pt;font-weight:700;vertical-align:middle;\">Issue ")
+            .Append(position.ToString(CultureInfo.InvariantCulture)).Append(" of ").Append(count.ToString(CultureInfo.InvariantCulture))
+            .Append(" · ").Append(Text(CategoryLabel(packet.IssueCategory))).Append("</td>\n");
+        sb.Append("<td style=\"padding:2mm 0;text-align:right;white-space:nowrap;vertical-align:middle;\">Intake #")
+            .Append(Text(packet.Origin.ReferenceCode)).Append("</td>\n");
+        sb.Append("</tr>\n</table>\n");
+    }
+
+    private static string CategoryLabel(string? category) =>
+        string.IsNullOrWhiteSpace(category) ? "Uncategorized" : category.Trim();
 
     // ── Manager-app status actions (Spec C-7, issue #498) ────────────────
     //
@@ -738,6 +868,8 @@ public static class PacketHtmlRenderer
         .photo-note a { color: #000; }
 
         .status-link a { color: #000; }
+
+        .issue-head { break-after: avoid; page-break-after: avoid; }
 
         .packet-foot {
           width: 100%;
