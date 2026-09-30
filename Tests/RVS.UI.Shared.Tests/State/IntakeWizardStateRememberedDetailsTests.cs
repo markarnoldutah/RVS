@@ -6,7 +6,7 @@ namespace RVS.UI.Shared.Tests.State;
 
 /// <summary>
 /// Opt-in device memory of the customer's contact details, preferred contact method and vehicle
-/// (issues #811, #819, Spec A-7). It fills only blank fields and is never offered on an advisor invite.
+/// (issues #811, #819). It fills only blank fields and is never offered on an advisor invite.
 /// </summary>
 public class IntakeWizardStateRememberedDetailsTests
 {
@@ -94,16 +94,6 @@ public class IntakeWizardStateRememberedDetailsTests
 
         state.IsRememberedPrefilled.Should().BeTrue();
         state.RememberDetails.Should().BeTrue();
-    }
-
-    [Fact]
-    public void ApplyRememberedDetails_ShouldNotLookLikeAReturningCustomerMatch()
-    {
-        var state = CreateState();
-
-        state.ApplyRememberedDetails(Jane);
-
-        state.IsPrefilled.Should().BeFalse();
     }
 
     [Fact]

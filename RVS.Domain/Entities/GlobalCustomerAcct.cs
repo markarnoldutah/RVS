@@ -38,13 +38,6 @@ public class GlobalCustomerAcct : EntityBase
     public List<LinkedProfileEmbedded> LinkedProfiles { get; set; } = [];
 
     /// <summary>
-    /// All vehicle-history keys ever associated with this person across all dealerships:
-    /// VINs, or <c>MANUFACTURER:SERIAL</c> for serial-number rigs (issue #808).
-    /// </summary>
-    [JsonProperty("allKnownAssetIds")]
-    public List<string> AllKnownAssetIds { get; set; } = [];
-
-    /// <summary>
     /// Global magic-link token — resolves to the identity (not a single profile).
     /// Status page shows requests across all dealerships.
     /// </summary>

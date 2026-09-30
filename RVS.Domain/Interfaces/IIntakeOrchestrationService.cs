@@ -40,15 +40,13 @@ public interface IIntakeOrchestrationService
 
     /// <summary>
     /// Resolves the location slug and assembles the intake configuration DTO,
-    /// including dealership name, location details, accepted file types, and
-    /// optionally prefilled customer data from a magic-link token.
+    /// including dealership name, location details and accepted file types.
     /// </summary>
     /// <param name="slug">Location slug for resolving tenant and location.</param>
-    /// <param name="magicLinkToken">Optional magic-link token for customer prefill.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The intake configuration for rendering the customer form.</returns>
     /// <exception cref="KeyNotFoundException">Thrown when the slug cannot be resolved.</exception>
-    Task<IntakeConfigResponseDto> GetIntakeConfigAsync(string slug, string? magicLinkToken = null, CancellationToken cancellationToken = default);
+    Task<IntakeConfigResponseDto> GetIntakeConfigAsync(string slug, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Resolves an A-14 advisor invite for the intake form's prefill (<c>Spec A-14</c>, issue #664):

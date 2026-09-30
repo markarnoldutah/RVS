@@ -872,7 +872,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_johnson_abc123def456",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId1],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -895,7 +894,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_smith_ghi789jkl012",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId2],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -918,7 +916,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_martinez_mno345pqr678",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId3],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -941,7 +938,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_williams_stu901vwx234",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId4],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -964,7 +960,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_thompson_yza567bcd890",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId5],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -987,7 +982,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_chen_efg123hij456",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId6, AssetId7, AssetId8],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded

@@ -3,30 +3,6 @@
     <MudStack Spacing="4">
         <MudText Typo="Typo.h5" Class="mb-1" Style="color: var(--mud-palette-text-primary);">RV Lookup</MudText>
 
-        @* Known-vehicle picker: A-7, deferred and unreachable (Spec A-7, #673). Kept for when A-7 returns. *@
-        @if (State.KnownAssets is { Count: > 0 })
-        {
-            <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Previously seen RVs</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                    Select a previously seen RV or enter a new one below
-                </MudText>
-            </MudStack>
-
-            <MudRadioGroup T="string" Value="@State.Vin" ValueChanged="HandleKnownAssetSelected"
-                           InputStyle="display: flex; flex-direction: column; align-items: flex-start;">
-                @foreach (var asset in State.KnownAssets)
-                {
-                    var label = FormatAssetLabel(asset);
-                    <MudRadio T="string" Value="@asset.AssetId" Color="Color.Primary" Dense="true">
-                        @label
-                    </MudRadio>
-                }
-            </MudRadioGroup>
-
-            <MudDivider Class="my-1" />
-        }
-
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="1">
                 <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">VIN or serial number</MudText>
@@ -240,41 +216,6 @@
         State.VehicleSkipped = false;
         State.VinLookupSucceeded = false;
         _lookupFailed = false;
-    }
-
-    private void HandleKnownAssetSelected(string? assetId)
-    {
-        if (string.IsNullOrWhiteSpace(assetId)) return;
-
-        var asset = State.KnownAssets?.FirstOrDefault(a =>
-            string.Equals(a.AssetId, assetId, StringComparison.OrdinalIgnoreCase));
-
-        if (asset is null) return;
-
-        SelectKnownAsset(asset);
-    }
-
-    private void SelectKnownAsset(AssetInfoDto asset)
-    {
-        State.Vin = asset.AssetId;
-        State.Manufacturer = asset.Manufacturer;
-        State.Model = asset.Model;
-        State.Year = asset.Year;
-        _lookupFailed = false;
-        StateHasChanged();
-    }
-
-    private static string FormatAssetLabel(AssetInfoDto asset)
-    {
-        var parts = new List<string>();
-        if (asset.Year.HasValue)
-            parts.Add(asset.Year.Value.ToString());
-        if (!string.IsNullOrWhiteSpace(asset.Manufacturer))
-            parts.Add(asset.Manufacturer);
-        if (!string.IsNullOrWhiteSpace(asset.Model))
-            parts.Add(asset.Model);
-
-        return parts.Count > 0 ? string.Join(" ", parts) : asset.AssetId;
     }
 
     private void TriggerCameraCapture()
