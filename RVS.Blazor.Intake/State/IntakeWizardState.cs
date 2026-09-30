@@ -177,6 +177,26 @@ public sealed class IntakeWizardState
     /// </summary>
     public bool IsInvitePrefilled { get; set; }
 
+    /// <summary>
+    /// Whether the customer ticked "Remember my details on this device" on Step 2 (issue #811,
+    /// Spec A-7). Unticked by default: a shared browser must not keep one customer's details for
+    /// the next. The submission saves them only while this is set.
+    /// </summary>
+    public bool RememberDetails { get; set; }
+
+    /// <summary>
+    /// Whether Step 2's fields were filled from details this device remembered, so the step can
+    /// offer "Not you?". Separate from <see cref="IsPrefilled"/> and <see cref="IsInvitePrefilled"/>.
+    /// </summary>
+    public bool IsRememberedPrefilled { get; set; }
+
+    /// <summary>
+    /// Whether device memory can be offered at all. Never on an A-14 advisor invite: self-entry
+    /// runs in the advisor's own browser, and remembering there would hand this caller's details
+    /// to the next one.
+    /// </summary>
+    public bool CanRememberDetails => string.IsNullOrWhiteSpace(InviteToken);
+
     /// <summary>All known vehicles for the returning customer, enabling one-tap VIN selection in Step 3.</summary>
     public List<AssetInfoDto> KnownAssets { get; set; } = [];
 
@@ -642,6 +662,72 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
+    /// Fills Step 2 and the Step 3 identifier from details this device remembered (issue #811).
+    /// Fills only blank fields, like the invite prefill, and leaves the contact preferences to the
+    /// customer. The customer opted in last time, so the box starts ticked.
+    /// </summary>
+    public void ApplyRememberedDetails(RememberedDetails details)
+    {
+        ArgumentNullException.ThrowIfNull(details);
+
+        if (string.IsNullOrWhiteSpace(FirstName) && !string.IsNullOrWhiteSpace(details.FirstName))
+        {
+            FirstName = details.FirstName;
+        }
+
+        if (string.IsNullOrWhiteSpace(LastName) && !string.IsNullOrWhiteSpace(details.LastName))
+        {
+            LastName = details.LastName;
+        }
+
+        if (string.IsNullOrWhiteSpace(Email) && !string.IsNullOrWhiteSpace(details.Email))
+        {
+            Email = details.Email;
+        }
+
+        if (string.IsNullOrWhiteSpace(Phone) && !string.IsNullOrWhiteSpace(details.Phone))
+        {
+            Phone = details.Phone;
+        }
+
+        if (string.IsNullOrWhiteSpace(Vin) && !string.IsNullOrWhiteSpace(details.Vin))
+        {
+            Vin = details.Vin;
+        }
+
+        RememberDetails = true;
+        IsRememberedPrefilled = true;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// "Not you?" on Step 2 (issue #811): blanks the contact details and identifier and turns
+    /// device memory off. The caller also forgets what the device kept.
+    /// </summary>
+    public void ClearRememberedDetails()
+    {
+        FirstName = string.Empty;
+        LastName = string.Empty;
+        Email = string.Empty;
+        Phone = null;
+        Vin = string.Empty;
+        RememberDetails = false;
+        IsRememberedPrefilled = false;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// What the device should remember for next time (issue #811): the contact details as
+    /// submitted and the VIN or serial number, unless the customer skipped the vehicle.
+    /// </summary>
+    public RememberedDetails ToRememberedDetails() => new(
+        FirstName.Trim(),
+        LastName.Trim(),
+        Email.Trim(),
+        string.IsNullOrWhiteSpace(Phone) ? null : Phone.Trim(),
+        VehicleSkipped || string.IsNullOrWhiteSpace(Vin) ? null : Vin.Trim());
+
+    /// <summary>
     /// Applies asset prefill data from the intake config (magic-link token).
     /// Sets the most recently used vehicle information so the customer doesn't re-enter it.
     /// </summary>
@@ -878,6 +964,8 @@ public sealed class IntakeWizardState
             EmailOptOut = EmailOptOut,
             IsPrefilled = IsPrefilled,
             IsInvitePrefilled = IsInvitePrefilled,
+            RememberDetails = RememberDetails,
+            IsRememberedPrefilled = IsRememberedPrefilled,
             KnownAssets = KnownAssets,
             Vin = Vin,
             VehicleSkipped = VehicleSkipped,
@@ -938,6 +1026,8 @@ public sealed class IntakeWizardState
             EmailOptOut = data.EmailOptOut;
             IsPrefilled = data.IsPrefilled;
             IsInvitePrefilled = data.IsInvitePrefilled;
+            RememberDetails = data.RememberDetails;
+            IsRememberedPrefilled = data.IsRememberedPrefilled;
             KnownAssets = data.KnownAssets;
             Vin = data.Vin;
             VehicleSkipped = data.VehicleSkipped;
@@ -1040,6 +1130,8 @@ public sealed class IntakeWizardState
         EmailOptOut = false;
         IsPrefilled = false;
         IsInvitePrefilled = false;
+        RememberDetails = false;
+        IsRememberedPrefilled = false;
         KnownAssets = [];
         Vin = string.Empty;
         VehicleSkipped = false;
@@ -1338,6 +1430,13 @@ internal sealed class IntakeWizardStateData
     public bool EmailOptOut { get; set; }
     public bool IsPrefilled { get; set; }
     public bool IsInvitePrefilled { get; set; }
+
+    /// <summary>Step 2's "Remember my details on this device" (issue #811).</summary>
+    public bool RememberDetails { get; set; }
+
+    /// <summary>Whether Step 2 was filled from remembered details (issue #811).</summary>
+    public bool IsRememberedPrefilled { get; set; }
+
     public List<AssetInfoDto> KnownAssets { get; set; } = [];
     public string Vin { get; set; } = string.Empty;
     public bool VehicleSkipped { get; set; }

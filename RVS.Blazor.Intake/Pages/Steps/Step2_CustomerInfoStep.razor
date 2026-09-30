@@ -15,6 +15,21 @@
                 </MudAlert>
             }
 
+            @if (State.IsRememberedPrefilled)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="1">
+                        <MudText Typo="Typo.body1">Filled in from your last visit on this device.</MudText>
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   OnClick="HandleNotYou"
+                                   Style="text-transform: none;">
+                            Not you? Clear it
+                        </MudButton>
+                    </MudStack>
+                </MudAlert>
+            }
+
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="1">
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">First name</MudText>
@@ -110,6 +125,22 @@
                 </MudStack>
             </MudPaper>
 
+            @if (State.CanRememberDetails)
+            {
+                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                    <MudStack Spacing="1">
+                        <MudCheckBox T="bool"
+                                     Value="State.RememberDetails"
+                                     ValueChanged="HandleRememberChanged"
+                                     Label="Remember my name, email, phone and VIN on this device"
+                                     Color="Color.Primary" />
+                        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                            Saves typing next time. Leave it unticked on a shared or dealership device.
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            }
+
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        FullWidth="true"
@@ -125,6 +156,7 @@
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Inject] private RememberedDetailsStore RememberedDetails { get; set; } = default!;
 
     private MudForm _form = default!;
     private bool _submitted;
@@ -162,6 +194,25 @@
             return "You've opted out of that channel. Choose another preferred contact method.";
         }
         return null;
+    }
+
+    // Issue #811: unticking forgets at once, not at submission, so a customer who changes their
+    // mind and walks away leaves nothing behind.
+    private async Task HandleRememberChanged(bool remember)
+    {
+        State.RememberDetails = remember;
+        if (!remember)
+        {
+            await RememberedDetails.ForgetAsync();
+        }
+        await State.PersistAsync();
+    }
+
+    private async Task HandleNotYou()
+    {
+        State.ClearRememberedDetails();
+        await RememberedDetails.ForgetAsync();
+        await State.PersistAsync();
     }
 
     private async Task HandleNext()
