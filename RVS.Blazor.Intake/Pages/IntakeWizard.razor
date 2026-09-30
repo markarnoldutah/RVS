@@ -16,6 +16,13 @@
         </MudPaper>
     </MudStack>
 }
+else if (_state.Config is { IntakeExpired: true })
+{
+    @* Spec A-19: a session restored past Step 1 reloads the config, so it lands here too. *@
+    <MudStack AlignItems="AlignItems.Center" Style="max-width: 560px; margin: 0 auto;">
+        <IntakeUnavailableNotice LocationName="@_state.Config.LocationName" />
+    </MudStack>
+}
 else
 {
 <MudStack AlignItems="AlignItems.Center" Spacing="4"

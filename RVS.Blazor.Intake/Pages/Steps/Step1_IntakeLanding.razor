@@ -35,6 +35,10 @@
             </MudStack>
         </MudPaper>
     }
+    else if (State.Config is { IntakeExpired: true })
+    {
+        <IntakeUnavailableNotice LocationName="@State.Config.LocationName" />
+    }
     else if (State.Config is not null)
     {
         @if (State.Config.TokenExpired)
@@ -215,6 +219,12 @@
         try
         {
             State.Config = await IntakeApi.GetConfigAsync(State.Slug, State.Token);
+
+            // Spec A-19: an expired slug shows the notice, so there is no form to prefill.
+            if (State.Config.IntakeExpired)
+            {
+                return;
+            }
 
             // A-7 returning-customer prefill is deferred (Spec A-7, #673): nothing RVS sends puts
             // ?token= on the intake URL, so this path is unreachable today. Kept for when A-7 returns.

@@ -28,6 +28,7 @@ public class IntakeOrchestrationServiceTests
     private readonly Mock<INotificationOrchestrator> _notificationOrchestratorMock = new();
     private readonly Mock<IPacketGenerationQueue> _packetQueueMock = new();
     private readonly Mock<IIntakeInviteRepository> _inviteRepoMock = new();
+    private readonly Mock<ITenantConfigRepository> _tenantConfigRepoMock = new();
     private readonly IntakeOrchestrationService _sut;
 
     public IntakeOrchestrationServiceTests()
@@ -48,6 +49,7 @@ public class IntakeOrchestrationServiceTests
             _notificationOrchestratorMock.Object,
             _packetQueueMock.Object,
             _inviteRepoMock.Object,
+            _tenantConfigRepoMock.Object,
             intakeUrlOptions,
             Mock.Of<ILogger<IntakeOrchestrationService>>());
     }
@@ -96,6 +98,59 @@ public class IntakeOrchestrationServiceTests
 
         result.ServiceRequest.TenantId.Should().Be("ten_test");
         result.ServiceRequest.LocationId.Should().Be("loc_test");
+    }
+
+    // ── Spec A-19: a disabled tenant's intake expires after 60 days ──────────
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTenantDisabledWithinCaptureWindow_ShouldStillCreateTheRequest()
+    {
+        SetupFullHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 59);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.TenantId.Should().Be("ten_test");
+        _packetQueueMock.Verify(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTenantIntakeExpired_ShouldThrowIntakeExpiredException()
+    {
+        SetupFullHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 61);
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        await act.Should().ThrowAsync<IntakeExpiredException>();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTenantIntakeExpired_ShouldWriteNothing()
+    {
+        SetupFullHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 61);
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+        await act.Should().ThrowAsync<IntakeExpiredException>();
+
+        _globalAcctRepoMock.Verify(r => r.CreateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()), Times.Never);
+        _profileRepoMock.Verify(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()), Times.Never);
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        _ledgerRepoMock.Verify(r => r.AppendAsync(It.IsAny<AssetLedgerEntry>(), It.IsAny<CancellationToken>()), Times.Never);
+        _packetQueueMock.Verify(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTenantReEnabledAfterExpiry_ShouldCreateTheRequest()
+    {
+        SetupFullHappyPath();
+        _tenantConfigRepoMock.Setup(r => r.GetAsync("ten_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildTenantConfig(new TenantAccessGateEmbedded { LoginsEnabled = true, DisabledAtUtc = null }));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.TenantId.Should().Be("ten_test");
     }
 
     // ── Step 2: GlobalCustomerAcct Resolution ────────────────────────────────
@@ -2129,6 +2184,39 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task GetIntakeConfigAsync_WhenTenantHasNoConfig_ShouldNotBeExpired()
+    {
+        SetupConfigHappyPath();
+
+        var config = await _sut.GetIntakeConfigAsync("test-slug");
+
+        config.IntakeExpired.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenTenantDisabledWithinCaptureWindow_ShouldNotBeExpired()
+    {
+        SetupConfigHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 30);
+
+        var config = await _sut.GetIntakeConfigAsync("test-slug");
+
+        config.IntakeExpired.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenTenantIntakeExpired_ShouldReportExpiredAndKeepTheLocationName()
+    {
+        SetupConfigHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 61);
+
+        var config = await _sut.GetIntakeConfigAsync("test-slug");
+
+        config.IntakeExpired.Should().BeTrue();
+        config.LocationName.Should().Be(BuildSlugLookup().LocationName);
+    }
+
+    [Fact]
     public async Task GetIntakeConfigAsync_WhenSlugNotFound_ShouldThrowKeyNotFoundException()
     {
         _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("unknown-slug", It.IsAny<CancellationToken>()))
@@ -2627,6 +2715,25 @@ public class IntakeOrchestrationServiceTests
             CreatedByUserId = "intake",
         };
     }
+
+    private void SetupAccessGate(bool loginsEnabled, int disabledDaysAgo)
+    {
+        _tenantConfigRepoMock.Setup(r => r.GetAsync("ten_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildTenantConfig(new TenantAccessGateEmbedded
+            {
+                LoginsEnabled = loginsEnabled,
+                DisabledReason = loginsEnabled ? null : "PastDue",
+                DisabledAtUtc = loginsEnabled ? null : DateTimeOffset.UtcNow.AddDays(-disabledDaysAgo),
+            }));
+    }
+
+    private static TenantConfig BuildTenantConfig(TenantAccessGateEmbedded gate) => new()
+    {
+        Id = "ten_test",
+        TenantId = "ten_test",
+        AccessGate = gate,
+        CreatedByUserId = "admin",
+    };
 
     private void SetupConfigHappyPath()
     {

@@ -69,6 +69,23 @@ public class TenantAccessGateEmbedded
     /// </summary>
     [JsonProperty("disabledAtUtc")]
     public DateTimeOffset? DisabledAtUtc { get; set; }
+
+    /// <summary>
+    /// How long a disabled tenant's intake slugs keep capturing, counted from
+    /// <see cref="DisabledAtUtc"/> (<c>Spec A-19</c>, issue #478).
+    /// </summary>
+    public const int IntakeCaptureDays = 60;
+
+    /// <summary>
+    /// Whether the tenant's intake slugs have stopped accepting new requests (<c>Spec A-19</c>).
+    /// Derived on read rather than stored, so re-enabling the tenant restores intake at once. A
+    /// disabled gate with no <see cref="DisabledAtUtc"/> has no clock to run and keeps capturing.
+    /// </summary>
+    /// <param name="utcNow">The current time.</param>
+    public bool IsIntakeExpired(DateTimeOffset utcNow) =>
+        !LoginsEnabled
+        && DisabledAtUtc is { } disabledAt
+        && utcNow >= disabledAt.AddDays(IntakeCaptureDays);
 }
 
 // ---------------------------------------------------------------------------

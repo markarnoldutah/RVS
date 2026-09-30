@@ -31,6 +31,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly IPacketGenerationQueue _packetGenerationQueue;
     private readonly IIntakeInviteRepository _intakeInviteRepository;
+    private readonly ITenantConfigRepository _tenantConfigRepository;
     private readonly IntakeUrlOptions _intakeUrlOptions;
     private readonly ILogger<IntakeOrchestrationService> _logger;
 
@@ -49,6 +50,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         INotificationOrchestrator notificationOrchestrator,
         IPacketGenerationQueue packetGenerationQueue,
         IIntakeInviteRepository intakeInviteRepository,
+        ITenantConfigRepository tenantConfigRepository,
         IOptions<IntakeUrlOptions> intakeUrlOptions,
         ILogger<IntakeOrchestrationService> logger)
     {
@@ -63,6 +65,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
         _notificationOrchestrator = notificationOrchestrator;
         _packetGenerationQueue = packetGenerationQueue;
         _intakeInviteRepository = intakeInviteRepository;
+        _tenantConfigRepository = tenantConfigRepository;
         _intakeUrlOptions = intakeUrlOptions.Value;
         _logger = logger;
     }
@@ -111,6 +114,15 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
 
         _logger.LogInformation("Intake Step 1 complete: slug={Slug} → tenantId={TenantId}, locationId={LocationId}",
             slug, tenantId, locationId);
+
+        // Spec A-19 (issue #478): a disabled tenant keeps capturing for 60 days, then the slug
+        // stops accepting work. Checked before anything is written.
+        if (await IsIntakeExpiredAsync(tenantId, cancellationToken))
+        {
+            _logger.LogWarning("Intake refused: tenant {TenantId} has been disabled past the capture window (slug={Slug})",
+                tenantId, slug);
+            throw new IntakeExpiredException();
+        }
 
         // A-14 (issue #664): an advisor invite that is still good attributes the request to that
         // advisor and invite. Anything else is ignored rather than refused — a spent, expired or
@@ -588,6 +600,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             ?? throw new KeyNotFoundException($"Location slug '{slug}' not found.");
 
         var location = await _locationRepository.GetByIdAsync(slugLookup.TenantId, slugLookup.LocationId, cancellationToken);
+        var intakeExpired = await IsIntakeExpiredAsync(slugLookup.TenantId, cancellationToken);
 
         var intakeConfig = location?.IntakeConfig ?? new IntakeFormConfigEmbedded();
 
@@ -679,7 +692,19 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             PrefillAsset = prefillAsset,
             KnownAssets = knownAssets,
             TokenExpired = tokenExpired,
+            IntakeExpired = intakeExpired,
         };
+    }
+
+    /// <summary>
+    /// Whether the tenant has been disabled for longer than the intake capture window
+    /// (<c>Spec A-19</c>). One point read on <c>tenant-configs</c>; a tenant with no config
+    /// document has no gate and keeps capturing.
+    /// </summary>
+    private async Task<bool> IsIntakeExpiredAsync(string tenantId, CancellationToken cancellationToken)
+    {
+        var tenantConfig = await _tenantConfigRepository.GetAsync(tenantId, cancellationToken);
+        return tenantConfig?.AccessGate?.IsIntakeExpired(DateTimeOffset.UtcNow) ?? false;
     }
 
     /// <inheritdoc />
