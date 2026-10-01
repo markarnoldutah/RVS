@@ -241,6 +241,39 @@ public class ServiceRequestApiClientTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    // ── GetSubmissionAsync (Spec A-17, issue #822) ───────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetSubmissionAsync_WhenAnyArgumentIsBlank_ShouldThrowArgumentException(string? blank)
+    {
+        var sut = CreateClient(new HttpClient { BaseAddress = new Uri("https://test.local") });
+
+        await sut.Invoking(c => c.GetSubmissionAsync(blank!, "sr-1")).Should().ThrowAsync<ArgumentException>();
+        await sut.Invoking(c => c.GetSubmissionAsync("dlr-1", blank!)).Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetSubmissionAsync_ShouldGetSubmissionRoute_AndDeserializeMembers()
+    {
+        ServiceRequestSummaryResponseDto[] expected =
+        [
+            new() { Id = "sr-1", LocationId = "loc-1", Status = "New", CustomerFullName = "A B", IssueCategory = "plumbing", SubmissionPosition = 1, SubmissionCount = 2 },
+            new() { Id = "sr-2", LocationId = "loc-1", Status = "New", CustomerFullName = "A B", IssueCategory = "electrical", SubmissionPosition = 2, SubmissionCount = 2 }
+        ];
+        var handler = new CapturingHandler(HttpStatusCode.OK, expected);
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var result = await sut.GetSubmissionAsync("dlr 1", "sr/2");
+
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Get);
+        handler.LastRequest.RequestUri!.AbsolutePath
+            .Should().Be("/api/dealerships/dlr%201/service-requests/sr%2F2/submission");
+        result.Select(r => r.Id).Should().Equal("sr-1", "sr-2");
+    }
+
     private sealed class CapturingHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _statusCode;

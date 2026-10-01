@@ -346,9 +346,50 @@
                                 @* Spec A-17 (#806): the customer reported this with other issues on one visit *@
                                 @if (_sr.SubmissionCount > 1)
                                 {
-                                    <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Outlined.Layers">
-                                        Issue @_sr.SubmissionPosition of @_sr.SubmissionCount reported on the same visit. The others are separate requests on the board.
-                                    </MudAlert>
+                                    <MudPaper Outlined="true" Elevation="0" Class="pa-3">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudIcon Icon="@Icons.Material.Outlined.Layers" Color="Color.Info" Size="Size.Small" />
+                                            <MudText Typo="Typo.body2" Style="@ValueStyle">
+                                                Issue @_sr.SubmissionPosition of @_sr.SubmissionCount reported.
+                                            </MudText>
+                                        </MudStack>
+                                        @if (_submissionMembers is { Count: > 1 })
+                                        {
+                                            <MudSimpleTable Dense="true" Elevation="0" Class="mt-2" Style="background: transparent;">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Issue</th>
+                                                        <th>Category</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var member in _submissionMembers)
+                                                    {
+                                                        var memberId = member.Id;
+                                                        <tr>
+                                                            <td>
+                                                                @if (memberId == _sr.Id)
+                                                                {
+                                                                    <MudText Typo="Typo.body2" Style="font-weight: 700;" aria-current="true">
+                                                                        Issue @member.SubmissionPosition (this one)
+                                                                    </MudText>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <MudLink Typo="Typo.body2" OnClick="@(() => OpenSubmissionMemberAsync(memberId))">
+                                                                        Issue @member.SubmissionPosition
+                                                                    </MudLink>
+                                                                }
+                                                            </td>
+                                                            <td>@FormatCategoryName(member.IssueCategory)</td>
+                                                            <td><StatusBadge Status="@member.Status" /></td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </MudSimpleTable>
+                                        }
+                                    </MudPaper>
                                 }
                                 <div>
                                     <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Description</MudText>
@@ -1209,6 +1250,7 @@
 
     private DialogMode _mode;
     private ServiceRequestDetailResponseDto? _sr;
+    private IReadOnlyList<ServiceRequestSummaryResponseDto>? _submissionMembers;
     private bool _loading;
     private string? _error;
     private string? _dealershipId;
@@ -1373,8 +1415,23 @@
 
         if (!needsLoad) return;
 
+        if (string.IsNullOrEmpty(ServiceRequestId))
+        {
+            ResetViewState();
+            _mode = DialogMode.Create;
+            _createForm = new CreateForm();
+            _createSubmitted = false;
+            return;
+        }
+
+        await LoadServiceRequestAsync(ServiceRequestId);
+    }
+
+    private void ResetViewState()
+    {
         _error = null;
         _sr = null;
+        _submissionMembers = null;
         _attachmentUrls.Clear();
         _statusError = null;
         _selectedStatus = null;
@@ -1384,15 +1441,26 @@
         _packetPdfUrl = null;
         _priorityError = null;
         _selectedPriority = null;
+    }
 
-        if (string.IsNullOrEmpty(ServiceRequestId))
-        {
-            _mode = DialogMode.Create;
-            _createForm = new CreateForm();
-            _createSubmitted = false;
-            return;
-        }
+    @* Switching to another issue from the same visit reloads the flyout in place; any open
+       editor is dropped so its values cannot be saved onto the newly loaded request. *@
+    private async Task OpenSubmissionMemberAsync(string serviceRequestId)
+    {
+        CancelEditIssue();
+        CancelEditCustomer();
+        CancelEditAsset();
+        CancelEditTech();
+        CancelEditStatusNote();
+        CancelEditTitle();
+        _commentText = null;
+        _commentError = null;
+        await LoadServiceRequestAsync(serviceRequestId);
+    }
 
+    private async Task LoadServiceRequestAsync(string serviceRequestId)
+    {
+        ResetViewState();
         _mode = DialogMode.View;
         _loading = true;
 
@@ -1406,7 +1474,7 @@
                 return;
             }
 
-            var srTask = SrClient.GetByIdAsync(_dealershipId, ServiceRequestId);
+            var srTask = SrClient.GetByIdAsync(_dealershipId, serviceRequestId);
             var categoriesTask = EnsureIssueCategoriesAsync();
             _sr = await srTask;
             await categoriesTask;
@@ -1425,11 +1493,26 @@
             _loading = false;
         }
 
-        // Show the request first; thumbnails and the packet link fill in when their read URLs arrive.
-        if (_sr is not null && (_sr.Attachments.Count > 0 || PacketStatusDisplay.HasPdf(_sr.PacketGeneration)))
+        // Show the request first; thumbnails, the packet link and the same-visit table fill in afterwards.
+        if (_sr is not null && (_sr.Attachments.Count > 0 || PacketStatusDisplay.HasPdf(_sr.PacketGeneration) || _sr.SubmissionCount > 1))
         {
             StateHasChanged();
-            await Task.WhenAll(LoadAttachmentUrlsAsync(), LoadPacketPdfUrlAsync());
+            await Task.WhenAll(LoadAttachmentUrlsAsync(), LoadPacketPdfUrlAsync(), LoadSubmissionMembersAsync());
+        }
+    }
+
+    private async Task LoadSubmissionMembersAsync()
+    {
+        if (_sr is not { SubmissionCount: > 1 } || _dealershipId is null) return;
+        var srId = _sr.Id;
+        try
+        {
+            var members = await SrClient.GetSubmissionAsync(_dealershipId, srId);
+            if (_sr?.Id == srId) _submissionMembers = members;
+        }
+        catch (Exception)
+        {
+            // The line above the table still says how many issues the visit reported.
         }
     }
 

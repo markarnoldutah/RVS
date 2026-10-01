@@ -61,6 +61,24 @@ public sealed class ServiceRequestApiClient
     }
 
     /// <summary>
+    /// Gets every request reported on the same intake visit as this one (Spec A-17), in
+    /// submission order and including this request.
+    /// </summary>
+    public async Task<IReadOnlyList<ServiceRequestSummaryResponseDto>> GetSubmissionAsync(
+        string dealershipId,
+        string serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+
+        return await _httpClient.GetFromJsonAsync<List<ServiceRequestSummaryResponseDto>>(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/submission",
+            cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize submission response.");
+    }
+
+    /// <summary>
     /// Searches service requests with filter criteria.
     /// </summary>
     public async Task<ServiceRequestSearchResultResponseDto> SearchAsync(

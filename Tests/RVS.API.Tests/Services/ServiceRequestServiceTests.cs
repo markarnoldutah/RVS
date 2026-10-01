@@ -67,6 +67,84 @@ public class ServiceRequestServiceTests
         result.Should().BeSameAs(sr);
     }
 
+    // ── GetSubmissionMembersAsync ────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetSubmissionMembersAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.GetSubmissionMembersAsync(tenantId!, "sr_1");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetSubmissionMembersAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.GetSubmissionMembersAsync("ten_1", id!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetSubmissionMembersAsync_WhenNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest?)null);
+
+        var act = () => _sut.GetSubmissionMembersAsync("ten_1", "sr_missing");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task GetSubmissionMembersAsync_WhenReportedOnItsOwn_ShouldReturnOnlyTheRequest()
+    {
+        var sr = BuildServiceRequest("sr_1");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var result = await _sut.GetSubmissionMembersAsync("ten_1", "sr_1");
+
+        result.Should().ContainSingle().Which.Should().BeSameAs(sr);
+        _repoMock.Verify(r => r.GetBySubmissionIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetSubmissionMembersAsync_WhenInMultiIssueSubmission_ShouldReturnEveryMemberInOrder()
+    {
+        var lead = BuildSubmissionMember("sr_lead", 1);
+        var second = BuildSubmissionMember("sr_2", 2);
+        var third = BuildSubmissionMember("sr_3", 3);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(second);
+        _repoMock.Setup(r => r.GetBySubmissionIdAsync("ten_1", "sr_lead", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([lead, second, third]);
+
+        var result = await _sut.GetSubmissionMembersAsync("ten_1", "sr_2");
+
+        result.Select(r => r.Id).Should().Equal("sr_lead", "sr_2", "sr_3");
+    }
+
+    [Fact]
+    public async Task GetSubmissionMembersAsync_WhenSubmissionReadsBackEmpty_ShouldReturnOnlyTheRequest()
+    {
+        var second = BuildSubmissionMember("sr_2", 2);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(second);
+        _repoMock.Setup(r => r.GetBySubmissionIdAsync("ten_1", "sr_lead", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await _sut.GetSubmissionMembersAsync("ten_1", "sr_2");
+
+        result.Should().ContainSingle().Which.Should().BeSameAs(second);
+    }
+
     // ── SearchAsync ──────────────────────────────────────────────────────────
 
     [Theory]
@@ -713,6 +791,20 @@ public class ServiceRequestServiceTests
         IssueDescription = "Water heater not working",
         IssueCategory = "Plumbing",
         Priority = "High"
+    };
+
+    private static ServiceRequest BuildSubmissionMember(string id, int position) => new()
+    {
+        Id = id,
+        TenantId = "ten_1",
+        Status = "New",
+        LocationId = "loc_slc",
+        CustomerProfileId = "cp_1",
+        IssueDescription = $"Issue {position}",
+        IssueCategory = "Plumbing",
+        SubmissionId = "sr_lead",
+        SubmissionPosition = position,
+        SubmissionCount = 3
     };
 
     private static ServiceRequestUpdateRequestDto BuildUpdateRequest() => new()

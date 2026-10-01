@@ -40,6 +40,24 @@ public sealed class ServiceRequestService : IServiceRequestService
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<ServiceRequest>> GetSubmissionMembersAsync(string tenantId, string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        var request = await _repository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
+
+        if (!request.IsInMultiIssueSubmission)
+        {
+            return [request];
+        }
+
+        var members = await _repository.GetBySubmissionIdAsync(tenantId, request.SubmissionId!, cancellationToken);
+        return members.Count > 0 ? members : [request];
+    }
+
+    /// <inheritdoc />
     public async Task<PagedResult<ServiceRequest>> SearchAsync(
         string tenantId,
         ServiceRequestSearchRequestDto request,
