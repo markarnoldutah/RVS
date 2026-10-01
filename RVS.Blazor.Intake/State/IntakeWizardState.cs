@@ -646,7 +646,7 @@ public sealed class IntakeWizardState
 
     /// <summary>
     /// Fills Step 2, the Step 3 identifier and Step 4 from details this device remembered (issues
-    /// #811, #819). Fills only blank fields, like the invite prefill, and leaves the opt-outs to the
+    /// #811, #819, #823). Fills only blank fields, like the invite prefill, and leaves the opt-outs to the
     /// customer; a remembered preferred contact method is skipped if it is now opted out. The
     /// customer opted in last time, so the box starts ticked.
     /// </summary>
@@ -701,14 +701,25 @@ public sealed class IntakeWizardState
             Year = details.Year;
         }
 
+        if (string.IsNullOrWhiteSpace(HasExtendedWarranty) && !string.IsNullOrWhiteSpace(details.HasExtendedWarranty))
+        {
+            HasExtendedWarranty = details.HasExtendedWarranty;
+        }
+
+        if (string.IsNullOrWhiteSpace(ApproxPurchaseDate) && !string.IsNullOrWhiteSpace(details.ApproxPurchaseDate))
+        {
+            ApproxPurchaseDate = details.ApproxPurchaseDate;
+        }
+
         RememberDetails = true;
         IsRememberedPrefilled = true;
         NotifyStateChanged();
     }
 
     /// <summary>
-    /// What the device should remember for next time (issues #811, #819): the contact details and
-    /// preferred contact method as submitted, and the vehicle, unless the customer skipped it.
+    /// What the device should remember for next time (issues #811, #819, #823): the contact details
+    /// and preferred contact method as submitted, and the vehicle with its warranty answer and
+    /// purchase date, unless the customer skipped it.
     /// </summary>
     public RememberedDetails ToRememberedDetails() => new(
         FirstName.Trim(),
@@ -719,7 +730,9 @@ public sealed class IntakeWizardState
         TrimToNull(PreferredContact),
         VehicleSkipped ? null : TrimToNull(Manufacturer),
         VehicleSkipped ? null : TrimToNull(Model),
-        VehicleSkipped ? null : Year);
+        VehicleSkipped ? null : Year,
+        VehicleSkipped ? null : TrimToNull(HasExtendedWarranty),
+        VehicleSkipped ? null : TrimToNull(ApproxPurchaseDate));
 
     private static string? TrimToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

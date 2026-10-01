@@ -13,7 +13,7 @@ public class RememberedDetailsStoreTests
 {
     private static readonly RememberedDetails Jane =
         new("Jane", "Doe", "jane@example.com", "(801) 555-1234", "1FTFW1ET5DFC10312",
-            "Text", "Grand Design", "Reflection 312BHTS", 2021);
+            "Text", "Grand Design", "Reflection 312BHTS", 2021, "Yes", "06/2021");
 
     private readonly InMemoryWebStorageJSRuntime _js = new("localStorage");
     private readonly RememberedDetailsStore _sut;
