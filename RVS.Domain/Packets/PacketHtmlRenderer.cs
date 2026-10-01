@@ -123,13 +123,6 @@ public static class PacketHtmlRenderer
         sb.Append("</head>\n<body>\n");
         sb.Append("<main class=\"packet\">\n");
 
-        // A single issue keeps its status buttons above the masthead, as it always has. With
-        // several, each issue's buttons sit under its own heading instead (Spec A-17).
-        if (!isMultiIssue)
-        {
-            AppendManagerActions(sb, lead.ManagerLinks);
-        }
-
         AppendMasthead(sb, lead, received);
 
         if (isMultiIssue)
@@ -145,10 +138,11 @@ public static class PacketHtmlRenderer
                 // The heading carries the category, so the issue's own category section would
                 // only repeat it.
                 AppendIssueHeading(sb, packet, i + 1, packets.Count);
-                AppendManagerActions(sb, packet.ManagerLinks);
+                AppendOpenManager(sb, packet.ManagerLinks);
             }
             else
             {
+                AppendOpenManager(sb, packet.ManagerLinks);
                 AppendCategory(sb, packet.IssueCategory);
             }
 
@@ -161,6 +155,7 @@ public static class PacketHtmlRenderer
             AppendDiagnostics(sb, packet.Diagnostics);
             AppendPhotos(sb, packet.Photos, droppedPhotoNoteUrls[i]);
             AppendPasteBlock(sb, packet.PasteBlock);
+            AppendOpenManager(sb, packet.ManagerLinks);
 
             // The status page is the customer's and lists every issue (Spec X-1), so a
             // multi-issue packet links it once, after the last issue.
@@ -228,32 +223,29 @@ public static class PacketHtmlRenderer
     private static string CategoryLabel(string? category) =>
         string.IsNullOrWhiteSpace(category) ? "Uncategorized" : category.Trim();
 
-    // ── Manager-app status actions (Spec C-7, issue #498) ────────────────
+    // ── Manager-app link (Spec C-7, issues #498, #743) ───────────────────
     //
-    // Delivery chrome, not a Spec B-2 section: it sits above the masthead so a service manager
-    // can set status from the email in one tap, and the print stylesheet hides it. The links are
-    // plain navigations into the signed-in manager app — they carry no token and write nothing,
-    // so a mail-security scanner fetching them changes no state. A presentational <table> with
-    // inline styles, never flex/grid, for the same email-client reason as the masthead.
+    // Delivery chrome, not a Spec B-2 section: one "Open Manager" button on its own line, once
+    // under the masthead (under each issue's heading in a multi-issue packet) and again after
+    // the paste block, so the manager reaches it from the top or from the bottom of the
+    // packet. It opens the request page, where every status is one tap away — the email used
+    // to carry a button per status as well and #743 dropped them. The print stylesheet hides
+    // it. The link is a plain navigation into the signed-in manager app — it carries no token
+    // and writes nothing, so a mail-security scanner fetching it changes no state.
     //
-    // The links are styled as brand buttons (Spec THEME-1, issue #735): status actions are
-    // filled Rust, primary; "Open Manager" is outlined Rust, secondary, on its own line below.
-    // Styles are inline because a mail client may strip the <style> block. The Domain cannot
-    // reference RVS.UI.Shared, so the hex values mirror RvsBrand — change them together.
+    // A filled Rust primary button (Spec THEME-1, issue #735), styled inline because a mail
+    // client may strip the <style> block. A <p> with an inline-block anchor, never flex/grid,
+    // for the same email-client reason as the masthead. The Domain cannot reference
+    // RVS.UI.Shared, so the hex value mirrors RvsBrand — change them together.
 
     /// <summary>Text-safe Rust, <c>RvsBrand.Accent</c> — 6.02:1 under white button text.</summary>
     private const string BrandAccent = "#A8431F";
 
-    private const string ButtonBaseStyle =
-        "display:inline-block;padding:2mm 4mm;border-radius:4px;font-weight:700;text-decoration:none;";
-
     private const string PrimaryButtonStyle =
-        ButtonBaseStyle + "margin:1mm 2mm 1mm 0;background-color:" + BrandAccent + ";color:#ffffff;border:1px solid " + BrandAccent + ";";
+        "display:inline-block;padding:2mm 4mm;border-radius:4px;font-weight:700;text-decoration:none;"
+        + "background-color:" + BrandAccent + ";color:#ffffff;border:1px solid " + BrandAccent + ";";
 
-    private const string SecondaryButtonStyle =
-        ButtonBaseStyle + "background-color:#ffffff;color:" + BrandAccent + ";border:1px solid " + BrandAccent + ";";
-
-    private static void AppendManagerActions(StringBuilder sb, PacketManagerLinks? links)
+    private static void AppendOpenManager(StringBuilder sb, PacketManagerLinks? links)
     {
         if (links is null || !IsHttpUrl(links.RequestUrl))
         {
@@ -261,18 +253,8 @@ public static class PacketHtmlRenderer
         }
 
         sb.Append("<!-- section:manager-actions -->\n");
-        sb.Append("<table role=\"presentation\" class=\"manager-actions\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin:0 0 5mm;border:1px solid #000;\">\n<tr>\n");
-        sb.Append("<td style=\"padding:2mm 3mm;font-size:9.5pt;\">\n");
-        sb.Append("<p style=\"margin:0 0 1mm;font-weight:700;\">Set status</p>\n");
-        foreach (var action in links.Actions.Where(a => IsHttpUrl(a.Url)))
-        {
-            sb.Append("<a href=\"").Append(Attr(action.Url)).Append("\" style=\"").Append(PrimaryButtonStyle).Append("\">")
-                .Append(Text(action.Label)).Append("</a>\n");
-        }
-
-        sb.Append("<p style=\"margin:2mm 0 0;\"><a href=\"").Append(Attr(links.RequestUrl))
-            .Append("\" style=\"").Append(SecondaryButtonStyle).Append("\">Open Manager</a></p>\n");
-        sb.Append("</td>\n</tr>\n</table>\n");
+        sb.Append("<p class=\"manager-actions\" style=\"margin:4mm 0;\"><a href=\"").Append(Attr(links.RequestUrl))
+            .Append("\" style=\"").Append(PrimaryButtonStyle).Append("\">Open Manager</a></p>\n");
     }
 
     // ── Masthead: sections 1 (unit), 2 (customer), 3 (origin) ──────────────

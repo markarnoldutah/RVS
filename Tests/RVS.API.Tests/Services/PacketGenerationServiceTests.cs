@@ -1288,10 +1288,10 @@ public class PacketGenerationServiceTests
             Microsoft.Extensions.Options.Options.Create(new IntakeUrlOptions { BaseUrl = IntakeBaseUrl }),
             Mock.Of<ILogger<PacketGenerationService>>());
 
-    // ── Manager-app status deep links (Spec C-7, issue #498) ───────────────
+    // ── Manager-app link (Spec C-7, issues #498, #743) ─────────────────────
 
     [Fact]
-    public async Task GenerateAsync_WhenManagerAppBaseUrlIsConfigured_ShouldPutStatusDeepLinksInBothEmailBodies()
+    public async Task GenerateAsync_WhenManagerAppBaseUrlIsConfigured_ShouldPutTheRequestLinkInBothEmailBodies()
     {
         var sut = BuildSutWithEmailBudget(PacketEmailSizeFitter.DefaultMaxRequestBytes);
 
@@ -1301,23 +1301,22 @@ public class PacketGenerationServiceTests
         sent.Should().NotBeNull();
         foreach (var body in new[] { sent!.HtmlBody, sent.PlainTextBody })
         {
-            body.Should().Contain($"{ManagerAppBaseUrl}/sr/{sr.Id}?action=in-progress");
-            body.Should().Contain($"{ManagerAppBaseUrl}/sr/{sr.Id}?action=waiting-on-parts");
-            body.Should().Contain($"{ManagerAppBaseUrl}/sr/{sr.Id}?action=completed");
+            body.Should().Contain($"{ManagerAppBaseUrl}/sr/{sr.Id}");
+            body.Should().NotContain("?action=");
         }
     }
 
     [Fact]
-    public async Task GenerateAsync_WhenManagerAppBaseUrlIsBlank_ShouldSendTheEmailWithoutStatusDeepLinks()
+    public async Task GenerateAsync_WhenManagerAppBaseUrlIsBlank_ShouldSendTheEmailWithoutTheRequestLink()
     {
         var sut = BuildSutWithEmailBudget(PacketEmailSizeFitter.DefaultMaxRequestBytes, managerAppBaseUrl: "");
 
-        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 50_000, out _);
+        var sent = CaptureSentMessageWithTwoPhotos(sut, photoBytes: 50_000, out var sr);
 
         await Task.CompletedTask;
         sent.Should().NotBeNull();
-        sent!.HtmlBody.Should().NotContain("?action=");
-        sent.PlainTextBody.Should().NotContain("?action=");
+        sent!.HtmlBody.Should().NotContain($"/sr/{sr.Id}");
+        sent.PlainTextBody.Should().NotContain($"/sr/{sr.Id}");
     }
 
     /// <summary>

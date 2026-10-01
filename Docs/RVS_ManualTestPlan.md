@@ -312,11 +312,14 @@ In the manager app, open **Locations** and edit a location. The drawer has a **S
 
 ### 3.3 Status links from the packet email (C-7)
 
-- [ ] In a packet email, tap **Open Manager**. It opens the board with that request's detail drawer open.
-- [ ] Tap **In Progress**. A confirmation page appears, and **nothing changes until you tap to confirm**. After you confirm, the status is In Progress, and the activity timeline credits you.
-- [ ] Repeat with **Waiting on Parts** and **Completed**.
-- [ ] Open an action link in a signed-out private window. You are asked to sign in, and nothing changes until you sign in and confirm.
-- [ ] Open an action link as a user of the **second tenant**. The request is not shown and nothing changes (X-4).
+- [ ] A packet email shows one **Open Manager** button under the masthead and a second one right after **Copy & Paste Ready**. There are no per-status buttons and no *Set status* box. In a multi-issue email, each issue has its own pair.
+- [ ] Tap **Open Manager** on a phone. The request page opens, single column, with the customer, unit, status buttons, note, photos and packet PDF. **Nothing changes on page load.**
+- [ ] Tap **In Progress**. The status changes, a confirmation shows, and the activity timeline credits you. Repeat with another status.
+- [ ] Tap **Call**, **Text** and **Email**. Each opens the phone's dialler, messages or mail app with the customer's details. The preferred method is the filled button.
+- [ ] Write a note using the keyboard's microphone and save it. It shows on the customer status page (1.7).
+- [ ] Open the same link on a desktop. The same page shows; **Open on the board** opens the board with the drawer open.
+- [ ] Open the link in a signed-out private window. You are asked to sign in, and nothing changes until you sign in and tap.
+- [ ] Open the link as a user of the **second tenant**. The request is not shown and nothing changes (X-4).
 
 ### 3.4 Request detail drawer (C-2, C-4, C-9)
 

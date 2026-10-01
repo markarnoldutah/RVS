@@ -192,16 +192,14 @@ public class PacketEmailComposerTests
     [Fact]
     public void BuildPlainTextBody_WhenManagerLinksPresent_ShouldAppendThemAfterThePasteBlock()
     {
-        // Spec B-4: the status links must survive text-only degradation (issue #498).
+        // Spec B-4: the manager link must survive text-only degradation (issues #498, #743).
         var packet = BuildPacket() with { ManagerLinks = ManagerDeepLinks.Build("https://manager.example", "sr_1") };
 
         var body = PacketEmailComposer.BuildPlainTextBody(packet);
 
         body.Should().StartWith(packet.PasteBlock);
         body.Should().Contain("Open in manager app: https://manager.example/sr/sr_1");
-        body.Should().Contain("Mark In Progress: https://manager.example/sr/sr_1?action=in-progress");
-        body.Should().Contain("Mark Waiting on Parts: https://manager.example/sr/sr_1?action=waiting-on-parts");
-        body.Should().Contain("Mark Completed: https://manager.example/sr/sr_1?action=completed");
+        body.Should().NotContain("?action=").And.NotContain("Mark ");
     }
 
     [Fact]

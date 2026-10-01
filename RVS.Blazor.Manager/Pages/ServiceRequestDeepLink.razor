@@ -1,5 +1,4 @@
 @page "/sr/{Id}"
-@using RVS.Domain.Packets
 @inject ServiceRequestApiClient SrClient
 @inject LookupApiClient LookupClient
 @inject AttachmentApiClient AttachmentClient
@@ -10,9 +9,9 @@
 @*
     The request page the packet email links to (Spec C-7, issues #498 and #743).
 
-    /sr/{id}                 → the request, laid out for a phone: who, what, status, a note to
-                               the customer, and a way to call, text or email them.
-    /sr/{id}?action={slug}   → the same page, with a one-tap confirm for that status on top.
+    /sr/{id} → the request, laid out for a phone: who, what, status, a note to the customer,
+               and a way to call, text or email them. Every status is one tap away here, so
+               the email carries only this link, as "Open Manager" (#743).
 
     One single-column layout serves every device, so the email needs no device detection; on a
     desktop "Open on the board" leads to the full view. Reaching this page requires a signed-in
@@ -41,30 +40,6 @@
     else if (_sr is not null)
     {
         <MudStack Spacing="3">
-            @* One-tap confirm from an email status button *@
-            @if (_action is not null)
-            {
-                @if (string.Equals(_sr.Status, _action.Status, StringComparison.Ordinal))
-                {
-                    <MudAlert Severity="Severity.Info" ShowCloseIcon="true" CloseIconClicked="DismissAction">
-                        This request is already @_action.Label.
-                    </MudAlert>
-                }
-                else
-                {
-                    <MudPaper Elevation="2" Class="pa-4">
-                        <MudText Typo="Typo.h6" Class="mb-3">Mark as @_action.Label?</MudText>
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
-                                       OnClick="ConfirmActionAsync" Disabled="_statusSaving">
-                                Mark @_action.Label
-                            </MudButton>
-                            <MudButton Variant="Variant.Text" OnClick="DismissAction" Disabled="_statusSaving">Not now</MudButton>
-                        </MudStack>
-                    </MudPaper>
-                }
-            }
-
             @* Who and what *@
             <MudPaper Elevation="2" Class="pa-4">
                 <MudText Typo="Typo.caption">
@@ -243,10 +218,6 @@
     [Parameter]
     public string Id { get; set; } = default!;
 
-    [SupplyParameterFromQuery(Name = ManagerDeepLinks.ActionQueryParameter)]
-    public string? Action { get; set; }
-
-    private ManagerDeepLinkAction? _action;
     private ServiceRequestDetailResponseDto? _sr;
     private IReadOnlyList<ContactLink> _contactLinks = [];
     private string? _dealershipId;
@@ -273,10 +244,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        // An action the email never offers is ignored; the page still opens the request.
-        _action = ManagerDeepLinks.TryFindAction(Action, out var action) ? action : null;
-
-        // Dropping ?action= after a confirm re-enters here with the same id — keep the loaded request.
+        // Same request already loaded — nothing to fetch.
         if (string.Equals(_loadedId, Id, StringComparison.Ordinal) && _sr is not null) return;
 
         _loading = true;
@@ -354,24 +322,10 @@
         }
     }
 
-    private async Task ConfirmActionAsync()
+    private async Task SetStatusAsync(StatusOption option)
     {
-        if (_action is null) return;
-
-        var option = ServiceRequestMobileView.Statuses.First(s => s.Status == _action.Status);
-        if (await SetStatusAsync(option))
-        {
-            DismissAction();
-        }
-    }
-
-    /// <summary>Drops <c>?action=</c> so a reload does not ask again.</summary>
-    private void DismissAction() => Navigation.NavigateTo($"/sr/{Uri.EscapeDataString(Id)}", replace: true);
-
-    private async Task<bool> SetStatusAsync(StatusOption option)
-    {
-        if (_sr is null || _dealershipId is null) return false;
-        if (string.Equals(option.Status, _sr.Status, StringComparison.Ordinal)) return true;
+        if (_sr is null || _dealershipId is null) return;
+        if (string.Equals(option.Status, _sr.Status, StringComparison.Ordinal)) return;
 
         _statusSaving = true;
 
@@ -382,17 +336,14 @@
 
             SetRequest(await SrClient.UpdateAsync(_dealershipId, _sr.Id, request));
             Snackbar.Add($"Marked {option.Label}.", Severity.Success);
-            return true;
         }
         catch (AccessTokenNotAvailableException ex)
         {
             ex.Redirect();
-            return false;
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Unable to update status. {ex.Message}", Severity.Error);
-            return false;
         }
         finally
         {
