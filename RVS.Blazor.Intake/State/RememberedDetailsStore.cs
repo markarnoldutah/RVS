@@ -5,10 +5,11 @@ using Microsoft.JSInterop;
 namespace RVS.Blazor.Intake.State;
 
 /// <summary>
-/// What "Remember my details on this device" keeps (issues #811, #819): contact
+/// What "Remember my contact and RV info on this device" keeps (issues #811, #819, #823): contact
 /// details, the preferred contact method, and the RV's VIN or serial number with its
-/// manufacturer, model and year. Opt-outs are deliberately not kept. The fields added by #819
-/// are optional so an entry saved before them still reads.
+/// manufacturer, model, year, extended-warranty answer and approximate purchase date. Opt-outs are
+/// deliberately not kept. The fields added by #819 and #823 are optional so an entry saved before
+/// them still reads.
 /// </summary>
 public sealed record RememberedDetails(
     [property: JsonPropertyName("firstName")] string FirstName,
@@ -19,7 +20,9 @@ public sealed record RememberedDetails(
     [property: JsonPropertyName("preferredContact")] string? PreferredContact = null,
     [property: JsonPropertyName("manufacturer")] string? Manufacturer = null,
     [property: JsonPropertyName("model")] string? Model = null,
-    [property: JsonPropertyName("year")] int? Year = null);
+    [property: JsonPropertyName("year")] int? Year = null,
+    [property: JsonPropertyName("hasExtendedWarranty")] string? HasExtendedWarranty = null,
+    [property: JsonPropertyName("approxPurchaseDate")] string? ApproxPurchaseDate = null);
 
 /// <summary>
 /// Keeps the customer's <see cref="RememberedDetails"/> on this device, only when they asked for

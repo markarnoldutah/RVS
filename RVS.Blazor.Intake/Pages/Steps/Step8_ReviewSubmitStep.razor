@@ -14,75 +14,81 @@
             <strong>Submit Service Request</strong> at the bottom of this page to finish.
         </MudAlert>
 
-        @* Contact Information *@
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-            <MudStack Spacing="2">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Contact Information</MudText>
-                    <MudSpacer />
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.Edit"
-                               OnClick="() => EditStep(2)"
-                               Style="text-transform: none;">Edit</MudButton>
+        @* Contact Information. Issue #823: contact, vehicle and each issue sit in a card of their
+           own, as the issues of a multi-issue visit already did (#810), so the sections read
+           apart at a glance. *@
+        <div class="review-card">
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Contact Information</MudText>
+                        <MudSpacer />
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   OnClick="() => EditStep(2)"
+                                   Style="text-transform: none;">Edit</MudButton>
+                    </MudStack>
+                    <MudSimpleTable Elevation="0" Class="review-table">
+                        <tbody>
+                            <tr><td><strong>Name</strong></td><td>@State.FirstName @State.LastName</td></tr>
+                            <tr><td><strong>Email</strong></td><td>@State.Email</td></tr>
+                            @if (!string.IsNullOrWhiteSpace(State.Phone))
+                            {
+                                <tr><td><strong>Phone</strong></td><td>@State.Phone</td></tr>
+                            }
+                            <tr>
+                                <td><strong>Notifications</strong></td>
+                                <td>@GetNotificationSummary()</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
                 </MudStack>
-                <MudSimpleTable Elevation="0" Class="review-table">
-                    <tbody>
-                        <tr><td><strong>Name</strong></td><td>@State.FirstName @State.LastName</td></tr>
-                        <tr><td><strong>Email</strong></td><td>@State.Email</td></tr>
-                        @if (!string.IsNullOrWhiteSpace(State.Phone))
-                        {
-                            <tr><td><strong>Phone</strong></td><td>@State.Phone</td></tr>
-                        }
-                        <tr>
-                            <td><strong>Notifications</strong></td>
-                            <td>@GetNotificationSummary()</td>
-                        </tr>
-                    </tbody>
-                </MudSimpleTable>
-            </MudStack>
-        </MudPaper>
+            </MudPaper>
+        </div>
 
         @* Vehicle Information *@
-        <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
-            <MudStack Spacing="2">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Vehicle Information</MudText>
-                    <MudSpacer />
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.Edit"
-                               OnClick="() => EditStep(3)"
-                               Style="text-transform: none;">Edit</MudButton>
+        <div class="review-card">
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.h6" Style="color: var(--mud-palette-text-primary);">Vehicle Information</MudText>
+                        <MudSpacer />
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   OnClick="() => EditStep(3)"
+                                   Style="text-transform: none;">Edit</MudButton>
+                    </MudStack>
+                    <MudSimpleTable Elevation="0" Class="review-table">
+                        <tbody>
+                            @if (State.VehicleSkipped)
+                            {
+                                <tr><td><strong>VIN</strong></td><td>Skipped. The service team will collect it.</td></tr>
+                            }
+                            else
+                            {
+                                <tr><td><strong>@(State.HasVin ? "VIN" : "Serial number")</strong></td><td>@State.Vin</td></tr>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(State.Manufacturer))
+                            {
+                                <tr><td><strong>Manufacturer</strong></td><td>@State.Manufacturer</td></tr>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(State.Model))
+                            {
+                                <tr><td><strong>Model</strong></td><td>@State.Model</td></tr>
+                            }
+                            @if (State.Year.HasValue)
+                            {
+                                <tr><td><strong>Year</strong></td><td>@State.Year</td></tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
                 </MudStack>
-                <MudSimpleTable Elevation="0" Class="review-table">
-                    <tbody>
-                        @if (State.VehicleSkipped)
-                        {
-                            <tr><td><strong>VIN</strong></td><td>Skipped. The service team will collect it.</td></tr>
-                        }
-                        else
-                        {
-                            <tr><td><strong>@(State.HasVin ? "VIN" : "Serial number")</strong></td><td>@State.Vin</td></tr>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(State.Manufacturer))
-                        {
-                            <tr><td><strong>Manufacturer</strong></td><td>@State.Manufacturer</td></tr>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(State.Model))
-                        {
-                            <tr><td><strong>Model</strong></td><td>@State.Model</td></tr>
-                        }
-                        @if (State.Year.HasValue)
-                        {
-                            <tr><td><strong>Year</strong></td><td>@State.Year</td></tr>
-                        }
-                    </tbody>
-                </MudSimpleTable>
-            </MudStack>
-        </MudPaper>
+            </MudPaper>
+        </div>
 
         @* Spec A-17 (issue #806): one group per issue. With a single issue the groups read
            exactly as the review always has; with several, each is headed and can be removed. *@
@@ -95,10 +101,9 @@
             var issueIndex = index;
             var issue = issues[issueIndex];
 
-            @* Issue #810: with several issues, each one's header and sections sit in a card of
-               their own, so the issues read apart at a glance. One issue gets no card, and reads
-               as the review always has. *@
-            <div class="@(isMultiIssue ? "issue-card" : null)">
+            @* Issues #810, #823: each issue's sections sit in a card of their own. With several
+               issues the card is headed and can be removed. *@
+            <div class="review-card">
                 <MudStack Spacing="4">
                     @if (isMultiIssue)
                     {

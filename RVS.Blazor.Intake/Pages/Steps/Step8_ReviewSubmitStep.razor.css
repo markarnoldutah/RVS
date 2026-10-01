@@ -41,10 +41,9 @@
     white-space: nowrap;
 }
 
-/* Issue #810: one card per issue when a visit reports several, so each issue's header,
-   remove button and sections read as one unit. Theme tokens only, so the dealer accent and
-   high contrast follow. */
-.issue-card {
+/* Issues #810, #823: one card each for contact, vehicle and every issue, so each section
+   reads as one unit. Theme tokens only, so the dealer accent and high contrast follow. */
+.review-card {
     padding: 16px;
     border: 1px solid var(--mud-palette-lines-default);
     border-radius: var(--mud-default-borderradius);

@@ -6,7 +6,7 @@ namespace RVS.UI.Shared.Tests.State;
 
 /// <summary>
 /// Opt-in device memory of the customer's contact details, preferred contact method and vehicle
-/// (issues #811, #819). It fills only blank fields and is never offered on an advisor invite.
+/// (issues #811, #819, #823). It fills only blank fields and is never offered on an advisor invite.
 /// </summary>
 public class IntakeWizardStateRememberedDetailsTests
 {
@@ -14,7 +14,7 @@ public class IntakeWizardStateRememberedDetailsTests
 
     private static readonly RememberedDetails Jane =
         new("Jane", "Doe", "jane@example.com", "(801) 555-1234", "1FTFW1ET5DFC10312",
-            "Text", "Grand Design", "Reflection 312BHTS", 2021);
+            "Text", "Grand Design", "Reflection 312BHTS", 2021, "Yes", "06/2021");
 
     private static IntakeWizardState CreateState() => new(new NullJSRuntime());
 
@@ -71,6 +71,31 @@ public class IntakeWizardStateRememberedDetailsTests
         state.Manufacturer.Should().Be("Keystone");
         state.Model.Should().Be("Montana");
         state.Year.Should().Be(2019);
+    }
+
+    [Fact]
+    public void ApplyRememberedDetails_ShouldFillExtendedWarrantyAndPurchaseDate()
+    {
+        // Issue #823: Step 4's warranty answer and purchase date are as stable as the RV itself.
+        var state = CreateState();
+
+        state.ApplyRememberedDetails(Jane);
+
+        state.HasExtendedWarranty.Should().Be("Yes");
+        state.ApproxPurchaseDate.Should().Be("06/2021");
+    }
+
+    [Fact]
+    public void ApplyRememberedDetails_ShouldNotOverwriteChosenExtendedWarrantyOrPurchaseDate()
+    {
+        var state = CreateState();
+        state.HasExtendedWarranty = "No";
+        state.ApproxPurchaseDate = "03/2019";
+
+        state.ApplyRememberedDetails(Jane);
+
+        state.HasExtendedWarranty.Should().Be("No");
+        state.ApproxPurchaseDate.Should().Be("03/2019");
     }
 
     [Fact]
@@ -153,7 +178,7 @@ public class IntakeWizardStateRememberedDetailsTests
     }
 
     [Fact]
-    public void ToRememberedDetails_ShouldCarryContactDetailsPreferredContactAndVehicle()
+    public void ToRememberedDetails_ShouldCarryContactDetailsPreferredContactVehicleAndWarranty()
     {
         var state = CreateState();
         state.FirstName = " Jane ";
@@ -165,6 +190,8 @@ public class IntakeWizardStateRememberedDetailsTests
         state.Manufacturer = " Grand Design ";
         state.Model = "Reflection 312BHTS";
         state.Year = 2021;
+        state.HasExtendedWarranty = "Yes";
+        state.ApproxPurchaseDate = " 06/2021 ";
 
         var details = state.ToRememberedDetails();
 
@@ -181,6 +208,8 @@ public class IntakeWizardStateRememberedDetailsTests
         state.Manufacturer = "Grand Design";
         state.Model = "Reflection 312BHTS";
         state.Year = 2021;
+        state.HasExtendedWarranty = "Yes";
+        state.ApproxPurchaseDate = "06/2021";
         state.VehicleSkipped = true;
 
         var details = state.ToRememberedDetails();
@@ -189,6 +218,8 @@ public class IntakeWizardStateRememberedDetailsTests
         details.Manufacturer.Should().BeNull();
         details.Model.Should().BeNull();
         details.Year.Should().BeNull();
+        details.HasExtendedWarranty.Should().BeNull();
+        details.ApproxPurchaseDate.Should().BeNull();
     }
 
     [Fact]
