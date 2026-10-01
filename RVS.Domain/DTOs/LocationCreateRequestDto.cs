@@ -17,6 +17,15 @@ public sealed record LocationCreateRequestDto
     /// </summary>
     public string? Slug { get; init; }
     public string? Phone { get; init; }
+
+    /// <summary>
+    /// IANA time-zone id for this location (e.g. <c>America/Denver</c>), used to render the
+    /// service packet's <c>Received</c> line in dealership-local time (issue #506). Pass null
+    /// on update to leave it unchanged; pass an empty string to clear it, which returns the
+    /// packet to a UTC Received line.
+    /// </summary>
+    public string? TimeZoneId { get; init; }
+
     public AddressDto? Address { get; init; }
     public IntakeConfigDto? IntakeConfig { get; init; }
 
@@ -25,4 +34,25 @@ public sealed record LocationCreateRequestDto
     /// for this location. Pass null to leave existing capabilities unchanged on update.
     /// </summary>
     public List<string>? EnabledCapabilities { get; init; }
+
+    /// <summary>
+    /// Per-location service-packet configuration (<c>Spec B-6</c> / <c>C-6</c>). When omitted on
+    /// create, defaults are applied. Pass null on update to leave the existing configuration
+    /// unchanged; a non-null value replaces it wholesale.
+    /// </summary>
+    public PacketConfigDto? PacketConfig { get; init; }
+
+    /// <summary>
+    /// Customer-facing branding (<c>Spec A-16</c>, issue #470). When omitted on create, the
+    /// RV Intake defaults apply. Pass null on update to leave the existing branding unchanged;
+    /// a non-null value replaces it wholesale, so a blank field clears it.
+    /// </summary>
+    public LocationBrandingDto? Branding { get; init; }
+
+    /// <summary>
+    /// Up to two questions added to every intake's diagnostic step (<c>Spec A-18</c>, issue #785).
+    /// Pass null on update to leave the existing questions unchanged; a non-null value replaces
+    /// them wholesale, and blank entries are dropped.
+    /// </summary>
+    public List<string>? DealerQuestions { get; init; }
 }

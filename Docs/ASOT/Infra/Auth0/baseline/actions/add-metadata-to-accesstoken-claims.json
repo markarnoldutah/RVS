@@ -1,0 +1,14 @@
+{
+  "name": "Add metadata to accessToken claims",
+  "runtime": "node22",
+  "supported_triggers": [
+    {
+      "id": "post-login",
+      "version": "v3"
+    }
+  ],
+  "dependencies": [],
+  "bind_to": [
+    "post-login"
+  ]
+}

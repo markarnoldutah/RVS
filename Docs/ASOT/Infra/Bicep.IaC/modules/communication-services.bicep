@@ -6,6 +6,27 @@
 // the ACS resource; phone numbers are provisioned via the
 // Azure portal (not Bicep) for the MVP.
 //
+// When `customDomainName` is set (staging — mail-staging.rvintake.com;
+// prod — mail.rvintake.com; issue #532) a second, CustomerManaged domain is
+// provisioned alongside the Azure-managed one. The Azure-managed
+// *.azurecomm.net domain caps at 10 emails/hour with no support path to raise
+// it; a verified custom sending subdomain is the only route to pilot volume
+// and to a warmed sender reputation. Bicep provisions the domain and emits
+// the raw SPF / DKIM / domain-ownership records it needs
+// (`customDomainVerificationRecords`) for the caller to write into DNS;
+// `initiate-verification` stays manual (README "Deploy Production" step 4).
+//
+// The domain is linked to the account (added to `linkedDomains`) ONLY when
+// `linkCustomDomain = true` — ACS rejects linking an unverified domain
+// (`DomainValidationError: ... not in a valid state for linking`), so a
+// brand-new domain can never be linked in the same deployment that creates
+// it. Bootstrap sequence for a new custom domain: (1) deploy with the default
+// `linkCustomDomain = false` to create the domain and let the caller write
+// its DNS records; (2) run `initiate-verification` and poll until every
+// record shows Verified; (3) redeploy with `linkCustomDomain = true` to
+// perform the link. Steps 1 and 3 use the identical template — only the
+// parameter changes.
+//
 // ACS is a **global** resource — `location` is always 'global'.
 // Data residency is controlled via the `dataLocation` property.
 // ──────────────────────────────────────────────────────────────
@@ -22,10 +43,34 @@ param tags object
 @description('Data residency location for ACS. Must be a valid ACS data location (e.g. "United States", "Europe", "Asia Pacific", "Australia").')
 param dataLocation string = 'United States'
 
+@description('Principal ID (object ID) of the API App Service managed identity to grant ACS Email Send access. Leave empty to skip the role assignment.')
+param apiPrincipalId string = ''
+
+@description('Principal ID of the API staging deployment-slot managed identity (S1 only). Leave empty to skip the role assignment.')
+param stagingSlotPrincipalId string = ''
+
+@description('Custom sending subdomain to provision as a CustomerManaged domain (e.g. mail.rvintake.com). Empty = Azure-managed domain only. (#532)')
+param customDomainName string = ''
+
+@description('When true, adds the custom domain to the ACS account\'s linkedDomains. ACS rejects linking an unverified domain, so this must stay false on the deploy that first creates the domain and only flip to true once every verificationRecords entry shows Verified. Ignored when customDomainName is empty.')
+param linkCustomDomain bool = false
+
+@description('Display name recipients see on mail From DoNotReply@ on the custom domain. ACS takes it from the sender username resource, not from the send call — the SDK\'s EmailMessage carries an address only. (#710)')
+param senderDisplayName string = 'RV Intake'
+
 // ── Variables ─────────────────────────────────────────────────
 
 // Email service name follows the ACS resource name with an '-email' suffix.
 var emailServiceName = '${resourceName}-email'
+
+// Contributor — AcsEmailNotificationService authenticates to ACS with the API's
+// managed identity (DefaultAzureCredential). ACS exposes no granular data-plane
+// "email sender" role as of writing; Contributor scoped to the ACS resource is
+// the documented minimum for EmailClient.SendAsync under Entra ID auth. Re-check
+// the ACS "authenticate with managed identity" docs for a narrower role before
+// widening this pattern.
+// https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/general#contributor
+var contributorRoleId = 'b24988ac-6180-42a0-ab88-20f7382dd24c'
 
 // ── Azure Communication Services Account ──────────────────────
 // 2025-05-01 does not exist; 2025-09-01 fails domain validation at deploy time.
@@ -36,9 +81,14 @@ resource acsAccount 'Microsoft.Communication/communicationServices@2023-04-01' =
   tags: tags
   properties: {
     dataLocation: dataLocation
-    linkedDomains: [
-      azureManagedDomain.id
-    ]
+    // Both domains are linked once the custom one is verified — the account
+    // can then send From either, with the managed domain as a fallback. Until
+    // linkCustomDomain flips to true (see param doc above), only the managed
+    // domain is linked — ACS rejects linking an unverified domain outright.
+    linkedDomains: (!empty(customDomainName) && linkCustomDomain)
+      #disable-next-line BCP318
+      ? [ azureManagedDomain.id, customDomain.id ]
+      : [ azureManagedDomain.id ]
   }
 }
 
@@ -55,9 +105,10 @@ resource emailService 'Microsoft.Communication/emailServices@2023-04-01' = {
 }
 
 // ── Azure-Managed Email Domain ────────────────────────────────
-// Uses the built-in Azure-managed domain (AzureManagedDomain)
-// for staging. Production should use a custom verified domain
-// (e.g. notifications.rvserviceflow.com) configured separately.
+// The built-in Azure-managed domain (<guid>.azurecomm.net). Always
+// created — a From-address fallback wherever a custom domain is linked
+// (staging, prod), and the only domain in an env without one. Microsoft caps it at 5 emails/min, 10/hour with
+// no support path to raise it (#521).
 
 #disable-next-line use-recent-api-versions
 resource azureManagedDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' = {
@@ -68,6 +119,70 @@ resource azureManagedDomain 'Microsoft.Communication/emailServices/domains@2023-
   properties: {
     domainManagement: 'AzureManaged'
     userEngagementTracking: 'Disabled'
+  }
+}
+
+// ── Custom (CustomerManaged) Sending Domain — #532 ────────────
+// Provisioned as mail.rvintake.com in prod and mail-staging.rvintake.com
+// in staging, each on its own ACS resource. On creation ACS returns
+// `verificationRecords` (Domain + SPF as TXT, DKIM + DKIM2 as CNAME) —
+// deterministic from the domain name and region, available before
+// verification is initiated. main.bicep writes them into the Intake
+// DNS zone. `verificationStates` stays NotStarted until an operator
+// runs `az communication email domain initiate-verification`; sends
+// From this domain fail until every record shows Verified.
+
+#disable-next-line use-recent-api-versions
+resource customDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' = if (!empty(customDomainName)) {
+  parent: emailService
+  name: customDomainName
+  location: 'global'
+  tags: tags
+  properties: {
+    domainManagement: 'CustomerManaged'
+    userEngagementTracking: 'Disabled'
+  }
+}
+
+// ── DoNotReply sender username on the custom domain — #710 ─────
+// ACS creates DoNotReply@ on every domain with the display name
+// "DoNotReply", which is what the inbox showed. Declaring the username
+// here renames it. Custom domain only: an Azure-managed domain's sender
+// is fixed, and neither staging nor prod sends from it.
+
+#disable-next-line use-recent-api-versions
+resource customDomainDoNotReply 'Microsoft.Communication/emailServices/domains/senderUsernames@2023-04-01' = if (!empty(customDomainName)) {
+  parent: customDomain
+  name: 'DoNotReply'
+  properties: {
+    username: 'DoNotReply'
+    displayName: senderDisplayName
+  }
+}
+
+// ── Role Assignments ─────────────────────────────────────────
+// Grant the API managed identity (and the staging-slot identity on S1) the
+// rights to call ACS Email Send via managed identity. Scoped to the ACS
+// account only. Guarded by !empty(...) so the module still deploys when no
+// App Service is present.
+
+resource apiAcsContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(apiPrincipalId)) {
+  name: guid(acsAccount.id, apiPrincipalId, contributorRoleId)
+  scope: acsAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', contributorRoleId)
+    principalId: apiPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource stagingSlotAcsContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(stagingSlotPrincipalId)) {
+  name: guid(acsAccount.id, stagingSlotPrincipalId, contributorRoleId)
+  scope: acsAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', contributorRoleId)
+    principalId: stagingSlotPrincipalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -90,6 +205,17 @@ output emailServiceName string = emailService.name
 
 @description('The Azure-managed MailFrom address (e.g. DoNotReply@<guid>.azurecomm.net).')
 output azureManagedMailFrom string = azureManagedDomain.properties.mailFromSenderDomain
+
+@description('True when a CustomerManaged sending domain was provisioned (#532).')
+output hasCustomDomain bool = !empty(customDomainName)
+
+@description('The custom MailFrom sender domain (e.g. mail.rvintake.com). Empty when no custom domain — use for the packet-email From address in prod.')
+#disable-next-line BCP318
+output customFromSenderDomain string = empty(customDomainName) ? '' : customDomain.properties.fromSenderDomain
+
+@description('Raw ACS verification records for the custom domain (DKIM/DKIM2/Domain/SPF, each { name, value, type, ttl }). NOT zone-relative: ACS returns DKIM/DKIM2 as a bare selector with no domain suffix at all, and Domain/SPF as the full custom-domain FQDN — neither is usable as a dns.bicep record-set name as-is inside a parent zone. The caller (main.bicep) has the zone context this module lacks and derives the correct relative names from these raw values plus the zone/subdomain relationship. Also used for diffing against the zone with `az communication email domain show`. Empty object when no custom domain.')
+#disable-next-line BCP318
+output customDomainVerificationRecords object = empty(customDomainName) ? {} : customDomain.properties.verificationRecords
 
 @description('The data residency location.')
 output dataLocation string = dataLocation

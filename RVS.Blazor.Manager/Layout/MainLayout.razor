@@ -3,15 +3,19 @@
 @inject RVS.Blazor.Manager.State.ManagerAppState AppState
 @inject ThemeService ThemeService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject RVS.UI.Shared.Services.TenantAccessState TenantAccess
+@inject NavigationManager Navigation
 
 <MudThemeProvider Theme="ThemeService.CurrentTheme" IsDarkMode="ThemeService.IsDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
+<KeepSignedInPrompt />
 
-<MudLayout Style="@GetLayoutStyle()">
-    <MudAppBar Elevation="2"
-               Color="Color.Primary">
+<MudLayout>
+    @* No Color= : the app bar takes AppbarBackground (Ink) from the theme. Color="Color.Primary"
+       would paint it Rust, which the brand reserves for action, not structure (Spec THEME-1). *@
+    <MudAppBar Elevation="2">
         @if (_isAuthorized)
         {
             <MudIconButton Icon="@Icons.Material.Filled.Menu"
@@ -20,12 +24,20 @@
                            aria-label="Toggle navigation menu"
                            OnClick="ToggleDrawer" />
         }
-        <MudIconButton Icon="@Icons.Material.Filled.RvHookup"
-                       Color="Color.Inherit"
-                       Href="/"
-                       aria-label="RVS Manager home" />
-        <MudText Typo="Typo.h6" Class="ml-2" Style="@($"color: {(ThemeService.Mode == ThemeMode.HighContrast ? "black" : "white")};")">
-            RVS Manager
+        <MudLink Href="/" aria-label="RV Intake Manager home" Class="d-flex align-center ml-1">
+            @* The full "RV Intake" lockup from md up, the bare tag glyph below it (THEME-1 §4).
+               The link carries the accessible name, so both marks are decorative. *@
+            <BrandWordmark Reversed="true" Height="30px" Title="" Class="d-none d-md-block" />
+            <BrandWordmark Variant="BrandWordmarkVariant.Glyph" Reversed="true" Height="30px" Title="" Class="d-md-none" />
+        </MudLink>
+        @* "Manager" completes the lockup to RV Intake Manager (#703). Below md only the glyph
+           shows, so the label spells out the product. AppbarText carries the colour — Ink chrome
+           in light and dark, black in high contrast. *@
+        <MudText Typo="Typo.h6" Class="ml-3 d-none d-md-flex">
+            Manager
+        </MudText>
+        <MudText Typo="Typo.h6" Class="ml-3 d-md-none">
+            Intake Manager
         </MudText>
         <MudSpacer />
         @if (_isAuthorized)
@@ -38,16 +50,19 @@
                        OnClick="CycleThemeAsync" />
     </MudAppBar>
 
-    @if (_isAuthorized)
+    @if (_isAuthorized && !IsRestricted)
     {
-        <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always"
-                   Style="@(ThemeService.IsDarkMode ? "color: white;" : "")">
+        <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always">
             <NavMenu />
         </MudDrawer>
     }
 
     <MudMainContent Style="@GetMainContentStyle()">
-        @if (_isAuthorized)
+        @if (_isAuthorized && IsRestricted)
+        {
+            <TenantAccessRestricted />
+        }
+        else if (_isAuthorized)
         {
             <MudContainer MaxWidth="MaxWidth.Large" Class="py-4 px-4">
                 <ErrorBoundary>
@@ -90,6 +105,7 @@
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += StateHasChanged;
+        TenantAccess.Changed += OnTenantAccessChanged;
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
     }
 
@@ -102,10 +118,19 @@
     {
         if (firstRender)
         {
+            // The theme is already restored in Program.cs, before the first render (#703).
             await AppState.InitializeAsync();
-            await ThemeService.InitializeAsync();
         }
     }
+
+    // Issue #625: once the API reports the tenant disabled, every page is replaced by one
+    // "access restricted" message. The authentication/* pages stay reachable so sign-out and
+    // sign-in still work.
+    private bool IsRestricted =>
+        TenantAccess.IsRestricted
+        && !Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("authentication/", StringComparison.OrdinalIgnoreCase);
+
+    private void OnTenantAccessChanged() => _ = InvokeAsync(StateHasChanged);
 
     private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
     {
@@ -127,6 +152,7 @@
     public void Dispose()
     {
         ThemeService.OnThemeChanged -= StateHasChanged;
+        TenantAccess.Changed -= OnTenantAccessChanged;
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     }
 
@@ -167,12 +193,5 @@
         return _isAuthorized
             ? string.Empty
             : "min-height: calc(100vh - var(--mud-appbar-height));";
-    }
-
-    private string GetLayoutStyle()
-    {
-        return _isAuthorized
-            ? string.Empty
-            : "background: url('images/tetons-desktop.jpg') center 40%/cover no-repeat fixed; min-height: 100vh;";
     }
 }

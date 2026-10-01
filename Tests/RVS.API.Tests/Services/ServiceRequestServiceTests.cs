@@ -11,12 +11,13 @@ public class ServiceRequestServiceTests
 {
     private readonly Mock<IServiceRequestRepository> _repoMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
+    private readonly Mock<IPacketGenerationService> _packetGenerationMock = new();
     private readonly ServiceRequestService _sut;
 
     public ServiceRequestServiceTests()
     {
         _userContextMock.Setup(u => u.UserId).Returns("usr_test");
-        _sut = new ServiceRequestService(_repoMock.Object, _userContextMock.Object);
+        _sut = new ServiceRequestService(_repoMock.Object, _userContextMock.Object, _packetGenerationMock.Object);
     }
 
     // ── GetByIdAsync ─────────────────────────────────────────────────────────
@@ -64,6 +65,84 @@ public class ServiceRequestServiceTests
         var result = await _sut.GetByIdAsync("ten_1", sr.Id);
 
         result.Should().BeSameAs(sr);
+    }
+
+    // ── GetSubmissionMembersAsync ────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetSubmissionMembersAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.GetSubmissionMembersAsync(tenantId!, "sr_1");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetSubmissionMembersAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.GetSubmissionMembersAsync("ten_1", id!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetSubmissionMembersAsync_WhenNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest?)null);
+
+        var act = () => _sut.GetSubmissionMembersAsync("ten_1", "sr_missing");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task GetSubmissionMembersAsync_WhenReportedOnItsOwn_ShouldReturnOnlyTheRequest()
+    {
+        var sr = BuildServiceRequest("sr_1");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var result = await _sut.GetSubmissionMembersAsync("ten_1", "sr_1");
+
+        result.Should().ContainSingle().Which.Should().BeSameAs(sr);
+        _repoMock.Verify(r => r.GetBySubmissionIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetSubmissionMembersAsync_WhenInMultiIssueSubmission_ShouldReturnEveryMemberInOrder()
+    {
+        var lead = BuildSubmissionMember("sr_lead", 1);
+        var second = BuildSubmissionMember("sr_2", 2);
+        var third = BuildSubmissionMember("sr_3", 3);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(second);
+        _repoMock.Setup(r => r.GetBySubmissionIdAsync("ten_1", "sr_lead", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([lead, second, third]);
+
+        var result = await _sut.GetSubmissionMembersAsync("ten_1", "sr_2");
+
+        result.Select(r => r.Id).Should().Equal("sr_lead", "sr_2", "sr_3");
+    }
+
+    [Fact]
+    public async Task GetSubmissionMembersAsync_WhenSubmissionReadsBackEmpty_ShouldReturnOnlyTheRequest()
+    {
+        var second = BuildSubmissionMember("sr_2", 2);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(second);
+        _repoMock.Setup(r => r.GetBySubmissionIdAsync("ten_1", "sr_lead", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await _sut.GetSubmissionMembersAsync("ten_1", "sr_2");
+
+        result.Should().ContainSingle().Which.Should().BeSameAs(second);
     }
 
     // ── SearchAsync ──────────────────────────────────────────────────────────
@@ -351,127 +430,6 @@ public class ServiceRequestServiceTests
         result.UpdatedByUserId.Should().Be("usr_test");
     }
 
-    // ── BatchOutcomeAsync ────────────────────────────────────────────────────
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("  ")]
-    public async Task BatchOutcomeAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
-    {
-        var request = new BatchOutcomeRequestDto { ServiceRequestIds = ["sr_1"] };
-
-        var act = () => _sut.BatchOutcomeAsync(tenantId!, request);
-
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Fact]
-    public async Task BatchOutcomeAsync_WhenRequestIsNull_ShouldThrowArgumentNullException()
-    {
-        var act = () => _sut.BatchOutcomeAsync("ten_1", null!);
-
-        await act.Should().ThrowAsync<ArgumentNullException>();
-    }
-
-    [Fact]
-    public async Task BatchOutcomeAsync_WhenBatchExceeds25_ShouldThrowArgumentException()
-    {
-        var ids = Enumerable.Range(1, 26).Select(i => $"sr_{i}").ToList();
-        var request = new BatchOutcomeRequestDto { ServiceRequestIds = ids };
-
-        var act = () => _sut.BatchOutcomeAsync("ten_1", request);
-
-        await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*exceeds maximum of 25*");
-    }
-
-    [Fact]
-    public async Task BatchOutcomeAsync_WhenBatchIsEmpty_ShouldThrowArgumentException()
-    {
-        var request = new BatchOutcomeRequestDto { ServiceRequestIds = [] };
-
-        var act = () => _sut.BatchOutcomeAsync("ten_1", request);
-
-        await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*At least one*");
-    }
-
-    [Fact]
-    public async Task BatchOutcomeAsync_WhenAllExist_ShouldSucceed()
-    {
-        var sr1 = BuildServiceRequest("sr_1", "ten_1");
-        var sr2 = BuildServiceRequest("sr_2", "ten_1");
-        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>())).ReturnsAsync(sr1);
-        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_2", It.IsAny<CancellationToken>())).ReturnsAsync(sr2);
-        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
-
-        var request = new BatchOutcomeRequestDto
-        {
-            ServiceRequestIds = ["sr_1", "sr_2"],
-            FailureMode = "Leak",
-            RepairAction = "Sealed",
-            LaborHours = 2.5m
-        };
-
-        var result = await _sut.BatchOutcomeAsync("ten_1", request);
-
-        result.Succeeded.Should().HaveCount(2);
-        result.Failed.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task BatchOutcomeAsync_WhenSomeNotFound_ShouldReportFailures()
-    {
-        var sr1 = BuildServiceRequest("sr_1", "ten_1");
-        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>())).ReturnsAsync(sr1);
-        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_missing", It.IsAny<CancellationToken>())).ReturnsAsync((ServiceRequest?)null);
-        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
-
-        var request = new BatchOutcomeRequestDto
-        {
-            ServiceRequestIds = ["sr_1", "sr_missing"],
-            RepairAction = "Replaced"
-        };
-
-        var result = await _sut.BatchOutcomeAsync("ten_1", request);
-
-        result.Succeeded.Should().HaveCount(1).And.Contain("sr_1");
-        result.Failed.Should().HaveCount(1);
-        result.Failed[0].ServiceRequestId.Should().Be("sr_missing");
-    }
-
-    [Fact]
-    public async Task BatchOutcomeAsync_ShouldApplyOutcomeFieldsToServiceEvent()
-    {
-        var sr = BuildServiceRequest("sr_1", "ten_1");
-        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_1", It.IsAny<CancellationToken>())).ReturnsAsync(sr);
-        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
-
-        var request = new BatchOutcomeRequestDto
-        {
-            ServiceRequestIds = ["sr_1"],
-            FailureMode = "Corrosion",
-            RepairAction = "Replaced pipe",
-            PartsUsed = ["Pipe", "Sealant"],
-            LaborHours = 3.0m
-        };
-
-        await _sut.BatchOutcomeAsync("ten_1", request);
-
-        _repoMock.Verify(r => r.UpdateAsync(
-            It.Is<ServiceRequest>(e =>
-                e.ServiceEvent != null &&
-                e.ServiceEvent.FailureMode == "Corrosion" &&
-                e.ServiceEvent.RepairAction == "Replaced pipe" &&
-                e.ServiceEvent.PartsUsed.Contains("Pipe") &&
-                e.ServiceEvent.LaborHours == 3.0m),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
     // ── DeleteAsync ──────────────────────────────────────────────────────────
 
     [Theory]
@@ -519,6 +477,308 @@ public class ServiceRequestServiceTests
         _repoMock.Verify(r => r.DeleteAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // ── RegeneratePacketAsync ────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task RegeneratePacketAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.RegeneratePacketAsync(tenantId!, "sr_1");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task RegeneratePacketAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.RegeneratePacketAsync("ten_1", id!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task RegeneratePacketAsync_ShouldDelegateToPacketGenerationService()
+    {
+        await _sut.RegeneratePacketAsync("ten_1", "sr_42");
+
+        _packetGenerationMock.Verify(
+            p => p.RequestRegenerationAsync("ten_1", "sr_42", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ── GetPacketPdfLinkAsync (Spec C-2, issue #443) ─────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetPacketPdfLinkAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.GetPacketPdfLinkAsync(tenantId!, "sr_1");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetPacketPdfLinkAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.GetPacketPdfLinkAsync("ten_1", id!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetPacketPdfLinkAsync_ShouldDelegateToPacketGenerationService()
+    {
+        var link = new PacketPdfLinkDto { SasUrl = "https://blob/p.pdf", PacketVersion = 1 };
+        _packetGenerationMock.Setup(p => p.GetPdfLinkAsync("ten_1", "sr_42", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(link);
+
+        var result = await _sut.GetPacketPdfLinkAsync("ten_1", "sr_42");
+
+        result.Should().Be(link);
+    }
+
+    // ── SetCustomerStatusNoteAsync (Spec C-9) ────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SetCustomerStatusNoteAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.SetCustomerStatusNoteAsync(tenantId!, "sr_1", "note");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SetCustomerStatusNoteAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.SetCustomerStatusNoteAsync("ten_1", id!, "note");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WhenNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest?)null);
+
+        var act = () => _sut.SetCustomerStatusNoteAsync("ten_1", "sr_missing", "note");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WhenNoteExceedsMaxLength_ShouldThrowArgumentException()
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var act = () => _sut.SetCustomerStatusNoteAsync("ten_1", existing.Id, new string('a', 281));
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WhenNoteHasBlockedCharacter_ShouldThrowArgumentException()
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var act = () => _sut.SetCustomerStatusNoteAsync("ten_1", existing.Id, "waiting on <part>");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WhenNoteIsInvalid_ShouldNotLeakNoteTextInExceptionMessage()
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var secret = "SECRET-CUSTOMER-DETAIL-" + new string('a', 280);
+
+        var thrown = await Assert.ThrowsAsync<ArgumentException>(
+            () => _sut.SetCustomerStatusNoteAsync("ten_1", existing.Id, secret));
+
+        thrown.Message.Should().NotContain("SECRET-CUSTOMER-DETAIL");
+    }
+
+    [Fact]
+    public async Task SetCustomerStatusNoteAsync_WithValidNote_ShouldPersistTrimmedNoteWithAuditIdentity()
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.SetCustomerStatusNoteAsync(
+            "ten_1", existing.Id, "  Waiting on a back-ordered slide motor, ETA Friday.  ");
+
+        result.CustomerStatusNote.Should().NotBeNull();
+        result.CustomerStatusNote!.Text.Should().Be("Waiting on a back-ordered slide motor, ETA Friday.");
+        result.CustomerStatusNote.UpdatedByUserId.Should().Be("usr_test");
+        result.UpdatedByUserId.Should().Be("usr_test");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SetCustomerStatusNoteAsync_WithBlankNote_ShouldClearExistingNoteAndPersist(string? note)
+    {
+        var existing = BuildServiceRequest();
+        existing.SetCustomerStatusNote("An earlier note.", "usr_prev");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.SetCustomerStatusNoteAsync("ten_1", existing.Id, note);
+
+        result.CustomerStatusNote.Should().BeNull();
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ── CloseWithDispositionAsync (Spec C-4) ─────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task CloseWithDispositionAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.CloseWithDispositionAsync(tenantId!, "sr_1", "Duplicate");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task CloseWithDispositionAsync_WhenIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? id)
+    {
+        var act = () => _sut.CloseWithDispositionAsync("ten_1", id!, "Duplicate");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Other")]
+    [InlineData("duplicate")]
+    public async Task CloseWithDispositionAsync_WhenReasonCodeIsUnknownOrBlank_ShouldThrowArgumentExceptionWithoutWriting(string? reasonCode)
+    {
+        var act = () => _sut.CloseWithDispositionAsync("ten_1", "sr_1", reasonCode!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CloseWithDispositionAsync_WhenNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", "sr_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest?)null);
+
+        var act = () => _sut.CloseWithDispositionAsync("ten_1", "sr_missing", "Spam");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Theory]
+    [InlineData("New")]
+    [InlineData("InProgress")]
+    [InlineData("WaitingOnParts")]
+    [InlineData("WaitingOnCustomer")]
+    [InlineData("Completed")]
+    [InlineData("Cancelled")]
+    public async Task CloseWithDispositionAsync_FromAnyStatus_ShouldCancelAndStoreReasonWithAuditIdentity(string fromStatus)
+    {
+        var existing = BuildServiceRequest();
+        existing.Status = fromStatus;
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.CloseWithDispositionAsync("ten_1", existing.Id, "WrongLocation");
+
+        result.Status.Should().Be("Cancelled");
+        result.Disposition.Should().NotBeNull();
+        result.Disposition!.ReasonCode.Should().Be("WrongLocation");
+        result.Disposition.DisposedByUserId.Should().Be("usr_test");
+        result.UpdatedByUserId.Should().Be("usr_test");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenReopeningADisposedRequest_ShouldClearDisposition()
+    {
+        var existing = BuildServiceRequest();
+        existing.CloseWithDisposition("Duplicate", "usr_prev");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, BuildUpdateRequest() with { Status = "InProgress" });
+
+        result.Status.Should().Be("InProgress");
+        result.Disposition.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenDisposedRequestStaysCancelled_ShouldKeepDisposition()
+    {
+        var existing = BuildServiceRequest();
+        existing.CloseWithDisposition("Spam", "usr_prev");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, BuildUpdateRequest() with { Status = "Cancelled" });
+
+        result.Disposition!.ReasonCode.Should().Be("Spam");
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_WhenReopeningADisposedRequest_ShouldClearDisposition()
+    {
+        var existing = BuildServiceRequest();
+        existing.CloseWithDisposition("CustomerWithdrew", "usr_prev");
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateStatusAsync("ten_1", existing.Id, "New");
+
+        result.Disposition.Should().BeNull();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static ServiceRequest BuildServiceRequest(string? id = null, string tenantId = "ten_1") => new()
@@ -531,6 +791,20 @@ public class ServiceRequestServiceTests
         IssueDescription = "Water heater not working",
         IssueCategory = "Plumbing",
         Priority = "High"
+    };
+
+    private static ServiceRequest BuildSubmissionMember(string id, int position) => new()
+    {
+        Id = id,
+        TenantId = "ten_1",
+        Status = "New",
+        LocationId = "loc_slc",
+        CustomerProfileId = "cp_1",
+        IssueDescription = $"Issue {position}",
+        IssueCategory = "Plumbing",
+        SubmissionId = "sr_lead",
+        SubmissionPosition = position,
+        SubmissionCount = 3
     };
 
     private static ServiceRequestUpdateRequestDto BuildUpdateRequest() => new()

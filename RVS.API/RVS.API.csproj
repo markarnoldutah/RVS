@@ -20,11 +20,14 @@
     <PackageReference Include="Azure.Communication.Email" Version="1.1.0" />
     <PackageReference Include="Azure.Communication.Sms" Version="1.0.2" />
     <PackageReference Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.5.0" />
+    <PackageReference Include="Azure.Messaging.EventGrid" Version="5.0.0" />
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="3.1.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.7" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.17.1" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.5.0" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.15.3" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
+    <PackageReference Include="QuestPDF" Version="2026.8.0" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.1.7" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
@@ -33,7 +36,34 @@
   <ItemGroup>
     <ProjectReference Include="..\RVS.Infra.AzBlobRepository\RVS.Infra.AzBlobRepository.csproj" />
     <ProjectReference Include="..\RVS.Infra.AzCosmosRepository\RVS.Infra.AzCosmosRepository.csproj" />
-    <ProjectReference Include="..\RVS.Infra.AzTablesRepository\RVS.Infra.AzTablesRepository.csproj" />
+    <ProjectReference Include="..\RVS.Infra.AzTableRepository\RVS.Infra.AzTableRepository.csproj" />
+  </ItemGroup>
+
+  <!--
+    The packet PDF's "Powered by" mark (issue #470) is the logo kit's horizontal lockup, linked
+    from RVS.UI.Shared rather than copied, so the PDF and the apps draw the same file.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\RVS.UI.Shared\wwwroot\brand\logo-horizontal.svg"
+                      Link="Packets\logo-horizontal.svg"
+                      LogicalName="RVS.API.Packets.logo-horizontal.svg" />
+  </ItemGroup>
+
+  <!--
+    Ship the third-party open-source notices next to the binaries they cover
+    (ImageMagick / Magick.NET native delegates incl. LGPL libheif/libde265,
+    QuestPDF + its native deps). Copied into build AND publish output so the
+    deployed App Service artifact carries them. See /THIRD-PARTY-NOTICES.md.
+  -->
+  <ItemGroup>
+    <None Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="..\licenses\**\*" LinkBase="licenses">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

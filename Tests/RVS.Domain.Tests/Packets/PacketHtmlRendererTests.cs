@@ -1,0 +1,1451 @@
+using System.Text.RegularExpressions;
+using FluentAssertions;
+using RVS.Domain.Packets;
+
+namespace RVS.Domain.Tests.Packets;
+
+/// <summary>
+/// Tests for <see cref="PacketHtmlRenderer"/> — the pure transform that renders a
+/// <see cref="ServicePacket"/> to a self-contained HTML document with an embedded print
+/// stylesheet (<c>Spec B-3</c>, issue <c>#431</c>).
+///
+/// The renderer does presentation only: it reads the composed <see cref="ServicePacket"/>
+/// in <c>Spec B-2</c> order and never inspects a <c>ServiceRequest</c>. Greyscale
+/// legibility is asserted structurally — every semantic block carries a textual label and
+/// a border/weight treatment, never colour alone.
+/// </summary>
+public class PacketHtmlRendererTests
+{
+    // ── Fixtures ────────────────────────────────────────────────────────────
+
+    private static ServicePacket FullPacket() => new()
+    {
+        Unit = new PacketUnitHeader
+        {
+            Year = 2021,
+            Make = "Winnebago",
+            Model = "View",
+            Vin = "1FDXE45S12HB00001",
+        },
+        Customer = new PacketCustomer
+        {
+            FullName = "Dale Gribble",
+            FirstName = "Dale",
+            LastName = "Gribble",
+            Phone = "555-0101",
+            Email = "dale@example.com",
+            PreferredContact = "Phone",
+        },
+        Origin = new PacketOrigin
+        {
+            LocationName = "Salt Lake Service Center",
+            LocationPhone = "555-0199",
+            LocationTimeZoneId = "America/Denver",
+            SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
+            ReferenceCode = "A1B2C3D4",
+        },
+        IssueCategory = "Electrical",
+        CuratedIssue = "Generator shuts down under load after roughly ten minutes, with a hot smell.",
+        IssueDescription = "Generator quits after ten minutes. Smells hot.",
+        Diagnostics =
+        [
+            new PacketDiagnosticEntry
+            {
+                Question = "Does the generator start at all?",
+                Answers = ["Yes, then dies", "Dies after about 10 minutes"],
+            },
+            new PacketDiagnosticEntry
+            {
+                Question = "Any warning lights?",
+                Answers = ["Temp light"],
+            },
+        ],
+        AiSummary = new PacketAiSummary { Text = "Likely overheating on the generator windings." },
+        Photos =
+        [
+            new PacketPhoto { Url = "https://blob/generator.jpg?sas=read", FileName = "generator.jpg" },
+        ],
+        PasteBlock = "ELECTRICAL\nGenerator quits after ten minutes.\nhttps://rvintake.com/status/abc123",
+        StatusLink = new PacketStatusLink { Url = "https://rvintake.com/status/abc123" },
+    };
+
+    private static ServicePacket MinimalPacket() => new()
+    {
+        Unit = new PacketUnitHeader(),
+        Customer = new PacketCustomer { FullName = "Jane Doe" },
+        Origin = new PacketOrigin
+        {
+            SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
+            ReferenceCode = "DEADBEEF",
+        },
+        IssueDescription = "It rattles.",
+        Diagnostics = [],
+        Photos = [],
+    };
+
+    private static int Order(string html, string marker)
+    {
+        var index = html.IndexOf(marker, StringComparison.Ordinal);
+        index.Should().BeGreaterThanOrEqualTo(0, "marker '{0}' should be present", marker);
+        return index;
+    }
+
+    // ── Guard clause ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WhenPacketIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => PacketHtmlRenderer.Render(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    // ── Document shape ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_ShouldProduceAWellFormedHtmlDocument()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().StartWith("<!DOCTYPE html>");
+        html.Should().Contain("<html").And.Contain("</html>");
+        html.Should().Contain("<meta charset=\"utf-8\"");
+    }
+
+    [Fact]
+    public void Render_ShouldBeSelfContained_WithNoExternalResourcesOrScripts()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("<link", "the stylesheet must be embedded, not linked");
+        html.Should().NotContain("<script", "the packet is a static document");
+        html.Should().Contain("<style", "the print stylesheet is embedded inline");
+    }
+
+    [Fact]
+    public void Render_ShouldEmbedAPrintStylesheet()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("@media print");
+        html.Should().MatchRegex(@"@page\s*\{[^}]*margin");
+    }
+
+    [Fact]
+    public void Render_ShouldNotPinPaperSize_SoLetterAndA4BothPrintCleanly()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        // A fixed `size: letter` / `size: A4` in @page forces one paper and clips the
+        // other. Margins are declared; the paper is left to the printer.
+        Regex.IsMatch(html, @"@page\s*\{[^}]*\bsize\s*:\s*(letter|a4)", RegexOptions.IgnoreCase)
+            .Should().BeFalse();
+    }
+
+    // ── Section ordering (Spec B-2) ─────────────────────────────────────────
+
+    [Fact]
+    public void Render_ShouldEmitEverySectionInSpecB2Order()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        // Spec B-2 order, with the curated issue and the AI assessment lifted above the
+        // verbatim complaint (issue #601).
+        var order = new[]
+        {
+            Order(html, "section:unit"),
+            Order(html, "section:customer"),
+            Order(html, "section:origin"),
+            Order(html, "section:category"),
+            Order(html, "section:curated-issue"),
+            Order(html, "section:ai-summary"),
+            Order(html, "section:description"),
+            Order(html, "section:diagnostics"),
+            Order(html, "section:paste-block"),
+            Order(html, "section:status-link"),
+        };
+
+        order.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void Render_WhenAVideoIsPresent_ShouldPlaceThePhotosSectionBetweenDiagnosticsAndThePasteBlock()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket() with { Photos = [Video()] });
+
+        Order(html, "section:diagnostics").Should().BeLessThan(Order(html, "section:photos"));
+        Order(html, "section:photos").Should().BeLessThan(Order(html, "section:paste-block"));
+    }
+
+    [Fact]
+    public void Render_ShouldPlaceThePreliminaryAssessmentAboveTheComplaint()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        Order(html, "section:ai-summary").Should().BeLessThan(Order(html, "section:description"));
+        Order(html, "section:category").Should().BeLessThan(Order(html, "section:ai-summary"));
+    }
+
+    // ── Curated issue — the "Issue" section (issue #601) ───────────────────
+
+    [Fact]
+    public void Render_ShouldPlaceTheCuratedIssueDirectlyAboveThePreliminaryAssessment()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        Order(html, "section:category").Should().BeLessThan(Order(html, "section:curated-issue"));
+        Order(html, "section:curated-issue").Should().BeLessThan(Order(html, "section:ai-summary"));
+        Order(html, "section:curated-issue").Should().BeLessThan(Order(html, "section:description"));
+    }
+
+    [Fact]
+    public void Render_ShouldHeadTheCuratedIssueSectionIssue()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var block = html[Order(html, "section:curated-issue")..Order(html, "section:ai-summary")];
+
+        block.Should().Contain("Issue");
+        block.Should().Contain("Generator shuts down under load after roughly ten minutes, with a hot smell.");
+    }
+
+    [Fact]
+    public void Render_WhenCuratedIssueIsNull_ShouldOmitTheIssueSection()
+    {
+        var packet = FullPacket() with { CuratedIssue = null };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("section:curated-issue");
+        html.Should().Contain("section:description");
+    }
+
+    [Fact]
+    public void Render_ShouldHtmlEncodeTheCuratedIssue()
+    {
+        var packet = FullPacket() with { CuratedIssue = "it won't \"start\" <b>at all</b> & smells hot" };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var block = html[Order(html, "section:curated-issue")..Order(html, "section:ai-summary")];
+
+        block.Should().NotContain("<b>at all</b>");
+        block.Should().Contain("&lt;b&gt;at all&lt;/b&gt;");
+        block.Should().Contain("&amp;");
+    }
+
+    // ── 1. Unit header ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WhenVinPresent_ShouldRenderTheSerialLine()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        // IDS calls the VIN the "Serial#"; we label it "Serial# (VIN)".
+        html.Should().Contain("Serial# (VIN):").And.Contain("1FDXE45S12HB00001");
+        html.Should().Contain("2021").And.Contain("Winnebago").And.Contain("View");
+    }
+
+    [Fact]
+    public void Render_WhenVinAbsent_ShouldOmitTheSerialLine()
+    {
+        var packet = FullPacket() with { Unit = new PacketUnitHeader { Year = 2021, Make = "Winnebago", Model = "View" } };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("Serial#");
+        html.Should().NotContain("1FDXE45S12HB00001");
+    }
+
+    [Fact]
+    public void Render_WhenYearMakeModelAllAbsent_ShouldRenderAFallbackAndNotCrash()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        Order(html, "section:unit");
+        html.Should().Contain("Unit details not provided");
+    }
+
+    // ── 2. Customer ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_ShouldRenderCustomerContactRows_AndSkipAbsentOnes()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        html.Should().Contain("Jane Doe");
+        // MinimalPacket has no phone/email/preferred-contact — those labels must not appear.
+        var customerBlock = html[Order(html, "section:customer")..Order(html, "section:origin")];
+        customerBlock.Should().NotContain("Phone:");
+        customerBlock.Should().NotContain("Email:");
+        customerBlock.Should().NotContain("Preferred contact:");
+    }
+
+    [Fact]
+    public void Render_ShouldRenderTheCustomerPhoneAsATelLink()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var customerBlock = html[Order(html, "section:customer")..Order(html, "section:origin")];
+        customerBlock.Should().Contain("<a href=\"tel:5550101\"");
+        customerBlock.Should().Contain(">555-0101</a>");
+    }
+
+    [Fact]
+    public void Render_ShouldKeepALeadingPlusAndDropFormattingInTheTelLink()
+    {
+        var packet = FullPacket() with { Customer = FullPacket().Customer with { Phone = "+1 (801) 555-0101" } };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().Contain("href=\"tel:+18015550101\"");
+        html.Should().Contain(">+1 (801) 555-0101</a>");
+    }
+
+    [Fact]
+    public void Render_WhenThePhoneHasNoDigits_ShouldRenderItAsPlainText_NotATelLink()
+    {
+        var packet = FullPacket() with { Customer = FullPacket().Customer with { Phone = "\"><script>x</script>" } };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("href=\"tel:");
+        html.Should().NotContain("<script>x");
+        html.Should().Contain("&lt;script&gt;x");
+    }
+
+    [Fact]
+    public void Render_ShouldRenderTheCustomerEmailAsAMailtoLink()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var customerBlock = html[Order(html, "section:customer")..Order(html, "section:origin")];
+        customerBlock.Should().Contain("<a href=\"mailto:dale@example.com\"");
+        customerBlock.Should().Contain(">dale@example.com</a>");
+    }
+
+    [Fact]
+    public void Render_ShouldNotLinkTheLocationPhone()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("tel:5550199", "only the customer's number is a call-back target");
+    }
+
+    [Fact]
+    public void Render_ShouldRenderPreferredContact_WhenPresent()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("Preferred contact:").And.Contain("Phone");
+    }
+
+    // ── 3. Origin ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_ShouldRenderReferenceCodeAndAnInvariantTimestamp()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("A1B2C3D4");
+        html.Should().Contain("2026-09-05 8:30 AM MDT");
+        html.Should().Contain("Salt Lake Service Center");
+    }
+
+    // ── IDS work-order alignment (issue #431, Blue Compass / Integrated Dealer Systems) ──
+
+    [Fact]
+    public void Render_ShouldPlaceTheReferenceCodeInTheMastheadAsIntakeNumber()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("Intake #:");
+        html.Should().NotContain("RVS #", "the tracking number is labelled Intake # (issue #735)");
+        // Mirrors IDS "W/O #" top-right: the tracking number comes before any section body.
+        html.IndexOf("A1B2C3D4", StringComparison.Ordinal)
+            .Should().BeLessThan(Order(html, "section:customer"));
+        // The top-of-packet Received line carries the full timestamp, date + time, in the
+        // dealership's own zone (issue #492 item 4, finished by #506).
+        html.Should().Contain("Received: 2026-09-05 8:30 AM MDT");
+    }
+
+    // ── Masthead: brand, logo, customer headline, received line (issue #492) ──
+
+    [Fact]
+    public void Render_ShouldTitleTheMastheadServiceIntakePacket_NotTheBrandName()
+    {
+        // Issue #794: the letterhead names the document, not the brand — "Service Intake Packet"
+        // where "RV Intake" was, in the same bold 13pt, with no doctype line under it.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var masthead = html[Order(html, "section:unit")..Order(html, "section:customer")];
+        masthead.Should().MatchRegex(
+            @"<div class=""letterhead"" style=""font-size:13pt;font-weight:700;"">Service Intake Packet</div>");
+        masthead.Should().NotContain("RV Intake");
+        masthead.Should().NotContain("class=\"doctype\"");
+        html.Should().NotContain("RV ServiceFlow");
+    }
+
+    [Fact]
+    public void Render_TheLetterhead_ShouldSitInTheRefboxAboveTheIntakeNumber()
+    {
+        // Issue #800: the letterhead moved from under the logo, top left, to the right-hand
+        // refbox, directly above the Intake # line.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var refbox = html[Order(html, "class=\"refbox\"")..Order(html, "section:customer")];
+        refbox.Should().Contain("class=\"letterhead\"");
+        Order(refbox, "class=\"letterhead\"").Should().BeLessThan(Order(refbox, "Intake #:"));
+        html[Order(html, "class=\"brand\"")..Order(html, "class=\"refbox\"")]
+            .Should().NotContain("Service Intake Packet");
+    }
+
+    [Fact]
+    public void Render_WhenBrandNameOverridden_ShouldUseItInTheRunningFooterOnly()
+    {
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding { BrandName = "Acme RV Group" },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html[Order(html, "section:unit")..Order(html, "section:customer")]
+            .Should().NotContain("Acme RV Group");                                         // masthead (#794)
+        html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*Acme RV Group");               // running footer
+        html[Order(html, "class=\"packet-foot\"")..].Should().NotContain("Acme RV Group"); // static footer (#800)
+        // The "Powered by" mark names the product whatever the brand is (issue #470); nothing
+        // before it does.
+        html[..Order(html, "class=\"powered-by\"")].Should().NotContain("RV Intake");
+    }
+
+    [Fact]
+    public void Render_WhenBrandingHasNoLogo_ShouldNotEmitAMastheadImage()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html[..Order(html, "section:customer")].Should().NotContain("<img");
+    }
+
+    [Fact]
+    public void Render_WhenBrandingHasALogoUrl_ShouldEmitItAsTheFirstThingInTheMasthead()
+    {
+        // Top left, by URL rather than a data: URI: this HTML is the email body, and Gmail and
+        // Outlook drop data: images (issue #470).
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding { LogoUrl = "https://cdn.dealer.example/logo.png?v=1&size=l" },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var masthead = html[Order(html, "section:unit")..Order(html, "section:customer")];
+        masthead.Should().Contain("class=\"masthead-logo\"");
+        masthead.Should().Contain("src=\"https://cdn.dealer.example/logo.png?v=1&amp;size=l\"");
+        masthead.IndexOf("masthead-logo", StringComparison.Ordinal)
+            .Should().BeLessThan(masthead.IndexOf("class=\"letterhead\"", StringComparison.Ordinal));
+        masthead.IndexOf("masthead-logo", StringComparison.Ordinal)
+            .Should().BeLessThan(masthead.IndexOf("class=\"refbox\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Render_WhenBrandingHasALogoUrl_ShouldLeaveTwoLinesOfWhitespaceBelowTheLogoRow()
+    {
+        // Issue #794. Inline padding on the cell, not a CSS margin: this HTML is the email body,
+        // and mail clients drop the <style> block and ignore margins on tables.
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding { LogoUrl = "https://cdn.dealer.example/logo.png" },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var masthead = html[Order(html, "section:unit")..Order(html, "section:customer")];
+        masthead.Should().MatchRegex(@"<td class=""brand"" style=""[^""]*padding-bottom:10mm;");
+    }
+
+    [Fact]
+    public void Render_WhenBrandingHasNoLogo_ShouldNotAddWhitespaceBelowTheLetterhead()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var masthead = html[Order(html, "section:unit")..Order(html, "section:customer")];
+        masthead.Should().NotContain("padding-bottom:10mm");
+    }
+
+    // ── "Powered by RV Intake" footer (issue #470) ───────────────────────
+
+    [Fact]
+    public void Render_ShouldPutThePoweredByMarkOnTheRightOfTheStaticFooterLine()
+    {
+        // Issue #800: the mark replaced "RV Intake — service intake packet" on the right of the
+        // Intake # line, and is no longer a separate centred row.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var footer = html[Order(html, "class=\"packet-foot\"")..];
+        var firstRow = footer[..Order(footer, "</tr>")];
+        firstRow.Should().Contain("Intake #A1B2C3D4");
+        firstRow.Should().MatchRegex(@"<td[^>]*class=""powered-by""[^>]*text-align:right");
+        firstRow[Order(firstRow, "class=\"powered-by\"")..].Should().Contain("Powered by");
+        footer.Should().NotContain("service intake packet");
+        footer.Should().NotContain("text-align:center");
+    }
+
+    [Fact]
+    public void Render_WhenAPoweredByLogoUrlIsSet_ShouldShowTheRvIntakeMarkAsASizedImage()
+    {
+        var packet = FullPacket() with
+        {
+            Branding = new PacketBranding
+            {
+                PoweredByLogoUrl = "https://rvintake.com/_content/RVS.UI.Shared/brand/logo-horizontal.png",
+            },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var poweredBy = html[Order(html, "class=\"powered-by\"")..];
+        poweredBy.Should().MatchRegex(
+            @"<img[^>]*src=""https://rvintake\.com/_content/RVS\.UI\.Shared/brand/logo-horizontal\.png""[^>]*alt=""RV Intake""");
+        // Outlook ignores CSS sizes on images; explicit attributes keep the mark small.
+        poweredBy.Should().MatchRegex(@"<img[^>]*width=""\d+""[^>]*height=""\d+""");
+    }
+
+    [Fact]
+    public void Render_WhenNoPoweredByLogoUrl_ShouldNameRvIntakeInText()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var poweredBy = html[Order(html, "class=\"powered-by\"")..];
+        poweredBy.Should().Contain("Powered by <strong>RV Intake</strong>");
+        poweredBy.Should().NotContain("<img");
+    }
+
+    [Fact]
+    public void Render_PoweredByLine_ShouldComeBeforeTheAiDisclaimer()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("class=\"ai-disclaimer\"");
+        Order(html, "class=\"powered-by\"").Should().BeLessThan(Order(html, "class=\"ai-disclaimer\""));
+    }
+
+    [Fact]
+    public void Render_ShouldRenderASingleLineTitle_CustomerNameLastNameFirstThenUnitDescriptor()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("class=\"packet-title\"");
+        html.Should().Contain(">Gribble, Dale : 2021 Winnebago View<");
+        // Below the top refbox.
+        html.IndexOf("Gribble, Dale", StringComparison.Ordinal)
+            .Should().BeGreaterThan(html.IndexOf("Intake #:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Render_WhenOnlyAFullNameIsAvailable_ShouldStillRenderItInTheTitle()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());   // FullName only, no discrete parts
+
+        html.Should().Contain("class=\"packet-title\"");
+        html.Should().Contain(">Jane Doe : Unit details not provided<");
+    }
+
+    // ── 3. Origin column renamed to "Location", Received row dropped (item 5) ──
+
+    [Fact]
+    public void Render_TheOriginColumn_ShouldBeHeadedLocation_WithNoReceivedRow()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var originColumn = html[Order(html, "section:origin")..Order(html, "class=\"col unit\"")];
+        originColumn.Should().Contain("<h2>Location</h2>");
+        originColumn.Should().NotContain("Location &amp; received");
+        originColumn.Should().NotContain("Received:", "the Received line now lives only in the top refbox");
+    }
+
+    [Fact]
+    public void Render_ShouldRenderTheCustomerLocationUnitBand()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("class=\"idcols\"");
+        html.Should().Contain("class=\"col customer\"")
+            .And.Contain("class=\"col origin\"")
+            .And.Contain("class=\"col unit\"");
+    }
+
+    [Fact]
+    public void Render_TheIdentityBand_ShouldStackCustomerLocationUnitVertically()
+    {
+        // Issue #800: Customer, Location and Unit read top to bottom at every width — each in
+        // its own table row, full width — rather than as three side-by-side columns.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var band = html[Order(html, "class=\"idcols\"")..Order(html, "</header>")];
+        Regex.Matches(band, "<tr>").Count.Should().Be(3);
+        band.Should().MatchRegex(@"<td class=""col customer""[^>]*style=""[^""]*width:100%");
+        band.Should().MatchRegex(@"<td class=""col origin""[^>]*style=""[^""]*width:100%");
+        band.Should().MatchRegex(@"<td class=""col unit""[^>]*style=""[^""]*width:100%");
+        Order(band, "class=\"col customer\"").Should().BeLessThan(Order(band, "class=\"col origin\""));
+        Order(band, "class=\"col origin\"").Should().BeLessThan(Order(band, "class=\"col unit\""));
+    }
+
+    // ── Email-client-safe layout ─────────────────────────────────────────────
+    //
+    // The rendered HTML is used verbatim as the packet delivery email body
+    // (PacketEmailComposer). Gmail and Outlook silently drop `display:flex` and
+    // `display:grid`, so any multi-column band built with them collapses to a single
+    // stacked column in the inbox — which is exactly what a service manager saw. Every
+    // horizontal band must therefore be a presentational <table> with the column geometry
+    // carried inline so it survives a stripped <style> block.
+
+    [Fact]
+    public void Render_ShouldNotUseFlexOrGridForLayout()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotMatchRegex(@"display\s*:\s*flex", "email clients drop flexbox layout");
+        html.Should().NotMatchRegex(@"display\s*:\s*grid", "email clients drop CSS grid layout");
+    }
+
+    [Fact]
+    public void Render_TheIdentityBand_ShouldBeAPresentationalTable_WithInlineCellGeometry()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().MatchRegex(@"<table[^>]*role=""presentation""[^>]*class=""idcols""");
+        // Each cell carries width + top alignment inline, so the band keeps its shape when the
+        // <style> block is discarded.
+        html.Should().MatchRegex(@"<td class=""col customer""[^>]*style=""[^""]*vertical-align:\s*top");
+        html.Should().MatchRegex(@"<td class=""col customer""[^>]*style=""[^""]*width:");
+        html.Should().MatchRegex(@"<td class=""col origin""[^>]*style=""[^""]*vertical-align:\s*top");
+        html.Should().MatchRegex(@"<td class=""col unit""[^>]*style=""[^""]*vertical-align:\s*top");
+    }
+
+    [Fact]
+    public void Render_TheMastheadTop_ShouldBeAPresentationalTable_BrandLeftTrackingNumberRight()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+        var masthead = html[..Order(html, "section:customer")];
+
+        masthead.Should().MatchRegex(@"<table[^>]*role=""presentation""[^>]*class=""masthead-top""");
+        // The tracking-number cell is right-aligned inline.
+        masthead.Should().MatchRegex(@"class=""refbox""[^>]*style=""[^""]*text-align:\s*right");
+    }
+
+    [Fact]
+    public void Render_TheStaticFooter_ShouldBeAPresentationalTable()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().MatchRegex(@"<table[^>]*role=""presentation""[^>]*class=""packet-foot""");
+    }
+
+    [Fact]
+    public void Render_TheIdentityBand_ShouldNeedNoNarrowScreenRule()
+    {
+        // The band stacks at every width since issue #800, so the #780 phone-width override
+        // that stacked three columns is gone.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("max-width: 600px");
+        html.Should().NotContain("!important");
+    }
+
+    // ── AI disclaimer in the footer, no per-section badges (issue #780) ─────
+
+    [Fact]
+    public void Render_ShouldNotBadgeAnySectionAsAiGenerated()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("class=\"tag\"");
+        html.Should().Contain("<h2>Issue</h2>");
+        html.Should().Contain("<h2>Preliminary assessment</h2>");
+    }
+
+    [Fact]
+    public void Render_WhenAiContentPresent_ShouldCarryTheAiDisclaimerInTheStaticFooter()
+    {
+        var packet = FullPacket();
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var footer = html[Order(html, "class=\"packet-foot\"")..];
+        footer.Should().Contain("class=\"ai-disclaimer\"");
+        footer.Should().Contain(System.Net.WebUtility.HtmlEncode(packet.AiDisclaimer!));
+    }
+
+    [Fact]
+    public void Render_WhenNoAiContent_ShouldOmitTheAiDisclaimer()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        html.Should().NotContain("class=\"ai-disclaimer\"");
+        html.Should().NotContain("AI disclosure");
+    }
+
+    [Fact]
+    public void Render_ShouldUseIdsFieldVocabulary()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("Reported issue");     // not "Complaint" (issue #735)
+        html.Should().NotContain("Complaint");
+        html.Should().Contain("Manufacturer:");      // not "Make"
+        html.Should().Contain("Serial# (VIN):");     // not "VIN"
+        html.Should().Contain("Preliminary assessment");
+        html.Should().Contain("Reported symptoms &amp; diagnostic Q&amp;A");
+    }
+
+    [Fact]
+    public void Render_ShouldEmitARunningFooterWithReferenceAndPageCounter()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        // @page margin box for engines that honour it (Chrome/Edge/Firefox print)…
+        html.Should().Contain("@bottom-right")
+            .And.Contain("counter(page)")
+            .And.Contain("counter(pages)");
+        html.Should().MatchRegex(@"@bottom-left\s*\{[^}]*Intake #A1B2C3D4");
+        // …and a static end-of-flow footer for engines that don't (Safari).
+        html.Should().Contain("class=\"packet-foot\"");
+        html[Order(html, "section:status-link")..]
+            .Should().Contain("Intake #A1B2C3D4");
+    }
+
+    [Fact]
+    public void Render_RunningFooterContent_ShouldStayInsideACssString()
+    {
+        var packet = FullPacket() with
+        {
+            Origin = new PacketOrigin
+            {
+                LocationName = "Salt Lake Service Center",
+                LocationTimeZoneId = "America/Denver",
+                SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
+                ReferenceCode = "A1B2C3D4",
+            },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        // The reference code alphabet is ASCII with no quote/backslash, so the @page
+        // content string is well-formed. Guard against a stray quote breaking the rule.
+        var open = html.IndexOf("@bottom-left", StringComparison.Ordinal);
+        var slice = html[open..html.IndexOf("@bottom-right", StringComparison.Ordinal)];
+        slice.Split('"').Length.Should().Be(3, "content should be exactly one quoted string");
+    }
+
+    [Fact]
+    public void Render_RunningFooterContent_ShouldCarryTheZoneAbbreviation()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var slice = html[Order(html, "@bottom-left")..Order(html, "@bottom-right")];
+        slice.Should().Contain("2026-09-05 8:30 AM MDT");
+    }
+
+    [Fact]
+    public void Render_ShouldUseOneReceivedStringAcrossTheMastheadTheRunningFooterAndTheStaticFooter()
+    {
+        // The three surfaces read one derived value (PacketOrigin.ReceivedDisplay, issue
+        // #506). Without this test the guarantee is convention: a future edit could re-derive
+        // one of them and only a visual diff would catch it.
+        var packet = FullPacket();
+        var html = PacketHtmlRenderer.Render(packet);
+        var received = packet.Origin.ReceivedDisplay;
+
+        received.Should().Be("2026-09-05 8:30 AM MDT");
+
+        var runningFooter = html[Order(html, "@bottom-left")..Order(html, "@bottom-right")];
+        var masthead = html[Order(html, "class=\"received\"")..Order(html, "section:category")];
+        var staticFooter = html[Order(html, "class=\"packet-foot\"")..];
+
+        runningFooter.Should().Contain(received);
+        masthead.Should().Contain(received);
+        staticFooter.Should().Contain(received);
+    }
+
+    [Fact]
+    public void Render_WhenTheLocationHasNoTimeZone_ShouldKeepTheUtcReceivedLine()
+    {
+        // The fallback that every packet rendered before #506, still exact.
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        html.Should().Contain("Received: 2026-09-05 2:30 PM UTC");
+    }
+
+    // ── 4. Category ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WhenCategoryPresent_ShouldRenderIt()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html[Order(html, "section:category")..Order(html, "section:ai-summary")]
+            .Should().Contain("Electrical");
+    }
+
+    [Fact]
+    public void Render_WhenCategoryNull_ShouldRenderUncategorized()
+    {
+        var packet = FullPacket() with { IssueCategory = null };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html[Order(html, "section:category")..Order(html, "section:ai-summary")]
+            .Should().Contain("Uncategorized");
+    }
+
+    // ── 5. Description, verbatim + encoded ─────────────────────────────────
+
+    [Fact]
+    public void Render_ShouldHeadTheDescriptionReportedIssue_CustomersWordsVerbatim()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var block = html[Order(html, "section:description")..Order(html, "section:diagnostics")];
+        block.Should().Contain("<h2>Reported issue <span class=\"sub\">— customer's words verbatim</span></h2>");
+    }
+
+    [Fact]
+    public void Render_ShouldRenderTheCustomerDescriptionVerbatim_HtmlEncoded_PreservingWhitespace()
+    {
+        var packet = FullPacket() with
+        {
+            IssueDescription = "it won't \"start\" <b>at all</b> & smells hot\nsecond line",
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("<b>at all</b>");
+        html.Should().Contain("&lt;b&gt;at all&lt;/b&gt;");
+        html.Should().Contain("&amp; smells hot");
+        // newlines preserved for a shop reader — rendered inside a <pre>-style block
+        html.Should().MatchRegex(@"smells hot\r?\nsecond line");
+    }
+
+    // ── 6. Diagnostic Q&A — the expert block ──────────────────────────────
+
+    [Fact]
+    public void Render_WhenDiagnosticsPresent_ShouldRenderEveryQuestionAndAnswer()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("Does the generator start at all?");
+        html.Should().Contain("Yes, then dies");
+        html.Should().Contain("Dies after about 10 minutes");
+        html.Should().Contain("Any warning lights?");
+        html.Should().Contain("Temp light");
+    }
+
+    [Fact]
+    public void Render_TheDiagnosticsBlock_ShouldBeVisuallyEmphasised_NotByColourAlone()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("class=\"diagnostics\"");
+        // No frame around the section (issue #580); emphasis is carried by bold questions
+        // and a left-rule accent per answer, legible in greyscale.
+        html.Should().MatchRegex(@"\.diagnostics\s+dt\s*\{[^}]*font-weight:\s*700");
+        html.Should().MatchRegex(@"\.diagnostics\s+dd\s*\{[^}]*border-left[^}]*}");
+    }
+
+    [Fact]
+    public void Render_TheDiagnosticAnswers_ShouldUseTheSameMonospaceAsTheVerbatimDescription()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        // The customer's own answers read as their words, like the verbatim description
+        // (issue #735) — the same Courier stack, not the body sans-serif.
+        html.Should().MatchRegex(@"\.description \.verbatim,[^{]*\{[^}]*""Courier New""");
+        html.Should().MatchRegex(@"\.diagnostics\s+dd\s*\{[^}]*font-family:\s*""Courier New"", ""Liberation Mono"", monospace");
+    }
+
+    [Fact]
+    public void Render_TheDiagnosticQuestions_ShouldUseThePageTypeface_NotMonospace()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        // The questions are ours, not the customer's: they match the rest of the page, and
+        // only the answers are in Courier (issue #780). Neither the list nor the question
+        // may set a monospace face.
+        html.Should().NotMatchRegex(@"\.diagnostics\s+dl\s*\{[^}]*font-family");
+        html.Should().NotMatchRegex(@"\.diagnostics\s+dt\s*\{[^}]*font-family");
+    }
+
+    [Fact]
+    public void Render_TheDiagnosticsSection_ShouldNotBeFramed()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotMatchRegex(@"\.diagnostics\s*\{[^}]*border\s*:");
+    }
+
+    [Fact]
+    public void Render_TheDescriptionVerbatimBlock_ShouldNotBeFramed()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var openBrace = html.IndexOf(".description .verbatim", StringComparison.Ordinal);
+        openBrace.Should().BeGreaterThanOrEqualTo(0);
+        var sharedRuleBody = html[html.IndexOf('{', openBrace)..html.IndexOf('}', openBrace)];
+        sharedRuleBody.Should().NotContain("border");
+    }
+
+    [Fact]
+    public void Render_ThePasteBlock_ShouldStayFramed()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().MatchRegex(@"pre\.dms-text\s*\{[^}]*border\s*:\s*1px");
+    }
+
+    [Fact]
+    public void Render_WhenNoDiagnostics_ShouldRenderAnExplicitPlaceholder()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        // MinimalPacket has no sections after diagnostics, so slice to the end.
+        html[Order(html, "section:diagnostics")..]
+            .Should().Contain("No diagnostic questions were answered");
+    }
+
+    // ── 5. AI summary (rendered above the complaint) ──────────────────────
+
+    [Fact]
+    public void Render_WhenAiSummaryPresent_ShouldRenderIt_DisclosedInTheFooterRatherThanBadged()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var block = html[Order(html, "section:ai-summary")..Order(html, "section:description")];
+        block.Should().Contain("Likely overheating on the generator windings.");
+        // Issue #780: no badge on the section; the footer's AI disclaimer names it instead.
+        block.ToLowerInvariant().Should().NotContain("ai-generated");
+        html[Order(html, "class=\"packet-foot\"")..].Should().Contain("Preliminary assessment");
+    }
+
+    [Fact]
+    public void Render_WhenAiSummaryAbsent_ShouldOmitTheSection()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        html.Should().NotContain("section:ai-summary");
+    }
+
+    // ── 5a. Structured preliminary assessment (issue #507) ────────────────
+
+    private static ServicePacket AssessedPacket() => FullPacket() with
+    {
+        AiSummary = new PacketAiSummary
+        {
+            Text = "Likely overheating on the generator windings.",
+            ProbableCause = "Overheating from a clogged generator air intake.",
+            PossibleFixes = ["Clear the air intake and cooling fins", "Replace the high-temp shutdown switch"],
+            LikelyParts = ["Air filter", "High-temp shutdown switch"],
+            Confidence = "Medium",
+        },
+    };
+
+    private static string AssessmentBlock(string html) =>
+        html[Order(html, "section:ai-summary")..Order(html, "section:description")];
+
+    [Fact]
+    public void Render_WhenAssessmentPresent_ShouldRenderProbableCauseAndConfidenceInThePreliminaryAssessment()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()));
+
+        block.Should().Contain("Preliminary assessment");
+        block.Should().Contain("Probable cause: <span>Overheating from a clogged generator air intake.</span>");
+        block.Should().Contain("Confidence: <span>Medium</span>");
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentPresent_ShouldRenderPossibleFixesAsAnOrderedList_InOrder()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()));
+
+        block.Should().Contain("Possible fixes");
+        block.Should().Contain("<ol class=\"possible-fixes\"");
+        Order(block, "<li>Clear the air intake and cooling fins</li>")
+            .Should().BeLessThan(Order(block, "<li>Replace the high-temp shutdown switch</li>"));
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentPresent_ShouldRenderLikelyPartsAsAList()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()));
+
+        block.Should().Contain("Likely parts");
+        block.Should().Contain("<ul class=\"likely-parts\"");
+        block.Should().Contain("<li>Air filter</li>");
+        block.Should().Contain("<li>High-temp shutdown switch</li>");
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentPresent_ShouldCarryTheAdvisoryNote()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()));
+
+        block.Should().Contain(System.Net.WebUtility.HtmlEncode(PacketAiSummary.AdvisoryNote));
+    }
+
+    [Fact]
+    public void Render_ShouldNeverPresentAFixAsRecommended()
+    {
+        var html = PacketHtmlRenderer.Render(AssessedPacket());
+
+        html.ToLowerInvariant().Should().NotContain("recommended");
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentHasNoPartsOrFixes_ShouldOmitThoseListsEntirely()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = AssessedPacket().AiSummary! with { PossibleFixes = [], LikelyParts = [] },
+        };
+
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(packet));
+
+        block.Should().Contain("Probable cause:");
+        block.Should().NotContain("Possible fixes");
+        block.Should().NotContain("Likely parts");
+    }
+
+    [Fact]
+    public void Render_WhenNoStructuredAssessment_ShouldRenderOnlyTheSummaryText_WithNoAdvisoryNote()
+    {
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(FullPacket()));
+
+        block.Should().Contain("Likely overheating on the generator windings.");
+        block.Should().NotContain("Probable cause");
+        block.Should().NotContain("Possible fixes");
+        block.Should().NotContain("Likely parts");
+        block.Should().NotContain("Confidence");
+        block.Should().NotContain(System.Net.WebUtility.HtmlEncode(PacketAiSummary.AdvisoryNote));
+    }
+
+    [Fact]
+    public void Render_WhenAssessmentPresentWithoutSummaryText_ShouldRenderTheAssessmentWithoutAnEmptyParagraph()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = AssessedPacket().AiSummary! with { Text = null },
+        };
+
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(packet));
+
+        block.Should().Contain("Probable cause:");
+        block.Should().NotContain("<p></p>");
+        block.Should().NotContain("Likely overheating on the generator windings.");
+    }
+
+    [Fact]
+    public void Render_ShouldHtmlEncodeEveryAssessmentValue()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = new PacketAiSummary
+            {
+                ProbableCause = "<script>cause</script>",
+                PossibleFixes = ["<b>fix</b>"],
+                LikelyParts = ["\"part\" & <i>more</i>"],
+                Confidence = "Low",
+            },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("<script>cause</script>");
+        html.Should().NotContain("<b>fix</b>");
+        html.Should().NotContain("<i>more</i>");
+        html.Should().Contain("&lt;script&gt;cause&lt;/script&gt;");
+    }
+
+    // ── 5b. From photos (issue #772) ──────────────────────────────────────
+
+    private static readonly PacketPhotoFinding[] Findings =
+    [
+        new() { Text = "Refrigerator — Dometic RM2652 · S/N 12345678", PhotoLabel = "photo 3, fridge.jpg" },
+        new() { Text = "Thermostat — code E1", PhotoLabel = "photo 5, thermostat.jpg" },
+    ];
+
+    [Fact]
+    public void Render_WithPhotoFindings_ShouldListThemUnderFromPhotos_AfterThePartsAndBeforeTheAdvisoryNote()
+    {
+        var packet = AssessedPacket() with { AiSummary = AssessedPacket().AiSummary! with { PhotoFindings = Findings } };
+
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(packet));
+
+        block.Should().Contain("<ul class=\"photo-findings\"");
+        Order(block, "Likely parts").Should().BeLessThan(Order(block, PacketPhotoFinding.Heading));
+        Order(block, $"<li>{System.Net.WebUtility.HtmlEncode(Findings[0].Display)}</li>")
+            .Should().BeLessThan(Order(block, $"<li>{System.Net.WebUtility.HtmlEncode(Findings[1].Display)}</li>"));
+        Order(block, "photo 5, thermostat.jpg")
+            .Should().BeLessThan(Order(block, System.Net.WebUtility.HtmlEncode(PacketAiSummary.AdvisoryNote)));
+    }
+
+    [Fact]
+    public void Render_WithOnlyPhotoFindings_ShouldRenderThem_WithoutAssessmentRowsOrTheAdvisoryNote()
+    {
+        var packet = FullPacket() with { AiSummary = new PacketAiSummary { PhotoFindings = Findings } };
+
+        var block = AssessmentBlock(PacketHtmlRenderer.Render(packet));
+
+        block.Should().Contain(PacketPhotoFinding.Heading);
+        block.Should().Contain("Thermostat — code E1 (photo 5, thermostat.jpg)");
+        block.Should().NotContain("Probable cause");
+        block.Should().NotContain("Confidence");
+        block.Should().NotContain(System.Net.WebUtility.HtmlEncode(PacketAiSummary.AdvisoryNote));
+    }
+
+    [Fact]
+    public void Render_WithoutPhotoFindings_ShouldOmitTheFromPhotosBlock()
+    {
+        AssessmentBlock(PacketHtmlRenderer.Render(AssessedPacket()))
+            .Should().NotContain(PacketPhotoFinding.Heading);
+    }
+
+    [Fact]
+    public void Render_ShouldHtmlEncodePhotoFindings()
+    {
+        var packet = FullPacket() with
+        {
+            AiSummary = new PacketAiSummary
+            {
+                PhotoFindings = [new PacketPhotoFinding { Text = "<img src=x>", PhotoLabel = "photo 1, a&b.jpg" }],
+            },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("<img src=x>");
+        html.Should().Contain("&lt;img src=x&gt; (photo 1, a&amp;b.jpg)");
+    }
+
+    // ── 8. Photos ─────────────────────────────────────────────────────────
+
+    private static PacketPhoto Video(string fileName = "walkaround.mp4") => new()
+    {
+        Url = $"https://blob/{fileName}?sas=read",
+        FileName = fileName,
+        ContentType = "video/mp4",
+    };
+
+    [Fact]
+    public void Render_WhenOnlyImagesPresent_ShouldOmitThePhotosSection_TheAttachmentThumbnailsSuffice()
+    {
+        // The images travel as email attachments, which the mail client shows as thumbnails;
+        // a list of their file names above them added nothing (issue #735).
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("section:photos");
+        html.Should().NotContain("generator.jpg");
+        html.Should().NotContain("<img");
+        html.ToLowerInvariant().Should().NotContain("data:image");
+        html.ToLowerInvariant().Should().NotContain("base64");
+    }
+
+    [Fact]
+    public void Render_WhenImagesAndAVideoArePresent_ShouldListOnlyTheVideo()
+    {
+        var packet = FullPacket() with
+        {
+            Photos = [new PacketPhoto { Url = "https://blob/generator.jpg?sas=read", FileName = "generator.jpg" }, Video()],
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        var block = html[Order(html, "section:photos")..Order(html, "section:paste-block")];
+        block.Should().Contain("video walkaround.mp4");
+        block.Should().NotContain("generator.jpg");
+    }
+
+    [Fact]
+    public void Render_ShouldHtmlEncodeTheVideoFileName()
+    {
+        var packet = FullPacket() with { Photos = [Video("<b>x</b>.mp4")] };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().Contain("video &lt;b&gt;x&lt;/b&gt;.mp4");
+        html.Should().NotContain("<b>x</b>.mp4");
+    }
+
+    [Fact]
+    public void Render_WhenNoPhotos_ShouldOmitTheSection()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        html.Should().NotContain("section:photos");
+    }
+
+    [Fact]
+    public void Render_WhenPhotoIsVideo_ShouldRenderAViewVideoHyperlink_NeverAVideoTag()
+    {
+        var packet = FullPacket() with
+        {
+            Photos =
+            [
+                new PacketPhoto
+                {
+                    Url = "https://blob/walkaround.mp4?sas=read",
+                    FileName = "walkaround.mp4",
+                    ContentType = "video/mp4",
+                },
+            ],
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().Contain("video walkaround.mp4");
+        html.Should().Contain("<a href=\"https://blob/walkaround.mp4?sas=read\">view video</a>");
+        html.Should().NotContain("<video");
+        html.Should().NotContain("image walkaround.mp4 attached");
+    }
+
+    // ── Manager-app note for a photo dropped by the ACS size budget (issue #580) ──
+
+    [Fact]
+    public void Render_WhenAManagerAppUrlIsGiven_ShouldAddANoteWithADeepLink()
+    {
+        // FullPacket carries images only: the note alone still earns the section.
+        var html = PacketHtmlRenderer.Render(FullPacket(), "https://manager.example/sr/sr_1");
+
+        html.Should().Contain("section:photos");
+        html.Should().Contain("Some images can only be shown in the manager app");
+        html.Should().Contain("href=\"https://manager.example/sr/sr_1\"");
+    }
+
+    [Fact]
+    public void Render_WhenNoManagerAppUrlIsGiven_ShouldOmitTheNote()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("Some images can only be shown in the manager app");
+    }
+
+    // ── Manager-app link (Spec C-7, issues #498, #743) ────────────────────
+
+    private const string RequestUrl = "https://manager.example/sr/sr_1";
+
+    private static ServicePacket PacketWithManagerLinks() =>
+        FullPacket() with { ManagerLinks = ManagerDeepLinks.Build("https://manager.example", "sr_1") };
+
+    /// <summary>The inline <c>style</c> of the anchor whose <c>href</c> is exactly <paramref name="href"/>.</summary>
+    private static string AnchorStyle(string html, string href)
+    {
+        var match = Regex.Match(html, $@"<a href=""{Regex.Escape(href)}"" style=""([^""]*)""");
+        match.Success.Should().BeTrue("an anchor to '{0}' with an inline style should be present", href);
+        return match.Groups[1].Value;
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldOfferOpenManagerTwice_TopAndBottom()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        Regex.Matches(html, "<!-- section:manager-actions -->").Count.Should().Be(2);
+        Regex.Matches(html, $@"<a href=""{Regex.Escape(RequestUrl)}"" style=""[^""]*"">Open Manager</a>").Count.Should().Be(2);
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldOfferNoStatusActions()
+    {
+        // Every status is one tap away on the /sr page, so the email no longer carries them (#743).
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        html.Should().NotContain("?action=");
+        html.Should().NotContain("Set status");
+        html.Should().NotContain(">In Progress<").And.NotContain(">Waiting on Parts<").And.NotContain(">Completed<");
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldStyleOpenManagerAsAPrimaryBrandButton_Inline()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        // Filled text-safe Rust (RvsBrand.Accent) with a white label, carried inline so the
+        // button survives a stripped <style> block (issue #735).
+        AnchorStyle(html, RequestUrl).Should()
+            .Contain("background-color:#A8431F;")
+            .And.Contain("color:#ffffff;")
+            .And.Contain("border-radius:");
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldPutTheTopButtonBetweenTheMastheadAndTheIssue()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        var top = Order(html, "<!-- section:manager-actions -->");
+        top.Should().BeGreaterThan(Order(html, "<!-- section:origin -->"));
+        top.Should().BeLessThan(Order(html, "<!-- section:category -->"));
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldPutTheBottomButtonRightAfterThePasteBlock()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        var bottom = html.LastIndexOf("<!-- section:manager-actions -->", StringComparison.Ordinal);
+        bottom.Should().BeGreaterThan(Order(html, "<!-- section:paste-block -->"));
+        bottom.Should().BeLessThan(Order(html, "<!-- section:status-link -->"));
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldDrawNoFrameAroundTheButton()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        html.Should().NotContain("<table role=\"presentation\" class=\"manager-actions\"");
+        html.Should().Contain("<p class=\"manager-actions\"");
+        html.Should().NotContain("display:flex").And.NotContain("display:grid");
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldHideThemWhenPrinted()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        html.Should().Contain(".manager-actions { display: none; }");
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksAbsent_ShouldOmitTheSection()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().NotContain("<!-- section:manager-actions -->");
+        html.Should().NotContain("/sr/");
+    }
+
+    [Fact]
+    public void Render_WhenAManagerLinkIsNotHttp_ShouldNotRenderIt()
+    {
+        var packet = FullPacket() with
+        {
+            ManagerLinks = new PacketManagerLinks { RequestUrl = "javascript:alert(1)" },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("javascript:");
+        html.Should().NotContain("<!-- section:manager-actions -->");
+    }
+
+    [Fact]
+    public void Render_WhenManyImagesPresent_ShouldNameNoneOfThem()
+    {
+        var photos = Enumerable.Range(1, 8)
+            .Select(i => new PacketPhoto { Url = $"https://blob/p{i}.jpg", FileName = $"p{i}.jpg" })
+            .ToArray();
+        var packet = FullPacket() with { Photos = photos };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("section:photos");
+        foreach (var photo in photos)
+        {
+            html.Should().NotContain(photo.FileName);
+        }
+    }
+
+    // ── 9. Paste block ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WhenPasteBlockPresent_ShouldRenderItInAMonospaceBlockVerbatim()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var block = html[Order(html, "section:paste-block")..Order(html, "section:status-link")];
+        block.Should().Contain("<pre");
+        block.Should().Contain("ELECTRICAL");
+        block.Should().MatchRegex(@"Generator quits after ten minutes\.\r?\nhttps://rvintake\.com/status/abc123");
+    }
+
+    [Fact]
+    public void Render_ThePasteBlock_ShouldBeHeadedCopyAndPasteReady()
+    {
+        // Issue #800 — "Copy & paste into your DMS" until then.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        var block = html[Order(html, "section:paste-block")..Order(html, "section:status-link")];
+        block.Should().Contain("<h2>Copy &amp; Paste Ready</h2>");
+        html.Should().NotContain("into your DMS");
+    }
+
+    [Fact]
+    public void Render_ThePasteBlock_ShouldSelectWholeOnOneClick_InlineSoAStrippedStyleBlockKeepsIt()
+    {
+        // No mail client runs script, so a real copy button is impossible (issue #735).
+        // user-select: all makes one click select the whole block, ready for Ctrl/Cmd-C.
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().MatchRegex(@"<pre class=""dms-text"" style=""[^""]*-webkit-user-select:\s*all;[^""]*\buser-select:\s*all");
+    }
+
+    [Fact]
+    public void Render_WhenPasteBlockAbsent_ShouldOmitTheSection()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        html.Should().NotContain("section:paste-block");
+    }
+
+    // ── 10. Status link ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WhenStatusLinkPresent_ShouldRenderAnAnchorAndTheVisibleUrl()
+    {
+        var html = PacketHtmlRenderer.Render(FullPacket());
+
+        html.Should().Contain("href=\"https://rvintake.com/status/abc123\"");
+        html.Should().Contain(">https://rvintake.com/status/abc123<");
+    }
+
+    [Fact]
+    public void Render_WhenStatusLinkAbsent_ShouldOmitTheSection()
+    {
+        var html = PacketHtmlRenderer.Render(MinimalPacket());
+
+        html.Should().NotContain("section:status-link");
+    }
+
+    // ── Encoding / safety across every field ────────────────────────────
+
+    [Fact]
+    public void Render_ShouldHtmlEncodeEveryDynamicValue()
+    {
+        var packet = FullPacket() with
+        {
+            Customer = new PacketCustomer { FullName = "<script>alert('x')</script>" },
+        };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("<script>alert");
+        html.Should().Contain("&lt;script&gt;alert");
+    }
+
+    [Fact]
+    public void Render_WhenStatusLinkIsNotHttp_ShouldRenderItAsInertText_NotALink()
+    {
+        var packet = FullPacket() with { StatusLink = new PacketStatusLink { Url = "javascript:alert(1)" } };
+
+        var html = PacketHtmlRenderer.Render(packet);
+
+        html.Should().NotContain("href=\"javascript:");
+    }
+
+    [Fact]
+    public void Render_ShouldBeDeterministic_ForTheSamePacket()
+    {
+        var packet = FullPacket();
+
+        PacketHtmlRenderer.Render(packet).Should().Be(PacketHtmlRenderer.Render(packet));
+    }
+}

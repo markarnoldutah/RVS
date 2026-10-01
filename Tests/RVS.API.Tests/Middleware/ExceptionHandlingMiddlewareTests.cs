@@ -93,6 +93,57 @@ public sealed class ExceptionHandlingMiddlewareTests
     }
 
     [Fact]
+    public async Task IntakeExpiredException_Returns410_WithProblemDetails()
+    {
+        var context = CreateHttpContext();
+        RequestDelegate next = _ => throw new IntakeExpiredException();
+
+        await _middleware.InvokeAsync(context, next);
+
+        var problem = await DeserializeProblemDetails(context);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status410Gone);
+        context.Response.ContentType.Should().Contain("application/problem+json");
+        problem.Type.Should().Be("https://api.rvserviceflow.com/errors/intake-expired");
+        problem.Title.Should().Be("Gone");
+        problem.Status.Should().Be(410);
+        problem.Detail.Should().Be("This location isn't accepting online service requests right now.");
+    }
+
+    [Fact]
+    public async Task ConflictException_Returns409_WithProblemDetails()
+    {
+        var context = CreateHttpContext();
+        RequestDelegate next = _ => throw new ConflictException("Slug 'nova-hurricane' is already in use.");
+
+        await _middleware.InvokeAsync(context, next);
+
+        var problem = await DeserializeProblemDetails(context);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        context.Response.ContentType.Should().Contain("application/problem+json");
+        problem.Type.Should().Be("https://api.rvserviceflow.com/errors/conflict");
+        problem.Title.Should().Be("Conflict");
+        problem.Status.Should().Be(409);
+        problem.Detail.Should().Be("Slug 'nova-hurricane' is already in use.");
+        problem.Instance.Should().Be("/api/test");
+    }
+
+    [Fact]
+    public async Task RateLimitExceededException_Returns429_WithProblemDetails()
+    {
+        var context = CreateHttpContext();
+        RequestDelegate next = _ => throw new RateLimitExceededException("You've sent the most invites allowed in an hour.");
+
+        await _middleware.InvokeAsync(context, next);
+
+        var problem = await DeserializeProblemDetails(context);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        problem.Type.Should().Be("https://api.rvserviceflow.com/errors/rate-limited");
+        problem.Title.Should().Be("Too Many Requests");
+        problem.Status.Should().Be(429);
+        problem.Detail.Should().Be("You've sent the most invites allowed in an hour.");
+    }
+
+    [Fact]
     public async Task UnhandledException_Returns500_WithProblemDetails()
     {
         var context = CreateHttpContext();

@@ -14,22 +14,7 @@
                 }
                 else
                 {
-                    <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height: 400px;">
-                        <MudPaper Elevation="2" Class="pa-8 text-center" Style="max-width: 500px; width: 100%;">
-                            <MudIcon Icon="@Icons.Material.Filled.Block"
-                                     Color="Color.Error" Size="Size.Large" Class="mb-4"
-                                     aria-hidden="true" />
-                            <MudText Typo="Typo.h5" Class="mb-2">Access Denied</MudText>
-                            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4" role="alert">
-                                You are not authorized to access this resource.
-                            </MudText>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
-                                       StartIcon="@Icons.Material.Filled.ArrowBack"
-                                       Href="/">
-                                Return Home
-                            </MudButton>
-                        </MudPaper>
-                    </MudContainer>
+                    <AccessDeniedCard />
                 }
             </NotAuthorized>
         </AuthorizeRouteView>

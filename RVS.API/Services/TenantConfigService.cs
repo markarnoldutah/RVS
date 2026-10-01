@@ -76,4 +76,25 @@ public sealed class TenantConfigService : ITenantConfigService
         var config = await _repository.GetAsync(tenantId, cancellationToken);
         return config?.AccessGate ?? new TenantAccessGateEmbedded { LoginsEnabled = true };
     }
+
+    /// <inheritdoc />
+    public async Task<TenantConfig> SetAccessGateAsync(
+        string tenantId,
+        bool loginsEnabled,
+        string? reason,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        var entity = await _repository.GetAsync(tenantId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Tenant config not found for tenant '{tenantId}'.");
+
+        entity.AccessGate.LoginsEnabled = loginsEnabled;
+        entity.AccessGate.DisabledReason = loginsEnabled ? null : reason?.Trim();
+        entity.AccessGate.DisabledAtUtc = loginsEnabled ? null : DateTimeOffset.UtcNow;
+        entity.MarkAsUpdated(_userContext.UserId);
+        await _repository.SaveAsync(entity, cancellationToken);
+
+        return entity;
+    }
 }

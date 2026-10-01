@@ -18,7 +18,8 @@ public class AssetLedgerEntry
     public string Id { get; init; } = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// Asset identifier — the 17-character Vehicle Identification Number (VIN).
+    /// Vehicle-history key from <see cref="Validation.VehicleHistoryKey"/>: the VIN, or
+    /// <c>MANUFACTURER:SERIAL</c> for a rig with only a serial number (issue #808).
     /// Partition key — immutable after creation.
     /// </summary>
     [JsonProperty("assetId")]
@@ -57,45 +58,9 @@ public class AssetLedgerEntry
     [JsonProperty("issueDescription")]
     public string? IssueDescription { get; init; }
 
-    /// <summary>
-    /// Section 10A fields — populated progressively via change feed.
-    /// Null at write time; enriched in later phases.
-    /// </summary>
-    [JsonProperty("section10A")]
-    public Section10AEmbedded? Section10A { get; set; }
-
     [JsonProperty("status")]
     public string Status { get; set; } = "New";
 
     [JsonProperty("submittedAtUtc")]
     public DateTime SubmittedAtUtc { get; init; }
-}
-
-// ---------------------------------------------------------------------------
-// Embedded: Section10AEmbedded
-// ---------------------------------------------------------------------------
-
-/// <summary>
-/// Structured Section 10A service event data.
-/// Enriched progressively across phases via change feed.
-/// </summary>
-public class Section10AEmbedded
-{
-    [JsonProperty("componentType")]
-    public string? ComponentType { get; set; }
-
-    [JsonProperty("failureMode")]
-    public string? FailureMode { get; set; }
-
-    [JsonProperty("repairAction")]
-    public string? RepairAction { get; set; }
-
-    [JsonProperty("partsUsed")]
-    public List<string> PartsUsed { get; set; } = [];
-
-    [JsonProperty("laborHours")]
-    public decimal? LaborHours { get; set; }
-
-    [JsonProperty("serviceDateUtc")]
-    public DateTime? ServiceDateUtc { get; set; }
 }

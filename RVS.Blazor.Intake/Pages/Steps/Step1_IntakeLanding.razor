@@ -1,76 +1,196 @@
-<MudPaper Elevation="2" Class="pa-6 rounded-lg" Style="width: 100%; max-width: 480px; margin: 0 auto;">
+@implements IDisposable
+
+@* Step 0 — the first screen after following an intake link (issue #707). It borrows the
+   public landing page's shape: an Ink hero band carries the badge and the dealership's name,
+   then the page says what the next few minutes will ask for, then offers the one control on
+   it. The wizard proper starts on the next step, so this one is allowed to be scenery. *@
+
+<MudStack AlignItems="AlignItems.Center" Spacing="5"
+          Style="width: 100%; max-width: 560px; margin: 0 auto;">
     @if (_isLoading)
     {
-        <MudStack AlignItems="AlignItems.Center" Spacing="5"
+        <MudStack AlignItems="AlignItems.Center" Spacing="5" Style="width: 100%;"
                   aria-busy="true" aria-label="Loading location information">
-            <MudSkeleton SkeletonType="SkeletonType.Circle" Width="64px" Height="64px" />
-            <MudSkeleton SkeletonType="SkeletonType.Text" Width="60%" />
-            <MudSkeleton SkeletonType="SkeletonType.Text" Width="40%" />
-            <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" />
-            <MudDivider Style="width: 100%;" />
-            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="300px" Height="44px" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="220px"
+                         Class="rounded-lg" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="180px"
+                         Class="rounded-lg" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="52px"
+                         Class="rounded-lg" />
         </MudStack>
     }
     else if (_error is not null)
     {
-        <MudStack AlignItems="AlignItems.Center" Spacing="4">
-            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
-                     Style="font-size: 4rem;" />
-            <MudText Typo="Typo.h5" Color="Color.Error" Align="Align.Center">
-                The link provided appears to be invalid.
-            </MudText>
-            <MudText Typo="Typo.body1" Align="Align.Center"
-                     Style="color: var(--mud-palette-text-secondary);">
-                @_error
-            </MudText>
-        </MudStack>
+        <MudPaper Elevation="2" Class="pa-8 rounded-lg" Style="width: 100%;">
+            <MudStack AlignItems="AlignItems.Center" Spacing="4">
+                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Error"
+                         Style="font-size: 4rem;" />
+                <MudText Typo="Typo.h5" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
+                    The link provided appears to be invalid.
+                </MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center"
+                         Style="color: var(--mud-palette-text-secondary);">
+                    @_error
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    }
+    else if (State.Config is { IntakeExpired: true })
+    {
+        <IntakeUnavailableNotice LocationName="@State.Config.LocationName" />
     }
     else if (State.Config is not null)
     {
-        <MudStack AlignItems="AlignItems.Center" Spacing="5">
-            @if (State.Config.TokenExpired)
-            {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-2" Style="width: 100%;"
-                          Icon="@Icons.Material.Filled.Schedule">
-                    Your link has expired. You can still submit a service request below, but your information won't be pre-filled.
-                    Contact the dealership if you need a new link.
-                </MudAlert>
-            }
+        @* Hero band — the same lockup the public landing page opens with, on Ink. On a location that
+           sets branding (Spec A-16, issue #470) the band takes the dealer's colour, so it matches the
+           header bar, and the dealer's logo leads it: straight on their colour, which they chose to
+           suit it, or on a white plate when the band stays Ink. The RV Intake mark stands in when
+           there is no logo or it fails to load. Decorative either way: the names below say whose
+           form this is.
+           The band also starts the wizard on a click, like Continue below it (issue #744): people
+           tap the big card that says "Start a Service Request". It stays a card, not a button, so
+           it is pointer-only; keyboard and screen-reader users reach Continue next. *@
+        <MudPaper Elevation="3" Class="pa-8 rounded-lg" Style="@HeroStyle" @onclick="HandleStart">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                @if (Hero.HasDealerLogo)
+                {
+                    <DealerLogo Url="@(Hero.DealerLogoUrl ?? string.Empty)" Alt="" Height="64px" MaxWidth="100%"
+                                Plated="@Hero.LogoOnPlate">
+                        <Fallback>
+                            <BrandWordmark Variant="BrandWordmarkVariant.Glyph" Reversed="@Hero.UseReversedMark" Height="56px" Title="" />
+                        </Fallback>
+                    </DealerLogo>
+                }
+                else
+                {
+                    <BrandWordmark Variant="BrandWordmarkVariant.Glyph" Reversed="@Hero.UseReversedMark" Height="56px" Title="" />
+                }
 
-            <MudIcon Icon="@Icons.Material.Filled.RvHookup" Color="Color.Primary"
-                     Style="font-size: 4rem;" />
+                <MudText Typo="Typo.h4" Style="@HeroTextStyle(bold: true)">
+                    Start a Service Request
+                </MudText>
 
-            <MudText Typo="Typo.h5" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
-                Start a Service Request<br />
-                with
-            </MudText>
+                <MudDivider Style="@HeroDividerStyle" />
 
-            <MudText Typo="Typo.h6" Align="Align.Center"
-                     Style="color: var(--mud-palette-text-secondary);">
-                @State.Config.LocationName
-            </MudText>
+                <MudText Typo="Typo.h6" Style="@HeroTextStyle()">
+                    @HeroName
+                </MudText>
+            </MudStack>
+        </MudPaper>
 
-            <MudDivider Class="my-2" Style="width: 100%;" />
+        @* What the wizard is about to ask for, so nobody starts it wondering how long it runs. *@
+        <MudPaper Elevation="2" Class="pa-6 rounded-lg"
+                  Style="width: 100%; border-top: 4px solid var(--mud-palette-primary);">
+            <MudStack Spacing="4">
+                <MudText Typo="Typo.subtitle1" Style="color: var(--mud-palette-text-primary); font-weight: 700;">
+                    What we'll ask for
+                </MudText>
 
+                @foreach (var item in Expectations)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                        <MudIcon Icon="@item.Icon" Color="Color.Primary" Style="font-size: 1.75rem;" />
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-primary); font-weight: 700;">
+                                @item.Title
+                            </MudText>
+                            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+                                @item.Detail
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                }
+            </MudStack>
+        </MudPaper>
+
+        <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="width: 100%;">
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        Size="Size.Large"
                        FullWidth="true"
+                       EndIcon="@Icons.Material.Filled.ArrowForward"
                        OnClick="HandleStart"
                        Style="text-transform: none;">
                 Continue
             </MudButton>
+
+            <MudText Typo="Typo.body2" Align="Align.Center"
+                     Style="color: var(--mud-palette-text-secondary);">
+                About 5 minutes. No app to install and no account to create.
+            </MudText>
         </MudStack>
     }
-</MudPaper>
+</MudStack>
 
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnStart { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
+    [Inject] private ThemeService ThemeService { get; set; } = default!;
+    [Inject] private RememberedDetailsStore RememberedDetails { get; set; } = default!;
+
+    // The hero follows the header bar's surface rules (Spec A-16, issue #470): the dealer's colour
+    // and a contrast-chosen foreground when set, Ink and its own text colour otherwise.
+    private IntakeChrome Hero => IntakeChrome.ForLanding(State.Config, ThemeService.IsHighContrast);
+
+    private string HeroForeground => Hero.AppBarForeground ?? "var(--mud-palette-secondary-text)";
+
+    private string HeroStyle =>
+        $"width: 100%; text-align: center; cursor: pointer; background: {Hero.AppBarBackground ?? "var(--mud-palette-secondary)"};";
+
+    // "<dealer> - <location>" on one line (issue #744). Provisioning already stores LocationName in
+    // that shape (LocationNameGenerator.ForBusiness), so the dealer is prepended here only when it
+    // isn't already there — otherwise a name like "Nova RV Services - Hurricane" doubled up front.
+    private string HeroName
+    {
+        get
+        {
+            var location = State.Config!.LocationName;
+            var dealer = State.Config.DealershipName;
+            return string.IsNullOrWhiteSpace(dealer) || StartsWithWord(location, dealer)
+                ? location
+                : $"{dealer} - {location}";
+        }
+    }
+
+    private static bool StartsWithWord(string text, string prefix)
+    {
+        if (!text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // "Nova" is not a word-boundary prefix of "Novato".
+        return text.Length == prefix.Length || !char.IsLetterOrDigit(text[prefix.Length]);
+    }
+
+    private string HeroDividerStyle => $"width: 64px; border-color: {HeroForeground}; opacity: 0.35;";
+
+    private string HeroTextStyle(bool bold = false, string? opacity = null) =>
+        $"color: {HeroForeground};{(bold ? " font-weight: 700;" : string.Empty)}{(opacity is null ? string.Empty : $" opacity: {opacity};")}";
 
     private bool _isLoading = true;
     private string? _error;
+
+    /// <summary>
+    /// What the wizard goes on to ask for, in the order it asks. Listed on step 0 so nobody
+    /// starts an eight-step form without knowing its shape — it mirrors steps 2, 3-4, 5-6 and 7.
+    /// </summary>
+    private static readonly (string Icon, string Title, string Detail)[] Expectations =
+    [
+        (Icons.Material.Filled.Person, "Who you are",
+            "Name, phone and email, so the service department can reach you."),
+        (Icons.Material.Filled.RvHookup, "Your RV",
+            "Type, speak or photograph the VIN — or just give the year, make and model."),
+        (Icons.Material.Filled.Build, "What's wrong",
+            "Describe it, or say it out loud and we'll write it down."),
+        (Icons.Material.Filled.PhotoCamera, "Photos",
+            "Optional — but a picture of the problem saves a phone call.")
+    ];
+
+    protected override void OnInitialized() => ThemeService.OnThemeChanged += StateHasChanged;
+
+    public void Dispose() => ThemeService.OnThemeChanged -= StateHasChanged;
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,22 +209,16 @@
 
         try
         {
-            State.Config = await IntakeApi.GetConfigAsync(State.Slug, State.Token);
+            State.Config = await IntakeApi.GetConfigAsync(State.Slug);
 
-            if (State.Config.PrefillCustomer is not null)
+            // Spec A-19: an expired slug shows the notice, so there is no form to prefill.
+            if (State.Config.IntakeExpired)
             {
-                State.ApplyPrefill(State.Config.PrefillCustomer);
+                return;
             }
 
-            if (State.Config.PrefillAsset is not null)
-            {
-                State.ApplyAssetPrefill(State.Config.PrefillAsset);
-            }
-
-            if (State.Config.KnownAssets is { Count: > 0 })
-            {
-                State.KnownAssets = State.Config.KnownAssets;
-            }
+            await ApplyInvitePrefillAsync();
+            await ApplyRememberedDetailsAsync();
         }
         catch (HttpRequestException)
         {
@@ -117,6 +231,53 @@
         finally
         {
             _isLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Spec A-14 (issue #664): prefills first name and phone from an advisor invite. Opening the
+    /// invite does not spend it. Any failure (expired, used, unknown, network) is swallowed:
+    /// the customer gets the blank form, never an error.
+    /// </summary>
+    private async Task ApplyInvitePrefillAsync()
+    {
+        if (string.IsNullOrWhiteSpace(State.InviteToken) || State.IsInvitePrefilled)
+        {
+            return;
+        }
+
+        try
+        {
+            var prefill = await IntakeApi.GetInvitePrefillAsync(State.Slug, State.InviteToken);
+            if (prefill is not null)
+            {
+                State.ApplyInvitePrefill(prefill);
+                await State.PersistAsync();
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or NotSupportedException)
+        {
+            // Blank form.
+        }
+    }
+
+    /// <summary>
+    /// Issues #811, #819: fills contact details and the vehicle from what this device remembered, when the
+    /// customer opted in on an earlier visit. Never on an advisor invite (Spec A-14), and only
+    /// into blank fields.
+    /// </summary>
+    private async Task ApplyRememberedDetailsAsync()
+    {
+        if (!State.CanRememberDetails || State.IsRememberedPrefilled)
+        {
+            return;
+        }
+
+        var details = await RememberedDetails.GetAsync();
+        if (details is not null)
+        {
+            State.ApplyRememberedDetails(details);
+            await State.PersistAsync();
         }
     }
 

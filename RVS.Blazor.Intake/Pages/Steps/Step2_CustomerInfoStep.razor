@@ -8,13 +8,6 @@
                 </MudText>
             </MudStack>
 
-            @if (State.IsPrefilled)
-            {
-                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
-                    Your information has been pre-filled from your previous visit.
-                </MudAlert>
-            }
-
             <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
                 <MudStack Spacing="1">
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">First name</MudText>
@@ -63,6 +56,7 @@
                     <MudTextField @bind-Value="State.Phone"
                                   T="string"
                                   Validation="@(new Func<string?, string?>(ValidatePhone))"
+                                  Mask="_phoneMask"
                                   InputType="InputType.Telephone"
                                   Variant="Variant.Outlined"
                                   Margin="Margin.Dense"
@@ -75,7 +69,10 @@
                 <MudStack Spacing="2">
                     <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Notification Preferences</MudText>
                     <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                        We send updates via both email and text by default.  Message frequency varies. Message and data rates may apply.
+                        We'll confirm your request by text if you prefer text, otherwise by email.
+                        Texts are only about your service request; message frequency varies.
+                        Message and data rates may apply. Reply STOP to opt out, HELP for help.
+                        <MudLink Href="/sms-terms" Target="_blank" Typo="Typo.body1">Texting terms</MudLink>
                     </MudText>
                     <MudCheckBox @bind-Value="State.SmsOptOut"
                                  T="bool"
@@ -87,6 +84,35 @@
                                  Color="Color.Primary" />
                 </MudStack>
             </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Preferred contact method</MudText>
+                    <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
+                        How should the service team reach you first?
+                    </MudText>
+                    <MudRadioGroup T="string"
+                                   @bind-Value="State.PreferredContact"
+                                   Validation="@(new Func<string?, string?>(ValidatePreferredContact))">
+                        <MudRadio T="string" Value="@("Phone")" Color="Color.Primary">Phone call</MudRadio>
+                        <MudRadio T="string" Value="@("Text")" Color="Color.Primary"
+                                  Disabled="@(!State.IsContactMethodAvailable("Text"))">Text message</MudRadio>
+                        <MudRadio T="string" Value="@("Email")" Color="Color.Primary"
+                                  Disabled="@(!State.IsContactMethodAvailable("Email"))">Email</MudRadio>
+                    </MudRadioGroup>
+                </MudStack>
+            </MudPaper>
+
+            @if (State.CanRememberDetails)
+            {
+                <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                    <MudCheckBox T="bool"
+                                 Value="State.RememberDetails"
+                                 ValueChanged="HandleRememberChanged"
+                                 Label="Remember my contact and RV info on this device. (Not recommended for shared devices)"
+                                 Color="Color.Primary" />
+                </MudPaper>
+            }
 
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
@@ -103,9 +129,13 @@
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
+    [Inject] private RememberedDetailsStore RememberedDetails { get; set; } = default!;
 
     private MudForm _form = default!;
     private bool _submitted;
+
+    // Issue #758: refuse letters at the keystroke; the rule below still counts the digits.
+    private readonly IMask _phoneMask = new RegexMask(PhoneInputMask.Pattern, "(555) 123-4567");
 
     private string? ValidateFirstName(string? value) =>
         _submitted && string.IsNullOrWhiteSpace(value) ? "First name is required" : null;
@@ -124,9 +154,31 @@
     private string? ValidatePhone(string? value)
     {
         if (!_submitted) return null;
-        if (string.IsNullOrWhiteSpace(value)) return "Phone number is required";
-        var digits = new string(value.Where(char.IsDigit).ToArray());
-        return digits.Length < 10 ? "Phone number must have at least 10 digits" : null;
+        var result = PhoneValidator.Validate(value);
+        return result.IsValid ? null : result.ErrorMessage;
+    }
+
+    private string? ValidatePreferredContact(string? value)
+    {
+        if (!_submitted) return null;
+        if (string.IsNullOrWhiteSpace(value)) return "Preferred contact method is required";
+        if (!State.IsContactMethodAvailable(value))
+        {
+            return "You've opted out of that channel. Choose another preferred contact method.";
+        }
+        return null;
+    }
+
+    // Issue #811: unticking forgets at once, not at submission, so a customer who changes their
+    // mind and walks away leaves nothing behind.
+    private async Task HandleRememberChanged(bool remember)
+    {
+        State.RememberDetails = remember;
+        if (!remember)
+        {
+            await RememberedDetails.ForgetAsync();
+        }
+        await State.PersistAsync();
     }
 
     private async Task HandleNext()

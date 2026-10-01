@@ -3,9 +3,7 @@
         <MudStack Spacing="1">
             <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-primary);">Attachments</MudText>
             <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                    Attach up to 10 photos or videos to help us with early diagnosis.
-                </MudText>
+                Attach photos or videos to help with early diagnosis.
             </MudText>
         </MudStack>
 
@@ -19,33 +17,79 @@
         else
         {
             <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
-                Max 10 files, up to 25 MB each.
+                Max @MaxAttachments files, up to @MaxFileSizeMb MB each.
             </MudText>
         }
 
-        @*         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" NoIcon="false"
+        @*         <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true" NoIcon="false"
                   Icon="@Icons.Material.Filled.Videocam" Class="mt-n2">
             <MudText Typo="Typo.body2">
-                <strong>Recording a video?</strong> Keep clips under @EstimatedMaxVideoSeconds seconds
+                <strong>Recording a video?</strong> Keep clips under @MaxVideoSeconds seconds
                 (@MaxFileSizeMb MB limit). Shorter clips or lower resolution record better.
             </MudText>
         </MudAlert> *@
 
         <MudPaper Elevation="0" Outlined="true"
                   Class="pa-8 d-flex flex-column align-center justify-center"
-                  Style="border-style: dashed; border-width: 2px; min-height: 140px; cursor: pointer;
-                    border-color: var(--mud-palette-primary); position: relative;">
+                  Style="border-style: dashed; border-width: 2px; min-height: 140px;
+                    border-color: var(--mud-palette-primary);">
             <MudIcon Icon="@Icons.Material.Filled.PhotoCamera" Color="Color.Primary"
                      Style="font-size: 3rem;" />
-            <MudText Typo="Typo.body1" Class="mt-2" Style="text-align:center;">
-                Max video length: @EstimatedMaxVideoSeconds seconds<br />
-                Max upload size: @MaxFileSizeMb MB.
+            @* Issue #758: count what is left, so it is obvious the zone still takes more. *@
+            <MudText Typo="Typo.body1" Class="mt-2" Style="text-align:center; font-weight: 700;" aria-live="polite">
+                @AttachmentSlots.Prompt(MaxAttachments, State.Attachments.Count)
             </MudText>
-            <InputFile OnChange="HandleFilesSelected"
-                       multiple
-                       accept="@AcceptedTypes"
-                       style="opacity: 0.001; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0; z-index: 1;" />
+            <MudText Typo="Typo.body2" Class="mt-1" Style="text-align:center; color: var(--mud-palette-text-secondary);">
+                Max video length: @MaxVideoSeconds seconds<br />
+                Max upload size: @MaxFileSizeMb MB
+            </MudText>
+
+            @* Issue #736: the camera runs in the page. Handing the customer to the phone's camera
+               app let Android kill the tab, and the capture was lost with everything attached. *@
+            <MudStack Row="true" Wrap="Wrap.Wrap" Justify="Justify.Center" Spacing="2" Class="mt-4">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PhotoCamera"
+                           OnClick="OpenCamera"
+                           Disabled="IsFull"
+                           Style="text-transform: none;">
+                    Take photo or video
+                </MudButton>
+                <div style="position: relative;">
+                    @* Drawn only; the input over it takes the tap and the keyboard focus. *@
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.PhotoLibrary"
+                               Disabled="IsFull"
+                               tabindex="-1"
+                               aria-hidden="true"
+                               Style="text-transform: none;">
+                        Choose from gallery
+                    </MudButton>
+                    <InputFile @ref="_galleryInput"
+                               OnChange="HandleFilesSelected"
+                               multiple
+                               accept="@AcceptedTypes"
+                               disabled="@IsFull"
+                               aria-label="Choose photos or videos from your gallery"
+                               style="opacity: 0.001; position: absolute; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0; z-index: 1;" />
+                </div>
+            </MudStack>
         </MudPaper>
+
+        @if (_cameraOpen)
+        {
+            <CameraOverlay AllowVideo="true"
+                           MaxVideoSeconds="MaxVideoSeconds"
+                           Caption="Show us the problem"
+                           Message="@_cameraMessage"
+                           MessageIsError="_cameraMessageIsError"
+                           RemainingCaptures="AttachmentSlots.Remaining(MaxAttachments, State.Attachments.Count)"
+                           DoneText="Done"
+                           OnCaptured="HandleCaptured"
+                           OnClose="CloseCamera"
+                           OnUseNativeCamera="UseGalleryInstead" />
+        }
 
         @if (State.Attachments.Count > 0)
         {
@@ -54,7 +98,15 @@
                 {
                     <MudPaper Elevation="1" Class="pa-3">
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@GetFileIcon(file.ContentType)" Color="Color.Primary" />
+                            @if (file.ThumbnailDataUrl is not null)
+                            {
+                                <img src="@file.ThumbnailDataUrl" alt=""
+                                     style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; flex-shrink: 0;" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@AttachmentSlots.FileIcon(file.ContentType)" Color="Color.Primary" />
+                            }
                             <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
                                 <MudText Typo="Typo.body2" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                     @file.FileName
@@ -68,7 +120,7 @@
                                            Size="Size.Small"
                                            Color="Color.Error"
                                            OnClick="() => RemoveFile(file)"
-                                           aria-label="Remove file" />
+                                           aria-label="@($"Remove {file.FileName}")" />
                         </MudStack>
                     </MudPaper>
                 }
@@ -77,7 +129,7 @@
 
         @if (_fileErrors.Count > 0)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
                 <ul style="margin: 0; padding-left: 16px;">
                     @foreach (var error in _fileErrors)
                     {
@@ -102,11 +154,19 @@
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
 
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
     private List<string> _fileErrors = [];
+    private InputFile? _galleryInput;
+    private bool _cameraOpen;
+    private string? _cameraMessage;
+    private bool _cameraMessageIsError;
+
+    private bool IsFull => AttachmentSlots.Remaining(MaxAttachments, State.Attachments.Count) <= 0;
 
     private static readonly HashSet<string> AllowedMimeTypes =
     [
-        "image/jpeg", "image/png", "image/gif", "image/webp", "image/heic",
+        "image/jpeg", "image/png", "image/gif", "image/webp", "image/heic", "image/heif",
         "video/mp4", "video/quicktime", "video/webm",
         "application/pdf"
     ];
@@ -123,6 +183,7 @@
         [".gif"] = "image/gif",
         [".webp"] = "image/webp",
         [".heic"] = "image/heic",
+        [".heif"] = "image/heif",
         [".mp4"] = "video/mp4",
         [".mov"] = "video/quicktime",
         [".webm"] = "video/webm",
@@ -145,23 +206,48 @@
         ? string.Join(",", types)
         : "image/*,video/*,application/pdf";
 
-    private int MaxAttachments => State.Config?.MaxAttachments ?? 10;
+    private int MaxAttachments => State.MaxAttachments;
     private int MaxFileSizeMb => State.Config?.MaxFileSizeMb ?? 25;
 
-    /// <summary>
-    /// Conservative estimate of the longest video a phone can record within the file size limit.
-    /// Based on ~14 Mbps (typical iPhone 1080p HEVC / Android 1080p H.264), rounded down to
-    /// the nearest 5 seconds so the guidance feels intentional rather than falsely precise.
-    /// </summary>
-    private int EstimatedMaxVideoSeconds
+    /// <summary>Longest clip the in-page camera records within the file size limit.</summary>
+    private int MaxVideoSeconds => CameraCapture.MaxVideoSeconds(MaxFileSizeMb);
+
+    private void OpenCamera()
     {
-        get
+        _fileErrors = [];
+        _cameraMessage = null;
+        _cameraOpen = true;
+    }
+
+    private void CloseCamera() => _cameraOpen = false;
+
+    /// <summary>The camera would not start: fall back to the file picker, which offers the phone's camera app.</summary>
+    private async Task UseGalleryInstead()
+    {
+        _cameraOpen = false;
+        if (_galleryInput?.Element is not null)
         {
-            const double typicalBitrateMbps = 14.0;
-            var rawSeconds = MaxFileSizeMb * 8.0 / typicalBitrateMbps;
-            var rounded = (int)(rawSeconds / 5) * 5;
-            return Math.Max(rounded, 5);
+            await JS.InvokeVoidAsync("rvs_triggerClick", _galleryInput.Element);
         }
+    }
+
+    private void HandleCaptured(CapturedMedia media)
+    {
+        var result = CameraCapture.ToAttachment(
+            media, MaxAttachments, State.Attachments.Count, MaxFileSizeMb, DateTimeOffset.Now);
+
+        if (result.Attachment is null)
+        {
+            _cameraMessage = result.Error;
+            _cameraMessageIsError = true;
+            return;
+        }
+
+        State.Attachments.Add(result.Attachment);
+
+        var added = media.ContentType.StartsWith("video/", StringComparison.Ordinal) ? "Video added." : "Photo added.";
+        _cameraMessage = IsFull ? $"{added} That's the most you can attach." : added;
+        _cameraMessageIsError = false;
     }
 
     private async Task HandleFilesSelected(InputFileChangeEventArgs e)
@@ -175,7 +261,9 @@
             return;
         }
 
-        var files = e.GetMultipleFiles(MaxAttachments);
+        // Read every file the customer picked: GetMultipleFiles throws when handed more than its
+        // cap, and a selection past the limit is handled below by taking only what fits.
+        var files = e.GetMultipleFiles(e.FileCount);
 
         foreach (var file in files.Take(remainingSlots))
         {
@@ -217,15 +305,46 @@
                 continue;
             }
 
+            attachment.ThumbnailDataUrl = await TryCreateThumbnailAsync(file, contentType);
+
             State.Attachments.Add(attachment);
         }
 
         if (files.Count > remainingSlots)
         {
-            _fileErrors.Add($"Only {remainingSlots} more file(s) can be added.");
+            _fileErrors.Add(AttachmentSlots.OverflowMessage(MaxAttachments, State.Attachments.Count));
         }
 
         StateHasChanged();
+    }
+
+    /// <summary>Longest edge of a Step 7 thumbnail, in CSS pixels; drawn at 48px, so this covers 3x screens.</summary>
+    private const int ThumbnailMaxEdgePx = 144;
+
+    /// <summary>
+    /// Asks the browser for a small JPEG of an image attachment (issue #758). The resize happens
+    /// in the browser's canvas, so only a few kilobytes cross into .NET. Must run while
+    /// <paramref name="file"/> is still valid — the same moment the bytes are buffered.
+    /// Best-effort: a video, PDF, HEIC, or an image the browser cannot decode gets an icon instead.
+    /// </summary>
+    private static async Task<string?> TryCreateThumbnailAsync(
+        Microsoft.AspNetCore.Components.Forms.IBrowserFile file, string contentType)
+    {
+        if (AttachmentPreview.Classify(contentType) != AttachmentPreviewKind.Image)
+            return null;
+
+        try
+        {
+            var resized = await file.RequestImageFileAsync("image/jpeg", ThumbnailMaxEdgePx, ThumbnailMaxEdgePx);
+            await using var stream = resized.OpenReadStream(maxAllowedSize: 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            return ms.Length == 0 ? null : AttachmentSlots.ThumbnailDataUrl("image/jpeg", ms.ToArray());
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void RemoveFile(AttachmentFileInfo file)
@@ -233,13 +352,6 @@
         State.Attachments.Remove(file);
         _fileErrors = [];
         StateHasChanged();
-    }
-
-    private static string GetFileIcon(string contentType)
-    {
-        if (contentType.StartsWith("image/")) return Icons.Material.Filled.Image;
-        if (contentType.StartsWith("video/")) return Icons.Material.Filled.VideoFile;
-        return Icons.Material.Filled.InsertDriveFile;
     }
 
     private static string FormatFileSize(long bytes) => bytes switch

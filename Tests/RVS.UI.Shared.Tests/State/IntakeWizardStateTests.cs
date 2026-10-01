@@ -17,15 +17,14 @@ public class IntakeWizardStateTests
         state.CurrentStep.Should().Be(1);
         state.TotalSteps.Should().Be(8);
         state.Slug.Should().BeEmpty();
-        state.Token.Should().BeNull();
         state.Config.Should().BeNull();
         state.FirstName.Should().BeEmpty();
         state.LastName.Should().BeEmpty();
         state.Email.Should().BeEmpty();
         state.Phone.Should().BeNull();
+        state.PreferredContact.Should().BeNull();
         state.SmsOptOut.Should().BeFalse();
         state.EmailOptOut.Should().BeFalse();
-        state.IsPrefilled.Should().BeFalse();
         state.Vin.Should().BeEmpty();
         state.VinLookupSucceeded.Should().BeFalse();
         state.IsSubmitted.Should().BeFalse();
@@ -108,65 +107,175 @@ public class IntakeWizardStateTests
         state.CurrentStep.Should().Be(1);
     }
 
+    // ── Spec A-14: invite prefill ────────────────────────────────────────────
+
     [Fact]
-    public void ApplyPrefill_ShouldSetCustomerFields()
+    public void ApplyInvitePrefill_ShouldSetFirstNameAndPhone()
     {
         var state = CreateState();
-        var prefill = new CustomerInfoDto
-        {
-            FirstName = "Jane",
-            LastName = "Doe",
-            Email = "jane@example.com",
-            Phone = "555-1234"
-        };
 
-        state.ApplyPrefill(prefill);
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
 
         state.FirstName.Should().Be("Jane");
-        state.LastName.Should().Be("Doe");
+        state.Phone.Should().Be("+18015551234");
+        state.IsInvitePrefilled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_ShouldLeaveEverythingElseForTheCustomer()
+    {
+        var state = CreateState();
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
+
+        state.LastName.Should().BeEmpty();
+        state.Email.Should().BeEmpty();
+        state.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_ShouldNotOverwriteWhatTheCustomerAlreadyEntered()
+    {
+        // Config is not persisted, so a reload re-fetches the invite; what the customer typed
+        // (or corrected) since must survive it.
+        var state = CreateState();
+        state.FirstName = "Janet";
+        state.Phone = "801-555-9999";
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
+
+        state.FirstName.Should().Be("Janet");
+        state.Phone.Should().Be("801-555-9999");
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_WhenTheInviteWasEmailed_ShouldSetTheEmail()
+    {
+        var state = CreateState();
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Email = "jane@example.com" });
+
         state.Email.Should().Be("jane@example.com");
-        state.Phone.Should().Be("555-1234");
-        state.IsPrefilled.Should().BeTrue();
     }
 
     [Fact]
-    public void ApplyPrefill_NullPrefill_ShouldThrow()
+    public void ApplyInvitePrefill_ShouldNotOverwriteAnEmailTheCustomerAlreadyEntered()
+    {
+        var state = CreateState();
+        state.Email = "janet@example.com";
+
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Email = "jane@example.com" });
+
+        state.Email.Should().Be("janet@example.com");
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_WhenInviteHasNoPhone_ShouldLeavePhoneBlank()
     {
         var state = CreateState();
 
-        var act = () => state.ApplyPrefill(null!);
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = null });
+
+        state.FirstName.Should().Be("Jane");
+        state.Phone.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyInvitePrefill_NullPrefill_ShouldThrow()
+    {
+        var state = CreateState();
+
+        var act = () => state.ApplyInvitePrefill(null!);
 
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
-    public void ApplyAssetPrefill_ShouldSetAssetFields()
+    public void ApplyInvitePrefill_ShouldNotifySubscribers()
     {
         var state = CreateState();
-        var prefillAsset = new AssetInfoDto
-        {
-            AssetId = "1HGBH41JXMN109186",
-            Manufacturer = "Grand Design",
-            Model = "Momentum 395G",
-            Year = 2023
-        };
+        var fired = false;
+        state.OnChange += () => fired = true;
 
-        state.ApplyAssetPrefill(prefillAsset);
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane" });
 
-        state.Vin.Should().Be("1HGBH41JXMN109186");
-        state.Manufacturer.Should().Be("Grand Design");
-        state.Model.Should().Be("Momentum 395G");
-        state.Year.Should().Be(2023);
+        fired.Should().BeTrue();
     }
 
     [Fact]
-    public void ApplyAssetPrefill_NullPrefill_ShouldThrow()
+    public void BuildCreateRequest_ShouldCarryTheInviteToken()
     {
         var state = CreateState();
+        state.InviteToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-        var act = () => state.ApplyAssetPrefill(null!);
+        var request = state.BuildCreateRequest();
 
-        act.Should().Throw<ArgumentNullException>();
+        request.InviteToken.Should().Be("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WithoutAnInvite_ShouldSendNoToken()
+    {
+        var request = CreateState().BuildCreateRequest();
+
+        request.InviteToken.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepTheInviteAcrossAReload()
+    {
+        // The invite is spent on submission, so losing the token on a reload mid-wizard would
+        // cost the request its advisor attribution.
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug", InviteToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" };
+        before.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+
+        after.InviteToken.Should().Be("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        after.IsInvitePrefilled.Should().BeTrue();
+        after.FirstName.Should().Be("Jane");
+    }
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepTheVinLookupResultAcrossAReload()
+    {
+        // Issue #758: without it, a refresh on Step 4 kept the decoded vehicle but told the
+        // customer no vehicle information was found for the VIN.
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug", Vin = "1HGBH41JXMN109186", VinLookupSucceeded = true };
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+
+        after.VinLookupSucceeded.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetTheVinLookupResult()
+    {
+        var state = CreateState();
+        state.VinLookupSucceeded = true;
+
+        await state.ClearAsync();
+
+        state.VinLookupSucceeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldDropTheInvite()
+    {
+        var state = CreateState();
+        state.InviteToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane" });
+
+        await state.ClearAsync();
+
+        state.InviteToken.Should().BeNull();
+        state.IsInvitePrefilled.Should().BeFalse();
     }
 
     [Fact]
@@ -225,6 +334,8 @@ public class IntakeWizardStateTests
         state.FirstName = "Jane";
         state.LastName = "Doe";
         state.Email = "not-an-email";
+        state.Phone = "801-555-1234";
+        state.PreferredContact = "Email";
 
         var errors = state.ValidateCurrentStep();
 
@@ -244,10 +355,209 @@ public class IntakeWizardStateTests
         state.FirstName = "Jane";
         state.LastName = "Doe";
         state.Email = "jane@example.com";
+        state.Phone = "801-555-1234";
+        state.PreferredContact = "Email";
 
         var errors = state.ValidateCurrentStep();
 
         errors.Should().BeEmpty();
+    }
+
+    // The API holds the same line (issue #679): phone is required whatever the preference.
+    [Theory]
+    [InlineData(null, "Phone number is required")]
+    [InlineData("555-1234", "Phone number must have at least 10 digits")]
+    public async Task ValidateCurrentStep_Step2_PreferredContactEmail_WithoutAValidPhone_ShouldReturnError(
+        string? phone, string expected)
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Phone = phone;
+        state.PreferredContact = "Email";
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().ContainSingle().Which.Should().Be(expected);
+        state.FieldErrors.Should().ContainKey("Phone");
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step2_NoPreferredContact_ShouldReturnError()
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.PreferredContact = null;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().Contain(e => e.Contains("contact", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step2_PreferredContactPhone_WithoutPhoneNumber_ShouldReturnError()
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.PreferredContact = "Phone";
+        state.Phone = null;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().Contain(e => e.Contains("phone", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step2_PreferredContactText_WithPhoneNumber_ShouldReturnNoErrors()
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.PreferredContact = "Text";
+        state.Phone = "801-555-1234";
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().BeEmpty();
+    }
+
+    // ── Step 2: opt-outs veto the preferred contact method (Spec A-2, issue #662) ──
+
+    [Theory]
+    [InlineData("Phone", true)]
+    [InlineData("Text", false)]
+    [InlineData("Email", true)]
+    public void IsContactMethodAvailable_WhenSmsOptOut_ShouldDisableTextOnly(string method, bool expected)
+    {
+        var state = CreateState();
+        state.SmsOptOut = true;
+
+        state.IsContactMethodAvailable(method).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("Phone", true)]
+    [InlineData("Text", true)]
+    [InlineData("Email", false)]
+    public void IsContactMethodAvailable_WhenEmailOptOut_ShouldDisableEmailOnly(string method, bool expected)
+    {
+        var state = CreateState();
+        state.EmailOptOut = true;
+
+        state.IsContactMethodAvailable(method).Should().Be(expected);
+    }
+
+    [Fact]
+    public void IsContactMethodAvailable_WhenBothOptedOut_ShouldLeavePhoneAvailable()
+    {
+        var state = CreateState();
+        state.SmsOptOut = true;
+        state.EmailOptOut = true;
+
+        state.IsContactMethodAvailable("Phone").Should().BeTrue();
+        state.IsContactMethodAvailable("Text").Should().BeFalse();
+        state.IsContactMethodAvailable("Email").Should().BeFalse();
+    }
+
+    [Fact]
+    public void SmsOptOut_WhenTextIsSelected_ShouldClearTheSelection()
+    {
+        var state = CreateState();
+        state.PreferredContact = "Text";
+
+        state.SmsOptOut = true;
+
+        state.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void EmailOptOut_WhenEmailIsSelected_ShouldClearTheSelection()
+    {
+        var state = CreateState();
+        state.PreferredContact = "Email";
+
+        state.EmailOptOut = true;
+
+        state.PreferredContact.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("Phone")]
+    [InlineData("Email")]
+    public void SmsOptOut_WhenSelectionDoesNotConflict_ShouldKeepIt(string method)
+    {
+        var state = CreateState();
+        state.PreferredContact = method;
+
+        state.SmsOptOut = true;
+
+        state.PreferredContact.Should().Be(method);
+    }
+
+    [Theory]
+    [InlineData("Phone")]
+    [InlineData("Text")]
+    public void EmailOptOut_WhenSelectionDoesNotConflict_ShouldKeepIt(string method)
+    {
+        var state = CreateState();
+        state.PreferredContact = method;
+
+        state.EmailOptOut = true;
+
+        state.PreferredContact.Should().Be(method);
+    }
+
+    [Theory]
+    [InlineData("Text", true, false)]
+    [InlineData("Email", false, true)]
+    public async Task ValidateCurrentStep_Step2_PreferredContactOptedOut_ShouldReturnError(
+        string preferredContact, bool smsOptOut, bool emailOptOut)
+    {
+        var state = CreateState();
+        state.Config = new IntakeConfigResponseDto
+        {
+            LocationName = "Test", LocationSlug = "test", DealershipName = "Test"
+        };
+        await state.GoToNextStepAsync();
+        state.FirstName = "Jane";
+        state.LastName = "Doe";
+        state.Email = "jane@example.com";
+        state.Phone = "801-555-1234";
+        state.SmsOptOut = smsOptOut;
+        state.EmailOptOut = emailOptOut;
+        // Set after the opt-out, which would otherwise clear it — the shape a hand-built state takes.
+        state.PreferredContact = preferredContact;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().ContainSingle(e => e.Contains("opted out", StringComparison.OrdinalIgnoreCase));
+        state.FieldErrors.Should().ContainKey("PreferredContact");
     }
 
     [Fact]
@@ -271,8 +581,9 @@ public class IntakeWizardStateTests
 
         var errors = state.ValidateCurrentStep();
 
+        // Issue #807: any length is allowed now, but a serial number still needs a digit.
         errors.Should().ContainSingle()
-            .Which.Should().Contain("17");
+            .Which.Should().Contain("number");
     }
 
     [Fact]
@@ -287,11 +598,238 @@ public class IntakeWizardStateTests
         errors.Should().BeEmpty();
     }
 
+    // ── Serial numbers and skipped vehicles (issue #807) ────────────────────
+
+    [Theory]
+    [InlineData("152263")]
+    [InlineData("1HGBH41JXMN109187")] // bad check digit: decode fails, the step does not block
+    public async Task ValidateCurrentStep_Step3_SerialNumberOrUndecodableVin_ShouldReturnNoErrors(string vin)
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+        state.Vin = vin;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().BeEmpty();
+    }
+
     [Fact]
-    public async Task ValidateCurrentStep_Step4_VehicleDetails_ShouldAlwaysReturnNoErrors()
+    public async Task ValidateCurrentStep_Step3_SeventeenCharactersWithLetterO_ShouldReturnError()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+        state.Vin = "1HGBH41JXMN10918O";
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().ContainSingle().Which.Should().Contain("VIN");
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step3_WhenVehicleSkipped_ShouldReturnNoErrors()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+        state.VehicleSkipped = true;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step4_WhenVehicleSkipped_ShouldReturnNoErrors()
     {
         var state = CreateState();
         await state.GoToStepAsync(4);
+        state.VehicleSkipped = true;
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("1HGBH41JXMN109186", true)]
+    [InlineData("152263", false)]
+    [InlineData("", false)]
+    public void HasVin_ShouldBeTrueOnlyForAWellFormedVin(string vin, bool expected)
+    {
+        var state = CreateState();
+        state.Vin = vin;
+
+        state.HasVin.Should().Be(expected);
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WithASerialNumber_ShouldSendItNormalised()
+    {
+        var state = CreateState();
+        state.Vin = " 152 263 ";
+
+        var request = state.BuildCreateRequest();
+
+        request.Asset.AssetId.Should().Be("152263");
+    }
+
+    [Fact]
+    public void BuildCreateRequest_WhenVehicleSkipped_ShouldSendABlankAssetIdAndWhateverWasEntered()
+    {
+        var state = CreateState();
+        state.VehicleSkipped = true;
+        state.Manufacturer = "Lance";
+
+        var request = state.BuildCreateRequest();
+
+        request.Asset.AssetId.Should().BeEmpty();
+        request.Asset.Manufacturer.Should().Be("Lance");
+        request.Asset.Model.Should().BeNull();
+        request.Asset.Year.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepASkippedVehicleAcrossAReload()
+    {
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug", VehicleSkipped = true };
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+
+        after.VehicleSkipped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetASkippedVehicle()
+    {
+        var state = CreateState();
+        state.VehicleSkipped = true;
+
+        await state.ClearAsync();
+
+        state.VehicleSkipped.Should().BeFalse();
+    }
+
+    // ── Step 4 prefill from the VIN / serial photo (issue #807) ─────────────
+
+    [Fact]
+    public void ApplyVehicleDetailsFromPhoto_ShouldFillWhatThePlateShowedAndFlagIt()
+    {
+        var state = CreateState();
+
+        state.ApplyVehicleDetailsFromPhoto("Lance", "1121", 2003);
+
+        state.Manufacturer.Should().Be("Lance");
+        state.Model.Should().Be("1121");
+        state.Year.Should().Be(2003);
+        state.VehicleDetailsFromPhoto.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApplyVehicleDetailsFromPhoto_ShouldKeepExistingValuesThePlateDidNotShow()
+    {
+        var state = CreateState();
+        state.Model = "Custom";
+        state.Year = 2005;
+
+        state.ApplyVehicleDetailsFromPhoto("Lance", null, null);
+
+        state.Manufacturer.Should().Be("Lance");
+        state.Model.Should().Be("Custom");
+        state.Year.Should().Be(2005);
+    }
+
+    [Fact]
+    public void ApplyVehicleDetailsFromPhoto_WhenThePlateShowedNothing_ShouldNotFlagIt()
+    {
+        var state = CreateState();
+
+        state.ApplyVehicleDetailsFromPhoto(null, "  ", null);
+
+        state.VehicleDetailsFromPhoto.Should().BeFalse();
+        state.Model.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyVinDecode_ShouldPreferDecodedValuesAndFallBackToThePhoto()
+    {
+        var state = CreateState();
+        state.ApplyVehicleDetailsFromPhoto("Photo Make", "Photo Model", 2019);
+
+        state.ApplyVinDecode(new VinDecodeResponseDto { Vin = "1HGBH41JXMN109186", Manufacturer = "Winnebago", Model = "", Year = 2020 });
+
+        state.Manufacturer.Should().Be("Winnebago");
+        state.Model.Should().Be("Photo Model");
+        state.Year.Should().Be(2020);
+        state.VinLookupSucceeded.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SkipVehicle_ShouldClearTheVehicleAndMarkItSkipped()
+    {
+        var state = CreateState();
+        state.Vin = "152263";
+        state.ApplyVehicleDetailsFromPhoto("Lance", "1121", 2003);
+        state.VinLookupSucceeded = true;
+
+        state.SkipVehicle();
+
+        state.VehicleSkipped.Should().BeTrue();
+        state.Vin.Should().BeEmpty();
+        state.Manufacturer.Should().BeNull();
+        state.Model.Should().BeNull();
+        state.Year.Should().BeNull();
+        state.VinLookupSucceeded.Should().BeFalse();
+        state.VehicleDetailsFromPhoto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepThePhotoPrefillFlagAcrossAReload()
+    {
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug" };
+        before.ApplyVehicleDetailsFromPhoto("Lance", "1121", 2003);
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+
+        after.VehicleDetailsFromPhoto.Should().BeTrue();
+        after.Manufacturer.Should().Be("Lance");
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetThePhotoPrefillFlag()
+    {
+        var state = CreateState();
+        state.ApplyVehicleDetailsFromPhoto("Lance", null, null);
+
+        await state.ClearAsync();
+
+        state.VehicleDetailsFromPhoto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step4_VehicleDetails_EmptyFields_ShouldReturnErrors()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(4);
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().Contain(e => e.Contains("warranty", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(e => e.Contains("purchase date", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step4_VehicleDetails_BothFieldsSet_ShouldReturnNoErrors()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(4);
+        state.HasExtendedWarranty = "No";
+        state.ApproxPurchaseDate = "03/2023";
 
         var errors = state.ValidateCurrentStep();
 
@@ -308,8 +846,6 @@ public class IntakeWizardStateTests
 
         errors.Should().Contain(e => e.Contains("category"));
         errors.Should().Contain(e => e.Contains("description"));
-        errors.Should().Contain(e => e.Contains("warranty", StringComparison.OrdinalIgnoreCase));
-        errors.Should().Contain(e => e.Contains("purchase date", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -355,20 +891,74 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public async Task ValidateCurrentStep_Step7_TooManyAttachments_ShouldReturnError()
+    public async Task ValidateCurrentStep_Step7_SixAttachmentsWithNoConfig_ShouldReturnError()
     {
         var state = CreateState();
         await state.GoToStepAsync(7);
-        for (var i = 0; i < 11; i++)
-        {
-            state.Attachments.Add(new AttachmentFileInfo { FileName = $"file{i}.jpg" });
-        }
+        AddAttachments(state, 6);
 
         var errors = state.ValidateCurrentStep();
 
         errors.Should().ContainSingle()
-            .Which.Should().Contain("10");
+            .Which.Should().Contain("5");
     }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step7_FiveAttachmentsWithNoConfig_ShouldReturnNoErrors()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(7);
+        AddAttachments(state, 5);
+
+        state.ValidateCurrentStep().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ValidateCurrentStep_Step7_FourAttachmentsWithConfiguredCapOfThree_ShouldReturnError()
+    {
+        var state = CreateState();
+        state.Config = BuildConfig(maxAttachments: 3);
+        await state.GoToStepAsync(7);
+        AddAttachments(state, 4);
+
+        var errors = state.ValidateCurrentStep();
+
+        errors.Should().ContainSingle()
+            .Which.Should().Contain("3");
+    }
+
+    [Theory]
+    [InlineData(null, 5)]
+    [InlineData(0, 5)]
+    [InlineData(3, 3)]
+    [InlineData(5, 5)]
+    [InlineData(10, 5)]
+    public void MaxAttachments_ShouldFollowConfigClampedToFive(int? configured, int expected)
+    {
+        var state = CreateState();
+        if (configured is not null)
+        {
+            state.Config = BuildConfig(configured.Value);
+        }
+
+        state.MaxAttachments.Should().Be(expected);
+    }
+
+    private static void AddAttachments(IntakeWizardState state, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            state.Attachments.Add(new AttachmentFileInfo { FileName = $"file{i}.jpg" });
+        }
+    }
+
+    private static IntakeConfigResponseDto BuildConfig(int maxAttachments) => new()
+    {
+        LocationName = "Test",
+        LocationSlug = "test",
+        DealershipName = "Test",
+        MaxAttachments = maxAttachments,
+    };
 
     [Fact]
     public async Task ValidateCurrentStep_Step8_ShouldAlwaysReturnNoErrors()
@@ -397,6 +987,7 @@ public class IntakeWizardStateTests
         state.IssueDescription = "  Lights flickering  ";
         state.Urgency = "  High  ";
         state.RvUsage = "  Full-Time  ";
+        state.PreferredContact = "  Text  ";
 
         var request = state.BuildCreateRequest();
 
@@ -404,6 +995,7 @@ public class IntakeWizardStateTests
         request.Customer.LastName.Should().Be("Doe");
         request.Customer.Email.Should().Be("jane@example.com");
         request.Customer.Phone.Should().Be("555-1234");
+        request.Customer.PreferredContact.Should().Be("Text");
         request.Asset.AssetId.Should().Be("1HGBH41JXMN109186");
         request.Asset.Manufacturer.Should().Be("Winnebago");
         request.Asset.Model.Should().Be("Vista");
@@ -608,16 +1200,6 @@ public class IntakeWizardStateTests
     }
 
     [Fact]
-    public void Token_ShouldBeSettable()
-    {
-        var state = CreateState();
-
-        state.Token = "dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ";
-
-        state.Token.Should().Be("dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ");
-    }
-
-    [Fact]
     public void SubmissionMagicLinkToken_ShouldDefaultToNull()
     {
         var state = CreateState();
@@ -651,8 +1233,10 @@ public class IntakeWizardStateTests
         state.IsSubmitted = true;
         state.SubmissionMagicLinkToken = "abc123:xyz789";
         state.FailedUploadCount = 3;
+        state.IsSubmitting = true;
         state.SmsOptOut = true;
         state.EmailOptOut = true;
+        state.PreferredContact = "Phone";
         await state.GoToStepAsync(5);
 
         await state.ClearAsync();
@@ -668,8 +1252,31 @@ public class IntakeWizardStateTests
         state.IsSubmitted.Should().BeFalse();
         state.SubmissionMagicLinkToken.Should().BeNull();
         state.FailedUploadCount.Should().Be(0);
+        state.IsSubmitting.Should().BeFalse();
         state.SmsOptOut.Should().BeFalse();
         state.EmailOptOut.Should().BeFalse();
+        state.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void IsSubmitting_ShouldDefaultToFalse()
+    {
+        var state = CreateState();
+
+        state.IsSubmitting.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OnChange_ShouldFireWhenTheConfigIsLoaded()
+    {
+        // The layout listens for this to swap in the dealer's header branding (Spec A-16, #470).
+        var state = CreateState();
+        var fired = false;
+        state.OnChange += () => fired = true;
+
+        state.Config = new IntakeConfigResponseDto { LocationName = "SLC", LocationSlug = "acme-slc", DealershipName = "Acme" };
+
+        fired.Should().BeTrue();
     }
 
     [Fact]
@@ -679,12 +1286,7 @@ public class IntakeWizardStateTests
         var fired = false;
         state.OnChange += () => fired = true;
 
-        state.ApplyPrefill(new CustomerInfoDto
-        {
-            FirstName = "Jane",
-            LastName = "Doe",
-            Email = "jane@example.com"
-        });
+        state.ApplyInvitePrefill(new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" });
 
         fired.Should().BeTrue();
     }
@@ -705,31 +1307,7 @@ public class IntakeWizardStateTests
     [Fact]
     public void BuildStartOverUrl_ShouldReturnIntakeUrlWithSlug()
     {
-        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", null);
-
-        url.Should().Be("/camping-world-slc");
-    }
-
-    [Fact]
-    public void BuildStartOverUrl_WithToken_ShouldIncludeTokenQueryParam()
-    {
-        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "dK3mRw9x:Xv2pLqN8aTcBfY7mZs4eWQ");
-
-        url.Should().Be("/camping-world-slc?token=dK3mRw9x%3AXv2pLqN8aTcBfY7mZs4eWQ");
-    }
-
-    [Fact]
-    public void BuildStartOverUrl_WithWhitespaceToken_ShouldOmitTokenQueryParam()
-    {
-        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "   ");
-
-        url.Should().Be("/camping-world-slc");
-    }
-
-    [Fact]
-    public void BuildStartOverUrl_WithEmptyToken_ShouldOmitTokenQueryParam()
-    {
-        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc", "");
+        var url = IntakeWizardState.BuildStartOverUrl("camping-world-slc");
 
         url.Should().Be("/camping-world-slc");
     }
@@ -737,7 +1315,7 @@ public class IntakeWizardStateTests
     [Fact]
     public void BuildStartOverUrl_ShouldEncodeSlug()
     {
-        var url = IntakeWizardState.BuildStartOverUrl("slug with spaces", null);
+        var url = IntakeWizardState.BuildStartOverUrl("slug with spaces");
 
         url.Should().Be("/slug%20with%20spaces");
     }
@@ -745,7 +1323,7 @@ public class IntakeWizardStateTests
     [Fact]
     public void BuildStartOverUrl_NullSlug_ShouldThrow()
     {
-        var act = () => IntakeWizardState.BuildStartOverUrl(null!, null);
+        var act = () => IntakeWizardState.BuildStartOverUrl(null!);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -753,8 +1331,425 @@ public class IntakeWizardStateTests
     [Fact]
     public void BuildStartOverUrl_EmptySlug_ShouldThrow()
     {
-        var act = () => IntakeWizardState.BuildStartOverUrl("", null);
+        var act = () => IntakeWizardState.BuildStartOverUrl("");
 
         act.Should().Throw<ArgumentException>();
+    }
+
+    // ── Issue #740: the config survives a refresh, and the category list is alphabetized ──
+
+    private static IntakeConfigResponseDto ConfigWithCategories(params LookupItemDto[] categories) => new()
+    {
+        LocationName = "Test", LocationSlug = "test-slug", DealershipName = "Test",
+        IssueCategories = [.. categories]
+    };
+
+    [Fact]
+    public async Task EnsureConfigAsync_WhenARestoredSessionIsPastStepOne_ShouldFetchTheConfig()
+    {
+        // Config is not persisted, so a refresh on Step 5 comes back with none — and Step 1,
+        // the only step that fetched it, is never shown again.
+        var jsRuntime = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(jsRuntime) { Slug = "test-slug" };
+        await before.GoToStepAsync(5);
+
+        var after = new IntakeWizardState(jsRuntime);
+        await after.RestoreAsync();
+        var config = ConfigWithCategories(new LookupItemDto("slides", "Slide-outs", null, 1, true));
+
+        await after.EnsureConfigAsync(_ => Task.FromResult(config));
+
+        after.Config.Should().BeSameAs(config);
+        after.SelectableIssueCategories.Should().ContainSingle(c => c.Code == "slides");
+    }
+
+    [Fact]
+    public async Task EnsureConfigAsync_WhenTheConfigIsAlreadyLoaded_ShouldNotFetchAgain()
+    {
+        var state = CreateState();
+        var loaded = ConfigWithCategories();
+        state.Config = loaded;
+        await state.GoToStepAsync(5);
+        var fetches = 0;
+
+        await state.EnsureConfigAsync(_ => { fetches++; return Task.FromResult(ConfigWithCategories()); });
+
+        fetches.Should().Be(0);
+        state.Config.Should().BeSameAs(loaded);
+    }
+
+    [Fact]
+    public async Task EnsureConfigAsync_OnStepOne_ShouldLeaveTheFetchToTheLandingStep()
+    {
+        // Step 1 fetches the config itself and applies the prefills that come with it.
+        var state = CreateState();
+        var fetches = 0;
+
+        await state.EnsureConfigAsync(_ => { fetches++; return Task.FromResult(ConfigWithCategories()); });
+
+        fetches.Should().Be(0);
+        state.Config.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EnsureConfigAsync_WhenTheFetchFails_ShouldLeaveTheConfigUnset()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(5);
+
+        await state.EnsureConfigAsync(_ => Task.FromException<IntakeConfigResponseDto>(new HttpRequestException("offline")));
+
+        state.Config.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EnsureConfigAsync_WhenFetchConfigIsNull_ShouldThrowArgumentNullException()
+    {
+        var state = CreateState();
+
+        var act = () => state.EnsureConfigAsync(null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void SelectableIssueCategories_WithNoConfig_ShouldBeEmpty()
+    {
+        CreateState().SelectableIssueCategories.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SelectableIssueCategories_ShouldBeAlphabetizedByNameAndOmitUnselectableItems()
+    {
+        var state = CreateState();
+        state.Config = ConfigWithCategories(
+            new LookupItemDto("slides", "Slide-outs", null, 1, true),
+            new LookupItemDto("appliances", "appliances", null, 2, true),
+            new LookupItemDto("other", "Other", null, 3, false),
+            new LookupItemDto("electrical", "Electrical", null, 4, true));
+
+        state.SelectableIssueCategories.Select(c => c.Name).Should()
+            .Equal("appliances", "Electrical", "Slide-outs");
+    }
+
+    // ---- Furthest step reached, and history-driven step changes -----------------------------
+    // The step now rides in the URL so the browser's Back button walks the wizard. That makes
+    // the step something a customer can ask for directly, so the state has to know which steps
+    // they have legitimately reached.
+
+    [Fact]
+    public void MaxStepReached_OnAFreshWizard_ShouldBeStepOne()
+    {
+        CreateState().MaxStepReached.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GoToNextStepAsync_ShouldRaiseMaxStepReached()
+    {
+        var state = CreateState();
+
+        await state.GoToNextStepAsync();
+        await state.GoToNextStepAsync();
+
+        state.MaxStepReached.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GoToPreviousStepAsync_ShouldNotLowerMaxStepReached()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(4);
+
+        await state.GoToPreviousStepAsync();
+
+        state.CurrentStep.Should().Be(3);
+        state.MaxStepReached.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task GoToStepAsync_ShouldRaiseMaxStepReached()
+    {
+        var state = CreateState();
+
+        await state.GoToStepAsync(6);
+
+        state.MaxStepReached.Should().Be(6);
+    }
+
+    [Fact]
+    public async Task GoToStepAsync_WhenRejected_ShouldLeaveMaxStepReachedAlone()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+
+        await state.GoToStepAsync(9);
+
+        state.MaxStepReached.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GoToStepFromHistoryAsync_ShouldMoveToTheStep()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(5);
+
+        await state.GoToStepFromHistoryAsync(2);
+
+        state.CurrentStep.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GoToStepFromHistoryAsync_ShouldNotGoPastTheStepReached()
+    {
+        // A hand-typed ?step=8 must not skip the steps in between.
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+        await state.GoToStepFromHistoryAsync(1);
+
+        await state.GoToStepFromHistoryAsync(8);
+
+        state.CurrentStep.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GoToStepFromHistoryAsync_ShouldNotRaiseMaxStepReached()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(3);
+
+        await state.GoToStepFromHistoryAsync(3);
+
+        state.MaxStepReached.Should().Be(3);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task GoToStepFromHistoryAsync_BelowStepOne_ShouldLandOnStepOne(int step)
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(4);
+
+        await state.GoToStepFromHistoryAsync(step);
+
+        state.CurrentStep.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GoToStepFromHistoryAsync_ShouldCancelAPendingEditReturn()
+    {
+        // Review sent them to Step 3 to edit, then they pressed Back instead of Continue. The
+        // promise to return to Review belonged to that Continue, and the customer overrode it.
+        var state = CreateState();
+        await state.GoToStepAsync(8);
+        state.ReturnToStepAfterEdit = 8;
+
+        await state.GoToStepFromHistoryAsync(3);
+
+        state.ReturnToStepAfterEdit.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepTheStepReachedAcrossAReload()
+    {
+        var js = new InMemoryWebStorageJSRuntime();
+        var state = new IntakeWizardState(js);
+        state.Slug = "acme-rv";
+        await state.GoToStepAsync(6);
+        await state.GoToStepFromHistoryAsync(2);
+
+        var restored = new IntakeWizardState(js);
+        await restored.RestoreAsync();
+
+        restored.CurrentStep.Should().Be(2);
+        restored.MaxStepReached.Should().Be(6);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_ForASessionSavedBeforeTheStepWasTracked_ShouldTrustTheCurrentStep()
+    {
+        // A session persisted by the previous build has no maxStepReached. Reading it as 0 would
+        // clamp a customer on Step 5 back to Step 1 and lose their place.
+        var js = new InMemoryWebStorageJSRuntime();
+        js.Items["rvs_intake_wizard_state"] =
+            """{"CurrentStep":5,"Slug":"acme-rv","FirstName":"Dana"}""";
+        var state = new IntakeWizardState(js);
+
+        await state.RestoreAsync();
+
+        state.CurrentStep.Should().Be(5);
+        state.MaxStepReached.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetTheStepReached()
+    {
+        var state = CreateState();
+        await state.GoToStepAsync(7);
+
+        await state.ClearAsync();
+
+        state.MaxStepReached.Should().Be(1);
+    }
+
+    private static DiagnosticQuestionsResponseDto TwoDiagnosticQuestions() => new()
+    {
+        Questions =
+        [
+            new DiagnosticQuestionDto { QuestionText = "Is the slide-out moving at all?", Options = ["Yes", "No"] },
+            new DiagnosticQuestionDto { QuestionText = "Do you hear the motor?", Options = ["Yes", "No"], AllowFreeText = true }
+        ],
+        SmartSuggestion = "Check the slide-out fuse."
+    };
+
+    [Fact]
+    public async Task PersistAndRestore_ShouldKeepTheDiagnosticQuestionsAcrossAReload()
+    {
+        // Issue #736: Android can reload the page — returning from the camera on Step 7, for one.
+        // Without the questions, Step 6 regenerated them and blanked every answer the customer gave.
+        var js = new InMemoryWebStorageJSRuntime();
+        var before = new IntakeWizardState(js) { Slug = "acme-rv" };
+        before.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+        before.DiagnosticResponses[0] = before.DiagnosticResponses[0] with { SelectedOptions = ["No"] };
+        await before.PersistAsync();
+
+        var after = new IntakeWizardState(js);
+        await after.RestoreAsync();
+
+        after.DiagnosticQuestions.Select(q => q.QuestionText).Should().Equal(
+            "Is the slide-out moving at all?", "Do you hear the motor?");
+        after.DiagnosticQuestions[1].AllowFreeText.Should().BeTrue();
+        after.DiagnosticResponses[0].SelectedOptions.Should().Equal("No");
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_ShouldSetQuestionsSuggestionAndOneBlankResponsePerQuestion()
+    {
+        var state = CreateState();
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Should().HaveCount(2);
+        state.SmartSuggestion.Should().Be("Check the slide-out fuse.");
+        state.DiagnosticResponses.Select(r => r.QuestionText).Should().Equal(
+            "Is the slide-out moving at all?", "Do you hear the motor?");
+        state.DiagnosticResponses.Should().OnlyContain(r => r.SelectedOptions.Count == 0 && r.FreeTextResponse == null);
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_ShouldKeepAnswersToQuestionsAskedAgain()
+    {
+        // A session saved by the previous build carries answers but no questions, so Step 6 asks
+        // for them again. An answer to a question that comes back must not be thrown away.
+        var state = CreateState();
+        state.DiagnosticResponses =
+        [
+            new DiagnosticResponseDto { QuestionText = "Do you hear the motor?", SelectedOptions = ["Yes"], FreeTextResponse = "A click" },
+            new DiagnosticResponseDto { QuestionText = "A question not asked this time", SelectedOptions = ["No"] }
+        ];
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticResponses.Should().HaveCount(2);
+        state.DiagnosticResponses[0].SelectedOptions.Should().BeEmpty();
+        state.DiagnosticResponses[1].SelectedOptions.Should().Equal("Yes");
+        state.DiagnosticResponses[1].FreeTextResponse.Should().Be("A click");
+    }
+
+    // ── Dealer questions (Spec A-18, issue #785) ────────────────────────
+
+    private static IntakeConfigResponseDto ConfigWithDealerQuestions(params string[] questions) => new()
+    {
+        LocationName = "Salt Lake",
+        LocationSlug = "acme-rv",
+        DealershipName = "Acme RV",
+        DealerQuestions = [.. questions]
+    };
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WhenTheLocationHasNoDealerQuestions_ShouldShowOnlyTheAiQuestions()
+    {
+        var state = CreateState();
+        state.Config = ConfigWithDealerQuestions();
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Select(q => q.QuestionText).Should().Equal(
+            "Is the slide-out moving at all?", "Do you hear the motor?");
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_ShouldAddTheDealerQuestionsAfterTheAiQuestionsAsFreeText()
+    {
+        var state = CreateState();
+        state.Config = ConfigWithDealerQuestions("Where is the RV stored?", "Do you need a loaner?");
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Select(q => q.QuestionText).Should().Equal(
+            "Is the slide-out moving at all?", "Do you hear the motor?",
+            "Where is the RV stored?", "Do you need a loaner?");
+        state.DiagnosticQuestions.Skip(2).Should().OnlyContain(q => q.AllowFreeText && q.Options.Count == 0);
+        state.DiagnosticResponses.Select(r => r.QuestionText).Should().Equal(
+            state.DiagnosticQuestions.Select(q => q.QuestionText));
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WhenTheAiAlreadyAskedADealerQuestion_ShouldAskItOnce()
+    {
+        // An answer is keyed by its question's text, so the same question twice would share one answer.
+        var state = CreateState();
+        state.Config = ConfigWithDealerQuestions("do you hear the motor?");
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WhenTheAiReturnsNoQuestions_ShouldStillShowTheDealerQuestions()
+    {
+        // Step 6 applies an empty response when the AI call fails, so the dealer's questions still show.
+        var state = CreateState();
+        state.Config = ConfigWithDealerQuestions("Where is the RV stored?");
+
+        state.ApplyDiagnosticQuestions(new DiagnosticQuestionsResponseDto());
+
+        state.DiagnosticQuestions.Select(q => q.QuestionText).Should().Equal("Where is the RV stored?");
+        state.DiagnosticResponses.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WhenConfigIsUnset_ShouldShowOnlyTheAiQuestions()
+    {
+        var state = CreateState();
+
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+
+        state.DiagnosticQuestions.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void ApplyDiagnosticQuestions_WithNullResponse_ShouldThrow()
+    {
+        var act = () => CreateState().ApplyDiagnosticQuestions(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task ClearAsync_ShouldResetTheDiagnosticQuestions()
+    {
+        var js = new InMemoryWebStorageJSRuntime();
+        var state = new IntakeWizardState(js) { Slug = "acme-rv" };
+        state.ApplyDiagnosticQuestions(TwoDiagnosticQuestions());
+        await state.PersistAsync();
+
+        await state.ClearAsync();
+        var restored = new IntakeWizardState(js);
+        await restored.RestoreAsync();
+
+        state.DiagnosticQuestions.Should().BeEmpty();
+        restored.DiagnosticQuestions.Should().BeEmpty();
     }
 }

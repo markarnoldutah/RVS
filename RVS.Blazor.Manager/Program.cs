@@ -9,6 +9,7 @@ using RVS.Blazor.Manager.Services;
 using RVS.Blazor.Manager.State;
 using RVS.UI.Shared.Services;
 
+
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
@@ -21,6 +22,10 @@ builder.Services.AddSingleton<ManagerAppState>();
 
 // Theme switcher state (scoped per browser tab)
 builder.Services.AddScoped<ThemeService>();
+
+// Whether the API has reported this user's tenant disabled (issue #625) — the layout swaps
+// every page for an "access restricted" message while it is set.
+builder.Services.AddSingleton<TenantAccessState>();
 
 // Get API base URL from configuration
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
@@ -35,7 +40,8 @@ builder.Services.AddHttpClient("RVS.API", client =>
     var handler = sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(authorizedUrls: [apiBaseUrl]);
     return handler;
-});
+})
+.AddHttpMessageHandler(sp => new TenantAccessGateHandler(sp.GetRequiredService<TenantAccessState>()));
 
 // Register AuthorizationMessageHandler
 builder.Services.AddScoped<AuthorizationMessageHandler>();
@@ -56,10 +62,31 @@ builder.Services.AddScoped<RVS.UI.Shared.Services.LookupApiClient>(sp =>
     new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
 builder.Services.AddScoped<RVS.UI.Shared.Services.AttachmentApiClient>(sp =>
     new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+builder.Services.AddScoped<RVS.UI.Shared.Services.IntakeInviteApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+
+// Platform-admin provisioning (issue #563) — the hidden /admin pages. The API is the only gate.
+builder.Services.AddScoped<AdminApiClient>(sp =>
+    new(sp.GetRequiredService<IHttpClientFactory>().CreateClient("RVS.API")));
+
+// Profile-menu and access-restricted sign-out (issues #498, #625).
+builder.Services.AddScoped<SignOutService>();
+
+// This device's "Keep me signed in" answer, read from js/session-persist.js once the host is
+// built (below). The OIDC options are resolved lazily on first use, after that read; if they were
+// ever resolved first, the null default fails closed and forces the password prompt.
+string? keepSignedInPreference = null;
+var keepSignedInPreferenceResolved = false;
 
 // Configure OIDC Authentication with Auth0
 builder.Services.AddOidcAuthentication(options =>
 {
+    // Force Auth0's password prompt unless this device opted in to staying signed in, so Auth0's
+    // own session cookie cannot silently sign the next person into a shared computer (issue #498).
+    KeepSignedInPolicy.ApplyTo(
+        options.ProviderOptions.AdditionalProviderParameters,
+        keepSignedInPreferenceResolved ? keepSignedInPreference : null);
+
     builder.Configuration.Bind("Auth0", options.ProviderOptions);
 
     // PKCE: Use authorization code flow
@@ -96,15 +123,28 @@ builder.Services.AddOidcAuthentication(options =>
 // the access token we are trying to renew).
 builder.Services.AddHttpClient("Auth0.Token");
 
+// Revokes the refresh token at Auth0 on sign-out (issue #498) — uses the same bearer-free client.
+builder.Services.AddScoped(sp => new RefreshTokenRevocationClient(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("Auth0.Token"),
+    builder.Configuration["Auth0:Authority"]
+        ?? throw new InvalidOperationException("Auth0:Authority is not configured."),
+    builder.Configuration["Auth0:ClientId"]
+        ?? throw new InvalidOperationException("Auth0:ClientId is not configured.")));
+
 // Decorate the default IAccessTokenProvider with refresh_token-backed renewal
-// so users stay signed in for the full 15-day rolling refresh-token lifetime
-// (RVS_Technical_PRD.md §10.1) instead of being bounced to login when the
-// iframe silent-renewal path fails. The concrete RemoteAuthenticationService<>
-// registered by AddOidcAuthentication is resolved directly to avoid a circular
-// IAccessTokenProvider lookup.
+// so users stay signed in for the full 30-day rotating refresh-token lifetime
+// (Spec C-7, issue #498) instead of being bounced to login when the iframe
+// silent-renewal path fails. js/session-persist.js keeps the token across
+// browser and installed-PWA restarts.
+//
+// The inner provider is the RemoteAuthenticationService<> that AddOidcAuthentication
+// registers as the AuthenticationStateProvider implementation. It is NOT registered
+// under its own concrete type, so we resolve AuthenticationStateProvider and cast to
+// IAccessTokenProvider (the framework's own idiom). Resolving IAccessTokenProvider
+// here would recurse into this very factory.
 builder.Services.AddScoped<IAccessTokenProvider>(sp =>
     new RefreshingAccessTokenProvider(
-        sp.GetRequiredService<RemoteAuthenticationService<RemoteAuthenticationState, RemoteUserAccount, OidcProviderOptions>>(),
+        (IAccessTokenProvider)sp.GetRequiredService<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider>(),
         sp.GetRequiredService<IHttpClientFactory>(),
         sp.GetRequiredService<IJSRuntime>(),
         builder.Configuration,
@@ -125,6 +165,25 @@ var app = builder.Build();
 
 // Startup diagnostics — console.warn is always visible in browser DevTools (F12 → Console)
 var js = app.Services.GetRequiredService<IJSRuntime>();
+
+// Read this device's "Keep me signed in" answer before anything resolves the OIDC options
+// (see KeepSignedInPolicy above). A failed read leaves it unresolved, which forces the prompt.
+try
+{
+    keepSignedInPreference = await js.InvokeAsync<string?>("rvsSession_getPersistPreference");
+    keepSignedInPreferenceResolved = true;
+}
+catch (JSException)
+{
+    // session-persist.js missing or storage blocked — fail closed.
+}
+// Restore the saved theme before the first render. The layouts used to do this in
+// OnAfterRenderAsync, so a dark-mode or high-contrast user got one frame of the light palette
+// on every boot — including the return from the auth callback, which is what made the
+// authentication hand-off flash (#703). js/splash-mode.js reads the same key to ground the
+// pre-Blazor splash, so splash, AuthStatePanel and app all come up in the chosen theme.
+await app.Services.GetRequiredService<ThemeService>().InitializeAsync();
+
 await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] Environment       : {builder.HostEnvironment.Environment}");
 await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] BaseAddress       : {builder.HostEnvironment.BaseAddress}");
 await js.InvokeVoidAsync("console.warn", $"[RVS.Manager] ApiBaseUrl resolved: {apiBaseUrl}");

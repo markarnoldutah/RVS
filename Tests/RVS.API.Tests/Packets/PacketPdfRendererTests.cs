@@ -1,0 +1,1006 @@
+using System.Diagnostics;
+using System.Net;
+using System.Text;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Moq;
+using RVS.API.Integrations;
+using RVS.API.Packets;
+using RVS.Domain.Packets;
+using MsOptions = Microsoft.Extensions.Options.Options;
+
+namespace RVS.API.Tests.Packets;
+
+/// <summary>
+/// Tests for the PDF packet renderer (<c>Spec B-3</c>, <c>B-7</c>, issue <c>#432</c>).
+///
+/// The renderer is split so its content can be tested as pure logic:
+/// <list type="bullet">
+///   <item><see cref="PacketPdfLayout.Build"/> resolves a <see cref="ServicePacket"/> into
+///   an ordered, degradation-resolved layout model — the single place that decides
+///   <em>what</em> content appears in <em>what</em> order. This is asserted exhaustively
+///   and cross-checked against <see cref="PacketHtmlRenderer"/> so the two renderings
+///   cannot diverge (issue <c>#432</c> AC "output matches the HTML rendering").</item>
+///   <item><see cref="PacketPdfRenderer.Render(ServicePacket, System.Collections.Generic.IReadOnlyDictionary{string, byte[]})"/>
+///   paints that model with QuestPDF. Only byte-level shape, determinism and latency are
+///   asserted here — QuestPDF's own layout engine is not re-tested.</item>
+/// </list>
+/// </summary>
+public class PacketPdfRendererTests
+{
+    // ── Fixtures (mirrors PacketHtmlRendererTests) ──────────────────────────
+
+    private static ServicePacket FullPacket() => new()
+    {
+        Unit = new PacketUnitHeader
+        {
+            Year = 2021,
+            Make = "Winnebago",
+            Model = "View",
+            Vin = "1FDXE45S12HB00001",
+        },
+        Customer = new PacketCustomer
+        {
+            FullName = "Dale Gribble",
+            FirstName = "Dale",
+            LastName = "Gribble",
+            Phone = "555-0101",
+            Email = "dale@example.com",
+            PreferredContact = "Phone",
+        },
+        Origin = new PacketOrigin
+        {
+            LocationName = "Salt Lake Service Center",
+            LocationPhone = "555-0199",
+            LocationTimeZoneId = "America/Denver",
+            SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
+            ReferenceCode = "A1B2C3D4",
+        },
+        IssueCategory = "Electrical",
+        CuratedIssue = "Generator shuts down under load after roughly ten minutes, with a hot smell.",
+        IssueDescription = "Generator quits after ten minutes. Smells hot.",
+        Diagnostics =
+        [
+            new PacketDiagnosticEntry
+            {
+                Question = "Does the generator start at all?",
+                Answers = ["Yes, then dies", "Dies after about 10 minutes"],
+            },
+            new PacketDiagnosticEntry
+            {
+                Question = "Any warning lights?",
+                Answers = ["Temp light"],
+            },
+        ],
+        AiSummary = new PacketAiSummary { Text = "Likely overheating on the generator windings." },
+        Photos =
+        [
+            new PacketPhoto { Url = "https://blob/generator.jpg?sas=read", FileName = "generator.jpg" },
+        ],
+        PasteBlock = "ELECTRICAL\nGenerator quits after ten minutes.\nhttps://rvintake.com/status/abc123",
+        StatusLink = new PacketStatusLink { Url = "https://rvintake.com/status/abc123" },
+    };
+
+    private static ServicePacket MinimalPacket() => new()
+    {
+        Unit = new PacketUnitHeader(),
+        Customer = new PacketCustomer { FullName = "Jane Doe" },
+        Origin = new PacketOrigin
+        {
+            SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
+            ReferenceCode = "DEADBEEF",
+        },
+        IssueDescription = "It rattles.",
+        Diagnostics = [],
+        Photos = [],
+    };
+
+    // 1x1 transparent PNG — a valid image payload for the embed / latency tests.
+    private static byte[] OnePixelPng() => Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    private static PacketPdfLayout Layout(ServicePacket packet) => PacketPdfLayout.Build(packet);
+
+    /// <summary>Counts <c>/Type /Page</c> objects (not the <c>/Pages</c> tree) in the raw PDF.</summary>
+    private static int PageCount(byte[] pdf) =>
+        System.Text.RegularExpressions.Regex.Matches(Encoding.Latin1.GetString(pdf), @"/Type\s*/Page(?![a-zA-Z])").Count;
+
+    private static PacketPdfLayoutSection Section(ServicePacket packet, string id) =>
+        Layout(packet).Sections.Single(s => s.Id == id);
+
+    private static int Order(string text, string marker)
+    {
+        var index = text.IndexOf(marker, StringComparison.Ordinal);
+        index.Should().BeGreaterThanOrEqualTo(0, "marker '{0}' should be present", marker);
+        return index;
+    }
+
+    // Spec B-2 order, with the curated issue and the AI assessment lifted above the verbatim
+    // complaint (issue #601).
+    private static readonly string[] SectionIdsInB2Order =
+    [
+        "unit", "customer", "origin", "category", "curated-issue", "ai-summary",
+        "description", "diagnostics", "photos", "paste-block", "status-link",
+    ];
+
+    // ── Guard clause ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WhenPacketIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => PacketPdfRenderer.Render(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void Build_WhenPacketIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => PacketPdfLayout.Build(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    // ── PDF document shape ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_ShouldProduceANonEmptyPdfDocument()
+    {
+        var bytes = PacketPdfRenderer.Render(FullPacket());
+
+        bytes.Should().NotBeNullOrEmpty();
+        Encoding.ASCII.GetString(bytes, 0, 5).Should().Be("%PDF-", "the output must be a PDF");
+    }
+
+    [Fact]
+    public void Render_WithMinimalPacket_ShouldNotThrow()
+    {
+        var act = () => PacketPdfRenderer.Render(MinimalPacket());
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Render_ShouldBeDeterministic_ForTheSamePacket()
+    {
+        var first = PacketPdfRenderer.Render(FullPacket());
+        var second = PacketPdfRenderer.Render(FullPacket());
+
+        second.Should().Equal(first, "document metadata dates are pinned to the packet so output is reproducible");
+    }
+
+    [Fact]
+    public void Render_ShouldEmbedProvidedPhotoBytes_WithoutThrowing()
+    {
+        var png = OnePixelPng();
+        var packet = FullPacket();
+        var images = packet.Photos.ToDictionary(p => p.Url, _ => png);
+
+        var act = () => PacketPdfRenderer.Render(packet, images);
+
+        act.Should().NotThrow();
+    }
+
+    // Minimal ISO-BMFF header whose `ftyp` major brand is "heic" — the shape of an iPhone
+    // photo. QuestPDF's decoder cannot read it (issue #492 item 8).
+    private static byte[] HeicHeader() =>
+    [
+        0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, // ....ftyp
+        0x68, 0x65, 0x69, 0x63, 0x00, 0x00, 0x00, 0x00, // heic....
+        0x68, 0x65, 0x69, 0x63, 0x6D, 0x69, 0x66, 0x31, // heicmif1
+    ];
+
+    [Fact]
+    public void Render_WhenAPhotosBytesAreHeic_ShouldRenderAPlaceholder_NotThrowOrDropTheGrid()
+    {
+        var packet = FullPacket();
+        var images = packet.Photos.ToDictionary(p => p.Url, _ => HeicHeader());
+
+        var act = () => PacketPdfRenderer.Render(packet, images);
+
+        act.Should().NotThrow("an undecodable image must fall back to a placeholder, never fail the whole PDF");
+        PacketPdfRenderer.Render(packet, images).Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public void Render_WhenPhotoBytesAreAHeicTranscodedToJpeg_ShouldEmbedTheImage_NotAPlaceholder()
+    {
+        // #508: once AttachmentService transcodes the HEIC upload, the packet pipeline hands
+        // the renderer a JPEG the SkiaSharp decoder reads — so the photo embeds instead of
+        // falling back to the labelled placeholder that a raw HEIC still triggers.
+        var transcoder = new MagickImageTranscoder(
+            MsOptions.Create(new ImageTranscodeOptions()),
+            Mock.Of<ILogger<MagickImageTranscoder>>());
+        var jpeg = transcoder.Normalize(SampleImages.Heic96x64(), "image/heic");
+        jpeg.Should().NotBeNull("the HEIC fixture must transcode for this regression to be meaningful");
+
+        var packet = FullPacket();
+        var withJpeg = packet.Photos.ToDictionary(p => p.Url, _ => jpeg!.Bytes);
+        var withHeic = packet.Photos.ToDictionary(p => p.Url, _ => SampleImages.Heic96x64());
+
+        var jpegPdf = PacketPdfRenderer.Render(packet, withJpeg);
+        var heicPdf = PacketPdfRenderer.Render(packet, withHeic);
+
+        jpegPdf.Should().NotBeNullOrEmpty();
+        // The embedded photo makes the JPEG rendering materially larger than the
+        // placeholder-only rendering of the same packet.
+        jpegPdf.Length.Should().BeGreaterThan(heicPdf.Length);
+    }
+
+    [Fact]
+    public void Render_WhenAPhotosBytesAreEmpty_ShouldRenderAPlaceholder_NotThrow()
+    {
+        var packet = FullPacket();
+        var images = packet.Photos.ToDictionary(p => p.Url, _ => Array.Empty<byte>());
+
+        var act = () => PacketPdfRenderer.Render(packet, images);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Render_WhenPhotoIsVideo_ShouldRenderAHyperlinkedPlaceholder_NotThrow()
+    {
+        // Videos are never embedded as raster images — they render as a placeholder that
+        // hyperlinks to the video's SAS URL, with no bytes required (issue #583).
+        var packet = FullPacket() with
+        {
+            Photos =
+            [
+                new PacketPhoto
+                {
+                    Url = "https://blob/walkaround.mp4?sas=read",
+                    FileName = "walkaround.mp4",
+                    ContentType = "video/mp4",
+                },
+            ],
+        };
+
+        var act = () => PacketPdfRenderer.Render(packet);
+
+        act.Should().NotThrow();
+        PacketPdfRenderer.Render(packet).Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public void Render_WithABrandNameOverride_ShouldNotThrow()
+    {
+        var packet = FullPacket() with { Branding = new PacketBranding { BrandName = "Acme RV Group" } };
+
+        var act = () => PacketPdfRenderer.Render(packet);
+
+        act.Should().NotThrow();
+    }
+
+    // ── Dealer logo and "Powered by" mark (Spec A-16, issue #470) ──────────
+
+    private static ServicePacket BrandedPacket() => FullPacket() with
+    {
+        Branding = new PacketBranding { LogoUrl = "https://cdn.dealer.example/logo.png" },
+    };
+
+    [Fact]
+    public void Render_WithLogoBytes_ShouldEmbedTheLogo()
+    {
+        var packet = BrandedPacket();
+
+        var withLogo = PacketPdfRenderer.Render(packet, logoImage: OnePixelPng());
+        var withoutLogo = PacketPdfRenderer.Render(packet);
+
+        withLogo.Length.Should().BeGreaterThan(withoutLogo.Length, "the logo is embedded as an image");
+    }
+
+    [Fact]
+    public void Render_WithLogoBytesButNoLogoOnTheBranding_ShouldIgnoreThem()
+    {
+        var withBytes = PacketPdfRenderer.Render(FullPacket(), logoImage: OnePixelPng());
+        var withoutBytes = PacketPdfRenderer.Render(FullPacket());
+
+        withBytes.Should().Equal(withoutBytes);
+    }
+
+    [Fact]
+    public void Render_WithUndecodableLogoBytes_ShouldFallBackToNoLogo_NotThrow()
+    {
+        var act = () => PacketPdfRenderer.Render(BrandedPacket(), logoImage: [0x3C, 0x68, 0x74, 0x6D, 0x6C, 0x3E]);
+
+        act.Should().NotThrow();
+        act().Should().Equal(PacketPdfRenderer.Render(BrandedPacket()));
+    }
+
+    [Fact]
+    public void PoweredByMarkSvg_ShouldBeTheKitsHorizontalLockup()
+    {
+        // Linked from RVS.UI.Shared/wwwroot/brand/logo-horizontal.svg, so the PDF footer and the
+        // apps draw one file, not two copies that can drift.
+        PacketPdfRenderer.PoweredByMarkSvg.Should().StartWith("<svg").And.Contain("viewBox=\"0 0 390.4 108.0\"");
+    }
+
+    [Fact]
+    public void Render_WithSixPhotos_ShouldCompleteWellWithinTheLatencyBudget()
+    {
+        var png = OnePixelPng();
+        var photos = Enumerable.Range(1, 6)
+            .Select(i => new PacketPhoto { Url = $"https://blob/p{i}.jpg", FileName = $"p{i}.jpg" })
+            .ToArray();
+        var images = photos.ToDictionary(p => p.Url, _ => png);
+        var packet = FullPacket() with { Photos = photos };
+
+        var stopwatch = Stopwatch.StartNew();
+        var bytes = PacketPdfRenderer.Render(packet, images);
+        stopwatch.Stop();
+
+        bytes.Should().NotBeNullOrEmpty();
+        stopwatch.Elapsed.Should().BeLessThan(
+            TimeSpan.FromSeconds(5),
+            "Spec B-1 budgets the whole generation pipeline at P95 < 10 s; the PDF render alone must be a small fraction");
+    }
+
+    [Fact]
+    public void Render_WithSixAppendixPhotos_ShouldFitThemOnOnePage()
+    {
+        // Portrait phone photos: at full half-page width only two rows fit, so six photos
+        // spilled onto a second appendix page (issue #775 item 2.4).
+        var portrait = SampleImages.Png(30, 40);
+
+        var sevenPages = PageCount(PacketPdfRenderer.Render(PacketWithPhotos(7, out var seven), Photos(seven, portrait)));
+        var twelvePages = PageCount(PacketPdfRenderer.Render(PacketWithPhotos(12, out var twelve), Photos(twelve, portrait)));
+
+        twelvePages.Should().Be(sevenPages, "photos 7–12 are one appendix page of six, same as photo 7 alone");
+
+        static ServicePacket PacketWithPhotos(int count, out PacketPhoto[] photos)
+        {
+            photos = Enumerable.Range(1, count)
+                .Select(i => new PacketPhoto { Url = $"https://blob/p{i}.jpg", FileName = $"p{i}.jpg" })
+                .ToArray();
+            // Drop the paste block and status link that follow the photos so the page count
+            // measures the photo grid alone, not whether trailing sections also fit.
+            return FullPacket() with { Photos = photos, PasteBlock = null, StatusLink = null };
+        }
+
+        static Dictionary<string, byte[]> Photos(PacketPhoto[] photos, byte[] bytes) =>
+            photos.ToDictionary(p => p.Url, _ => bytes);
+    }
+
+    // ── Section ordering (Spec B-2) ────────────────────────────────────────
+
+    [Fact]
+    public void Build_ShouldEmitEverySectionInSpecB2Order()
+    {
+        var text = Layout(FullPacket()).ToPlainText();
+
+        SectionIdsInB2Order
+            .Select(id => Order(text, $"[section:{id}]"))
+            .Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void Build_SectionOrder_ShouldMatchTheHtmlRenderer()
+    {
+        var packet = FullPacket();
+        var html = PacketHtmlRenderer.Render(packet);
+        var pdf = Layout(packet).ToPlainText();
+
+        // The HTML drops its Photos section when every photo is an attached image — the mail
+        // client's thumbnails stand in for it (issue #735) — so it is compared without one.
+        var htmlOrder = SectionIdsInB2Order.Where(id => id != "photos")
+            .Select(id => Order(html, $"section:{id}")).ToList();
+        var pdfOrder = SectionIdsInB2Order.Select(id => Order(pdf, $"[section:{id}]")).ToList();
+
+        htmlOrder.Should().BeInAscendingOrder();
+        pdfOrder.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void Build_WhenOptionalSectionsAbsent_ShouldOmitTheSameOnesAsTheHtmlRenderer()
+    {
+        var packet = MinimalPacket();
+        var pdf = Layout(packet).ToPlainText();
+        var html = PacketHtmlRenderer.Render(packet);
+
+        foreach (var id in new[] { "ai-summary", "photos", "paste-block", "status-link" })
+        {
+            pdf.Should().NotContain($"[section:{id}]");
+            html.Should().NotContain($"section:{id}");
+        }
+
+        foreach (var id in new[] { "unit", "customer", "origin", "category", "description", "diagnostics" })
+        {
+            pdf.Should().Contain($"[section:{id}]");
+        }
+    }
+
+    // ── 1. Unit header ────────────────────────────────────────────────────
+
+    [Fact]
+    public void Build_WhenVinPresent_ShouldIncludeASerialRow()
+    {
+        var section = Section(FullPacket(), "unit");
+
+        section.Heading.Should().Be("2021 Winnebago View");
+        section.Rows.Should().ContainSingle(r => r.Label == "Serial# (VIN)" && r.Value == "1FDXE45S12HB00001");
+        section.Rows.Should().Contain(r => r.Label == "Manufacturer" && r.Value == "Winnebago");
+    }
+
+    [Fact]
+    public void Build_WhenVinAbsent_ShouldOmitTheSerialRow()
+    {
+        var packet = FullPacket() with
+        {
+            Unit = new PacketUnitHeader { Year = 2021, Make = "Winnebago", Model = "View" },
+        };
+
+        Section(packet, "unit").Rows.Should().NotContain(r => r.Label == "Serial# (VIN)");
+    }
+
+    [Fact]
+    public void Build_WhenYearMakeModelAllAbsent_ShouldUseAFallbackHeading()
+    {
+        Section(MinimalPacket(), "unit").Heading.Should().Be("Unit details not provided");
+    }
+
+    // ── 2. Customer ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void Build_ShouldCarryCustomerName_AndOnlyTheContactRowsThatArePresent()
+    {
+        var section = Section(MinimalPacket(), "customer");
+
+        section.Heading.Should().Be("Customer");
+        section.Body.Should().Be("Jane Doe");
+        section.Rows.Should().BeEmpty("the minimal packet has no phone, email or preferred contact");
+    }
+
+    [Fact]
+    public void Build_ShouldIncludePreferredContactRow_WhenPresent()
+    {
+        Section(FullPacket(), "customer").Rows
+            .Should().ContainSingle(r => r.Label == "Preferred contact" && r.Value == "Phone");
+    }
+
+    // ── 3. Origin ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Build_TheOriginSection_ShouldBeHeadedLocation_CarryLocationAndIntakeNumber_AndNoReceivedRow()
+    {
+        var section = Section(FullPacket(), "origin");
+
+        section.Heading.Should().Be("Location", "the Received line moved to the top of the masthead (issue #492 item 5)");
+        section.Rows.Should().Contain(r => r.Label == "Location" && r.Value == "Salt Lake Service Center");
+        section.Rows.Should().Contain(r => r.Label == "Intake #" && r.Value == "A1B2C3D4");
+        Layout(FullPacket()).ToPlainText().Should().NotContain("RVS #", "the tracking number is labelled Intake # (issue #735)");
+        section.Rows.Should().NotContain(r => r.Label == "Received");
+    }
+
+    [Fact]
+    public void Build_ShouldExposeAnInvariantReceivedDisplayForTheTopOfTheMasthead()
+    {
+        Layout(FullPacket()).ReceivedDisplay.Should().Be("2026-09-05 8:30 AM MDT");
+    }
+
+    [Fact]
+    public void Build_ShouldNormaliseTheSubmittedInstantBeforeConvertingToTheLocationZone()
+    {
+        // 09:30-05:00 is the same instant as 14:30Z, which is 08:30 in Denver (issue #506;
+        // before it, this line read 14:30 UTC whatever zone the location was in).
+        var packet = FullPacket() with
+        {
+            Origin = FullPacket().Origin with
+            {
+                SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 9, 30, 0, TimeSpan.FromHours(-5)),
+            },
+        };
+
+        Layout(packet).ReceivedDisplay.Should().Be("2026-09-05 8:30 AM MDT");
+    }
+
+    [Fact]
+    public void Build_WhenTheLocationHasNoTimeZone_ShouldFallBackToTheUtcReceivedDisplay()
+    {
+        Layout(MinimalPacket()).ReceivedDisplay.Should().Be("2026-09-05 2:30 PM UTC");
+    }
+
+    [Fact]
+    public void Build_ShouldTakeItsReceivedDisplayFromThePacketOrigin()
+    {
+        // The PDF-side half of the no-drift guarantee: the layout projects the packet's own
+        // derived value rather than re-deriving it (issue #506).
+        var packet = FullPacket();
+
+        Layout(packet).ReceivedDisplay.Should().Be(packet.Origin.ReceivedDisplay);
+    }
+
+    [Fact]
+    public void Build_ShouldExposeTheCustomerHeadlineFamilyNameFirst()
+    {
+        Layout(FullPacket()).CustomerHeadline.Should().Be("Gribble, Dale");
+    }
+
+    [Fact]
+    public void ToPlainText_ShouldLeadWithTheReceivedLineAndCustomerHeadline_BeforeTheFirstSection()
+    {
+        var text = Layout(FullPacket()).ToPlainText();
+
+        Order(text, "Received: 2026-09-05 8:30 AM MDT").Should().BeLessThan(Order(text, "Gribble, Dale"));
+        Order(text, "Gribble, Dale").Should().BeLessThan(Order(text, "[section:unit]"));
+    }
+
+    // ── 4. Category ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void Build_WhenCategoryPresent_ShouldUseIt()
+    {
+        Section(FullPacket(), "category").Body.Should().Be("Electrical");
+    }
+
+    [Fact]
+    public void Build_WhenCategoryNull_ShouldFallBackToUncategorized()
+    {
+        Section(FullPacket() with { IssueCategory = null }, "category").Body.Should().Be("Uncategorized");
+    }
+
+    // ── 4b. Curated issue — the "Issue" section (issue #601) ─────────────
+
+    [Fact]
+    public void Build_ShouldHeadTheCuratedIssueSectionIssue_CarryingTheCuratedText()
+    {
+        var section = Section(FullPacket(), "curated-issue");
+
+        section.Heading.Should().Be("Issue");
+        section.Body.Should()
+            .Be("Generator shuts down under load after roughly ten minutes, with a hot smell.");
+    }
+
+    [Fact]
+    public void Build_WhenCuratedIssueIsNull_ShouldOmitTheIssueSection()
+    {
+        var layout = Layout(FullPacket() with { CuratedIssue = null });
+
+        layout.Sections.Should().NotContain(s => s.Id == "curated-issue");
+        layout.Sections.Should().Contain(s => s.Id == "description");
+    }
+
+    // ── 5. Description, verbatim ─────────────────────────────────────────
+
+    [Fact]
+    public void Build_ShouldCarryTheCustomerDescriptionVerbatim_NotEncoded_PreservingNewlines()
+    {
+        var packet = FullPacket() with
+        {
+            IssueDescription = "it won't \"start\" <b>at all</b> & smells hot\nsecond line",
+        };
+
+        // The PDF renders text directly — there is no markup to escape, so the value is
+        // carried through byte-for-byte, unlike the HTML renderer which entity-encodes it.
+        Section(packet, "description").Verbatim
+            .Should().Be("it won't \"start\" <b>at all</b> & smells hot\nsecond line");
+    }
+
+    [Fact]
+    public void Build_TheDescriptionSection_ShouldBeHeadedReportedIssue_LikeTheHtml()
+    {
+        // Issue #735 renamed the HTML's "Complaint"; the PDF heading follows it.
+        Section(FullPacket(), "description").Heading.Should().Be("Reported issue — customer's words verbatim");
+    }
+
+    [Fact]
+    public void Build_TheDescriptionSection_ShouldNotBeFramed()
+    {
+        // Issue #580: the reported-issue block reads as plain text, no bordered frame.
+        Section(FullPacket(), "description").Framed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Build_ThePasteBlockSection_ShouldStayFramed()
+    {
+        Section(FullPacket(), "paste-block").Framed.Should().BeTrue();
+    }
+
+    // ── 6. Diagnostic Q&A — the expert block ────────────────────────────
+
+    [Fact]
+    public void Build_WhenDiagnosticsPresent_ShouldCarryEveryQuestionAndAnswer()
+    {
+        var section = Section(FullPacket(), "diagnostics");
+
+        section.Diagnostics.Should().HaveCount(2);
+        section.Diagnostics[0].Question.Should().Be("Does the generator start at all?");
+        section.Diagnostics[0].Answers.Should().Equal("Yes, then dies", "Dies after about 10 minutes");
+        section.Diagnostics[1].Question.Should().Be("Any warning lights?");
+        section.Diagnostics[1].Answers.Should().Equal("Temp light");
+    }
+
+    [Fact]
+    public void Build_WhenNoDiagnostics_ShouldCarryAnExplicitPlaceholder()
+    {
+        var section = Section(MinimalPacket(), "diagnostics");
+
+        section.DiagnosticsEmpty.Should().BeTrue();
+        section.Diagnostics.Should().BeEmpty();
+        Layout(MinimalPacket()).ToPlainText().Should().Contain("No diagnostic questions were answered");
+    }
+
+    // ── 7. AI summary ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Build_WhenAiSummaryPresent_ShouldCarryItUnbadged()
+    {
+        var section = Section(FullPacket(), "ai-summary");
+
+        // No per-section badge: one AI disclaimer closes the packet instead (issue #780).
+        section.Heading.Should().Be("Preliminary assessment");
+        section.Body.Should().Be("Likely overheating on the generator windings.");
+        Layout(FullPacket()).ToPlainText().Should().NotContain("[AI-generated]");
+    }
+
+    [Fact]
+    public void Build_WhenAiContentPresent_ShouldCloseWithTheSameAiDisclaimerAsTheHtmlFooter()
+    {
+        var packet = FullPacket();
+
+        var layout = Layout(packet);
+
+        layout.AiDisclaimer.Should().Be(packet.AiDisclaimer).And.NotBeNull();
+        var text = layout.ToPlainText();
+        Order(text, packet.AiDisclaimer!).Should().BeGreaterThan(Order(text, "[section:status-link]"));
+        PacketHtmlRenderer.Render(packet).Should().Contain(System.Net.WebUtility.HtmlEncode(packet.AiDisclaimer!));
+    }
+
+    [Fact]
+    public void Build_WhenNoAiContent_ShouldCarryNoAiDisclaimer()
+    {
+        var layout = Layout(MinimalPacket());
+
+        layout.AiDisclaimer.Should().BeNull();
+        layout.ToPlainText().Should().NotContain("AI disclosure");
+    }
+
+    [Fact]
+    public void Build_WhenAiSummaryAbsent_ShouldOmitTheSection()
+    {
+        Layout(MinimalPacket()).Sections.Should().NotContain(s => s.Id == "ai-summary");
+    }
+
+    // ── 7a. Structured preliminary assessment (issue #507) ─────────────
+
+    private static ServicePacket AssessedPacket() => FullPacket() with
+    {
+        AiSummary = new PacketAiSummary
+        {
+            Text = "Likely overheating on the generator windings.",
+            ProbableCause = "Overheating from a clogged generator air intake.",
+            PossibleFixes = ["Clear the air intake and cooling fins", "Replace the high-temp shutdown switch"],
+            LikelyParts = ["Air filter", "High-temp shutdown switch"],
+            Confidence = "Medium",
+        },
+    };
+
+    [Fact]
+    public void Build_WhenAssessmentPresent_ShouldCarryCauseAndConfidenceRows_FixesAndPartsLists_AndTheAdvisoryNote()
+    {
+        var section = Section(AssessedPacket(), "ai-summary");
+
+        section.Heading.Should().Be("Preliminary assessment");
+        section.Body.Should().Be("Likely overheating on the generator windings.");
+        section.Rows.Should().Equal(
+            new PacketPdfLayoutRow("Probable cause", "Overheating from a clogged generator air intake."),
+            new PacketPdfLayoutRow("Confidence", "Medium"));
+        section.Lists.Should().HaveCount(2);
+        section.Lists[0].Label.Should().Be("Possible fixes");
+        section.Lists[0].Numbered.Should().BeTrue();
+        section.Lists[0].Items.Should().Equal("Clear the air intake and cooling fins", "Replace the high-temp shutdown switch");
+        section.Lists[1].Label.Should().Be("Likely parts");
+        section.Lists[1].Numbered.Should().BeFalse();
+        section.Lists[1].Items.Should().Equal("Air filter", "High-temp shutdown switch");
+        section.Note.Should().Be(PacketAiSummary.AdvisoryNote);
+    }
+
+    [Fact]
+    public void Build_WhenAssessmentHasNoFixesOrParts_ShouldCarryNoEmptyLists()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = AssessedPacket().AiSummary! with { PossibleFixes = [], LikelyParts = [] },
+        };
+
+        Section(packet, "ai-summary").Lists.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Build_WhenNoStructuredAssessment_ShouldCarryOnlyTheSummaryText()
+    {
+        var section = Section(FullPacket(), "ai-summary");
+
+        section.Rows.Should().BeEmpty();
+        section.Lists.Should().BeEmpty();
+        section.Note.Should().BeNull();
+    }
+
+    [Fact]
+    public void Build_WhenAssessmentPresentWithoutSummaryText_ShouldHaveNoBody()
+    {
+        var packet = AssessedPacket() with
+        {
+            AiSummary = AssessedPacket().AiSummary! with { Text = null },
+        };
+
+        var section = Section(packet, "ai-summary");
+
+        section.Body.Should().BeNull();
+        section.Rows.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Build_ForAnAssessedPacket_ShouldCarryTheSameAssessmentAsTheHtmlRendering_InTheSameOrder()
+    {
+        var packet = AssessedPacket();
+        var html = PacketHtmlRenderer.Render(packet);
+        var pdf = Layout(packet).ToPlainText();
+
+        string[] values =
+        [
+            "Electrical",
+            "Likely overheating on the generator windings.",
+            "Overheating from a clogged generator air intake.",
+            "Medium",
+            "Clear the air intake and cooling fins",
+            "Replace the high-temp shutdown switch",
+            "Air filter",
+            "High-temp shutdown switch",
+            PacketAiSummary.AdvisoryNote,
+            "Generator quits after ten minutes. Smells hot.",
+        ];
+
+        foreach (var value in values)
+        {
+            html.Should().Contain(WebUtility.HtmlEncode(value));
+            pdf.Should().Contain(value);
+        }
+
+        values.Select(v => pdf.IndexOf(v, StringComparison.Ordinal))
+            .Should().BeInAscendingOrder();
+        values.Select(v => html.IndexOf(WebUtility.HtmlEncode(v), html.IndexOf("section:category", StringComparison.Ordinal), StringComparison.Ordinal))
+            .Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void Render_WithAStructuredAssessment_ShouldNotThrow()
+    {
+        var bytes = PacketPdfRenderer.Render(AssessedPacket());
+
+        bytes.Should().NotBeEmpty();
+    }
+
+    // ── 7b. From photos (issue #772) ───────────────────────────────────
+
+    private static readonly PacketPhotoFinding[] PhotoFindings =
+    [
+        new() { Text = "Generator — Onan 5500 · S/N K123", PhotoLabel = "photo 1, generator.jpg" },
+        new() { Text = "Generator — code 36: Out of fuel", PhotoLabel = "photo 1, generator.jpg" },
+    ];
+
+    private static ServicePacket PhotoAssessedPacket() => AssessedPacket() with
+    {
+        AiSummary = AssessedPacket().AiSummary! with { PhotoFindings = PhotoFindings },
+    };
+
+    [Fact]
+    public void Build_WithPhotoFindings_ShouldCarryAFromPhotosList_AfterThePartsList()
+    {
+        var section = Section(PhotoAssessedPacket(), "ai-summary");
+
+        section.Lists.Select(l => l.Label).Should().Equal("Possible fixes", "Likely parts", PacketPhotoFinding.Heading);
+        section.Lists[2].Numbered.Should().BeFalse();
+        section.Lists[2].Items.Should().Equal(PhotoFindings.Select(f => f.Display));
+        section.Note.Should().Be(PacketAiSummary.AdvisoryNote);
+    }
+
+    [Fact]
+    public void Build_WithOnlyPhotoFindings_ShouldCarryTheList_WithNoRowsOrAdvisoryNote()
+    {
+        var packet = FullPacket() with { AiSummary = new PacketAiSummary { PhotoFindings = PhotoFindings } };
+
+        var section = Section(packet, "ai-summary");
+
+        section.Rows.Should().BeEmpty();
+        section.Lists.Should().ContainSingle().Which.Label.Should().Be(PacketPhotoFinding.Heading);
+        section.Note.Should().BeNull();
+    }
+
+    [Fact]
+    public void Build_WithoutPhotoFindings_ShouldCarryNoFromPhotosList()
+    {
+        Section(AssessedPacket(), "ai-summary").Lists.Should().NotContain(l => l.Label == PacketPhotoFinding.Heading);
+    }
+
+    [Fact]
+    public void Build_WithPhotoFindings_ShouldCarryTheSameFindingsAsTheHtmlRendering_InTheSameOrder()
+    {
+        var packet = PhotoAssessedPacket();
+        var html = PacketHtmlRenderer.Render(packet);
+        var pdf = Layout(packet).ToPlainText();
+
+        string[] values =
+        [
+            "High-temp shutdown switch",
+            PacketPhotoFinding.Heading,
+            PhotoFindings[0].Display,
+            PhotoFindings[1].Display,
+            PacketAiSummary.AdvisoryNote,
+        ];
+
+        foreach (var value in values)
+        {
+            html.Should().Contain(WebUtility.HtmlEncode(value));
+            pdf.Should().Contain(value);
+        }
+
+        values.Select(v => pdf.IndexOf(v, StringComparison.Ordinal)).Should().BeInAscendingOrder();
+        var assessmentStart = html.IndexOf("section:ai-summary", StringComparison.Ordinal);
+        values.Select(v => html.IndexOf(WebUtility.HtmlEncode(v), assessmentStart, StringComparison.Ordinal))
+            .Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void Render_WithPhotoFindings_ShouldNotThrow()
+    {
+        PacketPdfRenderer.Render(PhotoAssessedPacket()).Should().NotBeEmpty();
+    }
+
+    // ── 8. Photos ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Build_WhenPhotosPresent_ShouldListThem_UpToSixOnTheFirstPage()
+    {
+        var section = Section(FullPacket(), "photos");
+
+        section.Photos.Should().ContainSingle(p => p.FileName == "generator.jpg");
+        section.PhotosOnFirstPage.Should().Be(1);
+        section.HasAppendix.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Build_WhenMoreThanSixPhotos_ShouldPageTheRestToAnAppendix()
+    {
+        var photos = Enumerable.Range(1, 8)
+            .Select(i => new PacketPhoto { Url = $"https://blob/p{i}.jpg", FileName = $"p{i}.jpg" })
+            .ToArray();
+
+        var section = Section(FullPacket() with { Photos = photos }, "photos");
+
+        section.Photos.Should().HaveCount(8);
+        section.PhotosOnFirstPage.Should().Be(6);
+        section.HasAppendix.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Build_WithExactlySixPhotos_ShouldNotPageToAnAppendix()
+    {
+        var photos = Enumerable.Range(1, 6)
+            .Select(i => new PacketPhoto { Url = $"https://blob/p{i}.jpg", FileName = $"p{i}.jpg" })
+            .ToArray();
+
+        var section = Section(FullPacket() with { Photos = photos }, "photos");
+
+        section.PhotosOnFirstPage.Should().Be(6);
+        section.HasAppendix.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Build_ShouldIgnorePhotosWithoutAnHttpUrl()
+    {
+        var photos = new[]
+        {
+            new PacketPhoto { Url = "https://blob/ok.jpg", FileName = "ok.jpg" },
+            new PacketPhoto { Url = "", FileName = "empty.jpg" },
+            new PacketPhoto { Url = "data:image/png;base64,AAAA", FileName = "inline.png" },
+        };
+
+        Section(FullPacket() with { Photos = photos }, "photos").Photos
+            .Should().ContainSingle().Which.FileName.Should().Be("ok.jpg");
+    }
+
+    [Fact]
+    public void Build_WhenNoRenderablePhotos_ShouldOmitTheSection()
+    {
+        var packet = FullPacket() with
+        {
+            Photos = [new PacketPhoto { Url = "data:image/png;base64,AAAA", FileName = "inline.png" }],
+        };
+
+        Layout(packet).Sections.Should().NotContain(s => s.Id == "photos");
+    }
+
+    // ── 9. Paste block ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Build_WhenPasteBlockPresent_ShouldCarryItVerbatim()
+    {
+        Section(FullPacket(), "paste-block").Verbatim
+            .Should().Be("ELECTRICAL\nGenerator quits after ten minutes.\nhttps://rvintake.com/status/abc123");
+    }
+
+    [Fact]
+    public void Build_ThePasteBlock_ShouldBeHeadedCopyAndPasteReady()
+    {
+        // Issue #800 — "Copy & paste into your DMS" until then; matches the HTML heading.
+        Section(FullPacket(), "paste-block").Heading.Should().Be("Copy & Paste Ready");
+    }
+
+    [Fact]
+    public void Build_WhenPasteBlockAbsent_ShouldOmitTheSection()
+    {
+        Layout(MinimalPacket()).Sections.Should().NotContain(s => s.Id == "paste-block");
+    }
+
+    // ── 10. Status link ───────────────────────────────────────────────
+
+    [Fact]
+    public void Build_WhenStatusLinkIsHttp_ShouldCarryItAsAnActiveLink()
+    {
+        var section = Section(FullPacket(), "status-link");
+
+        section.Link.Should().NotBeNull();
+        section.Link!.Url.Should().Be("https://rvintake.com/status/abc123");
+        section.Link.Active.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Build_WhenStatusLinkIsNotHttp_ShouldCarryItAsInertText()
+    {
+        var packet = FullPacket() with { StatusLink = new PacketStatusLink { Url = "javascript:alert(1)" } };
+
+        Section(packet, "status-link").Link!.Active.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Build_WhenStatusLinkAbsent_ShouldOmitTheSection()
+    {
+        Layout(MinimalPacket()).Sections.Should().NotContain(s => s.Id == "status-link");
+    }
+
+    // ── Parity with the HTML rendering (issue #432 AC) ─────────────────
+
+    [Fact]
+    public void Build_ForAFullPacket_ShouldCarryTheSameKeyValuesAsTheHtmlRendering_InTheSameOrder()
+    {
+        var packet = FullPacket();
+        var html = PacketHtmlRenderer.Render(packet);
+        var pdf = Layout(packet).ToPlainText();
+
+        string[] values =
+        [
+            "2026-09-05 8:30 AM MDT",
+            "Gribble, Dale",
+            "2021 Winnebago View",
+            "1FDXE45S12HB00001",
+            "Dale Gribble",
+            "555-0101",
+            "Salt Lake Service Center",
+            "A1B2C3D4",
+            "Electrical",
+            "Likely overheating on the generator windings.",
+            "Generator quits after ten minutes. Smells hot.",
+            "Does the generator start at all?",
+            "Dies after about 10 minutes",
+            // No "generator.jpg": the HTML no longer names attached images (issue #735) — the
+            // mail client's thumbnails show them — while the PDF still prints its photo grid.
+            "https://rvintake.com/status/abc123",
+        ];
+
+        foreach (var value in values)
+        {
+            html.Should().Contain(WebUtility.HtmlEncode(value));
+            pdf.Should().Contain(value);
+        }
+
+        values.Select(v => pdf.IndexOf(v, StringComparison.Ordinal))
+            .Should().BeInAscendingOrder("the PDF presents the same content in the same section order as the HTML");
+    }
+
+    [Fact]
+    public void Build_ShouldBeDeterministic_ForTheSamePacket()
+    {
+        Layout(FullPacket()).ToPlainText().Should().Be(Layout(FullPacket()).ToPlainText());
+    }
+}

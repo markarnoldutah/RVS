@@ -44,19 +44,9 @@ public class ServiceRequestMapperApplyUpdateTests
             HasExtendedWarranty = "  Yes  ",
             ApproxPurchaseDate = "  March 2023  ",
             AssignedTechnicianId = "  tech_1  ",
-            AssignedBayId = "  bay_2  ",
             ScheduledDateUtc = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc),
             RequiredSkills = ["electrical", "plumbing"],
-            BoardSequence = 4,
-            ServiceEvent = new ServiceEventDto
-            {
-                ComponentType = "  Wiring  ",
-                FailureMode = "  Short Circuit  ",
-                RepairAction = "  Replaced  ",
-                PartsUsed = ["Wire", "Connector"],
-                LaborHours = 2.5m,
-                ServiceDateUtc = new DateTime(2026, 6, 14, 8, 0, 0, DateTimeKind.Utc)
-            }
+            BoardSequence = 4
         };
 
         entity.ApplyUpdate(dto, "usr_updater");
@@ -71,16 +61,9 @@ public class ServiceRequestMapperApplyUpdateTests
         entity.HasExtendedWarranty.Should().Be("Yes");
         entity.ApproxPurchaseDate.Should().Be("March 2023");
         entity.AssignedTechnicianId.Should().Be("tech_1");
-        entity.AssignedBayId.Should().Be("bay_2");
         entity.ScheduledDateUtc.Should().Be(new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc));
         entity.RequiredSkills.Should().BeEquivalentTo(["electrical", "plumbing"]);
         entity.BoardSequence.Should().Be(4);
-        entity.ServiceEvent.Should().NotBeNull();
-        entity.ServiceEvent!.ComponentType.Should().Be("Wiring");
-        entity.ServiceEvent.FailureMode.Should().Be("Short Circuit");
-        entity.ServiceEvent.RepairAction.Should().Be("Replaced");
-        entity.ServiceEvent.PartsUsed.Should().BeEquivalentTo(["Wire", "Connector"]);
-        entity.ServiceEvent.LaborHours.Should().Be(2.5m);
     }
 
     [Fact]
@@ -114,65 +97,6 @@ public class ServiceRequestMapperApplyUpdateTests
 
         entity.IssueCategory.Should().BeNull();
         entity.TechnicianSummary.Should().BeNull();
-    }
-
-    [Fact]
-    public void ApplyUpdate_WhenServiceEventIsNull_ShouldSetToNull()
-    {
-        var entity = BuildServiceRequest();
-        entity.ServiceEvent = new ServiceEventEmbedded { FailureMode = "Leak" };
-
-        var dto = BuildUpdateRequest() with { ServiceEvent = null };
-
-        entity.ApplyUpdate(dto, "usr_1");
-
-        entity.ServiceEvent.Should().BeNull();
-    }
-
-    [Fact]
-    public void ToEmbedded_ServiceEventDto_ShouldMapAllFields()
-    {
-        var dto = new ServiceEventDto
-        {
-            ComponentType = "  Wiring  ",
-            FailureMode = "  Short  ",
-            RepairAction = "  Replaced  ",
-            PartsUsed = ["Part1"],
-            LaborHours = 1.5m,
-            ServiceDateUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-        };
-
-        var embedded = dto.ToEmbedded();
-
-        embedded.ComponentType.Should().Be("Wiring");
-        embedded.FailureMode.Should().Be("Short");
-        embedded.RepairAction.Should().Be("Replaced");
-        embedded.PartsUsed.Should().BeEquivalentTo(["Part1"]);
-        embedded.LaborHours.Should().Be(1.5m);
-        embedded.ServiceDateUtc.Should().Be(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-    }
-
-    [Fact]
-    public void ToDto_ServiceEventEmbedded_ShouldMapAllFields()
-    {
-        var embedded = new ServiceEventEmbedded
-        {
-            ComponentType = "Engine",
-            FailureMode = "Overheating",
-            RepairAction = "Coolant flush",
-            PartsUsed = ["Coolant"],
-            LaborHours = 3.0m,
-            ServiceDateUtc = new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc)
-        };
-
-        var dto = embedded.ToDto();
-
-        dto.ComponentType.Should().Be("Engine");
-        dto.FailureMode.Should().Be("Overheating");
-        dto.RepairAction.Should().Be("Coolant flush");
-        dto.PartsUsed.Should().BeEquivalentTo(["Coolant"]);
-        dto.LaborHours.Should().Be(3.0m);
-        dto.ServiceDateUtc.Should().Be(new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc));
     }
 
     [Fact]
@@ -235,7 +159,8 @@ public class ServiceRequestMapperApplyUpdateTests
                 FirstName = "  John  ",
                 LastName = "  Smith  ",
                 Email = "  john@example.com  ",
-                Phone = "  555-9999  "
+                Phone = "  555-9999  ",
+                PreferredContact = "  text  "
             }
         };
 
@@ -245,6 +170,7 @@ public class ServiceRequestMapperApplyUpdateTests
         entity.CustomerSnapshot.LastName.Should().Be("Smith");
         entity.CustomerSnapshot.Email.Should().Be("john@example.com");
         entity.CustomerSnapshot.Phone.Should().Be("555-9999");
+        entity.CustomerSnapshot.PreferredContact.Should().Be("Text");
     }
 
     [Fact]

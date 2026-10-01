@@ -10,7 +10,7 @@
 @inject ThemeService ThemeService
 @using RVS.Domain.Validation
 
-<PageTitle>RVS Manager — Service Board</PageTitle>
+<PageTitle>RV Intake Manager — Service Board</PageTitle>
 
 <AuthorizeView>
     <Authorized>
@@ -38,19 +38,26 @@
                 <LocationSelector />
             </div>
 
-            @* Keyword filter *@
-            <div class="filter-no-helper mb-2">
-                <MudTextField T="string"
-                              Value="_filterText"
-                              ValueChanged="OnFilterChanged"
-                              Variant="Variant.Outlined"
-                              Placeholder="Filter by keyword or field"
-                              Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Search"
-                              Margin="Margin.Dense"
-                              Immediate="true"
-                              Clearable="true" />
-            </div>
+            @* Keyword filter + actionable-today toggle (issue #498: the board lands pre-filtered) *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Class="mb-2">
+                <div class="filter-no-helper flex-grow-1">
+                    <MudTextField T="string"
+                                  Value="_filterText"
+                                  ValueChanged="OnFilterChanged"
+                                  Variant="Variant.Outlined"
+                                  Placeholder="Filter by keyword or field"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Margin="Margin.Dense"
+                                  Immediate="true"
+                                  Clearable="true" />
+                </div>
+                <MudSwitch T="bool"
+                           Value="_actionableOnly"
+                           ValueChanged="OnActionableOnlyChanged"
+                           Color="Color.Primary"
+                           Label="Actionable today" />
+            </MudStack>
 
             @* Loading skeleton *@
             @if (_loading && _boardItems.Count == 0)
@@ -192,12 +199,22 @@
                                                     @boardItem.Summary.IssueCategory
                                                 </MudChip>
                                             }
+                                            @* Spec A-17 (#806): one of several issues reported on one visit *@
+                                            @if (boardItem.Summary.SubmissionCount > 1)
+                                            {
+                                                <MudChip T="string" Size="Size.Small"
+                                                         Variant="Variant.Outlined"
+                                                         Icon="@Icons.Material.Outlined.Layers"
+                                                         Style="@($"color: {ChipFontColor};")">
+                                                    @($"{boardItem.Summary.SubmissionPosition} of {boardItem.Summary.SubmissionCount}")
+                                                </MudChip>
+                                            }
                                                     @if (boardItem.Status is "WaitingOnParts" or "WaitingOnCustomer" or "Completed" or "Cancelled")
                                                     {
                                                         <MudChip T="string" Size="Size.Small"
                                                                  Variant="Variant.Outlined"
                                                                  Style="@($"color: {ChipFontColor};")">
-                                                            @GetStatusLabel(boardItem.Status)
+                                                            @GetCardStatusLabel(boardItem)
                                                         </MudChip>
                                                     }
                                                 </MudStack>
@@ -236,6 +253,19 @@
 
     private string? _dealershipId;
 
+    /// <summary>
+    /// Service request to open in the detail dialog on arrival — set by the packet email's plain
+    /// request link via <c>/sr/{id}</c> (issue #498).
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "sr")]
+    public string? OpenServiceRequestId { get; set; }
+
+    /// <summary>
+    /// The board lands on today's actionable requests (issue #498): open work plus anything closed
+    /// today. See <see cref="ActionableRequestFilter"/>.
+    /// </summary>
+    private bool _actionableOnly = true;
+
     private static readonly BoardColumn[] _columns =
     [
         new("New",         "New",             Icons.Material.Filled.FiberNew,     Color.Info,    "Items that haven't been started"),
@@ -246,10 +276,26 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _dealershipId = await ResolveDealershipIdAsync();
+        try
+        {
+            _dealershipId = await ResolveDealershipIdAsync();
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            // A packet-email link opened in a fresh tab on a device that doesn't keep the sign-in
+            // (issue #753): send the user to sign in, then back here with ?sr= intact.
+            ex.Redirect();
+            return;
+        }
 
         AppState.OnLocationChanged += HandleLocationChangedAsync;
         ThemeService.OnThemeChanged += HandleThemeChanged;
+
+        // Arrived from a packet-email request link (/sr/{id} → /board?sr={id}, issue #498).
+        if (!string.IsNullOrWhiteSpace(OpenServiceRequestId))
+        {
+            OpenDetailDialog(OpenServiceRequestId);
+        }
 
         // If a location was already persisted, load data immediately
         if (AppState.SelectedLocation is not null)
@@ -265,35 +311,19 @@
         _ = InvokeAsync(StateHasChanged);
     }
 
-    private string CardBorderColor => ThemeService.Mode switch
-    {
-        ThemeMode.Dark => "rgba(255, 255, 255, 0.18)",
-        ThemeMode.HighContrast => "#FFFF00",
-        _ => "var(--mud-palette-lines-default)"
-    };
+    private string CardBorderColor => ModeColors.Line(ThemeService.Mode);
 
-    private string CardTextColor => ThemeService.Mode switch
-    {
-        ThemeMode.Dark => "#FFFFFF",
-        ThemeMode.HighContrast => "#FFFF00",
-        _ => "var(--mud-palette-text-primary)"
-    };
+    private string CardTextColor => ModeColors.Text(ThemeService.Mode);
 
-    private string ColumnBackground => ThemeService.Mode switch
-    {
-        ThemeMode.Dark => "#010409",
-        _ => "var(--mud-palette-background-gray)"
-    };
+    // Recessed Denim in dark mode (ManagerTheme), a step below the cards.
+    private const string ColumnBackground = "var(--mud-palette-background-gray)";
 
-    private string CardBackground => "var(--mud-palette-background)";
+    private const string CardBackground = "var(--mud-palette-background)";
 
-    private string ChipFontColor => ThemeService.Mode == ThemeMode.HighContrast
-        ? "#FFFF00"
-        : "#9198A1";
+    // Was #9198A1 in light mode: 2.9:1 on the card, under AA for text (issue #728).
+    private string ChipFontColor => ModeColors.SecondaryText(ThemeService.Mode);
 
-    private string AddButtonColor => ThemeService.Mode == ThemeMode.Dark
-        ? "#FFFFFF"
-        : "var(--mud-palette-primary)";
+    private string AddButtonColor => ModeColors.Action(ThemeService.Mode);
 
     protected override void OnAfterRender(bool firstRender)
     {
@@ -423,7 +453,6 @@
                 HasExtendedWarranty = detail.HasExtendedWarranty,
                 ApproxPurchaseDate = detail.ApproxPurchaseDate,
                 AssignedTechnicianId = detail.AssignedTechnicianId,
-                AssignedBayId = detail.AssignedBayId,
                 ScheduledDateUtc = detail.ScheduledDateUtc,
                 RequiredSkills = detail.RequiredSkills,
                 BoardSequence = item.Sequence,
@@ -447,7 +476,6 @@
                     HasExtendedWarranty = siblingDetail.HasExtendedWarranty,
                     ApproxPurchaseDate = siblingDetail.ApproxPurchaseDate,
                     AssignedTechnicianId = siblingDetail.AssignedTechnicianId,
-                    AssignedBayId = siblingDetail.AssignedBayId,
                     ScheduledDateUtc = siblingDetail.ScheduledDateUtc,
                     RequiredSkills = siblingDetail.RequiredSkills,
                     BoardSequence = sibling.Sequence,
@@ -484,22 +512,28 @@
         _needsContainerRefresh = true;
     }
 
+    private void OnActionableOnlyChanged(bool value)
+    {
+        _actionableOnly = value;
+        ApplyFilter();
+        _needsContainerRefresh = true;
+    }
+
     private void ApplyFilter()
     {
-        if (string.IsNullOrWhiteSpace(_filterText))
-        {
-            _filteredBoardItems = _boardItems;
-            return;
-        }
+        var now = DateTimeOffset.Now;
+        IEnumerable<BoardItem> items = _actionableOnly
+            ? _boardItems.Where(i => string.IsNullOrWhiteSpace(i.Status)
+                || ActionableRequestFilter.IsActionable(i.Status, i.Summary.CreatedAtUtc, i.Summary.UpdatedAtUtc, now))
+            : _boardItems;
 
-        var tokens = _filterText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (tokens.Length == 0)
-        {
-            _filteredBoardItems = _boardItems;
-            return;
-        }
+        var tokens = string.IsNullOrWhiteSpace(_filterText)
+            ? []
+            : _filterText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        _filteredBoardItems = _boardItems.Where(i => tokens.All(t => MatchesToken(i, t))).ToList();
+        _filteredBoardItems = tokens.Length == 0
+            ? items.ToList()
+            : items.Where(i => tokens.All(t => MatchesToken(i, t))).ToList();
     }
 
     private static bool MatchesToken(BoardItem item, string token)
@@ -607,8 +641,8 @@
     {
         "critical" => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--mud-palette-error);",
         "high"     => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--mud-palette-warning);",
-        "medium"   => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #9e9e9e;",
-        "low"      => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: transparent; border: 2px solid #9e9e9e;",
+        "medium"   => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--mud-palette-text-secondary);",
+        "low"      => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: transparent; border: 2px solid var(--mud-palette-text-secondary);",
         _          => "flex-shrink: 0; margin-left: 4px; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: transparent;",
     };
 
@@ -669,6 +703,15 @@
         "Cancelled"         => "Cancelled",
         _                   => status,
     };
+
+    /// <summary>
+    /// The status chip on a card. A request closed without work (<c>Spec C-4</c>) shows its reason
+    /// instead of a bare "Cancelled", so it reads differently from a manual cancel.
+    /// </summary>
+    private static string GetCardStatusLabel(BoardItem item) =>
+        item.Status == "Cancelled" && item.Summary.DispositionReasonCode is { } reasonCode
+            ? $"Closed: {DispositionReasons.GetLabel(reasonCode)}"
+            : GetStatusLabel(item.Status);
 
     private static string GetZoneForStatus(string status) => status switch
     {

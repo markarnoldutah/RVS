@@ -1,0 +1,388 @@
+// ──────────────────────────────────────────────────────────────
+// Module: Monitor Alerts — packet-pipeline critical events (#494)
+// ──────────────────────────────────────────────────────────────
+// Turns the packet-pipeline LogCritical events, which today only
+// land in Application Insights, into actionable Azure Monitor
+// alerts routed to an ops action group. Covers:
+//
+//   EventId 439002  AllRecipientsBounced        (LocationService)        — page
+//   EventId 438001  PacketEmailDeliveryExhausted (PacketGenerationSvc)   — page
+//   EventId 434001  PacketGenerationExhausted    (PacketGenerationSvc)   — page
+//   EventId 521001  PacketEmailOversized         (PacketGenerationSvc)   — page
+//   EventId 439001  RecipientHardBounced         (LocationService)       — warn
+//
+// Each event is emitted with structured log properties (LocationId /
+// ServiceRequestId + TenantId). The Application Insights ILogger
+// provider projects those into `customDimensions`, and the alert
+// queries surface them as split dimensions so the alert payload
+// carries the tenant and the offending location / request.
+//
+// The 434001 path logs with an exception argument, so its record
+// lands in `exceptions` rather than `traces`; every rule therefore
+// queries `union traces, exceptions` and is robust to a LogCritical
+// gaining an exception argument later.
+//
+// Two further rules watch the monitoring itself rather than the app
+// (#602), and exist only while the /health availability test does:
+// one fires when the test stops passing, the other when the test
+// passes but Application Insights records none of the requests it
+// made — the app is serving, and its telemetry has gone dark.
+// ──────────────────────────────────────────────────────────────
+targetScope = 'resourceGroup'
+
+// ── Parameters ────────────────────────────────────────────────
+
+@description('Azure region for the scheduled-query-rule resources. Must match the region of the Application Insights scope.')
+param location string
+
+@description('Resource ID of the workspace-based Application Insights component the packet pipeline logs to.')
+param appInsightsResourceId string
+
+@description('Resource ID of the Log Analytics workspace backing that component. Scope of the daily-cap-reached alert.')
+param logAnalyticsWorkspaceResourceId string
+
+@description('Target environment (staging or prod). Drives the action-group short name and the alert display names.')
+@allowed([
+  'staging'
+  'prod'
+])
+param environmentName string
+
+@description('Tags applied to every resource this module creates.')
+param tags object = {}
+
+@description('Email receivers for the ops action group. Each item: { name: string, email: string }. Empty = an action group with no receivers. Never rely on adding one via the portal instead: this property is a full-replace PUT, so the next deploy silently deletes any receiver not in this parameter (#639).')
+param opsEmailReceivers array = []
+
+@description('Resource ID of the /health availability test (app-insights.bicep output). Empty = no test deployed, and neither availability-driven rule is created.')
+param availabilityTestId string = ''
+
+@description('Number of locations the availability test runs from. Sets how many must fail before the availability alert fires.')
+@minValue(1)
+param availabilityTestLocationCount int = 1
+
+@description('Seconds between availability test runs. Sets the availability alert window, which must span at least one run.')
+@allowed([
+  300
+  900
+])
+param availabilityTestFrequencySeconds int = 900
+
+// ── Variables ─────────────────────────────────────────────────
+
+// Page-worthy: something is silently not being delivered and nobody is told.
+// evaluationFrequency == windowSize == 5 minutes is the practical near-real-time
+// floor for log-search alerts and avoids partial-bucket flapping.
+var criticalEvents = [
+  {
+    slug: 'recipients-bounced'
+    eventId: '439002'
+    idColumn: 'LocationId'
+    description: 'EventId 439002 AllRecipientsBounced — a hard bounce removed a location\'s last active packet recipient. No packets can be delivered for that location until an address is fixed in its packet settings. Runbook: RVS Infra/Bicep.IaC/README.md "Monitoring & alerts".'
+  }
+  {
+    slug: 'email-delivery-exhausted'
+    eventId: '438001'
+    idColumn: 'ServiceRequestId'
+    description: 'EventId 438001 PacketEmailDeliveryExhausted — packet email delivery exhausted its 3 retries for a service request. The shop has a request with no packet in its inbox.'
+  }
+  {
+    slug: 'generation-exhausted'
+    eventId: '434001'
+    idColumn: 'ServiceRequestId'
+    description: 'EventId 434001 PacketGenerationExhausted — packet generation exhausted its 3 attempts for a service request. No packet was produced.'
+  }
+  {
+    slug: 'email-oversized'
+    eventId: '521001'
+    idColumn: 'ServiceRequestId'
+    description: 'EventId 521001 PacketEmailOversized — the packet email went out without its PDF because the PDF no longer fits the ACS size budget. Since #566 validates the budget at startup, this means the PDF grew unexpectedly: a renderer regression, an oversized embedded asset (e.g. a per-location logo), or a pathological HTML body. Treat any occurrence as a bug to chase.'
+  }
+]
+
+var actionGroupShortName = environmentName == 'prod' ? 'rvs-ops-prod' : 'rvs-ops-stg'
+
+var deployAvailabilityRules = !empty(availabilityTestId)
+
+// One location fails for reasons of its own now and then, so with several
+// locations wait for all but one to agree. With a single location, it decides.
+var availabilityFailedLocationThreshold = max(1, availabilityTestLocationCount - 1)
+
+// ── Resources ─────────────────────────────────────────────────
+
+resource opsActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
+  name: 'ag-rvs-ops-${environmentName}-wus3'
+  location: 'global'
+  tags: tags
+  properties: {
+    groupShortName: actionGroupShortName
+    enabled: true
+    emailReceivers: [
+      for r in opsEmailReceivers: {
+        name: r.name
+        emailAddress: r.email
+        useCommonAlertSchema: true
+      }
+    ]
+  }
+}
+
+resource criticalRules 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = [
+  for e in criticalEvents: {
+    name: 'sqr-rvs-packet-${e.slug}-${environmentName}-wus3'
+    location: location
+    tags: tags
+    kind: 'LogAlert'
+    properties: {
+      displayName: '[RVS ${environmentName}] Packet pipeline critical — ${e.slug} (EventId ${e.eventId})'
+      description: e.description
+      severity: 1
+      enabled: true
+      scopes: [
+        appInsightsResourceId
+      ]
+      evaluationFrequency: 'PT5M'
+      windowSize: 'PT5M'
+      autoMitigate: true
+      criteria: {
+        allOf: [
+          {
+            query: 'union traces, exceptions | where tostring(customDimensions.EventId) == "${e.eventId}" | extend ${e.idColumn} = tostring(customDimensions.${e.idColumn}), TenantId = tostring(customDimensions.TenantId) | project ${e.idColumn}, TenantId'
+            timeAggregation: 'Count'
+            operator: 'GreaterThan'
+            threshold: 0
+            dimensions: [
+              {
+                name: e.idColumn
+                operator: 'Include'
+                values: [
+                  '*'
+                ]
+              }
+              {
+                name: 'TenantId'
+                operator: 'Include'
+                values: [
+                  '*'
+                ]
+              }
+            ]
+            failingPeriods: {
+              numberOfEvaluationPeriods: 1
+              minFailingPeriodsToAlert: 1
+            }
+          }
+        ]
+      }
+      actions: {
+        actionGroups: [
+          opsActionGroup.id
+        ]
+      }
+    }
+  }
+]
+
+// EventId 439001 — one recipient disabled, others still receive packets. Lower
+// tier by design: not a delivery failure, just a "fix the address before it
+// becomes the last one (439002)" signal. Severity 3, a 6-hour window evaluated
+// hourly so it reads as a digest rather than a page, routed to the same ops
+// action group.
+resource recipientBounceWarning 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
+  name: 'sqr-rvs-packet-recipient-bounced-warn-${environmentName}-wus3'
+  location: location
+  tags: tags
+  kind: 'LogAlert'
+  properties: {
+    displayName: '[RVS ${environmentName}] Packet recipient hard-bounced (EventId 439001)'
+    description: 'EventId 439001 RecipientHardBounced — a hard bounce disabled one packet recipient for a location; other recipients still receive packets. Warning tier: digest to ops, not a page. Fix or replace the address in the location\'s packet settings before it becomes the last active recipient (439002).'
+    severity: 3
+    enabled: true
+    scopes: [
+      appInsightsResourceId
+    ]
+    evaluationFrequency: 'PT1H'
+    windowSize: 'PT6H'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: 'union traces, exceptions | where tostring(customDimensions.EventId) == "439001" | extend LocationId = tostring(customDimensions.LocationId), TenantId = tostring(customDimensions.TenantId) | project LocationId, TenantId'
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          dimensions: [
+            {
+              name: 'LocationId'
+              operator: 'Include'
+              values: [
+                '*'
+              ]
+            }
+            {
+              name: 'TenantId'
+              operator: 'Include'
+              values: [
+                '*'
+              ]
+            }
+          ]
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        opsActionGroup.id
+      ]
+    }
+  }
+}
+
+// Daily ingestion cap reached (logAnalyticsDailyCapGb). Once the cap is hit the
+// workspace stops ingesting until its daily reset, so every rule above goes
+// silent with it — this is the one signal that says they are blind. The
+// OverQuota operation event is not itself subject to the cap. Evaluated every
+// 15 minutes over a 1-hour window: the event is written once, the cheaper
+// frequency is enough for a warning, and the wider window absorbs ingestion lag.
+resource dailyCapReached 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
+  name: 'sqr-rvs-law-daily-cap-reached-${environmentName}-wus3'
+  location: location
+  tags: tags
+  kind: 'LogAlert'
+  properties: {
+    displayName: '[RVS ${environmentName}] Log Analytics daily cap reached — telemetry and alerts paused'
+    description: 'The Log Analytics workspace hit its daily ingestion cap (logAnalyticsDailyCapGb). Ingestion, and with it every packet-pipeline alert, is paused until the workspace\'s daily reset hour. Raise the cap in parameters/<env>.bicepparam, or find what spiked ingestion.'
+    severity: 2
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspaceResourceId
+    ]
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT1H'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: '_LogOperation | where Category =~ "Ingestion" | where Detail contains "OverQuota"'
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        opsActionGroup.id
+      ]
+    }
+  }
+}
+
+// /health availability test failing. Metric alert on the test's own
+// per-location results, which the availability service writes whatever the
+// app's SDK is doing. The window spans at least one run at either frequency.
+resource availabilityFailing 'Microsoft.Insights/metricAlerts@2026-01-01' = if (deployAvailabilityRules) {
+  name: 'ma-rvs-api-availability-${environmentName}-wus3'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'The /health availability test is failing from ${availabilityFailedLocationThreshold} or more of its ${availabilityTestLocationCount} location(s). The API is down or unreachable from outside Azure.'
+    severity: 1
+    enabled: true
+    scopes: [
+      availabilityTestId
+      appInsightsResourceId
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: availabilityTestFrequencySeconds == 900 ? 'PT15M' : 'PT5M'
+    autoMitigate: true
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
+      webTestId: availabilityTestId
+      componentId: appInsightsResourceId
+      failedLocationCount: availabilityFailedLocationThreshold
+    }
+    actions: [
+      {
+        actionGroupId: opsActionGroup.id
+      }
+    ]
+  }
+}
+
+// Telemetry gone dark (#602). The availability service writes its results to
+// availabilityResults independently of the app; the app's SDK writes the
+// request each successful ping made to requests. Pings passing while requests
+// stays empty means the app is serving and its telemetry is not arriving, so
+// every log alert above is blind. A whole-workspace stop (the daily cap)
+// empties both tables at once and does not fire this rule; dailyCapReached
+// covers that case. Two passing pings, not one, so a ping whose request is
+// still in the ingestion pipeline at the window edge cannot fire it alone.
+resource telemetryDark 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = if (deployAvailabilityRules) {
+  name: 'sqr-rvs-api-telemetry-dark-${environmentName}-wus3'
+  location: location
+  tags: tags
+  kind: 'LogAlert'
+  properties: {
+    displayName: '[RVS ${environmentName}] API telemetry gone dark — pings pass, App Insights records no requests'
+    description: 'The /health availability test passed at least twice in the last hour, yet Application Insights recorded no requests at all, so the app is serving but its telemetry is not arriving and every packet-pipeline alert is blind. Runbook: RVS Infra/Bicep.IaC/README.md "Telemetry gone dark".'
+    severity: 2
+    enabled: true
+    scopes: [
+      appInsightsResourceId
+    ]
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT1H'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: 'let pings = toscalar(availabilityResults | where tostring(success) in ("1", "True", "true") | count); let served = toscalar(requests | count); print Pings = pings, Served = served | where Pings >= 2 and Served == 0'
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        opsActionGroup.id
+      ]
+    }
+  }
+}
+
+// ── Outputs ───────────────────────────────────────────────────
+
+@description('Resource ID of the ops action group.')
+output actionGroupId string = opsActionGroup.id
+
+@description('Name of the ops action group.')
+output actionGroupName string = opsActionGroup.name
+
+@description('Names of the critical (page) scheduled-query alert rules.')
+output criticalRuleNames array = [for (e, i) in criticalEvents: criticalRules[i].name]
+
+@description('Name of the warning-tier (digest) scheduled-query alert rule.')
+output warningRuleName string = recipientBounceWarning.name
+
+@description('Name of the Log Analytics daily-cap-reached alert rule.')
+output dailyCapRuleName string = dailyCapReached.name
+
+@description('Names of the availability-driven alert rules (test failing, telemetry gone dark). Empty when no availability test is deployed.')
+output availabilityRuleNames array = deployAvailabilityRules ? [
+  availabilityFailing.name
+  telemetryDark.name
+] : []

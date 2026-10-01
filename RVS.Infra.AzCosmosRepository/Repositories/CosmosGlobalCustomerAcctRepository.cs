@@ -1,6 +1,8 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
+using System.Net;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Interfaces;
 
 namespace RVS.Infra.AzCosmosRepository.Repositories;
@@ -100,13 +102,21 @@ public sealed class CosmosGlobalCustomerAcctRepository : CosmosRepositoryBase, I
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentException.ThrowIfNullOrWhiteSpace(entity.Email, nameof(entity.Email));
 
-        var response = await _container.CreateItemAsync(
-            entity,
-            new PartitionKey(entity.Email),
-            cancellationToken: cancellationToken);
+        try
+        {
+            var response = await _container.CreateItemAsync(
+                entity,
+                new PartitionKey(entity.Email),
+                cancellationToken: cancellationToken);
 
-        _logger.LogDebug("CreateAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
-        return response.Resource;
+            _logger.LogDebug("CreateAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            // No unique key on this container; the id (GlobalCustomerAcct.IdForEmail) is what collides.
+            throw new ConflictException($"Global customer account '{entity.Id}' already exists.", ex);
+        }
     }
 
     /// <inheritdoc />

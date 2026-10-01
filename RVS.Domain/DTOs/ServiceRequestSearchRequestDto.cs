@@ -10,12 +10,10 @@ public sealed record ServiceRequestSearchRequestDto
     public string? IssueCategory { get; init; }
     public string? LocationId { get; init; }
     public string? AssignedTechnicianId { get; init; }
-    public string? AssignedBayId { get; init; }
     public string? AssetId { get; init; }
     public DateTime? DateFrom { get; init; }
     public DateTime? DateTo { get; init; }
     public string? Priority { get; init; }
-    public bool? HasOutcome { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 25;
 }

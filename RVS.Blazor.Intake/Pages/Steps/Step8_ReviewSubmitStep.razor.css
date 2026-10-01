@@ -1,1 +1,52 @@
 /* Border styles centralized in app.css */
+
+.attachment-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.attachment-thumb {
+    width: 72px;
+    height: 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 4px;
+    background: var(--mud-palette-surface);
+    overflow: hidden;
+}
+
+.attachment-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.attachment-thumb-name {
+    max-width: 100%;
+    padding: 0 4px;
+    box-sizing: border-box;
+    font-size: 0.625rem;
+    line-height: 1.2;
+    color: var(--mud-palette-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Issues #810, #823: one card each for contact, vehicle and every issue, so each section
+   reads as one unit. Theme tokens only, so the dealer accent and high contrast follow. */
+.review-card {
+    padding: 16px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    background: var(--mud-palette-surface);
+    box-shadow: var(--mud-elevation-2);
+}

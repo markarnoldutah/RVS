@@ -66,6 +66,23 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<ServiceRequest>> GetBySubmissionIdAsync(string tenantId, string submissionId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(submissionId);
+
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.submissionId = @submissionId AND c.type = 'serviceRequest'")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@submissionId", submissionId);
+
+        // Ordered here rather than with ORDER BY, which would need a composite index for a
+        // result set of at most ten documents.
+        var results = await ExecuteQueryAsync(query, tenantId, nameof(GetBySubmissionIdAsync), cancellationToken);
+        return [.. results.OrderBy(sr => sr.SubmissionPosition)];
+    }
+
+    /// <inheritdoc />
     public async Task<PagedResult<ServiceRequest>> SearchAsync(
         string tenantId,
         ServiceRequestSearchRequestDto request,
@@ -88,8 +105,6 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
             conditions.Add("c.locationId = @locationId");
         if (!string.IsNullOrWhiteSpace(request.AssignedTechnicianId))
             conditions.Add("c.assignedTechnicianId = @assignedTechnicianId");
-        if (!string.IsNullOrWhiteSpace(request.AssignedBayId))
-            conditions.Add("c.assignedBayId = @assignedBayId");
         if (!string.IsNullOrWhiteSpace(request.AssetId))
             conditions.Add("c.assetInfo.assetId = @assetId");
         if (request.DateFrom.HasValue)
@@ -98,14 +113,6 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
             conditions.Add("c.createdAtUtc <= @dateTo");
         if (!string.IsNullOrWhiteSpace(request.Priority))
             conditions.Add("c.priority = @priority");
-        // HasOutcome filter: checks whether serviceEvent has meaningful outcome fields (failureMode or repairAction)
-        if (request.HasOutcome.HasValue)
-        {
-            if (request.HasOutcome.Value)
-                conditions.Add("(c.serviceEvent != null AND (c.serviceEvent.failureMode != null OR c.serviceEvent.repairAction != null))");
-            else
-                conditions.Add("(NOT IS_DEFINED(c.serviceEvent) OR c.serviceEvent = null OR (c.serviceEvent.failureMode = null AND c.serviceEvent.repairAction = null))");
-        }
         if (!string.IsNullOrWhiteSpace(request.Keyword))
             conditions.Add("(CONTAINS(LOWER(c.customerSnapshot.firstName), LOWER(@keyword)) OR CONTAINS(LOWER(c.customerSnapshot.lastName), LOWER(@keyword)) OR CONTAINS(LOWER(c.issueDescription), LOWER(@keyword)) OR CONTAINS(LOWER(c.assetInfo.assetId), LOWER(@keyword)))");
 
@@ -122,8 +129,6 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
             definition = definition.WithParameter("@locationId", request.LocationId);
         if (!string.IsNullOrWhiteSpace(request.AssignedTechnicianId))
             definition = definition.WithParameter("@assignedTechnicianId", request.AssignedTechnicianId);
-        if (!string.IsNullOrWhiteSpace(request.AssignedBayId))
-            definition = definition.WithParameter("@assignedBayId", request.AssignedBayId);
         if (!string.IsNullOrWhiteSpace(request.AssetId))
             definition = definition.WithParameter("@assetId", request.AssetId);
         if (request.DateFrom.HasValue)

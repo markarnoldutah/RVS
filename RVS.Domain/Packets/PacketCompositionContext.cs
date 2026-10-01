@@ -1,0 +1,70 @@
+namespace RVS.Domain.Packets;
+
+/// <summary>
+/// The packet content that does not live on a <see cref="Entities.ServiceRequest"/> and
+/// must be resolved by the caller before composition: the request's location, the
+/// submission timestamp, the minted status link, the generated DMS paste block, and the
+/// per-request read URLs for photo attachments.
+///
+/// Supplying these as data keeps <see cref="PacketComposer.Compose"/> a pure transform —
+/// it performs no repository lookups, no SAS generation, and no rendering. The packet
+/// generation orchestrator populates this record.
+/// </summary>
+public sealed record PacketCompositionContext
+{
+    /// <summary>Display name of the location the request was submitted to.</summary>
+    public string? LocationName { get; init; }
+
+    /// <summary>Public phone number for that location.</summary>
+    public string? LocationPhone { get; init; }
+
+    /// <summary>
+    /// The location's IANA time-zone id (issue #506), e.g. <c>America/Denver</c>. The packet's
+    /// <c>Received</c> line is rendered in this zone; <c>null</c>, blank, or an id this host
+    /// cannot resolve falls back to the UTC form.
+    /// </summary>
+    public string? LocationTimeZoneId { get; init; }
+
+    /// <summary>When the request was submitted.</summary>
+    public required DateTimeOffset SubmittedAtUtc { get; init; }
+
+    /// <summary>Fully-formed customer status URL, or <c>null</c> if none has been minted yet.</summary>
+    public string? StatusLinkUrl { get; init; }
+
+    /// <summary>
+    /// Manager-app deep links for this request (<c>Spec C-7</c>, issue #498), built with
+    /// <see cref="ManagerDeepLinks.Build"/>, or <c>null</c> when none are configured.
+    /// </summary>
+    public PacketManagerLinks? ManagerLinks { get; init; }
+
+    /// <summary>Pre-generated DMS paste block text, or <c>null</c> if not generated yet.</summary>
+    public string? PasteBlock { get; init; }
+
+    /// <summary>
+    /// Per-location brand name override for the masthead/footer (issue <c>#470</c>).
+    /// <c>null</c> or blank falls back to <see cref="PacketBranding.Default"/>.
+    /// </summary>
+    public string? BrandName { get; init; }
+
+    /// <summary>
+    /// The location's dealer logo as an absolute https URL (<c>Spec A-16</c>, issue <c>#470</c>),
+    /// or <c>null</c> for none. Set only once the orchestrator has fetched it as a real image, so
+    /// the HTML never points a mail client at a logo the PDF could not show. Anything but https
+    /// is dropped. See <see cref="PacketBranding.LogoUrl"/>.
+    /// </summary>
+    public string? LogoUrl { get; init; }
+
+    /// <summary>
+    /// Absolute URL of the RV Intake mark for the footer's "Powered by" line (issue <c>#470</c>),
+    /// or <c>null</c> to name the product in text. See <see cref="PacketBranding.PoweredByLogoUrlFor"/>.
+    /// </summary>
+    public string? PoweredByLogoUrl { get; init; }
+
+    /// <summary>
+    /// Time-limited read URLs for photo attachments, keyed by
+    /// <see cref="Entities.ServiceRequestAttachmentEmbedded.AttachmentId"/>. An image
+    /// attachment with no entry here is omitted from the packet rather than rendered broken.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> PhotoUrls { get; init; } =
+        new Dictionary<string, string>();
+}

@@ -37,6 +37,31 @@ param auth0TokenUrl string
 @description('Auth0 authorization endpoint URL (e.g. https://rvs-dev.us.auth0.com/authorize).')
 param auth0AuthorizationUrl string
 
+// Platform-admin provisioning tool (issue #563). Optional: the provisioner secrets are written
+// only when all three are given, and the allowlist secret only when a user id is given. These
+// are deliberately not Auth0Mgmt--*: that name belongs to the rvs-config-automation app used by
+// the Infra/Auth0 scripts, and the API loads every secret in its vault.
+
+@secure()
+@description('Auth0 tenant domain for the "RVS API Provisioner" M2M app (e.g. rvs-dev.us.auth0.com). Optional.')
+param auth0ProvisionerDomain string = ''
+
+@secure()
+@description('Client ID of the "RVS API Provisioner" M2M app. Optional.')
+param auth0ProvisionerClientId string = ''
+
+@secure()
+@description('Client secret of the "RVS API Provisioner" M2M app. Optional.')
+param auth0ProvisionerClientSecret string = ''
+
+@secure()
+@description('Auth0 user id (sub, e.g. auth0|abc123) allowed to use the platform-admin tool. Optional.')
+param adminAllowedUserId string = ''
+
+// ── Variables ─────────────────────────────────────────────────
+
+var deployProvisionerSecrets = !empty(auth0ProvisionerDomain) && !empty(auth0ProvisionerClientId) && !empty(auth0ProvisionerClientSecret)
+
 // ── Existing Resource References ──────────────────────────────
 
 resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
@@ -97,6 +122,44 @@ resource auth0AuthorizationUrlSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-
   name: 'Auth0--AuthorizationUrl'
   properties: {
     value: auth0AuthorizationUrl
+    contentType: 'text/plain'
+  }
+}
+
+// ── Key Vault Secrets (provisioning tool, issue #563) ─────────
+
+resource auth0ProvisionerDomainSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (deployProvisionerSecrets) {
+  parent: keyVault
+  name: 'Auth0Provisioner--Domain'
+  properties: {
+    value: auth0ProvisionerDomain
+    contentType: 'text/plain'
+  }
+}
+
+resource auth0ProvisionerClientIdSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (deployProvisionerSecrets) {
+  parent: keyVault
+  name: 'Auth0Provisioner--ClientId'
+  properties: {
+    value: auth0ProvisionerClientId
+    contentType: 'text/plain'
+  }
+}
+
+resource auth0ProvisionerClientSecretKv 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (deployProvisionerSecrets) {
+  parent: keyVault
+  name: 'Auth0Provisioner--ClientSecret'
+  properties: {
+    value: auth0ProvisionerClientSecret
+    contentType: 'text/plain'
+  }
+}
+
+resource adminAllowedUserIdSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (!empty(adminAllowedUserId)) {
+  parent: keyVault
+  name: 'Admin--AllowedUserIds--0'
+  properties: {
+    value: adminAllowedUserId
     contentType: 'text/plain'
   }
 }

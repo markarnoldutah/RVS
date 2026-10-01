@@ -40,6 +40,21 @@ public class ServiceRequestsControllerTests
     }
 
     [Fact]
+    public async Task GetSubmission_ShouldReturnOkWithSummaryDtoPerMember()
+    {
+        var first = BuildServiceRequest();
+        var second = BuildServiceRequest();
+        _serviceMock.Setup(s => s.GetSubmissionMembersAsync(TenantId, second.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([first, second]);
+
+        var result = await _sut.GetSubmission("dlr_1", second.Id, CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dtos = okResult.Value.Should().BeAssignableTo<IReadOnlyList<ServiceRequestSummaryResponseDto>>().Subject;
+        dtos.Select(d => d.Id).Should().Equal(first.Id, second.Id);
+    }
+
+    [Fact]
     public async Task Search_ShouldReturnOkWithPagedResult()
     {
         var pagedResult = new PagedResult<ServiceRequest>
@@ -82,21 +97,6 @@ public class ServiceRequestsControllerTests
     }
 
     [Fact]
-    public async Task BatchOutcome_ShouldReturnOkWithResponse()
-    {
-        var request = new BatchOutcomeRequestDto { ServiceRequestIds = ["sr_1"], FailureMode = "Electrical" };
-        var response = new BatchOutcomeResponseDto { Succeeded = ["sr_1"] };
-        _serviceMock.Setup(s => s.BatchOutcomeAsync(TenantId, request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(response);
-
-        var result = await _sut.BatchOutcome("dlr_1", request, CancellationToken.None);
-
-        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var dto = okResult.Value.Should().BeOfType<BatchOutcomeResponseDto>().Subject;
-        dto.Succeeded.Should().Contain("sr_1");
-    }
-
-    [Fact]
     public async Task Delete_ShouldReturnNoContent()
     {
         _serviceMock.Setup(s => s.DeleteAsync(TenantId, "sr_1", It.IsAny<CancellationToken>()))
@@ -105,6 +105,129 @@ public class ServiceRequestsControllerTests
         var result = await _sut.Delete("dlr_1", "sr_1", CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task RegeneratePacket_ShouldReturnAcceptedAndDelegateWithTenantFromClaims()
+    {
+        _serviceMock.Setup(s => s.RegeneratePacketAsync(TenantId, "sr_1", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await _sut.RegeneratePacket("dlr_1", "sr_1", CancellationToken.None);
+
+        result.Should().BeOfType<AcceptedResult>();
+        _serviceMock.Verify(s => s.RegeneratePacketAsync(TenantId, "sr_1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetPacketPdfLink_ShouldReturnOkWithLinkAndDelegateWithTenantFromClaims()
+    {
+        var link = new PacketPdfLinkDto
+        {
+            SasUrl = "https://blob/packet.pdf?sig=x",
+            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(15),
+            PacketVersion = 2
+        };
+        _serviceMock.Setup(s => s.GetPacketPdfLinkAsync(TenantId, "sr_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(link);
+
+        var result = await _sut.GetPacketPdfLink("dlr_1", "sr_1", CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().Be(link);
+    }
+
+    [Fact]
+    public async Task SetStatusNote_WithValidNote_ShouldReturnOkAndDelegateWithTenantFromClaims()
+    {
+        var sr = BuildServiceRequest();
+        sr.SetCustomerStatusNote("Waiting on a back-ordered slide motor, ETA Friday.", "usr_mgr");
+        _serviceMock.Setup(s => s.SetCustomerStatusNoteAsync(
+                TenantId, sr.Id, "Waiting on a back-ordered slide motor, ETA Friday.", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var request = new ServiceRequestStatusNoteRequestDto { Note = "Waiting on a back-ordered slide motor, ETA Friday." };
+        var result = await _sut.SetStatusNote("dlr_1", sr.Id, request, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = ok.Value.Should().BeOfType<ServiceRequestDetailResponseDto>().Subject;
+        dto.CustomerStatusNote.Should().NotBeNull();
+        dto.CustomerStatusNote!.Text.Should().Be("Waiting on a back-ordered slide motor, ETA Friday.");
+        _serviceMock.Verify(s => s.SetCustomerStatusNoteAsync(
+            TenantId, sr.Id, "Waiting on a back-ordered slide motor, ETA Friday.", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetStatusNote_WithNullNote_ShouldReturnOkAndClear()
+    {
+        var sr = BuildServiceRequest();
+        _serviceMock.Setup(s => s.SetCustomerStatusNoteAsync(TenantId, sr.Id, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var result = await _sut.SetStatusNote("dlr_1", sr.Id, new ServiceRequestStatusNoteRequestDto { Note = null }, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeOfType<ServiceRequestDetailResponseDto>()
+            .Which.CustomerStatusNote.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetStatusNote_WhenNoteTooLong_ShouldReturn422AndNotCallService()
+    {
+        var request = new ServiceRequestStatusNoteRequestDto { Note = new string('a', 281) };
+
+        var result = await _sut.SetStatusNote("dlr_1", "sr_1", request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+        _serviceMock.Verify(s => s.SetCustomerStatusNoteAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SetStatusNote_WhenNoteHasBlockedCharacter_ShouldReturn422()
+    {
+        var request = new ServiceRequestStatusNoteRequestDto { Note = "waiting on <part>" };
+
+        var result = await _sut.SetStatusNote("dlr_1", "sr_1", request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+    }
+
+    // ── SetDisposition (Spec C-4) ────────────────────────────────────────────
+
+    [Fact]
+    public async Task SetDisposition_WithKnownReason_ShouldReturnOkAndDelegateWithTenantFromClaims()
+    {
+        var sr = BuildServiceRequest();
+        sr.CloseWithDisposition("Duplicate", "usr_mgr");
+        _serviceMock.Setup(s => s.CloseWithDispositionAsync(TenantId, sr.Id, "Duplicate", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+
+        var request = new ServiceRequestDispositionRequestDto { ReasonCode = "Duplicate" };
+        var result = await _sut.SetDisposition("dlr_1", sr.Id, request, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = ok.Value.Should().BeOfType<ServiceRequestDetailResponseDto>().Subject;
+        dto.Status.Should().Be("Cancelled");
+        dto.Disposition.Should().NotBeNull();
+        dto.Disposition!.ReasonCode.Should().Be("Duplicate");
+        _serviceMock.Verify(s => s.CloseWithDispositionAsync(TenantId, sr.Id, "Duplicate", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Other")]
+    [InlineData("spam")]
+    public async Task SetDisposition_WhenReasonUnknownOrBlank_ShouldReturn422AndNotCallService(string? reasonCode)
+    {
+        var request = new ServiceRequestDispositionRequestDto { ReasonCode = reasonCode! };
+
+        var result = await _sut.SetDisposition("dlr_1", "sr_1", request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+        _serviceMock.Verify(s => s.CloseWithDispositionAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static ServiceRequest BuildServiceRequest() => new()

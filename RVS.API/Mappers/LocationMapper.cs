@@ -1,5 +1,7 @@
+using RVS.Domain.Branding;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Mappers;
 
@@ -22,9 +24,13 @@ public static class LocationMapper
             Name = entity.Name,
             Slug = entity.Slug,
             Phone = entity.Phone,
+            TimeZoneId = entity.TimeZoneId,
             Address = entity.Address.ToDto(),
             IntakeConfig = entity.IntakeConfig.ToDto(),
             EnabledCapabilities = [.. entity.EnabledCapabilities],
+            PacketConfig = entity.PacketConfig.ToDto(),
+            Branding = entity.Branding.ToDto(),
+            DealerQuestions = [.. entity.DealerQuestions],
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
@@ -79,9 +85,13 @@ public static class LocationMapper
             // a unique slug from {dealership-slug}-{location-name} when so.
             Slug = string.IsNullOrWhiteSpace(dto.Slug) ? string.Empty : dto.Slug.Trim().ToLowerInvariant(),
             Phone = dto.Phone?.Trim(),
+            TimeZoneId = string.IsNullOrWhiteSpace(dto.TimeZoneId) ? null : dto.TimeZoneId.Trim(),
             Address = dto.Address is not null ? dto.Address.ToEmbedded() : new AddressEmbedded(),
             IntakeConfig = dto.IntakeConfig is not null ? dto.IntakeConfig.ToEmbedded() : new IntakeFormConfigEmbedded(),
-            EnabledCapabilities = dto.EnabledCapabilities is not null ? [.. dto.EnabledCapabilities] : []
+            EnabledCapabilities = dto.EnabledCapabilities is not null ? [.. dto.EnabledCapabilities] : [],
+            PacketConfig = dto.PacketConfig is not null ? dto.PacketConfig.ToEmbedded() : new PacketConfigEmbedded(),
+            Branding = dto.Branding is not null ? dto.Branding.ToEmbedded() : new LocationBrandingEmbedded(),
+            DealerQuestions = DealerQuestionsValidator.Normalize(dto.DealerQuestions)
         };
     }
 
@@ -111,6 +121,13 @@ public static class LocationMapper
             entity.Phone = dto.Phone.Trim();
         }
 
+        // null leaves the zone alone; an explicit blank clears it, returning the packet's
+        // Received line to UTC (issue #506).
+        if (dto.TimeZoneId is not null)
+        {
+            entity.TimeZoneId = string.IsNullOrWhiteSpace(dto.TimeZoneId) ? null : dto.TimeZoneId.Trim();
+        }
+
         if (dto.Address is not null)
         {
             entity.Address = dto.Address.ToEmbedded();
@@ -124,6 +141,21 @@ public static class LocationMapper
         if (dto.EnabledCapabilities is not null)
         {
             entity.EnabledCapabilities = [.. dto.EnabledCapabilities];
+        }
+
+        if (dto.PacketConfig is not null)
+        {
+            entity.PacketConfig = dto.PacketConfig.ToEmbedded();
+        }
+
+        if (dto.Branding is not null)
+        {
+            entity.Branding = dto.Branding.ToEmbedded();
+        }
+
+        if (dto.DealerQuestions is not null)
+        {
+            entity.DealerQuestions = DealerQuestionsValidator.Normalize(dto.DealerQuestions);
         }
 
         entity.MarkAsUpdated(updatedByUserId);
@@ -161,6 +193,99 @@ public static class LocationMapper
             State = dto.State?.Trim(),
             PostalCode = dto.PostalCode?.Trim()
         };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="PacketConfigEmbedded"/> entity to a <see cref="PacketConfigDto"/>.
+    /// </summary>
+    public static PacketConfigDto ToDto(this PacketConfigEmbedded config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+
+        return new PacketConfigDto
+        {
+            Enabled = config.Enabled,
+            Recipients = [.. config.Recipients],
+            DisabledRecipients = config.DisabledRecipients is { Count: > 0 }
+                ? [.. config.DisabledRecipients.Select(d => new DisabledRecipientDto
+                    {
+                        Email = d.Email,
+                        Reason = d.Reason,
+                        DisabledAtUtc = d.DisabledAtUtc,
+                    })]
+                : [],
+            AttachPdf = config.AttachPdf,
+            IncludePhotos = config.IncludePhotos,
+            PasteBlockCharacterCap = config.PasteBlockCharacterCap,
+            StatusLinkTtlDays = config.StatusLinkTtlDays,
+        };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="PacketConfigDto"/> to a <see cref="PacketConfigEmbedded"/> entity,
+    /// trimming the recipient addresses. Range and address-shape rules are
+    /// enforced by <c>PacketConfigValidator</c> in the service, not here.
+    ///
+    /// <see cref="PacketConfigDto.DisabledRecipients"/> is deliberately <b>not</b> read: the
+    /// disabled list is owned by the hard-bounce flow (<c>Spec B-4</c>, issue #439) and carried
+    /// across an update by <c>LocationService</c>, not set by an API caller.
+    /// </summary>
+    public static PacketConfigEmbedded ToEmbedded(this PacketConfigDto dto)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        return new PacketConfigEmbedded
+        {
+            Enabled = dto.Enabled,
+            Recipients = dto.Recipients is not null
+                ? [.. dto.Recipients.Select(r => r?.Trim() ?? string.Empty)]
+                : [],
+            AttachPdf = dto.AttachPdf,
+            IncludePhotos = dto.IncludePhotos,
+            PasteBlockCharacterCap = dto.PasteBlockCharacterCap,
+            StatusLinkTtlDays = dto.StatusLinkTtlDays,
+        };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="LocationBrandingEmbedded"/> entity to a <see cref="LocationBrandingDto"/>
+    /// (<c>Spec A-16</c>, issue #470).
+    /// </summary>
+    public static LocationBrandingDto ToDto(this LocationBrandingEmbedded branding)
+    {
+        ArgumentNullException.ThrowIfNull(branding);
+
+        return new LocationBrandingDto
+        {
+            LogoUrl = branding.LogoUrl,
+            HeaderColor = branding.HeaderColor,
+            AccentColor = branding.AccentColor
+        };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="LocationBrandingDto"/> to a <see cref="LocationBrandingEmbedded"/> entity:
+    /// blanks become <c>null</c>, the logo URL is trimmed, and well-formed colours are
+    /// upper-cased. A malformed or too-light colour is kept, trimmed, for
+    /// <c>LocationBrandingValidator</c> to reject in the service.
+    /// </summary>
+    public static LocationBrandingEmbedded ToEmbedded(this LocationBrandingDto dto)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        return new LocationBrandingEmbedded
+        {
+            LogoUrl = string.IsNullOrWhiteSpace(dto.LogoUrl) ? null : dto.LogoUrl.Trim(),
+            HeaderColor = NormalizeColor(dto.HeaderColor),
+            AccentColor = NormalizeColor(dto.AccentColor)
+        };
+    }
+
+    /// <summary>Blank becomes <c>null</c>; well-formed hex is upper-cased; anything else is kept, trimmed, for the validator to reject.</summary>
+    private static string? NormalizeColor(string? color)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(color) ? null : color.Trim();
+        return HeaderColor.Normalize(trimmed) ?? trimmed;
     }
 
     /// <summary>

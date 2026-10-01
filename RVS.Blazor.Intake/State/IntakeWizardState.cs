@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.JSInterop;
 using RVS.Domain.DTOs;
+using RVS.Domain.Validation;
 using RVS.UI.Shared.Validation;
 
 namespace RVS.Blazor.Intake.State;
@@ -15,7 +16,6 @@ public sealed class IntakeWizardState
     private const string StorageKey = "rvs_intake_wizard_state";
     private const int TotalStepCount = 8;
     private const int MaxDescriptionLength = 2000;
-    private const int MaxAttachments = 10;
 
     private readonly IJSRuntime _jsRuntime;
 
@@ -32,17 +32,76 @@ public sealed class IntakeWizardState
     /// <summary>Current wizard step index (1-based, range 1–8).</summary>
     public int CurrentStep { get; private set; } = 1;
 
+    /// <summary>
+    /// The furthest step the customer has legitimately reached, which is the highest step the URL
+    /// is allowed to ask for. The step rides in the <c>step</c> query parameter so the browser's
+    /// Back button walks the wizard, and that makes it something a customer can type; without
+    /// this ceiling, <c>?step=8</c> would jump straight to Review and skip every validation in
+    /// between. Never falls: going back leaves the steps already completed reachable.
+    /// </summary>
+    public int MaxStepReached { get; private set; } = 1;
+
     /// <summary>Total number of wizard steps.</summary>
     public int TotalSteps => TotalStepCount;
 
     /// <summary>Location slug from URL route.</summary>
     public string Slug { get; set; } = string.Empty;
 
-    /// <summary>Optional magic-link token from the intake URL query string.</summary>
-    public string? Token { get; set; }
+    /// <summary>
+    /// Distribution channel the customer arrived through (<c>Spec A-13</c>, issue #599) — the
+    /// <c>src</c> query parameter the go.rvintake.com redirect put on the intake URL. Forwarded
+    /// verbatim on submission and normalised server-side; a customer who opened a bare intake
+    /// URL has none, and the API records that as print.
+    /// </summary>
+    public string? IntakeSource { get; set; }
 
-    /// <summary>Location configuration fetched from the API.</summary>
-    public IntakeConfigResponseDto? Config { get; set; }
+    /// <summary>
+    /// The A-14 advisor invite token (<c>Spec A-14</c>, issue #664): the <c>inv</c> query parameter
+    /// an advisor's texted link put on the intake URL. It prefills the form on open and is sent
+    /// with the submission, which is where the API spends it. <c>null</c> for every other visit.
+    /// </summary>
+    public string? InviteToken { get; set; }
+
+    /// <summary>
+    /// Location configuration fetched from the API. Setting it raises <see cref="OnChange"/>, which
+    /// the layout listens for to show the dealer's header branding (<c>Spec A-16</c>, issue #470).
+    /// </summary>
+    public IntakeConfigResponseDto? Config
+    {
+        get => _config;
+        set
+        {
+            if (ReferenceEquals(_config, value))
+            {
+                return;
+            }
+
+            _config = value;
+            NotifyStateChanged();
+        }
+    }
+
+    private IntakeConfigResponseDto? _config;
+
+    /// <summary>
+    /// Attachment cap for this intake (<c>Spec A-6</c>): the location's configured value, held to
+    /// the platform maximum of five and falling back to it while <see cref="Config"/> is unset.
+    /// Same rule the API enforces on upload, so the wizard never offers a slot the server refuses.
+    /// </summary>
+    public int MaxAttachments => IntakeConfigValidator.EffectiveAttachmentCap(Config?.MaxAttachments);
+
+    /// <summary>
+    /// The issue categories a customer can pick on Step 5, alphabetized by name (issue #740).
+    /// Derived from <see cref="Config"/> on every read, so the list fills in whenever the
+    /// config arrives. Empty until then.
+    /// </summary>
+    public IReadOnlyList<LookupItemDto> SelectableIssueCategories =>
+        Config?.IssueCategories is { Count: > 0 } categories
+            ? categories
+                .Where(c => c.IsSelectable)
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            : [];
 
     /// <summary>Customer contact information (Step 2).</summary>
     public string FirstName { get; set; } = string.Empty;
@@ -53,23 +112,95 @@ public sealed class IntakeWizardState
     /// <summary>Customer email address — required (Step 2).</summary>
     public string Email { get; set; } = string.Empty;
 
-    /// <summary>Customer phone number — optional (Step 2).</summary>
+    /// <summary>Customer phone number — optional unless <see cref="PreferredContact"/> is Phone or Text (Step 2).</summary>
     public string? Phone { get; set; }
 
-    /// <summary>When <c>true</c>, customer has opted out of SMS notifications (Step 2).</summary>
-    public bool SmsOptOut { get; set; }
+    /// <summary>
+    /// Preferred contact method — one of <c>Phone</c>, <c>Text</c>, or <c>Email</c>.
+    /// Required to advance past Step 2 (<c>Spec A-2</c>).
+    /// </summary>
+    public string? PreferredContact { get; set; }
 
-    /// <summary>When <c>true</c>, customer has opted out of email notifications (Step 2).</summary>
-    public bool EmailOptOut { get; set; }
+    /// <summary>
+    /// When <c>true</c>, customer has opted out of SMS notifications (Step 2). The opt-out is a
+    /// hard veto over <see cref="PreferredContact"/> (<c>Spec A-2</c>): opting out while
+    /// <c>Text</c> is selected clears the selection.
+    /// </summary>
+    public bool SmsOptOut
+    {
+        get;
+        set
+        {
+            field = value;
+            ClearPreferredContactIfVetoed();
+        }
+    }
 
-    /// <summary>Whether the customer info was prefilled from a magic-link token.</summary>
-    public bool IsPrefilled { get; set; }
+    /// <summary>
+    /// When <c>true</c>, customer has opted out of email notifications (Step 2). Opting out while
+    /// <c>Email</c> is selected clears the selection.
+    /// </summary>
+    public bool EmailOptOut
+    {
+        get;
+        set
+        {
+            field = value;
+            ClearPreferredContactIfVetoed();
+        }
+    }
 
-    /// <summary>All known vehicles for the returning customer, enabling one-tap VIN selection in Step 3.</summary>
-    public List<AssetInfoDto> KnownAssets { get; set; } = [];
+    /// <summary>
+    /// Whether <paramref name="method"/> can be chosen as the preferred contact method given the
+    /// opt-outs — Step 2 disables the radio for an opted-out channel. <c>Phone</c> is always available.
+    /// </summary>
+    public bool IsContactMethodAvailable(string method) =>
+        NotificationPreferenceValidator.IsContactMethodAvailable(method, SmsOptOut, EmailOptOut);
 
-    /// <summary>Vehicle Identification Number (Step 3).</summary>
+    private void ClearPreferredContactIfVetoed()
+    {
+        if (PreferredContact is not null && !IsContactMethodAvailable(PreferredContact))
+        {
+            PreferredContact = null;
+        }
+    }
+
+    /// <summary>Whether the invite prefill has been applied (<c>Spec A-14</c>).</summary>
+    public bool IsInvitePrefilled { get; set; }
+
+    /// <summary>
+    /// Whether the customer ticked "Remember my details on this device" on Step 2 (issue #811).
+    /// Unticked by default: a shared browser must not keep one customer's details for
+    /// the next. The submission saves them only while this is set.
+    /// </summary>
+    public bool RememberDetails { get; set; }
+
+    /// <summary>
+    /// Whether the fields were filled from details this device remembered, so Step 1 does not
+    /// apply them twice. Separate from <see cref="IsInvitePrefilled"/>.
+    /// </summary>
+    public bool IsRememberedPrefilled { get; set; }
+
+    /// <summary>
+    /// Whether device memory can be offered at all. Never on an A-14 advisor invite: self-entry
+    /// runs in the advisor's own browser, and remembering there would hand this caller's details
+    /// to the next one.
+    /// </summary>
+    public bool CanRememberDetails => string.IsNullOrWhiteSpace(InviteToken);
+
+    /// <summary>
+    /// The RV's VIN or, for a rig with none such as a truck camper, its serial number (Step 3, issue #807).
+    /// </summary>
     public string Vin { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The customer skipped the vehicle details — the rig is in storage — and the dealer will collect
+    /// them later (issue #807). Step 3 needs no identifier and Step 4's fields become optional.
+    /// </summary>
+    public bool VehicleSkipped { get; set; }
+
+    /// <summary>Whether <see cref="Vin"/> is a well-formed VIN rather than a serial number.</summary>
+    public bool HasVin => VehicleIdentifierValidator.IsVin(Vin);
 
     /// <summary>Vehicle manufacturer (Step 4).</summary>
     public string? Manufacturer { get; set; }
@@ -82,6 +213,12 @@ public sealed class IntakeWizardState
 
     /// <summary>Whether the VIN decode API call returned successfully (Step 3 → Step 4).</summary>
     public bool VinLookupSucceeded { get; set; }
+
+    /// <summary>
+    /// Whether Step 4 was pre-filled from the plate in the Step 3 photo, so Step 4 can ask the
+    /// customer to check it (issue #807).
+    /// </summary>
+    public bool VehicleDetailsFromPhoto { get; set; }
 
     /// <summary>Issue category selected from LookupSet (Step 5).</summary>
     public string IssueCategory { get; set; } = string.Empty;
@@ -98,6 +235,14 @@ public sealed class IntakeWizardState
     /// <summary>Issue description text, max 2000 characters (Step 5).</summary>
     public string IssueDescription { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The customer's words before AI curation replaced <see cref="IssueDescription"/>
+    /// (issue #601) — the raw Whisper transcript when dictated, the typed text when typed.
+    /// <c>null</c> until curation runs; the packet then treats the submitted description as
+    /// the customer's own words.
+    /// </summary>
+    public string? IssueDescriptionVerbatim { get; set; }
+
     /// <summary>Urgency level (Step 5).</summary>
     public string? Urgency { get; set; }
 
@@ -110,7 +255,10 @@ public sealed class IntakeWizardState
     /// <summary>Approximate RV purchase date, free-text entry (Step 4).</summary>
     public string? ApproxPurchaseDate { get; set; }
 
-    /// <summary>AI-generated diagnostic questions (Step 6).</summary>
+    /// <summary>
+    /// AI-generated diagnostic questions (Step 6). Persisted with the answers: a reload that lost
+    /// them made Step 6 ask again and blank every answer (issue #736).
+    /// </summary>
     public List<DiagnosticQuestionDto> DiagnosticQuestions { get; set; } = [];
 
     /// <summary>Customer's diagnostic responses (Step 6).</summary>
@@ -130,6 +278,187 @@ public sealed class IntakeWizardState
     /// <summary>Uploaded attachment metadata (Step 7).</summary>
     public List<AttachmentFileInfo> Attachments { get; set; } = [];
 
+    // ── Several issues per visit (Spec A-17, issue #806) ─────────────
+    //
+    // The issue properties above always hold the active issue: Steps 5–7 bind to them and
+    // never know which issue they are editing. The drafts hold every issue; the active one
+    // is copied back from those properties whenever the list is read or another issue opens.
+
+    private List<IntakeIssueDraft> _issues = [new()];
+
+    /// <summary>The most issues one visit may report (<c>Spec A-17</c>).</summary>
+    public const int MaxIssues = IntakeIssuesValidator.MaxIssuesPerSubmission;
+
+    /// <summary>Index into <see cref="GetIssues"/> of the issue Steps 5–7 are editing.</summary>
+    public int ActiveIssueIndex { get; private set; }
+
+    /// <summary>How many issues this visit reports so far, counting the one being edited.</summary>
+    public int IssueCount => _issues.Count;
+
+    /// <summary>Whether the review step may offer <c>Add another issue</c>.</summary>
+    public bool CanAddIssue => _issues.Count < MaxIssues;
+
+    /// <summary>Every issue, in the order entered, with the active one brought up to date.</summary>
+    public IReadOnlyList<IntakeIssueDraft> GetIssues()
+    {
+        SaveActiveIssue();
+        return _issues;
+    }
+
+    /// <summary>
+    /// Opens a blank issue on Step 5, after the others (<c>Spec A-17</c>). RV usage describes
+    /// the visit, so it carries forward; everything Steps 5–7 ask per issue starts empty. Does
+    /// nothing once <see cref="MaxIssues"/> issues exist.
+    /// </summary>
+    public async Task StartNewIssueAsync()
+    {
+        if (!CanAddIssue)
+        {
+            return;
+        }
+
+        SaveActiveIssue();
+        _issues.Add(new IntakeIssueDraft());
+        ActiveIssueIndex = _issues.Count - 1;
+        LoadActiveIssue();
+
+        ReturnToStepAfterEdit = null;
+        await GoToStepAsync(5);
+    }
+
+    /// <summary>
+    /// Opens issue <paramref name="index"/> at <paramref name="step"/> (5–7) from the review
+    /// step, which Continue then returns to.
+    /// </summary>
+    public async Task EditIssueAsync(int index, int step)
+    {
+        if (index < 0 || index >= _issues.Count)
+        {
+            return;
+        }
+
+        SaveActiveIssue();
+        ActiveIssueIndex = index;
+        LoadActiveIssue();
+
+        ReturnToStepAfterEdit = TotalStepCount;
+        await GoToStepAsync(step);
+    }
+
+    /// <summary>Removes issue <paramref name="index"/>. The only issue is never removed.</summary>
+    public async Task RemoveIssueAsync(int index)
+    {
+        if (_issues.Count <= 1 || index < 0 || index >= _issues.Count)
+        {
+            return;
+        }
+
+        SaveActiveIssue();
+        _issues.RemoveAt(index);
+        if (index < ActiveIssueIndex || ActiveIssueIndex >= _issues.Count)
+        {
+            ActiveIssueIndex = Math.Max(0, ActiveIssueIndex - 1);
+        }
+
+        LoadActiveIssue();
+        await NotifyAndPersistAsync();
+    }
+
+    /// <summary>
+    /// Drops every issue after the first that the customer left blank — an issue they opened
+    /// with <c>Add another issue</c> and then backed out of. Run when the review step opens.
+    /// </summary>
+    public void PruneEmptyIssues()
+    {
+        SaveActiveIssue();
+
+        var pruned = false;
+        for (var i = _issues.Count - 1; i >= 1; i--)
+        {
+            if (!_issues[i].IsEmpty)
+            {
+                continue;
+            }
+
+            _issues.RemoveAt(i);
+            pruned = true;
+            if (i < ActiveIssueIndex || ActiveIssueIndex >= _issues.Count)
+            {
+                ActiveIssueIndex = Math.Max(0, ActiveIssueIndex - 1);
+            }
+        }
+
+        if (pruned)
+        {
+            LoadActiveIssue();
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>
+    /// Checks every issue as Step 5 would, for the review step: an issue added and then left
+    /// half-done must not reach the API. Each message names the issue.
+    /// </summary>
+    public List<string> ValidateAllIssues()
+    {
+        var errors = new List<string>();
+        var issues = GetIssues();
+        for (var i = 0; i < issues.Count; i++)
+        {
+            var label = $"Issue {i + 1}";
+            if (string.IsNullOrWhiteSpace(issues[i].IssueCategory))
+            {
+                errors.Add($"{label}: choose a category.");
+            }
+
+            if (string.IsNullOrWhiteSpace(issues[i].IssueDescription))
+            {
+                errors.Add($"{label}: describe the issue.");
+            }
+            else if (issues[i].IssueDescription.Length > MaxDescriptionLength)
+            {
+                errors.Add($"{label}: the description must not exceed {MaxDescriptionLength} characters.");
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>Copies the issue properties into the active draft.</summary>
+    private void SaveActiveIssue()
+    {
+        var draft = _issues[ActiveIssueIndex];
+        draft.IssueCategory = IssueCategory;
+        draft.IsCategorySuggestedByAi = IsCategorySuggestedByAi;
+        draft.IsUrgencySuggestedByAi = IsUrgencySuggestedByAi;
+        draft.IssueDescription = IssueDescription;
+        draft.IssueDescriptionVerbatim = IssueDescriptionVerbatim;
+        draft.Urgency = Urgency;
+        draft.DiagnosticQuestions = DiagnosticQuestions;
+        draft.DiagnosticResponses = DiagnosticResponses;
+        draft.SmartSuggestion = SmartSuggestion;
+        draft.CapabilityAssessment = CapabilityAssessment;
+        draft.Attachments = Attachments;
+    }
+
+    /// <summary>Copies the active draft into the issue properties.</summary>
+    private void LoadActiveIssue()
+    {
+        var draft = _issues[ActiveIssueIndex];
+        IssueCategory = draft.IssueCategory;
+        IsCategorySuggestedByAi = draft.IsCategorySuggestedByAi;
+        IsUrgencySuggestedByAi = draft.IsUrgencySuggestedByAi;
+        IssueDescription = draft.IssueDescription;
+        IssueDescriptionVerbatim = draft.IssueDescriptionVerbatim;
+        Urgency = draft.Urgency;
+        DiagnosticQuestions = draft.DiagnosticQuestions;
+        DiagnosticResponses = draft.DiagnosticResponses;
+        SmartSuggestion = draft.SmartSuggestion;
+        CapabilityAssessment = draft.CapabilityAssessment;
+        Attachments = draft.Attachments;
+        FieldErrors = [];
+    }
+
     /// <summary>Whether the service request has been submitted.</summary>
     public bool IsSubmitted { get; set; }
 
@@ -141,6 +470,16 @@ public sealed class IntakeWizardState
 
     /// <summary>Number of file uploads that failed during submission (runtime-only, not persisted).</summary>
     public int FailedUploadCount { get; set; }
+
+    /// <summary>
+    /// <c>true</c> while the Review &amp; Submit step is submitting the request and uploading
+    /// attachments (runtime-only, not persisted). The wizard header uses this to block
+    /// backward navigation mid-submission — leaving Step 8 while its upload loop is still
+    /// running tears down the component the loop's <c>StateHasChanged</c> calls depend on,
+    /// which previously could abandon an in-flight submission along with its attachments
+    /// (issue #583).
+    /// </summary>
+    public bool IsSubmitting { get; set; }
 
     /// <summary>
     /// When set, the next call to <see cref="GoToNextStepAsync"/> or <see cref="GoToPreviousStepAsync"/>
@@ -168,6 +507,7 @@ public sealed class IntakeWizardState
         {
             ReturnToStepAfterEdit = null;
             CurrentStep = returnStep;
+            RaiseMaxStepReached();
             NotifyStateChanged();
             await PersistAsync();
             return;
@@ -176,6 +516,7 @@ public sealed class IntakeWizardState
         if (CurrentStep < TotalStepCount)
         {
             CurrentStep++;
+            RaiseMaxStepReached();
             NotifyStateChanged();
             await PersistAsync();
         }
@@ -191,6 +532,7 @@ public sealed class IntakeWizardState
         {
             ReturnToStepAfterEdit = null;
             CurrentStep = returnStep;
+            RaiseMaxStepReached();
             NotifyStateChanged();
             await PersistAsync();
             return;
@@ -212,36 +554,263 @@ public sealed class IntakeWizardState
         if (step >= 1 && step <= TotalStepCount)
         {
             CurrentStep = step;
+            RaiseMaxStepReached();
             NotifyStateChanged();
             await PersistAsync();
         }
     }
 
     /// <summary>
-    /// Applies customer prefill data from the intake config (magic-link token).
+    /// Moves to the step the browser's history — or the address bar — asks for, clamped to the
+    /// range the customer has already reached. Unlike <see cref="GoToStepAsync"/> this never
+    /// raises <see cref="MaxStepReached"/>: arriving somewhere by pressing Back is not progress.
+    /// <para>
+    /// Any pending <see cref="ReturnToStepAfterEdit"/> is dropped. That promise belonged to the
+    /// Continue button of the step Review sent them to edit; a customer who pressed Back instead
+    /// has overridden it, and honouring it would fling them forward to Review unasked.
+    /// </para>
     /// </summary>
-    public void ApplyPrefill(CustomerInfoDto prefill)
+    public async Task GoToStepFromHistoryAsync(int step)
+    {
+        var target = Math.Clamp(step, 1, Math.Max(1, MaxStepReached));
+
+        ReturnToStepAfterEdit = null;
+        CurrentStep = target;
+        NotifyStateChanged();
+        await PersistAsync();
+    }
+
+    /// <summary>
+    /// Takes the diagnostic questions Step 6 fetched, with one response per question. An answer
+    /// already held for a question asked again is kept — a session saved before the questions
+    /// were persisted carries answers but no questions, and Step 6 fetches them anew.
+    /// The location's own questions (<see cref="IntakeConfigResponseDto.DealerQuestions"/>) follow
+    /// the AI's as free-text questions, skipping one the AI already asked (<c>Spec A-18</c>, issue #785).
+    /// </summary>
+    public void ApplyDiagnosticQuestions(DiagnosticQuestionsResponseDto response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        var previous = DiagnosticResponses
+            .GroupBy(r => r.QuestionText, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        var questions = response.Questions.ToList();
+        foreach (var dealerQuestion in Config?.DealerQuestions ?? [])
+        {
+            if (!questions.Any(q => string.Equals(q.QuestionText, dealerQuestion, StringComparison.OrdinalIgnoreCase)))
+            {
+                questions.Add(new DiagnosticQuestionDto { QuestionText = dealerQuestion, AllowFreeText = true });
+            }
+        }
+
+        DiagnosticQuestions = questions;
+        SmartSuggestion = response.SmartSuggestion;
+        DiagnosticResponses = questions
+            .Select(q => previous.TryGetValue(q.QuestionText, out var kept)
+                ? kept
+                : new DiagnosticResponseDto { QuestionText = q.QuestionText, SelectedOptions = [], FreeTextResponse = null })
+            .ToList();
+    }
+
+    /// <summary>Records <see cref="CurrentStep"/> as reached, if it is further than before.</summary>
+    private void RaiseMaxStepReached() => MaxStepReached = Math.Max(MaxStepReached, CurrentStep);
+
+    /// <summary>
+    /// Applies an A-14 advisor invite's prefill (<c>Spec A-14</c>, issues #664, #693): the first
+    /// name, phone and email the advisor entered. Fills only blank fields, because the invite is
+    /// re-fetched after a reload and must not undo what the customer typed since.
+    /// </summary>
+    public void ApplyInvitePrefill(IntakeInvitePrefillResponseDto prefill)
     {
         ArgumentNullException.ThrowIfNull(prefill);
-        FirstName = prefill.FirstName;
-        LastName = prefill.LastName;
-        Email = prefill.Email;
-        Phone = prefill.Phone;
-        IsPrefilled = true;
+
+        if (string.IsNullOrWhiteSpace(FirstName))
+        {
+            FirstName = prefill.FirstName;
+        }
+
+        if (string.IsNullOrWhiteSpace(Phone))
+        {
+            Phone = prefill.Phone;
+        }
+
+        if (string.IsNullOrWhiteSpace(Email) && !string.IsNullOrWhiteSpace(prefill.Email))
+        {
+            Email = prefill.Email;
+        }
+
+        IsInvitePrefilled = true;
         NotifyStateChanged();
     }
 
     /// <summary>
-    /// Applies asset prefill data from the intake config (magic-link token).
-    /// Sets the most recently used vehicle information so the customer doesn't re-enter it.
+    /// Fills Step 2, the Step 3 identifier and Step 4 from details this device remembered (issues
+    /// #811, #819, #823). Fills only blank fields, like the invite prefill, and leaves the opt-outs to the
+    /// customer; a remembered preferred contact method is skipped if it is now opted out. The
+    /// customer opted in last time, so the box starts ticked.
     /// </summary>
-    public void ApplyAssetPrefill(AssetInfoDto prefillAsset)
+    public void ApplyRememberedDetails(RememberedDetails details)
     {
-        ArgumentNullException.ThrowIfNull(prefillAsset);
-        Vin = prefillAsset.AssetId;
-        Manufacturer = prefillAsset.Manufacturer;
-        Model = prefillAsset.Model;
-        Year = prefillAsset.Year;
+        ArgumentNullException.ThrowIfNull(details);
+
+        if (string.IsNullOrWhiteSpace(FirstName) && !string.IsNullOrWhiteSpace(details.FirstName))
+        {
+            FirstName = details.FirstName;
+        }
+
+        if (string.IsNullOrWhiteSpace(LastName) && !string.IsNullOrWhiteSpace(details.LastName))
+        {
+            LastName = details.LastName;
+        }
+
+        if (string.IsNullOrWhiteSpace(Email) && !string.IsNullOrWhiteSpace(details.Email))
+        {
+            Email = details.Email;
+        }
+
+        if (string.IsNullOrWhiteSpace(Phone) && !string.IsNullOrWhiteSpace(details.Phone))
+        {
+            Phone = details.Phone;
+        }
+
+        if (string.IsNullOrWhiteSpace(PreferredContact)
+            && !string.IsNullOrWhiteSpace(details.PreferredContact)
+            && IsContactMethodAvailable(details.PreferredContact))
+        {
+            PreferredContact = details.PreferredContact;
+        }
+
+        if (string.IsNullOrWhiteSpace(Vin) && !string.IsNullOrWhiteSpace(details.Vin))
+        {
+            Vin = details.Vin;
+        }
+
+        if (string.IsNullOrWhiteSpace(Manufacturer) && !string.IsNullOrWhiteSpace(details.Manufacturer))
+        {
+            Manufacturer = details.Manufacturer;
+        }
+
+        if (string.IsNullOrWhiteSpace(Model) && !string.IsNullOrWhiteSpace(details.Model))
+        {
+            Model = details.Model;
+        }
+
+        if (!Year.HasValue && details.Year.HasValue)
+        {
+            Year = details.Year;
+        }
+
+        if (string.IsNullOrWhiteSpace(HasExtendedWarranty) && !string.IsNullOrWhiteSpace(details.HasExtendedWarranty))
+        {
+            HasExtendedWarranty = details.HasExtendedWarranty;
+        }
+
+        if (string.IsNullOrWhiteSpace(ApproxPurchaseDate) && !string.IsNullOrWhiteSpace(details.ApproxPurchaseDate))
+        {
+            ApproxPurchaseDate = details.ApproxPurchaseDate;
+        }
+
+        RememberDetails = true;
+        IsRememberedPrefilled = true;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// What the device should remember for next time (issues #811, #819, #823): the contact details
+    /// and preferred contact method as submitted, and the vehicle with its warranty answer and
+    /// purchase date, unless the customer skipped it.
+    /// </summary>
+    public RememberedDetails ToRememberedDetails() => new(
+        FirstName.Trim(),
+        LastName.Trim(),
+        Email.Trim(),
+        TrimToNull(Phone),
+        VehicleSkipped ? null : TrimToNull(Vin),
+        TrimToNull(PreferredContact),
+        VehicleSkipped ? null : TrimToNull(Manufacturer),
+        VehicleSkipped ? null : TrimToNull(Model),
+        VehicleSkipped ? null : Year,
+        VehicleSkipped ? null : TrimToNull(HasExtendedWarranty),
+        VehicleSkipped ? null : TrimToNull(ApproxPurchaseDate));
+
+    private static string? TrimToNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Pre-fills Step 4 with what the plate in the Step 3 photo showed (issue #807). Only the
+    /// values the plate carried are written; the rest keep whatever the customer already has.
+    /// Every field stays editable in Step 4.
+    /// </summary>
+    public void ApplyVehicleDetailsFromPhoto(string? manufacturer, string? model, int? year)
+    {
+        var applied = false;
+
+        if (!string.IsNullOrWhiteSpace(manufacturer))
+        {
+            Manufacturer = manufacturer.Trim();
+            applied = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            Model = model.Trim();
+            applied = true;
+        }
+
+        if (year.HasValue)
+        {
+            Year = year;
+            applied = true;
+        }
+
+        if (applied)
+        {
+            VehicleDetailsFromPhoto = true;
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>
+    /// Applies a successful Step 3 VIN decode. The decoder wins where it has a value; where it has
+    /// none, whatever the photo pre-filled is kept.
+    /// </summary>
+    public void ApplyVinDecode(VinDecodeResponseDto decoded)
+    {
+        ArgumentNullException.ThrowIfNull(decoded);
+
+        if (!string.IsNullOrWhiteSpace(decoded.Manufacturer))
+        {
+            Manufacturer = decoded.Manufacturer;
+        }
+
+        if (!string.IsNullOrWhiteSpace(decoded.Model))
+        {
+            Model = decoded.Model;
+        }
+
+        if (decoded.Year > 0)
+        {
+            Year = decoded.Year;
+        }
+
+        VinLookupSucceeded = true;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// The customer skips the vehicle: the rig is in storage and the dealer will collect its details
+    /// later (issue #807). Clears anything a decode or photo filled, so Step 4 starts empty and optional.
+    /// </summary>
+    public void SkipVehicle()
+    {
+        Vin = string.Empty;
+        VehicleSkipped = true;
+        VinLookupSucceeded = false;
+        VehicleDetailsFromPhoto = false;
+        Manufacturer = null;
+        Model = null;
+        Year = null;
         NotifyStateChanged();
     }
 
@@ -271,6 +840,11 @@ public sealed class IntakeWizardState
     /// </summary>
     public ServiceRequestCreateRequestDto BuildCreateRequest()
     {
+        // The first issue rides on the request's own issue fields, as a single-issue
+        // submission always has; the rest follow in AdditionalIssues (Spec A-17).
+        var issues = GetIssues();
+        var lead = issues[0];
+
         return new ServiceRequestCreateRequestDto
         {
             Customer = new CustomerInfoDto
@@ -278,31 +852,86 @@ public sealed class IntakeWizardState
                 FirstName = FirstName.Trim(),
                 LastName = LastName.Trim(),
                 Email = Email.Trim(),
-                Phone = string.IsNullOrWhiteSpace(Phone) ? null : Phone.Trim()
+                Phone = string.IsNullOrWhiteSpace(Phone) ? null : Phone.Trim(),
+                PreferredContact = string.IsNullOrWhiteSpace(PreferredContact) ? null : PreferredContact.Trim()
             },
             Asset = new AssetInfoDto
             {
-                AssetId = Vin.Trim().ToUpperInvariant(),
+                // Blank when the customer skipped: the dealer collects the vehicle later (issue #807).
+                AssetId = VehicleSkipped ? string.Empty : VehicleIdentifierValidator.Normalize(Vin),
                 Manufacturer = string.IsNullOrWhiteSpace(Manufacturer) ? null : Manufacturer.Trim(),
                 Model = string.IsNullOrWhiteSpace(Model) ? null : Model.Trim(),
                 Year = Year
             },
-            IssueCategory = IssueCategory.Trim(),
-            IssueDescription = IssueDescription.Trim(),
-            Urgency = string.IsNullOrWhiteSpace(Urgency) ? null : Urgency.Trim(),
+            IssueCategory = lead.IssueCategory.Trim(),
+            IssueDescription = lead.IssueDescription.Trim(),
+            IssueDescriptionVerbatim = NullIfBlank(lead.IssueDescriptionVerbatim),
+            Urgency = NullIfBlank(lead.Urgency),
             RvUsage = string.IsNullOrWhiteSpace(RvUsage) ? null : RvUsage.Trim(),
             SmsOptOut = SmsOptOut,
             EmailOptOut = EmailOptOut,
             HasExtendedWarranty = string.IsNullOrWhiteSpace(HasExtendedWarranty) ? null : HasExtendedWarranty.Trim(),
             ApproxPurchaseDate = string.IsNullOrWhiteSpace(ApproxPurchaseDate) ? null : ApproxPurchaseDate.Trim(),
-            DiagnosticResponses = DiagnosticResponses.Count > 0 ? DiagnosticResponses : null,
-            CapabilityMismatchNote = BuildCapabilityMismatchNote()
+            DiagnosticResponses = lead.DiagnosticResponses.Count > 0 ? lead.DiagnosticResponses : null,
+            CapabilityMismatchNote = BuildCapabilityMismatchNote(lead.CapabilityAssessment),
+            IntakeSource = IntakeSource,
+            InviteToken = string.IsNullOrWhiteSpace(InviteToken) ? null : InviteToken,
+            ExpectedAttachmentCount = lead.PendingUploadCount,
+            AdditionalIssues = issues.Count > 1
+                ? [.. issues.Skip(1).Select(ToIssueDto)]
+                : null,
         };
     }
 
-    private string? BuildCapabilityMismatchNote()
+    /// <summary>
+    /// A request describing only the issue Steps 5–7 are editing, with the visit's contact and
+    /// vehicle: what Step 6 sends for follow-up questions (issue #810). <see cref="BuildCreateRequest"/>
+    /// leads with the first issue, so using it there asked about the first issue every time.
+    /// </summary>
+    public ServiceRequestCreateRequestDto BuildActiveIssueRequest()
     {
-        if (CapabilityAssessment is not { Matched: false } ca || ca.MissingCapabilities.Count == 0)
+        var active = GetIssues()[ActiveIssueIndex];
+
+        return BuildCreateRequest() with
+        {
+            IssueCategory = active.IssueCategory.Trim(),
+            IssueDescription = active.IssueDescription.Trim(),
+            IssueDescriptionVerbatim = NullIfBlank(active.IssueDescriptionVerbatim),
+            Urgency = NullIfBlank(active.Urgency),
+            DiagnosticResponses = active.DiagnosticResponses.Count > 0 ? active.DiagnosticResponses : null,
+            CapabilityMismatchNote = BuildCapabilityMismatchNote(active.CapabilityAssessment),
+            ExpectedAttachmentCount = active.PendingUploadCount,
+            AdditionalIssues = null,
+        };
+    }
+
+    private static IntakeIssueDto ToIssueDto(IntakeIssueDraft draft) => new()
+    {
+        IssueCategory = draft.IssueCategory.Trim(),
+        IssueDescription = draft.IssueDescription.Trim(),
+        IssueDescriptionVerbatim = NullIfBlank(draft.IssueDescriptionVerbatim),
+        Urgency = NullIfBlank(draft.Urgency),
+        DiagnosticResponses = draft.DiagnosticResponses.Count > 0 ? draft.DiagnosticResponses : null,
+        CapabilityMismatchNote = BuildCapabilityMismatchNote(draft.CapabilityAssessment),
+        ExpectedAttachmentCount = draft.PendingUploadCount,
+    };
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// How many of the active issue's attachments still have to be uploaded to blob storage
+    /// after submission — the files buffered in the browser that have not been sent yet. Told to
+    /// the API so packet generation waits for them instead of rendering a photo-less packet
+    /// (issue #516). Files whose bytes were lost are excluded: they are already counted as upload
+    /// failures and will never arrive.
+    /// </summary>
+    public int PendingUploadCount =>
+        Attachments.Count(a => a.FileData is not null && !a.IsUploaded);
+
+    private static string? BuildCapabilityMismatchNote(CapabilityAssessmentResponseDto? assessment)
+    {
+        if (assessment is not { Matched: false } ca || ca.MissingCapabilities.Count == 0)
             return null;
 
         var caps = string.Join(", ", ca.MissingCapabilities.Select(c => $"'{c}'"));
@@ -318,32 +947,44 @@ public sealed class IntakeWizardState
         var data = new IntakeWizardStateData
         {
             CurrentStep = CurrentStep,
+            MaxStepReached = MaxStepReached,
             Slug = Slug,
+            IntakeSource = IntakeSource,
+            InviteToken = InviteToken,
             FirstName = FirstName,
             LastName = LastName,
             Email = Email,
             Phone = Phone,
+            PreferredContact = PreferredContact,
             SmsOptOut = SmsOptOut,
             EmailOptOut = EmailOptOut,
-            IsPrefilled = IsPrefilled,
-            KnownAssets = KnownAssets,
+            IsInvitePrefilled = IsInvitePrefilled,
+            RememberDetails = RememberDetails,
+            IsRememberedPrefilled = IsRememberedPrefilled,
             Vin = Vin,
+            VehicleSkipped = VehicleSkipped,
             Manufacturer = Manufacturer,
             Model = Model,
             Year = Year,
+            VinLookupSucceeded = VinLookupSucceeded,
+            VehicleDetailsFromPhoto = VehicleDetailsFromPhoto,
             IssueCategory = IssueCategory,
             IsCategorySuggestedByAi = IsCategorySuggestedByAi,
             IssueDescription = IssueDescription,
+            IssueDescriptionVerbatim = IssueDescriptionVerbatim,
             Urgency = Urgency,
             RvUsage = RvUsage,
             HasExtendedWarranty = HasExtendedWarranty,
             ApproxPurchaseDate = ApproxPurchaseDate,
+            DiagnosticQuestions = DiagnosticQuestions,
             DiagnosticResponses = DiagnosticResponses,
             SmartSuggestion = SmartSuggestion,
             CapabilityAssessment = CapabilityAssessment,
             IsSubmitted = IsSubmitted,
             CreatedServiceRequestId = CreatedServiceRequestId,
-            SubmissionMagicLinkToken = SubmissionMagicLinkToken
+            SubmissionMagicLinkToken = SubmissionMagicLinkToken,
+            Issues = [.. GetIssues()],
+            ActiveIssueIndex = ActiveIssueIndex,
         };
 
         var json = JsonSerializer.Serialize(data);
@@ -364,32 +1005,61 @@ public sealed class IntakeWizardState
             if (data is null) return;
 
             CurrentStep = data.CurrentStep;
+            // A session persisted before the step was tracked has no maxStepReached; reading it
+            // as 0 would clamp the customer back to Step 1 and lose their place.
+            MaxStepReached = Math.Max(data.MaxStepReached, data.CurrentStep);
             Slug = data.Slug;
+            IntakeSource = data.IntakeSource;
+            InviteToken = data.InviteToken;
             FirstName = data.FirstName;
             LastName = data.LastName;
             Email = data.Email;
             Phone = data.Phone;
+            PreferredContact = data.PreferredContact;
             SmsOptOut = data.SmsOptOut;
             EmailOptOut = data.EmailOptOut;
-            IsPrefilled = data.IsPrefilled;
-            KnownAssets = data.KnownAssets;
+            IsInvitePrefilled = data.IsInvitePrefilled;
+            RememberDetails = data.RememberDetails;
+            IsRememberedPrefilled = data.IsRememberedPrefilled;
             Vin = data.Vin;
+            VehicleSkipped = data.VehicleSkipped;
             Manufacturer = data.Manufacturer;
             Model = data.Model;
             Year = data.Year;
+            VinLookupSucceeded = data.VinLookupSucceeded;
+            VehicleDetailsFromPhoto = data.VehicleDetailsFromPhoto;
             IssueCategory = data.IssueCategory;
             IsCategorySuggestedByAi = data.IsCategorySuggestedByAi;
             IssueDescription = data.IssueDescription;
+            IssueDescriptionVerbatim = data.IssueDescriptionVerbatim;
             Urgency = data.Urgency;
             RvUsage = data.RvUsage;
             HasExtendedWarranty = data.HasExtendedWarranty;
             ApproxPurchaseDate = data.ApproxPurchaseDate;
+            DiagnosticQuestions = data.DiagnosticQuestions;
             DiagnosticResponses = data.DiagnosticResponses;
             SmartSuggestion = data.SmartSuggestion;
             CapabilityAssessment = data.CapabilityAssessment;
             IsSubmitted = data.IsSubmitted;
             CreatedServiceRequestId = data.CreatedServiceRequestId;
             SubmissionMagicLinkToken = data.SubmissionMagicLinkToken;
+
+            // A session saved before several issues were possible has no drafts: its one
+            // issue is the issue properties just restored.
+            if (data.Issues.Count == 0)
+            {
+                _issues = [new()];
+                ActiveIssueIndex = 0;
+                SaveActiveIssue();
+            }
+            else
+            {
+                _issues = data.Issues;
+                ActiveIssueIndex = Math.Clamp(data.ActiveIssueIndex, 0, _issues.Count - 1);
+                // The issue properties were persisted as the active issue, and the draft list
+                // carries it too; keep the properties, which hold its attachments' session state.
+                SaveActiveIssue();
+            }
 
             NotifyStateChanged();
         }
@@ -401,30 +1071,71 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
+    /// Re-fetches <see cref="Config"/> for a session restored past Step 1 (issue #740).
+    /// Config is not persisted, and Step 1 — the only step that fetches it — is not shown
+    /// again after a refresh, so without this Step 5 has no issue categories and Steps 6–7
+    /// lose the location phone and attachment limits. Prefills are not re-applied: what they
+    /// set was restored with the rest of the session. Best-effort — a failed fetch leaves
+    /// <see cref="Config"/> unset rather than blocking the wizard.
+    /// </summary>
+    public async Task EnsureConfigAsync(
+        Func<CancellationToken, Task<IntakeConfigResponseDto>> fetchConfig,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fetchConfig);
+
+        if (Config is not null || CurrentStep <= 1)
+        {
+            return;
+        }
+
+        try
+        {
+            Config = await fetchConfig(cancellationToken);
+            NotifyStateChanged();
+        }
+        catch (HttpRequestException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    /// <summary>
     /// Clears all state and removes from sessionStorage.
     /// </summary>
     public async Task ClearAsync()
     {
         CurrentStep = 1;
+        MaxStepReached = 1;
         Slug = string.Empty;
+        IntakeSource = null;
+        InviteToken = null;
         Config = null;
         FirstName = string.Empty;
         LastName = string.Empty;
         Email = string.Empty;
         Phone = null;
+        PreferredContact = null;
         SmsOptOut = false;
         EmailOptOut = false;
-        IsPrefilled = false;
-        KnownAssets = [];
+        IsInvitePrefilled = false;
+        RememberDetails = false;
+        IsRememberedPrefilled = false;
         Vin = string.Empty;
+        VehicleSkipped = false;
         Manufacturer = null;
         Model = null;
         Year = null;
+        VinLookupSucceeded = false;
+        VehicleDetailsFromPhoto = false;
         IssueCategory = string.Empty;
         IsCategorySuggestedByAi = false;
         IsUrgencySuggestedByAi = false;
         IsRvUsageSuggestedByAi = false;
         IssueDescription = string.Empty;
+        IssueDescriptionVerbatim = null;
         Urgency = null;
         RvUsage = null;
         HasExtendedWarranty = null;
@@ -438,7 +1149,10 @@ public sealed class IntakeWizardState
         CreatedServiceRequestId = null;
         SubmissionMagicLinkToken = null;
         FailedUploadCount = 0;
+        IsSubmitting = false;
         FieldErrors = [];
+        _issues = [new()];
+        ActiveIssueIndex = 0;
 
         await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", StorageKey);
 
@@ -446,19 +1160,13 @@ public sealed class IntakeWizardState
     }
 
     /// <summary>
-    /// Builds the URL to navigate to when starting over, preserving the location slug and optional token.
+    /// Builds the URL to navigate to when starting over, preserving the location slug.
     /// </summary>
-    public static string BuildStartOverUrl(string slug, string? token)
+    public static string BuildStartOverUrl(string slug)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
 
-        var url = $"/{Uri.EscapeDataString(slug)}";
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            url += $"?token={Uri.EscapeDataString(token)}";
-        }
-
-        return url;
+        return $"/{Uri.EscapeDataString(slug)}";
     }
 
     /// <summary>
@@ -513,25 +1221,46 @@ public sealed class IntakeWizardState
             }
         }
 
+        if (string.IsNullOrWhiteSpace(PreferredContact))
+        {
+            errors.Add("Preferred contact method is required.");
+            FieldErrors["PreferredContact"] = "Preferred contact method is required.";
+        }
+
+        // The same rule the API applies (issue #679): the phone is required whatever the preference.
+        var phoneResult = PhoneValidator.Validate(Phone);
+        if (!phoneResult.IsValid)
+        {
+            errors.Add(phoneResult.ErrorMessage!);
+            FieldErrors["Phone"] = phoneResult.ErrorMessage!;
+        }
+
+        var preferenceResult = NotificationPreferenceValidator.Validate(PreferredContact, SmsOptOut, EmailOptOut);
+        if (!preferenceResult.IsValid)
+        {
+            const string msg = "You've opted out of that channel. Choose another preferred contact method.";
+            errors.Add(msg);
+            FieldErrors["PreferredContact"] = msg;
+        }
+
         return errors;
     }
 
     private List<string> ValidateVinLookup()
     {
         var errors = new List<string>();
-        if (string.IsNullOrWhiteSpace(Vin))
+        if (VehicleSkipped)
         {
-            errors.Add("VIN is required.");
-            FieldErrors["Vin"] = "VIN is required.";
+            return errors;
         }
-        else
+
+        // Issue #807: a VIN or any serial number. The check digit is not enforced — a VIN that
+        // will not decode falls through to manual entry in Step 4.
+        var result = VehicleIdentifierValidator.Validate(Vin);
+        if (!result.IsValid)
         {
-            var vinResult = ClientVinValidator.ValidateFormat(Vin);
-            if (!vinResult.IsValid)
-            {
-                errors.Add(vinResult.ErrorMessage!);
-                FieldErrors["Vin"] = vinResult.ErrorMessage!;
-            }
+            errors.Add(result.ErrorMessage!);
+            FieldErrors["Vin"] = result.ErrorMessage!;
         }
 
         return errors;
@@ -540,6 +1269,10 @@ public sealed class IntakeWizardState
     private List<string> ValidateVehicleDetails()
     {
         var errors = new List<string>();
+        if (VehicleSkipped)
+        {
+            return errors;
+        }
 
         if (string.IsNullOrWhiteSpace(HasExtendedWarranty))
         {
@@ -639,39 +1372,87 @@ public sealed class AttachmentFileInfo
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public byte[]? FileData { get; set; }
+
+    /// <summary>
+    /// A small resized preview of an image attachment as a <c>data:</c> URL, drawn in Step 7's
+    /// file list (issue #758). <c>null</c> for videos, PDFs, HEIC, and any image the browser could
+    /// not resize — those show an icon. Not serializable, like <see cref="FileData"/>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? ThumbnailDataUrl { get; set; }
 }
 
 /// <summary>
 /// Serializable data transfer object for sessionStorage persistence.
-/// Excludes non-serializable properties like Config and DiagnosticQuestions.
+/// Excludes non-serializable properties like Config and the attachment bytes.
 /// </summary>
 internal sealed class IntakeWizardStateData
 {
     public int CurrentStep { get; set; } = 1;
+
+    /// <summary>
+    /// The furthest step reached. Absent — and so 0 — in a session persisted before the step
+    /// was carried in the URL; <see cref="IntakeWizardState.RestoreAsync"/> falls back to
+    /// <see cref="CurrentStep"/> in that case.
+    /// </summary>
+    public int MaxStepReached { get; set; }
+
     public string Slug { get; set; } = string.Empty;
+
+    /// <summary>Distribution channel the intake URL carried (<c>Spec A-13</c>).</summary>
+    public string? IntakeSource { get; set; }
+
+    /// <summary>A-14 advisor invite token from the intake URL (<c>Spec A-14</c>).</summary>
+    public string? InviteToken { get; set; }
+
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
+    public string? PreferredContact { get; set; }
     public bool SmsOptOut { get; set; }
     public bool EmailOptOut { get; set; }
-    public bool IsPrefilled { get; set; }
-    public List<AssetInfoDto> KnownAssets { get; set; } = [];
+    public bool IsInvitePrefilled { get; set; }
+
+    /// <summary>Step 2's "Remember my details on this device" (issue #811).</summary>
+    public bool RememberDetails { get; set; }
+
+    /// <summary>Whether Step 2 was filled from remembered details (issue #811).</summary>
+    public bool IsRememberedPrefilled { get; set; }
+
     public string Vin { get; set; } = string.Empty;
+    public bool VehicleSkipped { get; set; }
     public string? Manufacturer { get; set; }
     public string? Model { get; set; }
     public int? Year { get; set; }
+
+    /// <summary>Whether Step 3's VIN decode filled the vehicle, so Step 4 still says so after a refresh (issue #758).</summary>
+    public bool VinLookupSucceeded { get; set; }
+
+    /// <summary>Whether Step 4 was pre-filled from the Step 3 photo's plate (issue #807).</summary>
+    public bool VehicleDetailsFromPhoto { get; set; }
+
     public string IssueCategory { get; set; } = string.Empty;
     public bool IsCategorySuggestedByAi { get; set; }
     public string IssueDescription { get; set; } = string.Empty;
+    public string? IssueDescriptionVerbatim { get; set; }
     public string? Urgency { get; set; }
     public string? RvUsage { get; set; }
     public string? HasExtendedWarranty { get; set; }
     public string? ApproxPurchaseDate { get; set; }
+    /// <summary>Step 6's questions (issue #736). Absent — and so empty — in a session saved before they were persisted.</summary>
+    public List<DiagnosticQuestionDto> DiagnosticQuestions { get; set; } = [];
+
     public List<DiagnosticResponseDto> DiagnosticResponses { get; set; } = [];
     public string? SmartSuggestion { get; set; }
     public CapabilityAssessmentResponseDto? CapabilityAssessment { get; set; }
     public bool IsSubmitted { get; set; }
     public string? CreatedServiceRequestId { get; set; }
     public string? SubmissionMagicLinkToken { get; set; }
+
+    /// <summary>Every issue's Steps 5–7 answers (<c>Spec A-17</c>). Absent — and so empty — in a session saved before there could be several.</summary>
+    public List<IntakeIssueDraft> Issues { get; set; } = [];
+
+    /// <summary>Which of <see cref="Issues"/> the issue properties above hold.</summary>
+    public int ActiveIssueIndex { get; set; }
 }

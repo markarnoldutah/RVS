@@ -12,6 +12,13 @@ public sealed record LocationDetailDto
     public string Name { get; init; } = default!;
     public string Slug { get; init; } = default!;
     public string? Phone { get; init; }
+
+    /// <summary>
+    /// IANA time-zone id for this location (issue #506), or <c>null</c> when unset — in which
+    /// case the packet's <c>Received</c> line stays in UTC.
+    /// </summary>
+    public string? TimeZoneId { get; init; }
+
     public AddressDto? Address { get; init; }
     public IntakeConfigDto? IntakeConfig { get; init; }
 
@@ -19,6 +26,17 @@ public sealed record LocationDetailDto
     /// Capability codes that are enabled for this location.
     /// </summary>
     public List<string> EnabledCapabilities { get; init; } = [];
+
+    /// <summary>
+    /// Per-location service-packet configuration (<c>Spec B-6</c> / <c>C-6</c>).
+    /// </summary>
+    public PacketConfigDto PacketConfig { get; init; } = new();
+
+    /// <summary>Customer-facing branding (<c>Spec A-16</c>, issue #470).</summary>
+    public LocationBrandingDto Branding { get; init; } = new();
+
+    /// <summary>Questions added to every intake's diagnostic step (<c>Spec A-18</c>, issue #785).</summary>
+    public List<string> DealerQuestions { get; init; } = [];
 
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }

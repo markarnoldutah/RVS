@@ -142,6 +142,23 @@ public sealed class LookupApiClient
     }
 
     /// <summary>
+    /// Gets the location's channel-tagged intake links (<c>Spec A-13</c>) — the short link to
+    /// print, the one encoded in the QR sticker, and the ones an advisor pastes into a text
+    /// snippet or a quick reply.
+    /// </summary>
+    public async Task<LocationIntakeLinksResponseDto> GetLocationIntakeLinksAsync(
+        string locationId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationId);
+
+        return await _httpClient.GetFromJsonAsync<LocationIntakeLinksResponseDto>(
+            $"api/locations/{Uri.EscapeDataString(locationId)}/intake-links",
+            cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize intake links response.");
+    }
+
+    /// <summary>
     /// Gets the current tenant configuration.
     /// </summary>
     public async Task<TenantConfigResponseDto> GetTenantConfigAsync(

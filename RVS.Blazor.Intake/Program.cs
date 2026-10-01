@@ -7,6 +7,7 @@ using RVS.Blazor.Intake.Services;
 using RVS.Blazor.Intake.State;
 using RVS.UI.Shared.Services;
 
+
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
@@ -34,10 +35,20 @@ builder.Services.AddScoped<AttachmentApiClient>();
 // Intake wizard shared state — scoped (one per browser tab lifetime)
 builder.Services.AddScoped<IntakeWizardState>();
 
+// The customer's status link, remembered on this device across visits (issue #716)
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<StatusLinkStore>();
+
+// The customer's contact details and VIN, remembered on this device only when they opt in (issue #811)
+builder.Services.AddScoped<RememberedDetailsStore>();
+
 // Theme switcher — scoped (one per browser tab lifetime)
 builder.Services.AddScoped<ThemeService>();
 
 var app = builder.Build();
+
+// Restore the customer's high-contrast choice before the first render (issue #758).
+await app.Services.GetRequiredService<ThemeService>().InitializeAsync();
 
 // Startup diagnostics — console.warn is always visible in browser DevTools (F12 → Console)
 var js = app.Services.GetRequiredService<IJSRuntime>();

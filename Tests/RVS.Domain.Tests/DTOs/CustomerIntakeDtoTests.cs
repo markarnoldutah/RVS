@@ -13,13 +13,28 @@ public class CustomerIntakeDtoTests
             FirstName = "John",
             LastName = "Smith",
             Email = "john@example.com",
-            Phone = "555-1234"
+            Phone = "555-1234",
+            PreferredContact = "Phone"
         };
 
         dto.FirstName.Should().Be("John");
         dto.LastName.Should().Be("Smith");
         dto.Email.Should().Be("john@example.com");
         dto.Phone.Should().Be("555-1234");
+        dto.PreferredContact.Should().Be("Phone");
+    }
+
+    [Fact]
+    public void CustomerInfoDto_PreferredContactDefaultsToNull()
+    {
+        var dto = new CustomerInfoDto
+        {
+            FirstName = "John",
+            LastName = "Smith",
+            Email = "john@example.com"
+        };
+
+        dto.PreferredContact.Should().BeNull();
     }
 
     [Fact]
@@ -68,7 +83,6 @@ public class CustomerIntakeDtoTests
 
         dto.AcceptedFileTypes.Should().BeEmpty();
         dto.IssueCategories.Should().BeEmpty();
-        dto.PrefillCustomer.Should().BeNull();
     }
 
     [Fact]
@@ -77,5 +91,48 @@ public class CustomerIntakeDtoTests
         var dto = new CustomerStatusResponseDto();
 
         dto.ServiceRequests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CustomerStatusItemResponseDto_ExposesOnlyTheSpecX1AndC9Fields()
+    {
+        // Spec X-1 shows unit, submission date, current status, and the location's phone
+        // number; Spec C-9 adds the manager-authored status note; issue #741 adds the issue
+        // category's display name; issue #793 adds the servicing location's name and logo so
+        // requests at different dealers are told apart. Nothing customer-identifying and no
+        // free-text problem description crosses this boundary.
+        var properties = typeof(CustomerStatusItemResponseDto)
+            .GetProperties()
+            .Select(p => p.Name)
+            .OrderBy(n => n);
+
+        properties.Should().Equal(
+            "IssueCategory", "LocationLogoUrl", "LocationName", "LocationPhone", "Status", "StatusNote", "SubmittedAtUtc", "Unit");
+    }
+
+    [Fact]
+    public void CustomerStatusItemResponseDto_CanSetAllFields()
+    {
+        var submittedAt = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var dto = new CustomerStatusItemResponseDto
+        {
+            Unit = "2023 Thor Ace",
+            SubmittedAtUtc = submittedAt,
+            Status = "InProgress",
+            LocationPhone = "555-0100",
+            StatusNote = "Waiting on a back-ordered slide motor, ETA Friday.",
+            IssueCategory = "Slides",
+            LocationName = "Salt Lake Service Center",
+            LocationLogoUrl = "https://cdn.example.com/acme.png"
+        };
+
+        dto.Unit.Should().Be("2023 Thor Ace");
+        dto.SubmittedAtUtc.Should().Be(submittedAt);
+        dto.Status.Should().Be("InProgress");
+        dto.LocationPhone.Should().Be("555-0100");
+        dto.StatusNote.Should().Be("Waiting on a back-ordered slide motor, ETA Friday.");
+        dto.IssueCategory.Should().Be("Slides");
+        dto.LocationName.Should().Be("Salt Lake Service Center");
+        dto.LocationLogoUrl.Should().Be("https://cdn.example.com/acme.png");
     }
 }

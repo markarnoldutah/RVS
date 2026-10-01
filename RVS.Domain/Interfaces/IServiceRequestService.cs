@@ -20,6 +20,17 @@ public interface IServiceRequestService
     Task<ServiceRequest> GetByIdAsync(string tenantId, string id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets every request reported on the same intake visit as the given one (<c>Spec A-17</c>),
+    /// ordered by submission position and including the request itself. A request reported on
+    /// its own returns just itself.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
+    Task<IReadOnlyList<ServiceRequest>> GetSubmissionMembersAsync(string tenantId, string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Searches service requests using up to 10 filter parameters with continuation-token pagination.
     /// </summary>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
@@ -58,17 +69,6 @@ public interface IServiceRequestService
     Task<ServiceRequest> UpdateStatusAsync(string tenantId, string id, string newStatus, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Applies a shared repair outcome to up to 25 service requests in a single batch.
-    /// All service requests must belong to the specified tenant.
-    /// </summary>
-    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
-    /// <param name="request">Batch outcome request containing SR IDs and outcome fields.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="ArgumentException">Thrown when the batch exceeds 25 items.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
-    Task<BatchOutcomeResponseDto> BatchOutcomeAsync(string tenantId, BatchOutcomeRequestDto request, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Deletes a service request.
     /// </summary>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
@@ -76,4 +76,58 @@ public interface IServiceRequestService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
     Task DeleteAsync(string tenantId, string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets or clears the manager-authored customer status note (<c>Spec C-9</c>). The note renders
+    /// on the anonymous customer status page alongside the fixed status. Passing a null, empty, or
+    /// whitespace-only <paramref name="note"/> clears the current note. The text is validated
+    /// (length cap + blocked characters) and is never written to application logs.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="note">The note text, or null/blank to clear.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="tenantId"/> or <paramref name="id"/> is blank, or when the note
+    /// exceeds the length cap or contains a blocked character.
+    /// </exception>
+    /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
+    Task<ServiceRequest> SetCustomerStatusNoteAsync(string tenantId, string id, string? note, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Closes a service request without work (<c>Spec C-4</c>): sets its status to
+    /// <c>Cancelled</c> and stores the reason code with the manager's audit identity. Allowed from
+    /// any status; a repeat call overwrites the earlier reason.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="reasonCode">One of <see cref="Validation.DispositionReasons.All"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="tenantId"/> or <paramref name="id"/> is blank, or when
+    /// <paramref name="reasonCode"/> is not a known reason.
+    /// </exception>
+    /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
+    Task<ServiceRequest> CloseWithDispositionAsync(string tenantId, string id, string reasonCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Requests on-demand regeneration of the request's service packet (<c>Spec B-1</c>, issue #434):
+    /// resets the packet-generation state to <c>Pending</c> and enqueues a fresh generation job.
+    /// Returns as soon as the job is enqueued — generation runs in the background.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
+    Task RegeneratePacketAsync(string tenantId, string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns a short-lived read link to the request's latest generated packet PDF
+    /// (<c>Spec C-2</c>, issue #443).
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the request is not found or has no packet yet.</exception>
+    Task<PacketPdfLinkDto> GetPacketPdfLinkAsync(string tenantId, string id, CancellationToken cancellationToken = default);
 }

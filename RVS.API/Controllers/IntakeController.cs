@@ -8,6 +8,7 @@ using RVS.API.Mappers;
 using RVS.Domain.DTOs;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Controllers;
 
@@ -57,21 +58,42 @@ public class IntakeController : ControllerBase
 
     /// <summary>
     /// Returns the intake form configuration for the specified location slug.
-    /// Includes dealership name, accepted file types, issue categories, and optional customer prefill.
+    /// Includes dealership name, accepted file types and issue categories.
     /// </summary>
     /// <param name="locationSlug">Location slug for resolving the intake context.</param>
-    /// <param name="token">Optional magic-link token to prefill customer data.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <example>
-    /// GET /api/intake/camping-world-slc/config?token=abc123
+    /// GET /api/intake/camping-world-slc/config
     /// </example>
     [HttpGet("config")]
     public async Task<ActionResult<IntakeConfigResponseDto>> GetConfig(
-        string locationSlug, [FromQuery] string? token = null, CancellationToken ct = default)
+        string locationSlug, CancellationToken ct = default)
     {
-        var config = await _intakeService.GetIntakeConfigAsync(locationSlug, token, ct);
+        var config = await _intakeService.GetIntakeConfigAsync(locationSlug, ct);
 
         return Ok(config);
+    }
+
+    /// <summary>
+    /// Returns the first name and phone an A-14 advisor invite prefills (<c>Spec A-14</c>, issue #664),
+    /// while the invite is unexpired and unredeemed. Opening does not redeem the invite: link
+    /// previews fetch the URL too, so it is spent on submission instead.
+    /// Returns 404 for every unusable invite (unknown, expired, redeemed, another location, or a
+    /// failed lookup) alike, and the intake app treats any non-200 as a blank form.
+    /// </summary>
+    /// <param name="locationSlug">Location slug for resolving the tenant.</param>
+    /// <param name="token">The raw invite token from the intake URL's <c>inv</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <example>
+    /// GET /api/intake/camping-world-slc/invites/{token}
+    /// </example>
+    [HttpGet("invites/{token}")]
+    public async Task<ActionResult<IntakeInvitePrefillResponseDto>> GetInvitePrefill(
+        string locationSlug, string token, CancellationToken ct = default)
+    {
+        var prefill = await _intakeService.GetInvitePrefillAsync(locationSlug, token, ct);
+
+        return prefill is null ? NotFound() : Ok(prefill);
     }
 
     /// <summary>
@@ -215,7 +237,13 @@ public class IntakeController : ControllerBase
         return Ok(new AiOperationResponseDto<VinExtractionResultDto>
         {
             Success = true,
-            Result = new VinExtractionResultDto { Vin = result.Vin },
+            Result = new VinExtractionResultDto
+            {
+                Vin = result.Vin,
+                Manufacturer = result.Manufacturer,
+                Model = result.Model,
+                Year = result.Year
+            },
             Confidence = result.Confidence,
             Warnings = [],
             Provider = result.Provider,
@@ -537,12 +565,48 @@ public class IntakeController : ControllerBase
     public async Task<ActionResult<IntakeSubmissionResponseDto>> SubmitServiceRequest(
         string locationSlug, [FromBody] ServiceRequestCreateRequestDto request, CancellationToken ct = default)
     {
-        var (serviceRequest, magicLinkToken) = await _intakeService.ExecuteAsync(locationSlug, request, ct);
+        // The same contact rules as the intake wizard, so a hand-built request can't store a
+        // malformed email as the customer's identity key or leave the phone out (issue #679).
+        var emailValidation = EmailValidator.Validate(request.Customer.Email);
+        if (!emailValidation.IsValid)
+        {
+            ModelState.AddModelError("Customer.Email", emailValidation.ErrorMessage!);
+        }
+
+        var phoneValidation = PhoneValidator.Validate(request.Customer.Phone);
+        if (!phoneValidation.IsValid)
+        {
+            ModelState.AddModelError("Customer.Phone", phoneValidation.ErrorMessage!);
+        }
+
+        // An opted-out channel can never be the preference (Spec A-2, issue #662).
+        var preferenceValidation = NotificationPreferenceValidator.Validate(
+            request.Customer.PreferredContact, request.SmsOptOut, request.EmailOptOut);
+        if (!preferenceValidation.IsValid)
+        {
+            ModelState.AddModelError("Customer.PreferredContact", preferenceValidation.ErrorMessage!);
+        }
+
+        // Up to ten issues, each with a description (Spec A-17, issue #806).
+        var issuesValidation = IntakeIssuesValidator.Validate(request);
+        if (!issuesValidation.IsValid)
+        {
+            ModelState.AddModelError(nameof(request.AdditionalIssues), issuesValidation.ErrorMessage!);
+        }
+
+        if (ModelState.ErrorCount > 0)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+
+        var (serviceRequest, serviceRequests, magicLinkToken, magicLinkExpiresAtUtc) = await _intakeService.ExecuteAsync(locationSlug, request, ct);
 
         var response = new IntakeSubmissionResponseDto
         {
             ServiceRequest = serviceRequest.ToDetailDto(),
-            MagicLinkToken = magicLinkToken
+            ServiceRequestIds = [.. serviceRequests.Select(sr => sr.Id)],
+            MagicLinkToken = magicLinkToken,
+            MagicLinkExpiresAtUtc = magicLinkExpiresAtUtc
         };
 
         return CreatedAtAction(nameof(GetConfig), new { locationSlug }, response);

@@ -1,0 +1,31 @@
+@namespace RVS.UI.Shared.Components
+
+@* The kit's SVGs are outlined, so an <img> renders them in brand without the font (THEME-1 §4).
+   An empty Title marks the mark decorative: alt="" and hidden from assistive tech. *@
+
+<img src="@BrandMarkAssets.PathFor(Variant, Reversed)"
+     alt="@Title"
+     aria-hidden="@(IsDecorative ? "true" : null)"
+     class="@Class"
+     style="@ImageStyle" />
+
+@code {
+    /// <summary>Which lockup to draw.</summary>
+    [Parameter] public BrandWordmarkVariant Variant { get; set; } = BrandWordmarkVariant.Horizontal;
+
+    /// <summary>True when the mark sits on a dark or Ink surface, e.g. an app bar.</summary>
+    [Parameter] public bool Reversed { get; set; }
+
+    /// <summary>Rendered height, e.g. <c>"32px"</c>. Width follows the aspect ratio.</summary>
+    [Parameter] public string Height { get; set; } = "32px";
+
+    /// <summary>Accessible name. Pass an empty string where the mark is decorative.</summary>
+    [Parameter] public string Title { get; set; } = "RV Intake";
+
+    /// <summary>Extra CSS classes on the image, e.g. responsive display helpers.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    private bool IsDecorative => string.IsNullOrEmpty(Title);
+
+    private string ImageStyle => $"height:{Height};width:auto;display:block;";
+}

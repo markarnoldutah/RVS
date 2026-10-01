@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using RVS.Domain.DTOs;
 using RVS.Domain.Interfaces;
 using Microsoft.AspNetCore.Http;
 
@@ -55,16 +56,23 @@ public sealed class TenantAccessGateMiddleware
             return;
         }
 
-        // TODO consider saving access gate to Tables, cache etc to reduce RUs
+        // Single-partition 1 RU point read on tenant-configs (id == PartitionKey == tenantId).
+        // A short-TTL cache (archived optimisation O-4: 60s IMemoryCache / CachedTenantConfigRepository
+        // decorator) is deferred — the #462 perf assessment found no cache is warranted at current
+        // scale: this is a Manager-only path and the intake/status flows are allowlisted above.
         var gate = await tenantConfigService.GetAccessGateAsync(tenantId);
 
         if (gate.LoginsEnabled == false)
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await ctx.Response.WriteAsJsonAsync(new
+            // DisabledReason is internal (e.g. "PastDue") and stays off the wire.
+            await ctx.Response.WriteAsJsonAsync(new TenantAccessDeniedResponseDto
             {
-                message = "Tenant disabled",
-                errorId = Guid.NewGuid().ToString()
+                Message = "Tenant disabled",
+                ErrorId = Guid.NewGuid().ToString(),
+                Code = TenantAccessDeniedResponseDto.TenantDisabledCode,
+                DisabledMessage = gate.DisabledMessage,
+                SupportContactEmail = gate.SupportContactEmail
             });
             return;
         }

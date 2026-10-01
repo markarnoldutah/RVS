@@ -39,4 +39,156 @@ public class ServiceRequestTests
 
         sr.Status.Should().Be("New");
     }
+
+    [Fact]
+    public void NewServiceRequest_ShouldHaveNoCustomerStatusNote()
+    {
+        var sr = new ServiceRequest();
+
+        sr.CustomerStatusNote.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetCustomerStatusNote_WithText_StoresTrimmedTextAndAuditFields()
+    {
+        var sr = new ServiceRequest();
+        var before = DateTime.UtcNow;
+
+        sr.SetCustomerStatusNote("  Parts arrived — tech starts Monday.  ", "auth0|advisor-1");
+
+        sr.CustomerStatusNote.Should().NotBeNull();
+        sr.CustomerStatusNote!.Text.Should().Be("Parts arrived — tech starts Monday.");
+        sr.CustomerStatusNote.UpdatedByUserId.Should().Be("auth0|advisor-1");
+        sr.CustomerStatusNote.UpdatedAtUtc.Should().BeOnOrAfter(before).And.BeOnOrBefore(DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void SetCustomerStatusNote_WithText_StampsEntityAsUpdated()
+    {
+        var sr = new ServiceRequest();
+
+        sr.SetCustomerStatusNote("Waiting on customer approval.", "auth0|advisor-1");
+
+        sr.UpdatedAtUtc.Should().NotBeNull();
+        sr.UpdatedByUserId.Should().Be("auth0|advisor-1");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void SetCustomerStatusNote_WithBlank_ClearsExistingNoteAndStampsUpdated(string? note)
+    {
+        var sr = new ServiceRequest();
+        sr.SetCustomerStatusNote("An earlier note.", "auth0|advisor-1");
+
+        sr.SetCustomerStatusNote(note, "auth0|advisor-2");
+
+        sr.CustomerStatusNote.Should().BeNull();
+        sr.UpdatedByUserId.Should().Be("auth0|advisor-2");
+    }
+
+    // --- Disposition (Spec C-4, issue #445) ---------------------------------------------------
+
+    [Fact]
+    public void CloseWithDisposition_WithReason_SetsStatusCancelledAndStoresReasonWithAudit()
+    {
+        var sr = new ServiceRequest { Status = "InProgress" };
+        var before = DateTime.UtcNow;
+
+        sr.CloseWithDisposition("Duplicate", "auth0|advisor-1");
+
+        sr.Status.Should().Be("Cancelled");
+        sr.Disposition.Should().NotBeNull();
+        sr.Disposition!.ReasonCode.Should().Be("Duplicate");
+        sr.Disposition.DisposedByUserId.Should().Be("auth0|advisor-1");
+        sr.Disposition.DisposedAtUtc.Should().BeOnOrAfter(before).And.BeOnOrBefore(DateTime.UtcNow);
+        sr.UpdatedByUserId.Should().Be("auth0|advisor-1");
+        sr.UpdatedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void CloseWithDisposition_WhenAlreadyDisposed_OverwritesReason()
+    {
+        var sr = new ServiceRequest();
+        sr.CloseWithDisposition("Duplicate", "auth0|advisor-1");
+
+        sr.CloseWithDisposition("Spam", "auth0|advisor-2");
+
+        sr.Disposition!.ReasonCode.Should().Be("Spam");
+        sr.Disposition.DisposedByUserId.Should().Be("auth0|advisor-2");
+    }
+
+    [Fact]
+    public void NewServiceRequest_HasNoDisposition()
+    {
+        new ServiceRequest().Disposition.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("New")]
+    [InlineData("InProgress")]
+    [InlineData("WaitingOnParts")]
+    [InlineData("WaitingOnCustomer")]
+    [InlineData("Completed")]
+    public void ClearDispositionIfReopened_WhenStatusMovedOffCancelled_ClearsDisposition(string status)
+    {
+        var sr = new ServiceRequest();
+        sr.CloseWithDisposition("WrongLocation", "auth0|advisor-1");
+        sr.Status = status;
+
+        sr.ClearDispositionIfReopened();
+
+        sr.Disposition.Should().BeNull();
+    }
+
+    [Fact]
+    public void ClearDispositionIfReopened_WhenStillCancelled_KeepsDisposition()
+    {
+        var sr = new ServiceRequest();
+        sr.CloseWithDisposition("CustomerWithdrew", "auth0|advisor-1");
+
+        sr.ClearDispositionIfReopened();
+
+        sr.Disposition!.ReasonCode.Should().Be("CustomerWithdrew");
+    }
+
+    // ── Several issues per visit (Spec A-17, issue #806) ──────────────
+
+    [Fact]
+    public void NewServiceRequest_ShouldNotBeInAMultiIssueSubmission()
+    {
+        var sr = new ServiceRequest();
+
+        sr.SubmissionId.Should().BeNull();
+        sr.IsInMultiIssueSubmission.Should().BeFalse();
+        sr.IsSubmissionLead.Should().BeFalse();
+    }
+
+    [Fact]
+    public void FirstRequestOfAMultiIssueSubmission_ShouldBeTheLead()
+    {
+        var sr = new ServiceRequest { SubmissionId = "lead", SubmissionPosition = 1, SubmissionCount = 3 };
+
+        sr.IsInMultiIssueSubmission.Should().BeTrue();
+        sr.IsSubmissionLead.Should().BeTrue();
+    }
+
+    [Fact]
+    public void LaterRequestOfAMultiIssueSubmission_ShouldNotBeTheLead()
+    {
+        var sr = new ServiceRequest { SubmissionId = "lead", SubmissionPosition = 2, SubmissionCount = 3 };
+
+        sr.IsInMultiIssueSubmission.Should().BeTrue();
+        sr.IsSubmissionLead.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SubmissionOfOne_ShouldNotCountAsMultiIssue()
+    {
+        var sr = new ServiceRequest { SubmissionId = "lead", SubmissionPosition = 1, SubmissionCount = 1 };
+
+        sr.IsInMultiIssueSubmission.Should().BeFalse();
+        sr.IsSubmissionLead.Should().BeFalse();
+    }
 }

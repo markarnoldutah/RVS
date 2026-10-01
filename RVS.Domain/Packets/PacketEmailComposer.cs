@@ -1,0 +1,215 @@
+using System.Globalization;
+using RVS.Domain.Integrations;
+
+namespace RVS.Domain.Packets;
+
+/// <summary>
+/// Assembles the packet delivery email (<c>Spec B-4</c>, issue #437) from a composed
+/// <see cref="ServicePacket"/> and its rendered HTML.
+///
+/// A pure transform: it reads only its arguments and returns a new
+/// <see cref="PacketEmailMessage"/>. It performs no I/O, renders no HTML, downloads no
+/// attachment bytes, and knows nothing about the transport. The packet generation
+/// orchestrator resolves the recipient list and attachment bytes and hands them in.
+///
+/// <para><b>Subject.</b> <c>New SR: {customer last name}: {year} {make} {model} - {category}</c>
+/// (issue #775 — the last name leads so an inbox sorts and scans by customer),
+/// degrading field by field: an unclassified request reads <c>Uncategorized</c>; a unit with
+/// no year/make/model reads <c>Unknown vehicle</c>; a missing last name reads
+/// <c>Unknown</c>.</para>
+///
+/// <para><b>Plain-text body.</b> The DMS paste block (<c>Spec B-5</c>) so a text-only client
+/// still gets category, the verbatim description, and the status link. The packet's own
+/// <see cref="ServicePacket.PasteBlock"/> is used when present; otherwise one is generated
+/// here from the same fields.</para>
+/// </summary>
+public static class PacketEmailComposer
+{
+    /// <summary>Category placeholder when the request was never classified (<c>Spec A-5</c>).</summary>
+    private const string UncategorizedLabel = "Uncategorized";
+
+    /// <summary>Unit-header placeholder when year, make, and model are all absent.</summary>
+    private const string UnknownVehicleLabel = "Unknown vehicle";
+
+    /// <summary>Last-name placeholder for requests created before the name was captured.</summary>
+    private const string UnknownLastNameLabel = "Unknown";
+
+    /// <summary>Leads the subject so a new request stands out in a shared service inbox.</summary>
+    private const string SubjectPrefix = "New SR";
+
+    /// <summary>
+    /// Builds the packet email for one request.
+    /// </summary>
+    /// <param name="packet">The composed packet — subject fields and the plain-text fallback come from here.</param>
+    /// <param name="htmlBody">The rendered packet HTML, used verbatim as the inline HTML body.</param>
+    /// <param name="customerLastName">The customer's last name for the subject; blank becomes <c>Unknown</c>.</param>
+    /// <param name="recipients">The location's configured recipient addresses; blanks are dropped and at least one must remain.</param>
+    /// <param name="attachments">The PDF and/or original photos per the location's configuration. <c>null</c> is treated as none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="packet"/> or <paramref name="recipients"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="htmlBody"/> is blank, or <paramref name="recipients"/> has no non-blank entry.</exception>
+    public static PacketEmailMessage Compose(
+        ServicePacket packet,
+        string htmlBody,
+        string? customerLastName,
+        IReadOnlyList<string> recipients,
+        IReadOnlyList<PacketEmailAttachment>? attachments = null)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+        ArgumentException.ThrowIfNullOrWhiteSpace(htmlBody);
+        ArgumentNullException.ThrowIfNull(recipients);
+
+        var cleanRecipients = recipients
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r.Trim())
+            .ToList();
+
+        if (cleanRecipients.Count == 0)
+        {
+            throw new ArgumentException("At least one non-blank recipient is required.", nameof(recipients));
+        }
+
+        return new PacketEmailMessage
+        {
+            Subject = BuildSubject(packet, customerLastName),
+            HtmlBody = htmlBody,
+            PlainTextBody = BuildPlainTextBody(packet),
+            Recipients = cleanRecipients,
+            Attachments = attachments is null ? [] : [.. attachments],
+        };
+    }
+
+    /// <summary>
+    /// Builds the one packet email for a multi-issue submission (<c>Spec A-17</c>, <c>B-4</c>,
+    /// issue #806). The subject names the unit once, then the issue count and every category
+    /// in order — <c>New SR: {last name}: {year} {make} {model} - {n} issues: {category}, …</c>.
+    /// The plain-text body is <see cref="BuildCombinedPlainTextBody"/>. A single packet composes
+    /// exactly as <see cref="Compose"/> would.
+    /// </summary>
+    /// <param name="packets">The submission's packets, in the order the customer reported the issues. The first supplies the unit.</param>
+    /// <param name="htmlBody">The combined HTML (<see cref="PacketHtmlRenderer.RenderCombined"/>), used verbatim.</param>
+    /// <param name="customerLastName">The customer's last name for the subject; blank becomes <c>Unknown</c>.</param>
+    /// <param name="recipients">The location's configured recipient addresses; blanks are dropped and at least one must remain.</param>
+    /// <param name="attachments">The merged PDF and/or original photos. <c>null</c> is treated as none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="packets"/> or <paramref name="recipients"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="packets"/> is empty, <paramref name="htmlBody"/> is blank, or no recipient remains.</exception>
+    public static PacketEmailMessage ComposeCombined(
+        IReadOnlyList<ServicePacket> packets,
+        string htmlBody,
+        string? customerLastName,
+        IReadOnlyList<string> recipients,
+        IReadOnlyList<PacketEmailAttachment>? attachments = null)
+    {
+        ArgumentNullException.ThrowIfNull(packets);
+        if (packets.Count == 0)
+        {
+            throw new ArgumentException("At least one packet is required.", nameof(packets));
+        }
+
+        var message = Compose(packets[0], htmlBody, customerLastName, recipients, attachments);
+        if (packets.Count == 1)
+        {
+            return message;
+        }
+
+        var categories = string.Join(", ", packets.Select(p => CategoryLabel(p.IssueCategory)));
+
+        return message with
+        {
+            Subject = $"{SubjectPrefix}: {LastNameLabel(customerLastName)}: {BuildVehicle(packets[0].Unit)} - {packets.Count} issues: {categories}",
+            PlainTextBody = BuildCombinedPlainTextBody(packets),
+        };
+    }
+
+    /// <summary>
+    /// The plain-text body of a multi-issue email: each packet's <see cref="BuildPlainTextBody"/>
+    /// in order, headed <c>ISSUE i OF n</c>. ASCII like the paste blocks it carries (<c>Spec B-5</c>).
+    /// A single packet's body has no heading, as <see cref="Compose"/> sends it.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="packets"/> is null.</exception>
+    public static string BuildCombinedPlainTextBody(IReadOnlyList<ServicePacket> packets)
+    {
+        ArgumentNullException.ThrowIfNull(packets);
+
+        if (packets.Count == 1)
+        {
+            return BuildPlainTextBody(packets[0]);
+        }
+
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < packets.Count; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append("\n\n");
+            }
+
+            sb.Append("ISSUE ").Append((i + 1).ToString(CultureInfo.InvariantCulture))
+                .Append(" OF ").Append(packets.Count.ToString(CultureInfo.InvariantCulture)).Append('\n');
+            sb.Append(BuildPlainTextBody(packets[i]));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string BuildSubject(ServicePacket packet, string? customerLastName) =>
+        $"{SubjectPrefix}: {LastNameLabel(customerLastName)}: {BuildVehicle(packet.Unit)} - {CategoryLabel(packet.IssueCategory)}";
+
+    private static string CategoryLabel(string? category) =>
+        string.IsNullOrWhiteSpace(category) ? UncategorizedLabel : category.Trim();
+
+    private static string LastNameLabel(string? customerLastName) =>
+        string.IsNullOrWhiteSpace(customerLastName) ? UnknownLastNameLabel : customerLastName.Trim();
+
+    private static string BuildVehicle(PacketUnitHeader unit)
+    {
+        var parts = new List<string>(3);
+
+        if (unit.Year is { } year)
+        {
+            parts.Add(year.ToString(CultureInfo.InvariantCulture));
+        }
+
+        if (!string.IsNullOrWhiteSpace(unit.Make))
+        {
+            parts.Add(unit.Make.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(unit.Model))
+        {
+            parts.Add(unit.Model.Trim());
+        }
+
+        return parts.Count == 0 ? UnknownVehicleLabel : string.Join(' ', parts);
+    }
+
+    /// <summary>
+    /// The plain-text body this composer would send for <paramref name="packet"/> — the packet's
+    /// own paste block, or one generated from the same fields when it has none.
+    ///
+    /// Public so a caller can measure the body before composing: the email size budget
+    /// (<see cref="PacketEmailSizeFitter"/>, issue #521) has to charge the real bodies against
+    /// the ACS request ceiling, and re-deriving them here keeps that measurement and the
+    /// composed message from drifting apart.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="packet"/> is null.</exception>
+    public static string BuildPlainTextBody(ServicePacket packet)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        var pasteBlock = string.IsNullOrWhiteSpace(packet.PasteBlock)
+            ? PasteBlockGenerator.Generate(packet.IssueCategory, packet.IssueDescription, packet.StatusLink?.Url)
+            : packet.PasteBlock;
+
+        return packet.ManagerLinks is { } links
+            ? pasteBlock + BuildManagerLinksText(links)
+            : pasteBlock;
+    }
+
+    /// <summary>
+    /// The manager-app link as an ASCII line after the paste block, so a text-only client still
+    /// gets it (<c>Spec B-4</c>, <c>C-7</c>, issues #498, #743). Kept outside the paste block
+    /// itself: that block is lifted into a DMS field and the link does not belong there.
+    /// </summary>
+    private static string BuildManagerLinksText(PacketManagerLinks links) =>
+        $"\n\nManager app\nOpen in manager app: {links.RequestUrl}\n";
+}

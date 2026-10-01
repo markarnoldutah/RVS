@@ -4,9 +4,42 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Authoritative Docs
 
-- Product / architecture source of truth: [Docs/ASOT/](Docs/ASOT/) — PRD, Technical PRD, implementation plan, Cosmos data model, Auth0 identity, Magic Link storage. Prefer these over any older notes elsewhere in the repo.
-- Infra source of truth: Bicep files in [Docs/ASOT/Infra/](Docs/ASOT/Infra/). Do not trust hand-drawn diagrams or older docs for Azure resource configuration.
+**Product canon:**
+
+| Document | Use it when |
+| --- | --- |
+| [Docs/RVS_Overview.md](Docs/RVS_Overview.md) | You need to remember what this is, or explain it to someone |
+| [Docs/RVS_Spec.md](Docs/RVS_Spec.md) | You're writing code. **If a requirement isn't here, it isn't in scope** |
+| [Docs/RVS_Plan.md](Docs/RVS_Plan.md) | You're deciding what to do next, or need an open question |
+| [Docs/RVS_Money.md](Docs/RVS_Money.md) | You need unit economics, cost structure, a revenue scenario, or the break-even |
+| [Docs/RVS_GoLive_Activities.md](Docs/RVS_GoLive_Activities.md) | You're about to take production live and need the agreed actions parked for that moment |
+| [Docs/RVS_Archive_Index.md](Docs/RVS_Archive_Index.md) | You need something from the prior document set, or why it was cut |
+
+There is no target number of these. One authoritative home per fact; a document earns its place by answering a question someone actually asks; register a new one here, in `RVS_Overview.md` and in `.github/copilot-instructions.md` on the same commit. See "Document set" in the Overview.
+
+**Technical detail** lives in [Docs/ASOT/](Docs/ASOT/): [RVS_Architecture.md](Docs/ASOT/RVS_Architecture.md), [RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md), [RVS_Infrastructure.md](Docs/ASOT/RVS_Infrastructure.md), [RVS_Identity.md](Docs/ASOT/RVS_Identity.md), [RVS_FrontEnd.md](Docs/ASOT/RVS_FrontEnd.md), [RVS_PacketComposition.md](Docs/ASOT/RVS_PacketComposition.md). These describe **what is built**; the Spec describes what is intended. Each ASOT doc carries a coverage or gap table where the two differ.
+
+- Infra source of truth: Bicep files in [Docs/ASOT/Infra/Bicep.IaC/](Docs/ASOT/Infra/Bicep.IaC/). Do not trust hand-drawn diagrams or older docs for Azure resource configuration.
+- Brand: [Docs/ASOT/Brand/](Docs/ASOT/Brand/) — the Denim & Rust theme brief (cited in code as **Spec THEME-1**) as handed over in #702, and the logo-kit asset inventory as re-issued September 24 2026 with the "Service Tag" mark (THEME-1 revised the same day: text-safe Rust, WCAG-audited semantic colors). They carry the rationale; the palette itself is authoritative in `RVS.UI.Shared/Theme/RvsBrand.cs`.
+- GTM material: [Docs/Marketing/](Docs/Marketing/) — Positioning, GoToMarket, Objections.
+- Customer-facing how-tos: [Docs/Guides/](Docs/Guides/) — per-device guides for sending a channel-tagged intake link (Spec A-13). Written for a non-technical service advisor, not for engineers.
+- [Docs/ARCHIVE/](Docs/ARCHIVE/) and [Docs/Obsolete/](Docs/Obsolete/) are frozen snapshots. **Never cite them as current.**
 - Per-language instruction files also live in [.github/instructions/](.github/instructions/) (C#, ASP.NET, Blazor, Markdown, Testing).
+
+**Scope discipline.** The product was deliberately reduced to: anonymous intake → a one-page packet emailed to the service department → a thin manager app. Archived and out of scope: DMS integration, two-way SMS, technician/MAUI app, scheduling, benchmarking and analytics, billing tiers, OEM data licensing. Code for several of these still exists and is a descope target, not a feature — see the descope backlogs in the ASOT docs before extending anything in those areas.
+
+## Working an Issue
+
+When the user says **"Execute Issue #abc"** (where `abc` is a valid GitHub Issue number), before doing any work:
+
+1. Create a new branch off the current base branch (usually `main`) named `abc-some-meaningful-identifier` — `abc` is the issue number, followed by a short kebab-case slug describing the issue (e.g. `431-packet-html-render`).
+2. Check out that branch, then perform the work for the issue on it.
+
+Do not commit issue work directly to `main`. If the branch already exists, check it out and continue on it rather than creating a duplicate.
+
+## Committing
+
+**Never commit or push automatically.** Do the work, leave the changes in the working tree, and stop there. Run `git commit` or `git push` only when I explicitly ask for it in that same message. Creating a branch, "executing" an issue, or being told to "make the change" is **not** permission to commit — wait for an explicit "commit this" / "push it" instruction.
 
 ## Solution Layout
 
@@ -18,12 +51,12 @@ Solution file is [RVS.slnx](RVS.slnx) (new SLNX format — `dotnet` CLI handles 
 | [RVS.Domain](RVS.Domain/) | Entities, DTOs, Interfaces, Validation, Exceptions. **Zero infra dependencies.** |
 | [RVS.Infra.AzCosmosRepository](RVS.Infra.AzCosmosRepository/) | Cosmos DB repository implementations. |
 | [RVS.Infra.AzBlobRepository](RVS.Infra.AzBlobRepository/) | Azure Blob Storage (attachments). |
-| [RVS.Infra.AzTablesRepository](RVS.Infra.AzTablesRepository/) | Azure Tables (tenant access gate). |
-| [RVS.Infra.AzCredentials](RVS.Infra.AzCredentials/) | Shared credential helpers. |
-| [RVS.Blazor.Intake](RVS.Blazor.Intake/) | Blazor **WASM** — anonymous 7-step customer intake wizard. |
+| [RVS.Infra.AzTableRepository](RVS.Infra.AzTableRepository/) | Azure Table Storage — the append-only `go.rvintake.com` redirect hit log (Spec A-13). Falls back to a no-op when `TableStorage:Endpoint` is unset. |
+| [RVS.Blazor.Intake](RVS.Blazor.Intake/) | Blazor **WASM** — anonymous 8-step customer intake wizard. |
 | [RVS.Blazor.Manager](RVS.Blazor.Manager/) | Blazor **WASM** — authenticated dealer manager desktop (OIDC/Auth0, PKCE). |
-| [RVS.UI.Shared](RVS.UI.Shared/) | Shared typed API clients (`ServiceRequestApiClient`, `AnalyticsApiClient`, `LookupApiClient`, `AttachmentApiClient`) + `ThemeService`. |
-| [RVS.Data.Cosmos.Seed](RVS.Data.Cosmos.Seed/) | Idempotent seeder — creates 9 containers with partition keys/unique keys/indexing, seeds test data. |
+| [RVS.UI.Shared](RVS.UI.Shared/) | Shared typed API clients (`IntakeApiClient`, `ServiceRequestApiClient`, `LookupApiClient`, `AttachmentApiClient`, and `AnalyticsApiClient` — archived scope), client-side validators, badge components. **`ThemeService` is not here** — each Blazor app has its own copy. |
+| [RVS.Data.Cosmos.Seed](RVS.Data.Cosmos.Seed/) | Idempotent seeder — creates 11 containers with partition keys/unique keys/indexing, seeds test data. |
+| [RVS.PacketDump](RVS.PacketDump/) | Dev utility — renders sample `ServicePacket`s to standalone `.html` (`PacketHtmlRenderer`) and `.pdf` (`PacketPdfRenderer`) files for print-testing at Letter/A4. `--format html\|pdf\|both`, `--variant full\|minimal\|multi\|both\|all` (`multi` is a three-issue visit rendered as one packet, Spec A-17). Not deployable. |
 | [Tests/RVS.Domain.Tests](Tests/RVS.Domain.Tests/) | Pure logic: mappers, validators, entities. |
 | [Tests/RVS.API.Tests](Tests/RVS.API.Tests/) | Services, middleware, controllers (with Moq). |
 | [Tests/RVS.UI.Shared.Tests](Tests/RVS.UI.Shared.Tests/) | Shared API client tests. |
@@ -40,13 +73,17 @@ dotnet restore RVS.slnx
 dotnet build RVS.slnx --configuration Release
 
 # Run all tests with coverage (matches CI)
-dotnet test Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj     --configuration Release --collect:"XPlat Code Coverage"
-dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj           --configuration Release --collect:"XPlat Code Coverage"
-dotnet test Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj --configuration Release --collect:"XPlat Code Coverage"
+# The Tests/ projects run on Microsoft.Testing.Platform (xunit.v3 + Tests/Directory.Build.props).
+# trx/coverage flags are MTP syntax and go after `--`; the old VSTest --collect/--logger
+# forms discover nothing and exit 0 (issue #560).
+dotnet build RVS.slnx --configuration Release
+dotnet test Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj     --configuration Release --no-build -- --coverage --coverage-output-format cobertura
+dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj           --configuration Release --no-build -- --coverage --coverage-output-format cobertura
+dotnet test Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura
 
-# Run a single test class or test
-dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj --filter "FullyQualifiedName~ServiceRequestServiceTests"
-dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj --filter "FullyQualifiedName=RVS.API.Tests.Services.ServiceRequestServiceTests.GetAsync_WhenNotFound_ShouldThrow"
+# Run a single test class or test (MTP simple filters; wildcard '*' only at start/end)
+dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj --configuration Release --no-build -- --filter-class "*.ServiceRequestServiceTests"
+dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj --configuration Release --no-build -- --filter-method "*.ServiceRequestServiceTests.GetAsync_WhenNotFound_ShouldThrow"
 
 # Run individual apps (each has launchSettings.json with HTTPS profile)
 dotnet run --project RVS.API                -lp https   # https://localhost:7116
@@ -59,13 +96,35 @@ Tools/rvs-launch.cmd
 # Seed Cosmos — idempotent; re-run is safe
 dotnet run --project RVS.Data.Cosmos.Seed                     # Local (emulator)
 dotnet run --project RVS.Data.Cosmos.Seed -- --environment Staging
+
+# Dump sample packets for print-testing — HTML + PDF, full + minimal
+dotnet run --project RVS.PacketDump -- ~/Desktop
+dotnet run --project RVS.PacketDump -- --pdf --full        # one format / one variant
 ```
 
 WASM workload is required for Blazor projects. CI installs it via `dotnet workload install wasm-tools`; do the same locally if Blazor builds fail.
 
 ## Architecture at a Glance
 
-**Multi-tenant B2B SaaS for RV dealerships.** Tenant = corporation, partitioned by `tenantId` (= Auth0 `org_id`). Three client apps share one API.
+**Multi-tenant B2B SaaS for RV dealerships.** Tenant = corporation, partitioned by `tenantId`. **RVS does not use Auth0 Organizations** — `tenantId` comes from the user's `app_metadata`, injected into the JWT by a Post-Login Action. Values are conventionally shaped like `ten_acme_rv`, but they are ordinary strings, not Auth0 org identifiers. Two client apps share one API.
+
+### Domains
+
+Two domains, split by audience rather than by app. **Every hostname a human reads is on `rvintake.com`**; `rvserviceflow.com` is corporate.
+
+| Host | Serves |
+| --- | --- |
+| `rvintake.com` / `staging.rvintake.com` | Intake SWA (prod is the apex) |
+| `manager.rvintake.com` / `manager-staging.rvintake.com` | Manager SWA |
+| `go.rvintake.com` / `go-staging.rvintake.com` | API redirect endpoint (Spec A-13) |
+| `mail.rvintake.com` / `mail-staging.rvintake.com` | ACS sending domain |
+| `api.rvserviceflow.com` / `api-staging.rvserviceflow.com` | API origin — XHR only, never typed |
+
+The `RVS` acronym is unaffected: resource names, project names and document names all keep it.
+
+**Three things on `rvserviceflow.com` are opaque identifiers, not addresses — never change them to match a hostname:** the Auth0 audience `https://api.rvserviceflow.com`, the claim namespace `https://rvserviceflow.com/tenantId` / `/locationIds` (pinned in seven places plus the Auth0 Action), and `ErrorBaseUri` in `ExceptionHandlingMiddleware`. Changing the audience invalidates every token and grant; changing the namespace breaks claim extraction.
+
+`manager*.rvserviceflow.com` was retired September 17 2026 and does not resolve.
 
 ### Request → Response Flow
 
@@ -82,9 +141,15 @@ WASM workload is required for Blazor projects. CI installs it via `dotnet worklo
 4. **Services** (sealed, scoped): guard clauses → repository → return domain entities.
 5. **Repositories** (scoped, Cosmos): all queries are **single-partition on `tenantId`** — cross-partition is structurally prevented.
 
-### Cosmos DB (9 containers)
+### Channel-tagged intake links (Spec A-13)
 
-`serviceRequests`, `customerProfiles`, `globalCustomerAccts`, `assetLedger`, `dealerships`, `locations`, `tenantConfigs`, `lookupSets`, `slugLookup`. `ConnectionMode.Gateway` (server-side caching enabled). Container creation + seeding lives in [RVS.Data.Cosmos.Seed/Program.cs](RVS.Data.Cosmos.Seed/Program.cs).
+Every customer-facing link routes through `go.rvintake.com/{locationSlug}` — `GoController` (anonymous, `/{slug}` and `/go/{slug}`) → `IntakeRedirectService` → 302 to the intake app with a normalised `src`. `IntakeLinkBuilder` (Domain) is the **only** place a customer-facing link is composed; the QR endpoint, `GET api/locations/{id}/intake-links` and the provisioning `intakeUrl` all go through it. `src` lands on `ServiceRequest.intakeSource`; raw hits go to Table Storage, never Cosmos. The redirect must never fail — unknown slug, unknown `src`, storage outage all still redirect.
+
+### Cosmos DB (11 containers, kebab-case)
+
+`service-requests`, `customer-profiles`, `global-customer-accounts`, `asset-ledger`, `dealerships`, `locations`, `slug-lookups`, `tenant-configs`, `lookup-sets`, `rv-warranty-rules`, `intake-invites`. `ConnectionMode.Gateway`, set explicitly in [RVS.API/Program.cs](RVS.API/Program.cs) and the seeder (the .NET SDK default is Direct). No integrated cache: that needs a provisioned dedicated gateway (`SqlDedicatedGateway`), which `modules/cosmos-db.bicep` does not declare. Container creation + seeding lives in [RVS.Data.Cosmos.Seed/Program.cs](RVS.Data.Cosmos.Seed/Program.cs); the same set is declared in `modules/cosmos-db.bicep`. Partition keys and entity shapes are in [Docs/ASOT/RVS_DataModel.md](Docs/ASOT/RVS_DataModel.md).
+
+Most containers partition on `/tenantId`. The exceptions are deliberate: `global-customer-accounts` on `/email`, `asset-ledger` on `/assetId`, `slug-lookups` on `/slug`, `lookup-sets` on `/category`, `rv-warranty-rules` on `/manufacturer`. `rv-warranty-rules` is seeded but has no repository and is never read.
 
 ### Auth & Claims
 
@@ -95,13 +160,15 @@ WASM workload is required for Blazor projects. CI installs it via `dotnet worklo
 
 ### AI / External Integrations
 
-All integrations have a `Mock*`/`NoOp*` fallback behind the same interface — toggled by `Integrations:UseMocks` in config. Real implementations use `Microsoft.Extensions.Http.Resilience.AddStandardResilienceHandler` with per-client timeouts:
+All integrations have a `Mock*`/`NoOp*` fallback behind the same interface, nominally toggled by `Integrations:UseMocks`. **That flag is `false` in every appsettings file, including Development** — the fallback that actually fires is the secondary one: if the relevant endpoint setting is absent, registration silently degrades to the rule-based or no-op implementation. Real implementations use `Microsoft.Extensions.Http.Resilience.AddStandardResilienceHandler` with per-client timeouts:
 
 - VIN Decode → NHTSA vPIC (`NhtsaVinDecoderClient`)
 - VIN Extraction (vision) → Azure OpenAI (`AzureOpenAiVinExtractionService`)
 - Speech-to-Text → Azure OpenAI Whisper (**northcentralus** — Whisper 001 Standard not in westus3)
 - Issue text refinement + categorization → Azure OpenAI (fallback: `RuleBasedIssueTextRefinementService` / `RuleBasedCategorizationService`)
-- Email + SMS → Azure Communication Services (fallback: NoOp)
+- Packet preliminary assessment (probable cause / possible fixes / likely parts) → Azure OpenAI, called from `PacketGenerationService` once per request (fallback: `RuleBasedPreliminaryAssessmentService`)
+- Email → Azure Communication Services (fallback: NoOp). Today it only sends a customer confirmation; **nothing emails a service manager yet** — that is Spec section B, the current work
+- SMS → Azure Communication Services (fallback: NoOp). Outbound-only, in scope as a customer-notification channel (A-14, #600). **Off unless `AzureCommunicationServices:Sms:Enabled` is true** — checked before the endpoint, so the vault's ACS endpoint alone never turns it on. The from-number is Bicep-injected per environment and resolved per location (`ISmsSenderNumberResolver`); recipients go through `PhoneNumberNormalizer` (E.164) and a per-tenant hourly cap. Two-way SMS stays archived
 
 ### Secrets Model
 
@@ -179,7 +246,7 @@ Target: .NET 10, C# 14, nullable enabled, implicit usings enabled.
 ### Exception Handling Middleware
 
 - `ExceptionHandlingMiddleware` implements `IMiddleware`, registered singleton.
-- Exception → HTTP mapping: `ArgumentException` → **400**, `UnauthorizedAccessException` → **401**, `KeyNotFoundException` → **404**, everything else → **500**.
+- Exception → HTTP mapping: `ArgumentException` → **400**, `UnauthorizedAccessException` → **401**, `KeyNotFoundException` → **404**, `ConflictException` → **409**, everything else → **500**.
 - Response body: `{ "message": "<safe message>", "errorId": "<guid>" }`. Dev mode adds `exception` and `stackTrace`.
 - Log full details (exception, tenantId, userId, path) via `ILogger`. Never expose internals to client.
 
@@ -237,7 +304,7 @@ When adding a new resource:
 
 ## Testing — TDD Is Mandatory
 
-Full rules in [.github/instructions/testing.instructions.md](.github/instructions/testing.instructions.md). Stack: xUnit v2 (net10.0, Microsoft.Testing.Platform) + Moq + FluentAssertions + coverlet.
+Full rules in [.github/instructions/testing.instructions.md](.github/instructions/testing.instructions.md). Stack: xUnit v3 3.2.x (net10.0, Microsoft.Testing.Platform — self-executing test assemblies) + Moq + FluentAssertions. Coverage via `Microsoft.Testing.Extensions.CodeCoverage` (`-- --coverage`).
 
 **Red → Green → Refactor. Non-negotiable order for every issue:**
 
@@ -258,14 +325,29 @@ All Blazor projects use **MudBlazor 9.x** (Material Design 3). **Do not** use `M
 
 ### Setup per project
 
-- `wwwroot/index.html`: link `MudBlazor.min.css`, Roboto font, `MudBlazor.min.js`.
+- `wwwroot/index.html`: link `MudBlazor.min.css`, `_content/RVS.UI.Shared/fonts/fonts.css` (self-hosted Space Grotesk — **never** a Google Fonts CDN link), `MudBlazor.min.js`.
 - `Program.cs`: `builder.Services.AddMudServices()`.
 - `_Imports.razor`: `@using MudBlazor`.
 - Root layout wraps body in `<MudThemeProvider>`, `<MudPopoverProvider>`, `<MudDialogProvider>`, `<MudSnackbarProvider>`.
 
 ### Theme
 
-Single `MudTheme` defined in `MainLayout.razor` with `PaletteLight` (Primary `#1565C0`, Secondary `#00897B`). Apply via `<MudThemeProvider Theme="_theme" />`. Never inline ad-hoc colors.
+The brand is **"RV Intake" — Denim & Rust** (Spec THEME-1, issue #702). Ink (Denim) `#2F4C6B` carries structure: app bar, drawer, nav, headings. Rust carries action: primary buttons, links, active nav, focus rings. The UI Rust is the text-safe `#A8431F` (`RvsBrand.Accent`), or `#E8956D` where it sits on a dark surface. The logo Rust `#C1502E` (`RvsBrand.AccentLogo`) fails AA as text on cream and belongs only in the logo files. Paper (Cream) `#F6F1E7` is text and marks on Ink. The Intake page ground is white (issue #470): a location's intake page carries the dealer's own logo and header colour (Spec A-16), and a neutral ground suits any dealer's brand. Manager uses `#FAF8F3`, barely tinted, because full cream everywhere reads as a landing page rather than an 8-hour-shift console. Typeface is **Space Grotesk**, self-hosted from `RVS.UI.Shared/wwwroot/fonts/`.
+
+The palette lives in **`RVS.UI.Shared/Theme/`** — one home, so it cannot drift between the apps. `RvsBrand` holds the tokens; `ManagerTheme` and `IntakeTheme` each expose a `Theme` and a `HighContrast` `MudTheme`.
+
+`ThemeService` is **still** per app (`RVS.Blazor.{Intake,Manager}/Services/ThemeService.cs`) and is **not** in `RVS.UI.Shared` — but it now only selects a mode and persists it, and declares no colors. `ThemeService.Mode` is `Light`/`Dark`/`HighContrast` in Manager, `Light`/`HighContrast` in Intake (Intake has no dark mode — a form filled out once does not need one). `MainLayout.razor` binds the result rather than defining it: `<MudThemeProvider Theme="ThemeService.CurrentTheme" />`, plus `IsDarkMode="ThemeService.IsDarkMode"` in Manager.
+
+Two things that bite:
+
+- **Do not put `Color="Color.Primary"` on `MudAppBar`.** That paints the bar Rust; structure is Ink. Leave the color off and the bar takes `AppbarBackground` from the palette, in every mode.
+- **High contrast is deliberately not brand-colored.** Black/yellow/cyan beats anything Denim and Rust can reach, and someone who turns it on asked for legibility over identity. Only the typeface follows the brand there.
+
+Semantic colors are **not** derived from the brand pair, and every pairing is audited to WCAG AA. `Error` is shifted toward crimson (`#A3123F`) to sit apart from Rust, but hue alone is not a reliable signal, so **every error state carries an icon** — never tell error from primary by color alone. In dark mode every fill is light, so every `*ContrastText` is the dark ground `#1B2A3C`. `Tertiary` is left at the MudBlazor default: this is a two-color brand.
+
+On a location's own intake page a dealer's accent (Spec A-16) replaces Rust through the theme (`IntakeTheme.WithAccent`), so Intake code must reach Rust only through `Color.Primary` / `--mud-palette-primary`, never a hard-coded hex. Never inline ad-hoc colors. When an external surface needs the brand color — the Auth0 Universal Login page, for instance — read it from `RVS.UI.Shared/Theme/RvsBrand.cs` rather than from a doc; `#1565C0` appeared in this file and in the Auth0 checklist for a while and was never in the code. `wwwroot/css/design-tokens.css` mirrors `RvsBrand.cs` for the plain-CSS components; change both together.
+
+The logo kit's SVGs are in `RVS.UI.Shared/wwwroot/brand/`, with their text outlined, so they render in brand as plain images. App chrome draws them through the `BrandWordmark` component (`Horizontal`, `Stacked`, `Glyph`, `Wordmark`; `Reversed` for dark surfaces), which picks the file — reference a lockup through it rather than by path.
 
 ### Component Conventions
 
@@ -291,7 +373,9 @@ Single `MudTheme` defined in `MainLayout.razor` with `PaletteLight` (Primary `#1
 Three workflows in [.github/workflows](.github/workflows/) — detailed runbook in [.github/workflows/README.md](.github/workflows/README.md):
 
 - `build-test.yml` — PR gate, runs on every push/PR. Never deploys.
-- `deploy-staging.yml` — runs on push to `main`. **Only place that builds deployable artifacts.**
+- `deploy-staging.yml` — runs on push to `main`. **Only place that builds deployable artifacts.** Its `build-and-test` job runs all three suites; every `deploy-*` job `needs:` it, so a red suite blocks the deploy.
 - `deploy-production.yml` — promotes the exact artifacts staging validated. **Never rebuilds from source.**
+
+Both workflows invoke the suites through Microsoft.Testing.Platform (`dotnet test <csproj> --no-build -- <mtp flags>`). The `TestingPlatformDotnetTestSupport` switch lives in [Tests/Directory.Build.props](Tests/Directory.Build.props); without it `dotnet test` took the VSTest path, discovered nothing, and reported success (issue #560).
 
 Auth: API uses Azure OIDC (federated credentials, no long-lived secrets). Static Web Apps use long-lived deployment tokens stored as environment secrets.

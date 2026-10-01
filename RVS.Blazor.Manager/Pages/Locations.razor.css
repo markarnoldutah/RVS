@@ -1,0 +1,73 @@
+/* Matches the service request flyout (ServiceRequestDetailDialog.razor.css) — issue #724. */
+::deep .section-icon-btn {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+}
+
+/* Branding (Spec A-16, issue #470): a strip that paints what the intake header will look like. */
+.header-preview {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 8px 16px;
+    border-radius: 4px 4px 0 0;
+}
+
+.header-preview-logo {
+    display: inline-flex;
+    align-items: center;
+    line-height: 0;
+}
+
+/* The white mount the Intake app puts under a dealer logo when the bar keeps the default Ink —
+   a neutral, not a brand colour. */
+.header-preview-plate {
+    background-color: #FFFFFF;
+    border-radius: 8px;
+    padding: 4px 8px;
+}
+
+.header-preview-logo img {
+    display: block;
+    height: 28px;
+    width: auto;
+    max-width: 180px;
+}
+
+.header-color-picker {
+    width: 44px;
+    height: 40px;
+    margin-top: 4px;
+    padding: 0;
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* The intake page under the previewed header: a sample button and link in the dealer's accent. */
+.accent-preview {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    background-color: #FFFFFF;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+}
+
+.accent-preview-button {
+    padding: 6px 16px;
+    border-radius: 14px;
+    font-weight: 700;
+}
+
+.accent-preview-link {
+    text-decoration: underline;
+}

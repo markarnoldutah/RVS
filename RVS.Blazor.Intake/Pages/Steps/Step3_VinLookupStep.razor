@@ -3,42 +3,19 @@
     <MudStack Spacing="4">
         <MudText Typo="Typo.h5" Class="mb-1" Style="color: var(--mud-palette-text-primary);">RV Lookup</MudText>
 
-        @if (State.KnownAssets is { Count: > 0 })
-        {
-            <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Previously seen RVs</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">
-                    Select a previously seen RV or enter a new one below
-                </MudText>
-            </MudStack>
-
-            <MudRadioGroup T="string" Value="@State.Vin" ValueChanged="HandleKnownAssetSelected"
-                           InputStyle="display: flex; flex-direction: column; align-items: flex-start;">
-                @foreach (var asset in State.KnownAssets)
-                {
-                    var label = FormatAssetLabel(asset);
-                    <MudRadio T="string" Value="@asset.AssetId" Color="Color.Primary" Dense="true">
-                        @label
-                    </MudRadio>
-                }
-            </MudRadioGroup>
-
-            <MudDivider Class="my-1" />
-        }
-
         <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
             <MudStack Spacing="1">
-                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">VIN</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Enter, speak, or snap a pic of your VIN</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">VIN or serial number</MudText>
+                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-secondary);">Enter, speak, or snap a pic of your VIN. No VIN? A truck camper, for example, has a shorter serial number on its plate. Use that.</MudText>
                 <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="1">
                     <MudTextField T="string"
                                   Value="@State.Vin"
                                   ValueChanged="HandleVinChanged"
                                   Validation="@(new Func<string?, string?>(ValidateVin))"
-                                  MaxLength="17"
+                                  MaxLength="VehicleIdentifierValidator.MaxLength"
                                   Variant="Variant.Outlined"
                                   Margin="Margin.Dense"
-                                  Placeholder="17-character VIN"
+                                  Placeholder="VIN or serial number"
                                   Immediate="true"
                                   Adornment="Adornment.End"
                                   AdornmentIcon="@(_isRecording ? Icons.Material.Filled.MicOff : Icons.Material.Filled.Mic)"
@@ -53,15 +30,13 @@
                                OnClick="TriggerCameraCapture"
                                Disabled="@(_isRecording || _isTranscribing)"
                                Style="height: 63px; width: 60px; padding: 8px; margin-top: 4px;"
-                               aria-label="Capture VIN with camera" />
+                               aria-label="Capture VIN or serial number with camera" />
                 </MudStack>
-                @if (_isRecording)
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudProgressCircular Size="Size.Small" Color="Color.Error" Indeterminate="true" />
-                        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Listening… tap mic to stop</MudText>
-                    </MudStack>
-                }
+                <VoiceRecordingIndicator IsRecording="_isRecording"
+                                          ElapsedSeconds="_recordingElapsedSeconds"
+                                          MaxSeconds="MaxRecordingSeconds"
+                                          WarningSeconds="RecordingCapWarningSeconds"
+                                          Announcement="_recordingAnnouncement" />
                 @if (_isTranscribing)
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
@@ -71,14 +46,23 @@
                 }
                 @if (_transcriptionError is not null)
                 {
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true">
                         <MudText Typo="Typo.body2">@_transcriptionError</MudText>
                     </MudAlert>
                 }
             </MudStack>
         </MudPaper>
 
-        @* Hidden camera input for native capture on mobile devices *@
+        @* Issue #736: the VIN photo is taken in the page. The phone's camera app, reached through
+           this input, is only the fallback when the in-page camera will not start. *@
+        @if (_cameraOpen)
+        {
+            <CameraOverlay Caption="Fit the VIN or serial number plate in the frame"
+                           OnCaptured="HandleInPageCapture"
+                           OnClose="() => _cameraOpen = false"
+                           OnUseNativeCamera="UseNativeCamera" />
+        }
+
         <InputFile @ref="_cameraInput"
                    accept="image/*"
                    capture="environment"
@@ -100,7 +84,7 @@
             <MudPaper Elevation="1" Class="pa-3">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;">
-                        <img src="@_capturedImageUrl" alt="Captured VIN photo"
+                        <img src="@_capturedImageUrl" alt="Captured VIN or serial number photo"
                              style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px;" />
                         @if (_isExtracting)
                         {
@@ -111,7 +95,7 @@
                     </div>
                     <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
                         <MudText Typo="Typo.body2">
-                            @(_isExtracting ? "Extracting VIN…" : "VIN photo captured")
+                            @(_isExtracting ? "Reading the photo…" : "Photo captured")
                         </MudText>
                     </MudStack>
                     <MudIconButton Icon="@Icons.Material.Filled.Close"
@@ -125,14 +109,14 @@
 
         @if (_extractionMessage is not null)
         {
-            <MudAlert Severity="@_extractionSeverity" Variant="Variant.Outlined" Dense="true">
+            <MudAlert Severity="@_extractionSeverity" Variant="Variant.Filled" Dense="true">
                 <MudText Typo="Typo.body2">@_extractionMessage</MudText>
             </MudAlert>
         }
 
         @if (_lookupFailed)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="false"
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="false"
                       Icon="@Icons.Material.Filled.ErrorOutline">
                 <MudText Typo="Typo.body2">
                     We tried to retrieve your RV's information but could not. Are you sure the information is correct?
@@ -171,15 +155,29 @@
                     @:Continue
                 }
             </MudButton>
+            @* Issue #807: a rig in storage can't be read. The dealer collects its details later. *@
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       Disabled="@(_isLookingUp || _isExtracting || _isTranscribing)"
+                       OnClick="HandleSkip"
+                       Style="text-transform: none;">
+                Skip for now. My RV isn't with me
+            </MudButton>
         </MudStack>
     </MudStack>
     </MudForm>
 </MudPaper>
 
+@implements IDisposable
 @code {
-    private const long MaxCameraCaptureSizeBytes = 10 * 1024 * 1024;
     private const double VinAutoFillThreshold = 0.7;
     private const double VinAutoLookupThreshold = 0.9;
+
+    // Spec A-9: voice is optional and advisory — this cap exists only so a forgotten
+    // recording doesn't produce a huge upload, not to gate the wizard.
+    private const int MaxRecordingSeconds = 120;
+    private const int RecordingCapWarningSeconds = 15;
 
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
@@ -189,6 +187,7 @@
     private MudForm _form = default!;
     private bool _submitted;
     private InputFile? _cameraInput;
+    private bool _cameraOpen;
     private string? _capturedImageUrl;
     private bool _isLookingUp;
     private bool _isExtracting;
@@ -198,69 +197,63 @@
     private string? _extractionMessage;
     private string? _transcriptionError;
     private Severity _extractionSeverity = Severity.Info;
+    private RecordingTimer? _recordingTimer;
+    private int _recordingElapsedSeconds;
+    private string _recordingAnnouncement = string.Empty;
 
+    // Issue #807: a VIN or any serial number. The check digit is not enforced here — a VIN that
+    // will not decode already has "Continue Anyway".
     private string? ValidateVin(string? value)
     {
         if (!_submitted) return null;
-        if (string.IsNullOrWhiteSpace(value)) return "VIN is required";
-        var result = ClientVinValidator.Validate(value);
+        var result = VehicleIdentifierValidator.Validate(value);
         return result.IsValid ? null : result.ErrorMessage;
     }
 
     private void HandleVinChanged(string? value)
     {
-        State.Vin = value?.Trim().ToUpperInvariant() ?? string.Empty;
+        State.Vin = VehicleIdentifierValidator.Normalize(value);
+        State.VehicleSkipped = false;
+        State.VinLookupSucceeded = false;
         _lookupFailed = false;
     }
 
-    private void HandleKnownAssetSelected(string? assetId)
+    private void TriggerCameraCapture()
     {
-        if (string.IsNullOrWhiteSpace(assetId)) return;
-
-        var asset = State.KnownAssets?.FirstOrDefault(a =>
-            string.Equals(a.AssetId, assetId, StringComparison.OrdinalIgnoreCase));
-
-        if (asset is null) return;
-
-        SelectKnownAsset(asset);
+        _cameraOpen = true;
     }
 
-    private void SelectKnownAsset(AssetInfoDto asset)
+    /// <summary>The in-page camera would not start: fall back to the phone's camera app.</summary>
+    private async Task UseNativeCamera()
     {
-        State.Vin = asset.AssetId;
-        State.Manufacturer = asset.Manufacturer;
-        State.Model = asset.Model;
-        State.Year = asset.Year;
-        _lookupFailed = false;
-        StateHasChanged();
-    }
-
-    private static string FormatAssetLabel(AssetInfoDto asset)
-    {
-        var parts = new List<string>();
-        if (asset.Year.HasValue)
-            parts.Add(asset.Year.Value.ToString());
-        if (!string.IsNullOrWhiteSpace(asset.Manufacturer))
-            parts.Add(asset.Manufacturer);
-        if (!string.IsNullOrWhiteSpace(asset.Model))
-            parts.Add(asset.Model);
-
-        return parts.Count > 0 ? string.Join(" ", parts) : asset.AssetId;
-    }
-
-    private async Task TriggerCameraCapture()
-    {
+        _cameraOpen = false;
         if (_cameraInput?.Element is not null)
         {
             await JsRuntime.InvokeVoidAsync("rvs_triggerClick", _cameraInput.Element);
         }
     }
 
+    private async Task HandleInPageCapture(CapturedMedia media)
+    {
+        // One photo is all the VIN needs; the camera closes, and the extraction shows under the field.
+        _cameraOpen = false;
+        if (media.Bytes.Length > VinPhoto.MaxUploadBytes)
+        {
+            _extractionMessage = "We couldn't use that photo. Please try again, or type the number in.";
+            _extractionSeverity = Severity.Warning;
+            return;
+        }
+
+        await ExtractVinFromPhotoAsync(new VinPhotoImage(media.Bytes, media.ContentType));
+    }
+
     private async Task ToggleVinRecording()
     {
         if (_isRecording)
         {
+            StopRecordingTimer();
             _isRecording = false;
+            _recordingAnnouncement = "Recording stopped";
             _isTranscribing = true;
             _transcriptionError = null;
             StateHasChanged();
@@ -290,7 +283,7 @@
                     }
                     else
                     {
-                        _transcriptionError = "Could not recognize a VIN from the audio. Please try again or type it manually.";
+                        _transcriptionError = "Could not recognize a VIN or serial number from the audio. Please try again or type it manually.";
                     }
                 }
                 else
@@ -300,7 +293,7 @@
             }
             catch (Exception)
             {
-                _transcriptionError = "Transcription failed. Please try again or type the VIN manually.";
+                _transcriptionError = "Transcription failed. Please try again or type it manually.";
             }
             finally
             {
@@ -315,6 +308,9 @@
             {
                 await JsRuntime.InvokeVoidAsync("rvs_startRecording");
                 _isRecording = true;
+                _recordingElapsedSeconds = 0;
+                _recordingAnnouncement = "Recording started";
+                StartRecordingTimer();
             }
             catch (Exception)
             {
@@ -323,28 +319,69 @@
         }
     }
 
+    private void StartRecordingTimer()
+    {
+        _recordingTimer?.Dispose();
+        _recordingTimer = new RecordingTimer(
+            MaxRecordingSeconds,
+            onTick: () =>
+            {
+                _recordingElapsedSeconds = _recordingTimer!.ElapsedSeconds;
+                StateHasChanged();
+            },
+            onAutoStop: ToggleVinRecording);
+        _recordingTimer.Start();
+    }
+
+    private void StopRecordingTimer()
+    {
+        _recordingTimer?.Dispose();
+        _recordingTimer = null;
+    }
+
+    public void Dispose()
+    {
+        _recordingTimer?.Dispose();
+    }
+
     private async Task HandleCameraCapture(InputFileChangeEventArgs e)
     {
         var file = e.File;
         if (file is null) return;
 
         _extractionMessage = null;
+        _capturedImageUrl = null;
         _isExtracting = true;
         StateHasChanged();
 
-        var buffer = new byte[file.Size];
-        await using var stream = file.OpenReadStream(maxAllowedSize: MaxCameraCaptureSizeBytes);
-        _ = await stream.ReadAsync(buffer);
-        var base64 = Convert.ToBase64String(buffer);
-        _capturedImageUrl = $"data:{file.ContentType};base64,{base64}";
+        // Issue #736: shrunk in the browser and read whole. A full-size Android photo was over the
+        // API's limit, and a single read took only its first chunk.
+        var photo = await VinPhoto.ReadAsync(file, VinPhoto.ResizeInBrowser);
+        if (photo is null)
+        {
+            _isExtracting = false;
+            _extractionMessage = "We couldn't use that photo. Please try again, or type the number in.";
+            _extractionSeverity = Severity.Warning;
+            StateHasChanged();
+            return;
+        }
+
+        await ExtractVinFromPhotoAsync(photo);
+    }
+
+    private async Task ExtractVinFromPhotoAsync(VinPhotoImage photo)
+    {
+        _extractionMessage = null;
+        _isExtracting = true;
+        _capturedImageUrl = photo.DataUrl;
         StateHasChanged();
 
         try
         {
             var request = new VinExtractionRequestDto
             {
-                ImageBase64 = base64,
-                ContentType = file.ContentType
+                ImageBase64 = photo.Base64,
+                ContentType = photo.ContentType
             };
 
             var response = await IntakeApi.ExtractVinFromImageAsync(State.Slug, request);
@@ -352,26 +389,38 @@
             if (response is { Success: true, Result.Vin: { } vin } && response.Confidence >= VinAutoFillThreshold)
             {
                 HandleVinChanged(vin);
-                _extractionMessage = $"VIN extracted from photo: {vin}";
+                // Issue #807: whatever else the plate shows pre-fills Step 4, where the customer can change it.
+                State.ApplyVehicleDetailsFromPhoto(response.Result.Manufacturer, response.Result.Model, response.Result.Year);
                 _extractionSeverity = Severity.Success;
 
-                if (response.Confidence >= VinAutoLookupThreshold)
+                // Issue #807: a serial number has no check digit and nothing to decode, so the
+                // customer confirms it with Continue rather than the wizard moving on by itself.
+                if (!State.HasVin)
                 {
-                    StateHasChanged();
-                    await Task.Yield();
-                    await HandleLookup();
-                    return;
+                    _extractionMessage = $"Serial number read from photo: {State.Vin}. Check it, then tap Continue.";
+                }
+                else
+                {
+                    _extractionMessage = $"VIN extracted from photo: {State.Vin}";
+
+                    if (response.Confidence >= VinAutoLookupThreshold)
+                    {
+                        StateHasChanged();
+                        await Task.Yield();
+                        await HandleLookup();
+                        return;
+                    }
                 }
             }
             else
             {
-                _extractionMessage = "We couldn't read the VIN from the photo. Please enter it manually.";
+                _extractionMessage = "We couldn't read a VIN or serial number from the photo. Please type it in.";
                 _extractionSeverity = Severity.Info;
             }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _extractionMessage = "We couldn't read the VIN from the photo. Please enter it manually.";
+            _extractionMessage = "We couldn't read a VIN or serial number from the photo. Please type it in.";
             _extractionSeverity = Severity.Info;
         }
         finally
@@ -395,6 +444,16 @@
         await _form.Validate();
         if (!_form.IsValid) return;
 
+        // Issue #807: only a VIN can be decoded. A serial number goes straight to manual entry in
+        // Step 4, pre-filled with the number.
+        if (!State.HasVin)
+        {
+            State.VinLookupSucceeded = false;
+            await State.NotifyAndPersistAsync();
+            await OnNext.InvokeAsync();
+            return;
+        }
+
         _isLookingUp = true;
         StateHasChanged();
 
@@ -403,10 +462,7 @@
             var decoded = await IntakeApi.DecodeVinAsync(State.Slug, State.Vin);
             if (decoded is not null)
             {
-                State.Manufacturer = decoded.Manufacturer;
-                State.Model = decoded.Model;
-                State.Year = decoded.Year;
-                State.VinLookupSucceeded = true;
+                State.ApplyVinDecode(decoded);
                 await State.NotifyAndPersistAsync();
                 await OnNext.InvokeAsync();
             }
@@ -436,6 +492,19 @@
     /// </summary>
     private async Task HandleProceedAnyway()
     {
+        await State.NotifyAndPersistAsync();
+        await OnNext.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Moves on without a VIN or serial number: the rig is in storage and the dealer will collect
+    /// its details later (issue #807). Clears anything a decode filled, so Step 4 starts empty
+    /// and optional.
+    /// </summary>
+    private async Task HandleSkip()
+    {
+        State.SkipVehicle();
+        _lookupFailed = false;
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
     }

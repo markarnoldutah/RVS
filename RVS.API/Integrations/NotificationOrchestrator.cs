@@ -1,11 +1,12 @@
 using RVS.Domain.Integrations;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Integrations;
 
 /// <summary>
-/// Routes transactional notifications to email and/or SMS channels.
-/// By default both channels are used; customers can opt out of either via
-/// <c>smsOptOut</c> and <c>emailOptOut</c> flags.
+/// Routes transactional notifications to the email or SMS channel. The customer's preferred
+/// contact method chooses the channel and <c>smsOptOut</c> / <c>emailOptOut</c> are a hard veto
+/// over it (<c>Spec A-2</c>, issues #577 and #662). Exactly one confirmation is sent, or none.
 /// </summary>
 public sealed class NotificationOrchestrator : INotificationOrchestrator
 {
@@ -25,118 +26,72 @@ public sealed class NotificationOrchestrator : INotificationOrchestrator
 
     /// <inheritdoc />
     public async Task SendServiceRequestConfirmationAsync(
+        string tenantId,
+        string locationId,
+        string? preferredContact,
         bool smsOptOut,
         bool emailOptOut,
         string? toEmail,
         string? toPhoneNumber,
         string serviceRequestId,
+        string? customerFirstName,
         string dealershipName,
+        string statusUrl,
+        int? statusLinkExpiresInDays,
+        string? dealerPhone,
         CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
         ArgumentException.ThrowIfNullOrWhiteSpace(dealershipName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(statusUrl);
 
-        var sent = false;
+        var smsPermitted = _smsService.IsEnabled && !smsOptOut && !string.IsNullOrWhiteSpace(toPhoneNumber);
+        var emailPermitted = !emailOptOut && !string.IsNullOrWhiteSpace(toEmail);
+        var prefersText = string.Equals(
+            preferredContact?.Trim(), PreferredContactMethod.Text, StringComparison.OrdinalIgnoreCase);
 
-        if (!emailOptOut && !string.IsNullOrWhiteSpace(toEmail))
+        if (prefersText && smsPermitted)
         {
+            await SendSmsAsync(tenantId, locationId, toPhoneNumber!, serviceRequestId, dealershipName, statusUrl, dealerPhone, cancellationToken);
+            return;
+        }
+
+        if (emailPermitted)
+        {
+            if (prefersText)
+            {
+                _logger.LogWarning(
+                    "SR {ServiceRequestId} prefers Text but SMS is unavailable (smsEnabled={SmsEnabled}, smsOptOut={SmsOptOut}, hasPhone={HasPhone}); confirming by email",
+                    serviceRequestId, _smsService.IsEnabled, smsOptOut, !string.IsNullOrWhiteSpace(toPhoneNumber));
+            }
+
             _logger.LogInformation("Sending SR confirmation via email for SR {ServiceRequestId}", serviceRequestId);
-            await _emailService.SendServiceRequestConfirmationAsync(
-                toEmail, serviceRequestId, cancellationToken);
-            sent = true;
+            var subject = ServiceRequestConfirmationContent.BuildEmailSubject(dealershipName);
+            var htmlBody = ServiceRequestConfirmationContent.BuildEmailHtmlBody(
+                dealershipName, customerFirstName, statusUrl, statusLinkExpiresInDays, dealerPhone);
+            await _emailService.SendEmailAsync(toEmail!, subject, htmlBody, cancellationToken);
+            return;
         }
 
-        if (!smsOptOut && !string.IsNullOrWhiteSpace(toPhoneNumber))
+        if (smsPermitted)
         {
-            _logger.LogInformation("Sending SR confirmation via SMS for SR {ServiceRequestId}", serviceRequestId);
-            await _smsService.SendServiceRequestConfirmationSmsAsync(
-                toPhoneNumber, serviceRequestId, dealershipName, cancellationToken);
-            sent = true;
+            await SendSmsAsync(tenantId, locationId, toPhoneNumber!, serviceRequestId, dealershipName, statusUrl, dealerPhone, cancellationToken);
+            return;
         }
 
-        if (!sent)
-        {
-            _logger.LogWarning(
-                "Cannot send SR confirmation for SR {ServiceRequestId}: no available channel (smsOptOut={SmsOptOut}, emailOptOut={EmailOptOut})",
-                serviceRequestId, smsOptOut, emailOptOut);
-        }
+        _logger.LogWarning(
+            "Cannot send SR confirmation for SR {ServiceRequestId}: no permitted channel (preferredContact={PreferredContact}, smsEnabled={SmsEnabled}, smsOptOut={SmsOptOut}, emailOptOut={EmailOptOut})",
+            serviceRequestId, preferredContact, _smsService.IsEnabled, smsOptOut, emailOptOut);
     }
 
-    /// <inheritdoc />
-    public async Task SendStatusChangeAsync(
-        bool smsOptOut,
-        bool emailOptOut,
-        string? toEmail,
-        string? toPhoneNumber,
-        string serviceRequestId,
-        string newStatus,
-        string dealershipName,
-        CancellationToken cancellationToken = default)
+    private async Task SendSmsAsync(
+        string tenantId, string locationId, string toPhoneNumber, string serviceRequestId,
+        string dealershipName, string statusUrl, string? dealerPhone, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(newStatus);
-        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipName);
-
-        var sent = false;
-
-        if (!emailOptOut && !string.IsNullOrWhiteSpace(toEmail))
-        {
-            _logger.LogInformation("Sending status change via email for SR {ServiceRequestId}", serviceRequestId);
-            var subject = $"Service Request {serviceRequestId} — Status Update: {newStatus}";
-            var htmlBody = $"<p>Your service request <strong>{serviceRequestId}</strong> at {dealershipName} has been updated to: <strong>{newStatus}</strong>.</p>";
-            await _emailService.SendEmailAsync(toEmail, subject, htmlBody, cancellationToken);
-            sent = true;
-        }
-
-        if (!smsOptOut && !string.IsNullOrWhiteSpace(toPhoneNumber))
-        {
-            _logger.LogInformation("Sending status change via SMS for SR {ServiceRequestId}", serviceRequestId);
-            await _smsService.SendStatusChangeSmsAsync(
-                toPhoneNumber, serviceRequestId, newStatus, cancellationToken);
-            sent = true;
-        }
-
-        if (!sent)
-        {
-            _logger.LogWarning(
-                "Cannot send status change for SR {ServiceRequestId}: no available channel (smsOptOut={SmsOptOut}, emailOptOut={EmailOptOut})",
-                serviceRequestId, smsOptOut, emailOptOut);
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task SendMagicLinkAsync(
-        bool smsOptOut,
-        bool emailOptOut,
-        string? toEmail,
-        string? toPhoneNumber,
-        string magicLinkUrl,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(magicLinkUrl);
-
-        var sent = false;
-
-        if (!emailOptOut && !string.IsNullOrWhiteSpace(toEmail))
-        {
-            _logger.LogInformation("Sending magic link via email");
-            var subject = "Your RV Service Flow Status Page Link";
-            var htmlBody = $"<p>View your service request status: <a href=\"{magicLinkUrl}\">{magicLinkUrl}</a></p>";
-            await _emailService.SendEmailAsync(toEmail, subject, htmlBody, cancellationToken);
-            sent = true;
-        }
-
-        if (!smsOptOut && !string.IsNullOrWhiteSpace(toPhoneNumber))
-        {
-            _logger.LogInformation("Sending magic link via SMS");
-            await _smsService.SendMagicLinkSmsAsync(toPhoneNumber, magicLinkUrl, cancellationToken);
-            sent = true;
-        }
-
-        if (!sent)
-        {
-            _logger.LogWarning("Cannot send magic link: no available channel (smsOptOut={SmsOptOut}, emailOptOut={EmailOptOut})",
-                smsOptOut, emailOptOut);
-        }
+        _logger.LogInformation("Sending SR confirmation via SMS for SR {ServiceRequestId}", serviceRequestId);
+        var message = ServiceRequestConfirmationContent.BuildSmsBody(dealershipName, statusUrl, dealerPhone);
+        await _smsService.SendSmsAsync(tenantId, locationId, toPhoneNumber, message, cancellationToken);
     }
 }

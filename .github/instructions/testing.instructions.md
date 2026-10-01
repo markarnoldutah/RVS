@@ -5,11 +5,12 @@ applyTo: "Tests/**/*.cs"
 # RVS Testing Guidelines — xUnit + Moq + FluentAssertions
 
 ## Stack
-- **Framework**: xUnit v2 (net10.0, Microsoft.Testing.Platform)
+- **Framework**: xUnit v3 3.2.x (net10.0). Test assemblies are self-executing Microsoft.Testing.Platform (MTP) apps; `Tests/Directory.Build.props` sets `TestingPlatformDotnetTestSupport` + `OutputType=Exe` so `dotnet test` routes through MTP instead of VSTest (issue #560).
 - **Mocking**: Moq 4.x
 - **Assertions**: FluentAssertions
-- **Coverage**: coverlet.collector
-- **Test Projects**: `Tests/RVS.Domain.Tests` (mappers, validators), `Tests/RVS.API.Tests` (services, middleware)
+- **Coverage**: `Microsoft.Testing.Extensions.CodeCoverage` — `dotnet test <csproj> --no-build -- --coverage --coverage-output-format cobertura`
+- **Test Projects**: `Tests/RVS.Domain.Tests` (mappers, validators), `Tests/RVS.API.Tests` (services, middleware), `Tests/RVS.UI.Shared.Tests` (API clients, Intake wizard state)
+- **Filtering**: MTP simple filters after `--`, e.g. `--filter-class "*.ServiceRequestServiceTests"` or `--filter-method "*.Foo.Bar"` (wildcard `*` only at start/end). VSTest `--filter "FullyQualifiedName~..."` does not work here.
 
 ## TDD Cycle — Non-Negotiable Order
 1. 🔴 RED — Write failing test in the correct project first. No implementation yet.

@@ -487,6 +487,189 @@ public class LocationMapperTests
         entity.EnabledCapabilities.Should().BeEquivalentTo(["diesel-service"]);
     }
 
+    // ── PacketConfigEmbedded ↔ PacketConfigDto ───────────────────────────────
+
+    [Fact]
+    public void PacketConfigToDto_WhenNull_ShouldThrowArgumentNullException()
+    {
+        PacketConfigEmbedded? config = null;
+
+        var act = () => config!.ToDto();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void PacketConfigToDto_ShouldMapAllFields()
+    {
+        var config = new PacketConfigEmbedded
+        {
+            Enabled = false,
+            Recipients = ["a@dealer.com", "b@dealer.com"],
+            AttachPdf = false,
+            IncludePhotos = false,
+            PasteBlockCharacterCap = 750,
+            StatusLinkTtlDays = 14,
+        };
+
+        var dto = config.ToDto();
+
+        dto.Enabled.Should().BeFalse();
+        dto.Recipients.Should().BeEquivalentTo(["a@dealer.com", "b@dealer.com"]);
+        dto.AttachPdf.Should().BeFalse();
+        dto.IncludePhotos.Should().BeFalse();
+        dto.PasteBlockCharacterCap.Should().Be(750);
+        dto.StatusLinkTtlDays.Should().Be(14);
+    }
+
+    [Fact]
+    public void PacketConfigToDto_ShouldMapDisabledRecipients()
+    {
+        var when = new DateTime(2026, 9, 8, 0, 0, 0, DateTimeKind.Utc);
+        var config = new PacketConfigEmbedded
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients =
+            [
+                new DisabledRecipientEmbedded { Email = "dead@dealer.com", Reason = "Bounced", DisabledAtUtc = when },
+            ],
+        };
+
+        var dto = config.ToDto();
+
+        var disabled = dto.DisabledRecipients.Should().ContainSingle().Subject;
+        disabled.Email.Should().Be("dead@dealer.com");
+        disabled.Reason.Should().Be("Bounced");
+        disabled.DisabledAtUtc.Should().Be(when);
+    }
+
+    [Fact]
+    public void PacketConfigToDto_WhenNoDisabledRecipients_ShouldReturnEmptyList()
+    {
+        new PacketConfigEmbedded().ToDto().DisabledRecipients.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void PacketConfigToEmbedded_ShouldNotAcceptDisabledRecipientsFromCaller()
+    {
+        var dto = new PacketConfigDto
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients = [new DisabledRecipientDto { Email = "injected@dealer.com" }],
+        };
+
+        dto.ToEmbedded().DisabledRecipients.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void PacketConfigToEmbedded_WhenNull_ShouldThrowArgumentNullException()
+    {
+        PacketConfigDto? dto = null;
+
+        var act = () => dto!.ToEmbedded();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void PacketConfigToEmbedded_ShouldTrimRecipients()
+    {
+        var dto = new PacketConfigDto { Recipients = ["  a@dealer.com ", " b@dealer.com"] };
+
+        dto.ToEmbedded().Recipients.Should().BeEquivalentTo(["a@dealer.com", "b@dealer.com"]);
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenNoPacketConfigSet_ShouldReturnDefaults()
+    {
+        var entity = new Location { TenantId = "ten_1", Name = "Test Location" };
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketConfig.Should().NotBeNull();
+        dto.PacketConfig.Enabled.Should().BeTrue();
+        dto.PacketConfig.Recipients.Should().BeEmpty();
+        dto.PacketConfig.PasteBlockCharacterCap.Should().Be(2500);
+        dto.PacketConfig.StatusLinkTtlDays.Should().Be(30);
+    }
+
+    [Fact]
+    public void ToDetailDto_ShouldMapPacketConfig()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Test Location",
+            PacketConfig = new PacketConfigEmbedded { Recipients = ["svc@dealer.com"], AttachPdf = false }
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+        dto.PacketConfig.AttachPdf.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToEntity_WhenNoPacketConfig_ShouldUseDefaultEmbedded()
+    {
+        var dto = BuildValidCreateRequest() with { PacketConfig = null };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.PacketConfig.Should().NotBeNull();
+        entity.PacketConfig.Enabled.Should().BeTrue();
+        entity.PacketConfig.Recipients.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ToEntity_ShouldMapPacketConfig()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            PacketConfig = new PacketConfigDto { Recipients = ["svc@dealer.com"], StatusLinkTtlDays = 7 }
+        };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+        entity.PacketConfig.StatusLinkTtlDays.Should().Be(7);
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenPacketConfigProvided_ShouldReplaceIt()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Old Name",
+            PacketConfig = new PacketConfigEmbedded { Recipients = ["old@dealer.com"] }
+        };
+        var dto = BuildValidCreateRequest() with
+        {
+            PacketConfig = new PacketConfigDto { Recipients = ["new@dealer.com"] }
+        };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("new@dealer.com");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenPacketConfigNull_ShouldLeaveExistingUnchanged()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Old Name",
+            PacketConfig = new PacketConfigEmbedded { Recipients = ["keep@dealer.com"] }
+        };
+        var dto = BuildValidCreateRequest() with { PacketConfig = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("keep@dealer.com");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static LocationCreateRequestDto BuildValidCreateRequest() =>
@@ -496,4 +679,291 @@ public class LocationMapperTests
             Slug = "phoenix-service-center",
             Phone = "(602) 555-0200"
         };
+
+    // ── Time zone (issue #506) ──────────────────────────────────────────
+
+    [Fact]
+    public void ToDetailDto_ShouldCarryTheTimeZoneId()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            TimeZoneId = "America/Phoenix"
+        };
+
+        entity.ToDetailDto().TimeZoneId.Should().Be("America/Phoenix");
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenNoTimeZoneIsSet_ShouldReturnNull()
+    {
+        var entity = new Location { TenantId = "ten_1", Name = "Phoenix Service Center" };
+
+        entity.ToDetailDto().TimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToEntity_ShouldTrimTheTimeZoneId()
+    {
+        var dto = BuildValidCreateRequest() with { TimeZoneId = "  America/Phoenix  " };
+
+        dto.ToEntity("ten_1", "usr_1").TimeZoneId.Should().Be("America/Phoenix");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToEntity_WhenTimeZoneIdIsBlank_ShouldLeaveItNull(string? timeZoneId)
+    {
+        var dto = BuildValidCreateRequest() with { TimeZoneId = timeZoneId };
+
+        dto.ToEntity("ten_1", "usr_1").TimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenTimeZoneIdIsNull_ShouldLeaveTheExistingZoneUnchanged()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            TimeZoneId = "America/Phoenix"
+        };
+        var dto = BuildValidCreateRequest() with { TimeZoneId = null };
+
+        entity.ApplyUpdate(dto, "usr_2");
+
+        entity.TimeZoneId.Should().Be("America/Phoenix");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenTimeZoneIdIsBlank_ShouldClearTheZone()
+    {
+        // An explicit blank is the clear signal — it returns the packet to a UTC Received line.
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            TimeZoneId = "America/Phoenix"
+        };
+        var dto = BuildValidCreateRequest() with { TimeZoneId = "" };
+
+        entity.ApplyUpdate(dto, "usr_2");
+
+        entity.TimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyUpdate_ShouldReplaceTheZone()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            TimeZoneId = "America/Phoenix"
+        };
+        var dto = BuildValidCreateRequest() with { TimeZoneId = "America/Denver" };
+
+        entity.ApplyUpdate(dto, "usr_2");
+
+        entity.TimeZoneId.Should().Be("America/Denver");
+    }
+
+    // ── Branding (Spec A-16, issue #470) ────────────────────────────────
+
+    [Fact]
+    public void BrandingToDto_WhenNull_ShouldThrowArgumentNullException()
+    {
+        LocationBrandingEmbedded? branding = null;
+
+        var act = () => branding!.ToDto();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void BrandingToEmbedded_WhenNull_ShouldThrowArgumentNullException()
+    {
+        LocationBrandingDto? dto = null;
+
+        var act = () => dto!.ToEmbedded();
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void ToDetailDto_ShouldMapBranding()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            Branding = new LocationBrandingEmbedded
+            {
+                LogoUrl = "https://cdn.dealer.com/logo.png",
+                HeaderColor = "#1A5E20",
+                AccentColor = "#0D47A1"
+            }
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+        dto.Branding.HeaderColor.Should().Be("#1A5E20");
+        dto.Branding.AccentColor.Should().Be("#0D47A1");
+    }
+
+    [Fact]
+    public void ToEntity_WhenNoBranding_ShouldUseTheDefaults()
+    {
+        var entity = BuildValidCreateRequest().ToEntity("ten_1", "usr_1");
+
+        entity.Branding.HasLogo.Should().BeFalse();
+        entity.Branding.HasHeaderColor.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToEntity_ShouldTrimTheLogoAndNormalizeTheHeaderColor()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            Branding = new LocationBrandingDto
+            {
+                LogoUrl = "  https://cdn.dealer.com/logo.png  ",
+                HeaderColor = " #1a5e20 ",
+                AccentColor = " #0d47a1 "
+            }
+        };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+        entity.Branding.HeaderColor.Should().Be("#1A5E20");
+        entity.Branding.AccentColor.Should().Be("#0D47A1");
+    }
+
+    [Fact]
+    public void BrandingToEmbedded_WhenFieldsBlank_ShouldBeNull()
+    {
+        var embedded = new LocationBrandingDto { LogoUrl = "   ", HeaderColor = "", AccentColor = " " }.ToEmbedded();
+
+        embedded.LogoUrl.Should().BeNull();
+        embedded.HeaderColor.Should().BeNull();
+        embedded.AccentColor.Should().BeNull();
+    }
+
+    [Fact]
+    public void BrandingToEmbedded_WhenHeaderColorIsNotHex_ShouldKeepItTrimmedForTheValidatorToReject()
+    {
+        // The mapper is a pure transform; LocationService rejects the value with a 400.
+        var embedded = new LocationBrandingDto { HeaderColor = " green " }.ToEmbedded();
+
+        embedded.HeaderColor.Should().Be("green");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenBrandingProvided_ShouldReplaceItWholesale()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            Branding = new LocationBrandingEmbedded { LogoUrl = "https://cdn.dealer.com/old.png", HeaderColor = "#1A5E20" }
+        };
+        var dto = BuildValidCreateRequest() with
+        {
+            Branding = new LocationBrandingDto { LogoUrl = "https://cdn.dealer.com/new.png" }
+        };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/new.png");
+        entity.Branding.HeaderColor.Should().BeNull("a non-null branding replaces the stored one, so an omitted colour clears it");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenBrandingNull_ShouldLeaveExistingUnchanged()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            Branding = new LocationBrandingEmbedded { LogoUrl = "https://cdn.dealer.com/keep.png", HeaderColor = "#1A5E20" }
+        };
+        var dto = BuildValidCreateRequest() with { Branding = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/keep.png");
+        entity.Branding.HeaderColor.Should().Be("#1A5E20");
+    }
+
+    // ── Dealer questions (Spec A-18, issue #785) ────────────────────────
+
+    [Fact]
+    public void ToDetailDto_ShouldCarryTheDealerQuestions()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            DealerQuestions = ["Where is the RV stored?", "Do you need a loaner?"]
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.DealerQuestions.Should().Equal("Where is the RV stored?", "Do you need a loaner?");
+    }
+
+    [Fact]
+    public void ToEntity_WhenNoDealerQuestions_ShouldHaveNone()
+    {
+        var entity = BuildValidCreateRequest().ToEntity("ten_1", "usr_1");
+
+        entity.DealerQuestions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ToEntity_ShouldTrimTheDealerQuestionsAndDropBlankOnes()
+    {
+        var dto = BuildValidCreateRequest() with { DealerQuestions = ["  Where is the RV stored?  ", "   "] };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.DealerQuestions.Should().Equal("Where is the RV stored?");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenDealerQuestionsProvided_ShouldReplaceThemWholesale()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            DealerQuestions = ["Old one?", "Old two?"]
+        };
+        var dto = BuildValidCreateRequest() with { DealerQuestions = [" New one? ", ""] };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.DealerQuestions.Should().Equal("New one?");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenDealerQuestionsNull_ShouldLeaveExistingUnchanged()
+    {
+        var entity = new Location
+        {
+            TenantId = "ten_1",
+            Name = "Phoenix Service Center",
+            DealerQuestions = ["Where is the RV stored?"]
+        };
+        var dto = BuildValidCreateRequest() with { DealerQuestions = null };
+
+        entity.ApplyUpdate(dto, "usr_1");
+
+        entity.DealerQuestions.Should().Equal("Where is the RV stored?");
+    }
 }

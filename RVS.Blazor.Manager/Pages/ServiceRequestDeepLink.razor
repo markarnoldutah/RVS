@@ -1,0 +1,431 @@
+@page "/sr/{Id}"
+@inject ServiceRequestApiClient SrClient
+@inject LookupApiClient LookupClient
+@inject AttachmentApiClient AttachmentClient
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@*
+    The request page the packet email links to (Spec C-7, issues #498 and #743).
+
+    /sr/{id} → the request, laid out for a phone: who, what, status, a note to the customer,
+               and a way to call, text or email them. Every status is one tap away here, so
+               the email carries only this link, as "Open Manager" (#743).
+
+    One single-column layout serves every device, so the email needs no device detection; on a
+    desktop "Open on the board" leads to the full view. Reaching this page requires a signed-in
+    manager (the app-wide fallback policy), and every write happens on a tap, through the
+    authenticated endpoints — so a mail-security scanner that fetches the link changes nothing,
+    and every change is attributed to the signed-in user.
+
+    Voice input is the phone keyboard's own dictation: the note is a plain text field.
+*@
+
+<PageTitle>RV Intake Manager — @(_sr is null ? "Service request" : $"Intake #{ServiceRequestMobileView.GetReferenceCode(_sr.Id)}")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="px-0">
+    @if (_loading)
+    {
+        <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="py-8">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" aria-label="Loading service request" />
+            <MudText Typo="Typo.body1">Loading service request&hellip;</MudText>
+        </MudStack>
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/board">Go to the board</MudButton>
+    }
+    else if (_sr is not null)
+    {
+        <MudStack Spacing="3">
+            @* Who and what *@
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.caption">
+                    Intake #@ServiceRequestMobileView.GetReferenceCode(_sr.Id)
+                    @if (_sr.SubmissionCount > 1)
+                    {
+                        <text> · Issue @_sr.SubmissionPosition of @_sr.SubmissionCount</text>
+                    }
+                    · @_sr.CreatedAtUtc.ToLocalTime().ToString("g")
+                </MudText>
+                <MudText Typo="Typo.h5" Class="mt-1">@ServiceRequestMobileView.GetCustomerName(_sr.Customer)</MudText>
+                @if (ServiceRequestMobileView.GetUnitLine(_sr.Asset) is { } unit)
+                {
+                    <MudText Typo="Typo.subtitle1">@unit</MudText>
+                }
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2" Wrap="Wrap.Wrap">
+                    <StatusBadge Status="@_sr.Status" />
+                    <MudText Typo="Typo.body2">@(IssueCategoryVocabulary.GetName(_sr.IssueCategory) ?? _sr.IssueCategory)</MudText>
+                </MudStack>
+
+                @if (_contactLinks.Count > 0)
+                {
+                    <MudStack Row="true" Spacing="2" Class="mt-4" Wrap="Wrap.Wrap">
+                        @foreach (var link in _contactLinks)
+                        {
+                            <MudButton Variant="@(link.IsPreferred ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Primary"
+                                       StartIcon="@ContactIcon(link.Method)"
+                                       Href="@link.Href"
+                                       aria-label="@ContactAriaLabel(link)">
+                                @link.Label
+                            </MudButton>
+                        }
+                    </MudStack>
+                    @if (_contactLinks.FirstOrDefault(l => l.IsPreferred) is { } preferred)
+                    {
+                        <MudText Typo="Typo.caption" Class="mt-1">Prefers @preferred.Label.ToLowerInvariant().</MudText>
+                    }
+                }
+            </MudPaper>
+
+            @* Status (Spec C-3) — one tap sets it *@
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                    <MudText Typo="Typo.h6">Status</MudText>
+                    @if (_statusSaving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" aria-label="Saving status" />
+                    }
+                </MudStack>
+                <MudGrid Spacing="2">
+                    @foreach (var option in ServiceRequestMobileView.Statuses)
+                    {
+                        var isCurrent = string.Equals(option.Status, _sr.Status, StringComparison.Ordinal);
+                        <MudItem xs="6">
+                            <MudButton Variant="@(isCurrent ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Primary"
+                                       FullWidth="true"
+                                       Size="Size.Large"
+                                       Disabled="_statusSaving"
+                                       aria-pressed="@(isCurrent ? "true" : "false")"
+                                       OnClick="@(() => SetStatusAsync(option))">
+                                @option.Label
+                            </MudButton>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudPaper>
+
+            @* Note to the customer (Spec C-9) *@
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.h6">Note to the customer</MudText>
+                <MudText Typo="Typo.caption" Class="mb-2">
+                    Shown on the customer's status page. One note per request; saving replaces it.
+                    To dictate, tap the microphone on your phone's keyboard.
+                </MudText>
+                <MudTextField T="string" @bind-Value="_note"
+                              Variant="Variant.Outlined"
+                              Lines="3"
+                              MaxLength="280"
+                              Counter="280"
+                              Immediate="true"
+                              Disabled="_noteSaving"
+                              Label="Note"
+                              Placeholder="e.g. Waiting on a back-ordered slide motor, ETA Friday" />
+                @if (_noteError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@_noteError</MudAlert>
+                }
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-3">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               OnClick="SaveNoteAsync"
+                               Disabled="@(_noteSaving || !NoteChanged)">
+                        Save note
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Delete"
+                               OnClick="ClearNoteAsync"
+                               Disabled="@(_noteSaving || string.IsNullOrWhiteSpace(_sr.CustomerStatusNote?.Text))">
+                        Clear
+                    </MudButton>
+                    @if (_noteSaving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" aria-label="Saving note" />
+                    }
+                </MudStack>
+            </MudPaper>
+
+            @* The customer's own words, then the way out to the full views *@
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-1">Customer's description</MudText>
+                <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@(_sr.IssueDescriptionVerbatim ?? _sr.IssueDescription)</MudText>
+            </MudPaper>
+
+            @* Photos and videos. The packet email's dropped-photo note links here (#581), so this
+               page must show every one; a tap opens it full size in the browser. *@
+            @if (_media.Count > 0)
+            {
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Photos (@_media.Count)</MudText>
+                    <MudGrid Spacing="2">
+                        @foreach (var att in _media)
+                        {
+                            var readUrl = _mediaUrls.GetValueOrDefault(att.AttachmentId);
+                            var isVideo = AttachmentPreview.Classify(att.ContentType) == AttachmentPreviewKind.Video;
+                            <MudItem xs="4">
+                                @if (readUrl is null)
+                                {
+                                    <div class="sr-media sr-media-placeholder" title="@att.FileName">
+                                        <MudIcon Icon="@(isVideo ? Icons.Material.Filled.Movie : Icons.Material.Filled.Image)" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <a class="sr-media" href="@readUrl" target="_blank" rel="noopener noreferrer"
+                                       aria-label="@(isVideo ? "Play" : "View") @att.FileName">
+                                        @if (isVideo)
+                                        {
+                                            <video src="@AttachmentPreview.VideoThumbnailSrc(readUrl)"
+                                                   preload="metadata" muted playsinline tabindex="-1"></video>
+                                            <span class="sr-media-overlay">
+                                                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large" />
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <img src="@readUrl" alt="@att.FileName" loading="lazy" />
+                                        }
+                                    </a>
+                                }
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudPaper>
+            }
+
+            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" Class="mb-4">
+                @if (PacketStatusDisplay.HasPdf(_sr.PacketGeneration))
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                               OnClick="OpenPacketPdfAsync" Disabled="_pdfOpening">
+                        View packet (PDF)
+                    </MudButton>
+                }
+                <MudButton Variant="Variant.Text" Color="Color.Primary"
+                           EndIcon="@Icons.Material.Filled.OpenInNew" Href="@BoardUrl">
+                    Open on the board
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = default!;
+
+    private ServiceRequestDetailResponseDto? _sr;
+    private IReadOnlyList<ContactLink> _contactLinks = [];
+    private string? _dealershipId;
+    private string? _loadedId;
+    private string _userDisplayName = "User";
+    private bool _loading = true;
+    private string? _error;
+
+    private bool _statusSaving;
+
+    private string? _note;
+    private bool _noteSaving;
+    private string? _noteError;
+
+    private bool _pdfOpening;
+
+    private IReadOnlyList<AttachmentDto> _media = [];
+    private readonly Dictionary<string, string> _mediaUrls = [];
+
+    private string BoardUrl => $"/board?sr={Uri.EscapeDataString(Id)}";
+
+    private bool NoteChanged =>
+        !string.Equals((_note ?? string.Empty).Trim(), _sr?.CustomerStatusNote?.Text ?? string.Empty, StringComparison.Ordinal);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Same request already loaded — nothing to fetch.
+        if (string.Equals(_loadedId, Id, StringComparison.Ordinal) && _sr is not null) return;
+
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            var auth = await AuthProvider.GetAuthenticationStateAsync();
+            _userDisplayName = ServiceRequestDetailDialog.ResolveDisplayName(auth.User);
+
+            var dealerships = await LookupClient.GetDealershipsAsync();
+            _dealershipId = dealerships.FirstOrDefault()?.Id;
+            if (_dealershipId is null)
+            {
+                _error = "No dealership found for your account.";
+                return;
+            }
+
+            SetRequest(await SrClient.GetByIdAsync(_dealershipId, Id));
+            _loadedId = Id;
+            _loading = false;
+            StateHasChanged();
+
+            await LoadMediaUrlsAsync();
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception)
+        {
+            _error = "This service request could not be opened. It may have been removed, or it belongs to another dealership.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void SetRequest(ServiceRequestDetailResponseDto sr)
+    {
+        _sr = sr;
+        _contactLinks = ServiceRequestMobileView.BuildContactLinks(sr.Customer);
+        _note = sr.CustomerStatusNote?.Text;
+        _media = [.. sr.Attachments.Where(a => AttachmentPreview.IsViewable(a.ContentType))];
+    }
+
+    /// <summary>
+    /// Fetches a read URL for every photo and video in parallel (Spec X-6: time-limited, never
+    /// persisted). A failed fetch leaves that tile as a placeholder rather than failing the page.
+    /// </summary>
+    private async Task LoadMediaUrlsAsync()
+    {
+        if (_dealershipId is null || _sr is null || _media.Count == 0) return;
+
+        var dealershipId = _dealershipId;
+        var srId = _sr.Id;
+
+        async Task<(string Id, string? Url)> FetchAsync(AttachmentDto att)
+        {
+            try
+            {
+                var sas = await AttachmentClient.GetReadSasAsync(dealershipId, srId, att.AttachmentId);
+                return (att.AttachmentId, sas.SasUrl);
+            }
+            catch (Exception)
+            {
+                return (att.AttachmentId, null);
+            }
+        }
+
+        foreach (var (id, url) in await Task.WhenAll(_media.Select(FetchAsync)))
+        {
+            if (url is not null) _mediaUrls[id] = url;
+        }
+    }
+
+    private async Task SetStatusAsync(StatusOption option)
+    {
+        if (_sr is null || _dealershipId is null) return;
+        if (string.Equals(option.Status, _sr.Status, StringComparison.Ordinal)) return;
+
+        _statusSaving = true;
+
+        try
+        {
+            var summary = ActivityLogFormatter.PrependSystemEntry(_sr.TechnicianSummary, $"Status changed to {option.Label}");
+            var request = ServiceRequestMobileView.BuildUpdateRequest(_sr, summary) with { Status = option.Status };
+
+            SetRequest(await SrClient.UpdateAsync(_dealershipId, _sr.Id, request));
+            Snackbar.Add($"Marked {option.Label}.", Severity.Success);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Unable to update status. {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _statusSaving = false;
+        }
+    }
+
+    private Task SaveNoteAsync() => PersistNoteAsync(string.IsNullOrWhiteSpace(_note) ? null : _note.Trim());
+
+    private Task ClearNoteAsync() => PersistNoteAsync(null);
+
+    private async Task PersistNoteAsync(string? note)
+    {
+        if (_sr is null || _dealershipId is null) return;
+
+        _noteSaving = true;
+        _noteError = null;
+
+        try
+        {
+            var previous = _sr.CustomerStatusNote?.Text;
+            var sr = await SrClient.SetStatusNoteAsync(_dealershipId, _sr.Id, note);
+
+            // The note endpoint touches nothing but the note, so record the write on the
+            // activity timeline with a second call, as the detail dialog does (issue #620).
+            var saved = sr.CustomerStatusNote?.Text;
+            if (!string.Equals(saved ?? string.Empty, previous ?? string.Empty, StringComparison.Ordinal))
+            {
+                var summary = ActivityLogFormatter.PrependStatusNoteEntry(sr.TechnicianSummary, _userDisplayName, saved);
+                sr = await SrClient.UpdateAsync(_dealershipId, sr.Id, ServiceRequestMobileView.BuildUpdateRequest(sr, summary));
+            }
+
+            SetRequest(sr);
+            Snackbar.Add(saved is null ? "Note cleared." : "Note saved.", Severity.Success);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            _noteError = ex.Message;
+        }
+        finally
+        {
+            _noteSaving = false;
+        }
+    }
+
+    private async Task OpenPacketPdfAsync()
+    {
+        if (_sr is null || _dealershipId is null) return;
+
+        _pdfOpening = true;
+
+        try
+        {
+            // Navigate rather than window.open: after an await, a mobile browser blocks a popup.
+            var link = await SrClient.GetPacketPdfLinkAsync(_dealershipId, _sr.Id);
+            Navigation.NavigateTo(link.SasUrl);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Unable to open the packet. {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _pdfOpening = false;
+        }
+    }
+
+    private static string ContactIcon(string method) => method switch
+    {
+        PreferredContactMethod.Phone => Icons.Material.Filled.Phone,
+        PreferredContactMethod.Text => Icons.Material.Filled.Sms,
+        _ => Icons.Material.Filled.Email,
+    };
+
+    private static string ContactAriaLabel(ContactLink link) =>
+        link.IsPreferred ? $"{link.Label} the customer (preferred)" : $"{link.Label} the customer";
+}

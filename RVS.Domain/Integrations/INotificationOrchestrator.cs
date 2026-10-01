@@ -1,66 +1,52 @@
 namespace RVS.Domain.Integrations;
 
 /// <summary>
-/// Routes transactional notifications to email and/or SMS channels.
-/// By default both channels are used; customers can opt out of either.
+/// Routes transactional notifications to the email or SMS channel.
 /// This is the single entry point for all notification dispatch in the application.
 /// </summary>
 public interface INotificationOrchestrator
 {
     /// <summary>
-    /// Sends a service request confirmation notification via all non-opted-out channels.
+    /// Sends one service request confirmation, on the channel the customer's preferred contact
+    /// method chooses, with the opt-outs as a hard veto (<c>Spec A-2</c>, issue #662):
+    /// <list type="bullet">
+    /// <item><c>Text</c>, with SMS enabled, a phone number and no SMS opt-out → SMS.</item>
+    /// <item><c>Text</c>, but SMS unavailable → email, logged at Warning.</item>
+    /// <item><c>Email</c>, <c>Phone</c> or <c>null</c> (requests from before the preference was captured) → email.</item>
+    /// <item>Email opted out or no address → SMS if permitted; otherwise nothing, logged at Warning.</item>
+    /// </list>
     /// </summary>
-    /// <param name="smsOptOut">When <c>true</c>, skip SMS channel.</param>
-    /// <param name="emailOptOut">When <c>true</c>, skip email channel.</param>
+    /// <param name="tenantId">Tenant the request was submitted to.</param>
+    /// <param name="locationId">Location the request was submitted to; keys the SMS sending number.</param>
+    /// <param name="preferredContact">
+    /// The customer's preferred contact method (<see cref="Validation.PreferredContactMethod"/>), or <c>null</c>.
+    /// </param>
+    /// <param name="smsOptOut">When <c>true</c>, never send by SMS.</param>
+    /// <param name="emailOptOut">When <c>true</c>, never send by email.</param>
     /// <param name="toEmail">Recipient email address.</param>
     /// <param name="toPhoneNumber">Recipient phone number in E.164 format.</param>
     /// <param name="serviceRequestId">Identifier of the confirmed service request.</param>
+    /// <param name="customerFirstName">The customer's first name, for the email greeting; <c>null</c> greets without a name.</param>
     /// <param name="dealershipName">Display name of the dealership for message context.</param>
+    /// <param name="statusUrl">The full URL of the customer's status page.</param>
+    /// <param name="statusLinkExpiresInDays">
+    /// Whole days until the status link's token expires, or <c>null</c> when it has no expiry on record.
+    /// </param>
+    /// <param name="dealerPhone">The dealer's contact phone number, when known.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task SendServiceRequestConfirmationAsync(
+        string tenantId,
+        string locationId,
+        string? preferredContact,
         bool smsOptOut,
         bool emailOptOut,
         string? toEmail,
         string? toPhoneNumber,
         string serviceRequestId,
+        string? customerFirstName,
         string dealershipName,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Sends a status change notification via all non-opted-out channels.
-    /// </summary>
-    /// <param name="smsOptOut">When <c>true</c>, skip SMS channel.</param>
-    /// <param name="emailOptOut">When <c>true</c>, skip email channel.</param>
-    /// <param name="toEmail">Recipient email address.</param>
-    /// <param name="toPhoneNumber">Recipient phone number in E.164 format.</param>
-    /// <param name="serviceRequestId">Identifier of the service request.</param>
-    /// <param name="newStatus">The new status of the service request.</param>
-    /// <param name="dealershipName">Display name of the dealership.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task SendStatusChangeAsync(
-        bool smsOptOut,
-        bool emailOptOut,
-        string? toEmail,
-        string? toPhoneNumber,
-        string serviceRequestId,
-        string newStatus,
-        string dealershipName,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Sends a magic link via all non-opted-out channels.
-    /// </summary>
-    /// <param name="smsOptOut">When <c>true</c>, skip SMS channel.</param>
-    /// <param name="emailOptOut">When <c>true</c>, skip email channel.</param>
-    /// <param name="toEmail">Recipient email address.</param>
-    /// <param name="toPhoneNumber">Recipient phone number in E.164 format.</param>
-    /// <param name="magicLinkUrl">The full magic link URL.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task SendMagicLinkAsync(
-        bool smsOptOut,
-        bool emailOptOut,
-        string? toEmail,
-        string? toPhoneNumber,
-        string magicLinkUrl,
+        string statusUrl,
+        int? statusLinkExpiresInDays,
+        string? dealerPhone,
         CancellationToken cancellationToken = default);
 }

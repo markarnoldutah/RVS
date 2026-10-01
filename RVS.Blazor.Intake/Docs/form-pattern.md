@@ -36,6 +36,9 @@ The component receives two parameters from the wizard host:
 - `Elevation="2"` — standard card depth for step pages
 - `pa-6` — inner padding; reduce to `pa-4` only on very compact steps
 - `rounded-lg` — consistent rounded corners across all steps
+- No autofocus. The wizard host scrolls to the top on every step change and focuses the step
+  container, never a form field (`WizardStepEntry`, issues #645 and #766). Focusing a field raised
+  the soft keyboard, and the scroll to it fought the scroll to the top.
 
 ---
 

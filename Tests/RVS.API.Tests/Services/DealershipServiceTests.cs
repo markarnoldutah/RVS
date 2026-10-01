@@ -179,6 +179,26 @@ public class DealershipServiceTests
         await act.Should().ThrowAsync<KeyNotFoundException>();
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    [InlineData(11)]
+    public async Task UpdateAsync_WhenIntakeMaxAttachmentsOutsideOneToFive_ShouldThrowArgumentExceptionAndNotPersist(int maxAttachments)
+    {
+        var existing = BuildDealership();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        var request = BuildUpdateRequest() with
+        {
+            IntakeConfig = new IntakeConfigDto { MaxAttachments = maxAttachments, MaxFileSizeMb = 25 },
+        };
+
+        var act = () => _sut.UpdateAsync("ten_1", existing.Id, request);
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*between 1 and 5*");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<Dealership>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task UpdateAsync_ShouldApplyChangesAndCallMarkAsUpdated()
     {

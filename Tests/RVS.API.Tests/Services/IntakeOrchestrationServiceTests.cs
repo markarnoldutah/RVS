@@ -1,11 +1,17 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
+using RVS.API.Options;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Packets;
+using RVS.Domain.Security;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Tests.Services;
 
@@ -20,10 +26,17 @@ public class IntakeOrchestrationServiceTests
     private readonly Mock<ILookupRepository> _lookupRepoMock = new();
     private readonly Mock<ICategorizationService> _categorizationMock = new();
     private readonly Mock<INotificationOrchestrator> _notificationOrchestratorMock = new();
+    private readonly Mock<IPacketGenerationQueue> _packetQueueMock = new();
+    private readonly Mock<IIntakeInviteRepository> _inviteRepoMock = new();
+    private readonly Mock<ITenantConfigRepository> _tenantConfigRepoMock = new();
     private readonly IntakeOrchestrationService _sut;
 
     public IntakeOrchestrationServiceTests()
     {
+        _packetQueueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>())).Returns(true);
+
+        var intakeUrlOptions = Microsoft.Extensions.Options.Options.Create(new IntakeUrlOptions { BaseUrl = "https://rvintake.com" });
+
         _sut = new IntakeOrchestrationService(
             _slugLookupRepoMock.Object,
             _globalAcctRepoMock.Object,
@@ -34,6 +47,10 @@ public class IntakeOrchestrationServiceTests
             _lookupRepoMock.Object,
             _categorizationMock.Object,
             _notificationOrchestratorMock.Object,
+            _packetQueueMock.Object,
+            _inviteRepoMock.Object,
+            _tenantConfigRepoMock.Object,
+            intakeUrlOptions,
             Mock.Of<ILogger<IntakeOrchestrationService>>());
     }
 
@@ -83,6 +100,59 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.LocationId.Should().Be("loc_test");
     }
 
+    // ── Spec A-19: a disabled tenant's intake expires after 60 days ──────────
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTenantDisabledWithinCaptureWindow_ShouldStillCreateTheRequest()
+    {
+        SetupFullHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 59);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.TenantId.Should().Be("ten_test");
+        _packetQueueMock.Verify(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTenantIntakeExpired_ShouldThrowIntakeExpiredException()
+    {
+        SetupFullHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 61);
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        await act.Should().ThrowAsync<IntakeExpiredException>();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTenantIntakeExpired_ShouldWriteNothing()
+    {
+        SetupFullHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 61);
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+        await act.Should().ThrowAsync<IntakeExpiredException>();
+
+        _globalAcctRepoMock.Verify(r => r.CreateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()), Times.Never);
+        _profileRepoMock.Verify(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()), Times.Never);
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        _ledgerRepoMock.Verify(r => r.AppendAsync(It.IsAny<AssetLedgerEntry>(), It.IsAny<CancellationToken>()), Times.Never);
+        _packetQueueMock.Verify(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTenantReEnabledAfterExpiry_ShouldCreateTheRequest()
+    {
+        SetupFullHappyPath();
+        _tenantConfigRepoMock.Setup(r => r.GetAsync("ten_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildTenantConfig(new TenantAccessGateEmbedded { LoginsEnabled = true, DisabledAtUtc = null }));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.TenantId.Should().Be("ten_test");
+    }
+
     // ── Step 2: GlobalCustomerAcct Resolution ────────────────────────────────
 
     [Fact]
@@ -109,138 +179,6 @@ public class IntakeOrchestrationServiceTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── Step 2: Opt-out Timestamp Stamping (GlobalCustomerAcct) ─────────────
-
-    [Fact]
-    public async Task ExecuteAsync_WhenNewGlobalAcct_WithSmsOptOut_ShouldStampSmsOptOutAtUtc()
-    {
-        SetupFullHappyPath(globalAcctExists: false);
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
-
-        _globalAcctRepoMock.Verify(r => r.CreateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.SmsOptOut && a.SmsOptOutAtUtc.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenNewGlobalAcct_WithEmailOptOut_ShouldStampEmailOptOutAtUtc()
-    {
-        SetupFullHappyPath(globalAcctExists: false);
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: true));
-
-        _globalAcctRepoMock.Verify(r => r.CreateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.EmailOptOut && a.EmailOptOutAtUtc.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenNewGlobalAcct_WithNoOptOut_ShouldNotSetOptOutTimestamps()
-    {
-        SetupFullHappyPath(globalAcctExists: false);
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: false, emailOptOut: false));
-
-        _globalAcctRepoMock.Verify(r => r.CreateAsync(
-            It.Is<GlobalCustomerAcct>(a => !a.SmsOptOutAtUtc.HasValue && !a.EmailOptOutAtUtc.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenSmsOptOutFirstSet_ShouldStampSmsOptOutAtUtc()
-    {
-        SetupFullHappyPath(globalAcctExists: true);
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.SmsOptOut && a.SmsOptOutAtUtc.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenSmsOptOutAlreadySet_ShouldPreserveExistingTimestamp()
-    {
-        var existingTimestamp = DateTime.UtcNow.AddDays(-30);
-        SetupFullHappyPath(globalAcctExists: true);
-        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GlobalCustomerAcct
-            {
-                Id = "gca_test",
-                Email = "jane@example.com",
-                FirstName = "Jane",
-                LastName = "Doe",
-                CreatedByUserId = "intake",
-                SmsOptOut = true,
-                SmsOptOutAtUtc = existingTimestamp,
-            });
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.SmsOptOutAtUtc == existingTimestamp),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenSmsOptOutCleared_ShouldClearSmsOptOutAtUtc()
-    {
-        SetupFullHappyPath(globalAcctExists: true);
-        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GlobalCustomerAcct
-            {
-                Id = "gca_test",
-                Email = "jane@example.com",
-                FirstName = "Jane",
-                LastName = "Doe",
-                CreatedByUserId = "intake",
-                SmsOptOut = true,
-                SmsOptOutAtUtc = DateTime.UtcNow.AddDays(-30),
-            });
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: false));
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => !a.SmsOptOut && !a.SmsOptOutAtUtc.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenEmailOptOutFirstSet_ShouldStampEmailOptOutAtUtc()
-    {
-        SetupFullHappyPath(globalAcctExists: true);
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: true));
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.EmailOptOut && a.EmailOptOutAtUtc.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenExistingGlobalAcct_WhenEmailOptOutCleared_ShouldClearEmailOptOutAtUtc()
-    {
-        SetupFullHappyPath(globalAcctExists: true);
-        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GlobalCustomerAcct
-            {
-                Id = "gca_test",
-                Email = "jane@example.com",
-                FirstName = "Jane",
-                LastName = "Doe",
-                CreatedByUserId = "intake",
-                EmailOptOut = true,
-                EmailOptOutAtUtc = DateTime.UtcNow.AddDays(-10),
-            });
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: false));
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => !a.EmailOptOut && !a.EmailOptOutAtUtc.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
     // ── Step 3: CustomerProfile Resolution + Asset Ownership ─────────────────
 
     [Fact]
@@ -265,6 +203,146 @@ public class IntakeOrchestrationServiceTests
         _profileRepoMock.Verify(r => r.CreateAsync(
             It.IsAny<CustomerProfile>(),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── Steps 2–3: Email uniqueness under concurrent first submissions (issue #679) ──
+    // Two submissions for a new email (a double-tapped Submit, two tabs) both miss the read.
+    // The second create collides; intake must carry on with the record that won, not fail
+    // with a 500 or leave a duplicate account behind.
+
+    [Fact]
+    public async Task ExecuteAsync_WhenGlobalAcctDoesNotExist_ShouldCreateItWithTheIdDerivedFromTheEmail()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _globalAcctRepoMock.Verify(r => r.CreateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.Id == GlobalCustomerAcct.IdForEmail("jane@example.com")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenGlobalAcctCreateConflicts_ShouldContinueWithTheAccountThatWon()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+        var winner = BuildGlobalAcct();
+        _globalAcctRepoMock.SetupSequence(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GlobalCustomerAcct?)null)
+            .ReturnsAsync(winner);
+        _globalAcctRepoMock.Setup(r => r.CreateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        var (serviceRequest, _, _, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        serviceRequest.Should().NotBeNull();
+        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<GlobalCustomerAcct>(a => a.Id == "gca_test" && a.Phone == "801-555-1234"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenGlobalAcctCreateConflictsButCannotBeReRead_ShouldThrowTheConflict()
+    {
+        SetupFullHappyPath(globalAcctExists: false);
+        _globalAcctRepoMock.Setup(r => r.CreateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        await act.Should().ThrowAsync<ConflictException>();
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileCreateConflicts_ShouldAttachTheRequestToTheProfileThatWon()
+    {
+        SetupFullHappyPath(profileExists: false);
+        var winner = BuildProfile("cp_winner");
+        _profileRepoMock.SetupSequence(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CustomerProfile?)null)
+            .ReturnsAsync(winner);
+        _profileRepoMock.Setup(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        var (serviceRequest, _, _, _) = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        serviceRequest.CustomerProfileId.Should().Be("cp_winner");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileCreateConflicts_ShouldApplyThisSubmissionsPhoneAndOptOutsToTheProfileThatWon()
+    {
+        SetupFullHappyPath(profileExists: false);
+        var winner = BuildProfile("cp_winner");
+        _profileRepoMock.SetupSequence(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CustomerProfile?)null)
+            .ReturnsAsync(winner);
+        _profileRepoMock.Setup(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: true));
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.Id == "cp_winner"
+                && p.PhoneE164 == "+18015551234"
+                && p.SmsOptOut
+                && p.SmsOptOutAtUtc.HasValue),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileCreateConflictsButCannotBeReRead_ShouldThrowTheConflict()
+    {
+        SetupFullHappyPath(profileExists: false);
+        _profileRepoMock.Setup(r => r.CreateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("exists"));
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        await act.Should().ThrowAsync<ConflictException>();
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileIsCreated_ShouldStoreThePhoneInE164()
+    {
+        // An inbound STOP arrives with a phone number and no tenant (issue #665), so the number
+        // has to be stored in a form a lookup can match. The typed form is kept as well.
+        SetupFullHappyPath(profileExists: false);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _profileRepoMock.Verify(r => r.CreateAsync(
+            It.Is<CustomerProfile>(p => p.PhoneE164 == "+18015551234" && p.Phone == "801-555-1234"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenProfileExists_ShouldRefreshThePhoneInE164()
+    {
+        SetupFullHappyPath(profileExists: true);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.PhoneE164 == "+18015551234"),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenPhoneCannotNormalise_ShouldLeaveE164Null()
+    {
+        // The profile still keeps what the customer typed; only the matchable form is absent.
+        SetupFullHappyPath(profileExists: false);
+        var request = BuildValidRequest();
+        request = request with { Customer = request.Customer with { Phone = "555-1234" } };
+
+        await _sut.ExecuteAsync("test-slug", request);
+
+        _profileRepoMock.Verify(r => r.CreateAsync(
+            It.Is<CustomerProfile>(p => p.PhoneE164 == null && p.Phone == "555-1234"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── Step 3: Opt-out Timestamp Stamping (CustomerProfile) ─────────────────
@@ -318,11 +396,14 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenExistingProfile_WhenSmsOptOutCleared_ShouldClearSmsOptOutAtUtc()
+    public async Task ExecuteAsync_WhenExistingProfile_WhenStoredSmsOptOutAndBoxUnticked_ShouldStayOptedOut()
     {
+        // Intake sets an opt-out but never clears one: the form never shows the stored value,
+        // so an unticked box is not a choice to opt back in (issue #673).
+        var storedAt = DateTime.UtcNow.AddDays(-5);
         var existingProfile = BuildProfile();
         existingProfile.SmsOptOut = true;
-        existingProfile.SmsOptOutAtUtc = DateTime.UtcNow.AddDays(-5);
+        existingProfile.SmsOptOutAtUtc = storedAt;
 
         SetupFullHappyPath(profileExists: true);
         _profileRepoMock.Setup(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
@@ -331,7 +412,7 @@ public class IntakeOrchestrationServiceTests
         await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: false));
 
         _profileRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<CustomerProfile>(p => !p.SmsOptOut && !p.SmsOptOutAtUtc.HasValue),
+            It.Is<CustomerProfile>(p => p.SmsOptOut && p.SmsOptOutAtUtc == storedAt),
             It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
@@ -348,11 +429,14 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenExistingProfile_WhenEmailOptOutCleared_ShouldClearEmailOptOutAtUtc()
+    public async Task ExecuteAsync_WhenExistingProfile_WhenStoredEmailOptOutAndBoxUnticked_ShouldStayOptedOut()
     {
+        // Intake sets an opt-out but never clears one: the form never shows the stored value,
+        // so an unticked box is not a choice to opt back in (issue #673).
+        var storedAt = DateTime.UtcNow.AddDays(-5);
         var existingProfile = BuildProfile();
         existingProfile.EmailOptOut = true;
-        existingProfile.EmailOptOutAtUtc = DateTime.UtcNow.AddDays(-5);
+        existingProfile.EmailOptOutAtUtc = storedAt;
 
         SetupFullHappyPath(profileExists: true);
         _profileRepoMock.Setup(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
@@ -361,7 +445,7 @@ public class IntakeOrchestrationServiceTests
         await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: false));
 
         _profileRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<CustomerProfile>(p => !p.EmailOptOut && !p.EmailOptOutAtUtc.HasValue),
+            It.Is<CustomerProfile>(p => p.EmailOptOut && p.EmailOptOutAtUtc == storedAt),
             It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
@@ -442,6 +526,7 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.CustomerSnapshot.LastName.Should().Be("Doe");
         result.ServiceRequest.CustomerSnapshot.Email.Should().Be("jane@example.com");
         result.ServiceRequest.CustomerSnapshot.Phone.Should().Be("801-555-1234");
+        result.ServiceRequest.CustomerSnapshot.PreferredContact.Should().Be("Phone");
     }
 
     [Fact]
@@ -493,51 +578,91 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ShouldUseAiCategorizationWhenAvailable()
+    public async Task ExecuteAsync_ShouldPersistTheCustomerSubmittedCategory_AndNotReRunAiCategorization()
     {
+        // A-5: the AI suggestion is advisory and was already offered in the wizard. The
+        // server stores what the customer submitted and never re-runs categorization here.
         SetupFullHappyPath();
         _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("AI Category");
+            .ReturnsAsync("HVAC");
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.ServiceRequest.IssueCategory.Should().Be("AI Category");
+        result.ServiceRequest.IssueCategory.Should().Be("Slides");
+        _categorizationMock.Verify(
+            c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenAiCategorizationFails_ShouldFallBackToRequestCategory()
+    public async Task ExecuteAsync_WhenSubmittedCategoryIsNotInTheVocabulary_ShouldStoreOther()
     {
         SetupFullHappyPath();
-        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TimeoutException("AI timed out"));
+        var request = BuildValidRequest();
+        request = request with { IssueCategory = "Transmission Fluid" };
 
-        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+        var result = await _sut.ExecuteAsync("test-slug", request);
 
-        result.ServiceRequest.IssueCategory.Should().Be("Slide System");
+        result.ServiceRequest.IssueCategory.Should().Be(IssueCategoryVocabulary.FallbackCode);
     }
 
     [Fact]
-    public async Task ExecuteAsync_ShouldBuildTechnicianSummaryFromIssueDescription()
+    public async Task ExecuteAsync_ShouldNormalizeSubmittedCategoryCasing()
     {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with { IssueCategory = "  slides  " };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.IssueCategory.Should().Be("Slides");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldPersistTheVerbatimIssueDescription()
+    {
+        // Issue #601: the pre-curation text is what the packet's "Complaint — word for word"
+        // section renders, so it has to survive intake alongside the curated description.
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with
+        {
+            IssueDescriptionVerbatim = "  um so like the slide it uh wont retract  ",
+        };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.IssueDescriptionVerbatim.Should().Be("um so like the slide it uh wont retract");
+        result.ServiceRequest.IssueDescription.Should().Be("Slide won't retract");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ExecuteAsync_WhenNoVerbatimDescriptionSupplied_ShouldLeaveItNull(string? verbatim)
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with { IssueDescriptionVerbatim = verbatim };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.IssueDescriptionVerbatim.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNoCapabilityMismatchNote_TechnicianSummaryShouldBeNull()
+    {
+        // Issue #601: the packet's Preliminary assessment section (disclosed as AI-generated)
+        // must never echo the literal issue description — that duplicates the Complaint
+        // section, which shows the customer's words verbatim. With no capability-mismatch
+        // note there is nothing distinct to say, so the seed text is null.
         SetupFullHappyPath();
 
         var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        result.ServiceRequest.TechnicianSummary.Should().Contain("Slide won't retract");
+        result.ServiceRequest.TechnicianSummary.Should().BeNull();
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenNoCapabilityMismatchNote_TechnicianSummaryShouldStartWithIssue()
-    {
-        SetupFullHappyPath();
-
-        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
-
-        result.ServiceRequest.TechnicianSummary.Should().StartWith("Issue:");
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenCapabilityMismatchNoteProvided_ShouldPrependNoteToTechnicianSummary()
+    public async Task ExecuteAsync_WhenCapabilityMismatchNoteProvided_TechnicianSummaryShouldBeTheNoteOnly()
     {
         SetupFullHappyPath();
         var request = BuildValidRequest() with
@@ -548,9 +673,8 @@ public class IntakeOrchestrationServiceTests
         var result = await _sut.ExecuteAsync("test-slug", request);
 
         result.ServiceRequest.TechnicianSummary.Should()
-            .StartWith("Capability 'diesel-service' was requested");
-        result.ServiceRequest.TechnicianSummary.Should()
-            .Contain("Slide won't retract");
+            .Be("Capability 'diesel-service' was requested but is not available at this location. User was advised to contact the location directly.");
+        result.ServiceRequest.TechnicianSummary.Should().NotContain("Slide won't retract");
     }
 
     [Fact]
@@ -590,6 +714,201 @@ public class IntakeOrchestrationServiceTests
 
         result.ServiceRequest.CustomerSnapshot.IsReturningCustomer.Should().BeFalse();
         result.ServiceRequest.CustomerSnapshot.PriorRequestCount.Should().Be(0);
+    }
+
+    // ── Serial numbers and skipped vehicles (issue #807) ────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_WhenAssetIdIsASerialNumber_ShouldStoreItOnTheServiceRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263"));
+
+        result.ServiceRequest.AssetInfo.AssetId.Should().Be("152263");
+        result.ServiceRequest.AssetInfo.Manufacturer.Should().Be("Grand Design");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSerialNumberHasNoManufacturer_ShouldNotTransferOwnershipOrRecordItOnTheProfile()
+    {
+        SetupFullHappyPath();
+
+        CustomerProfile? capturedProfile = null;
+        _profileRepoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .Callback<CustomerProfile, CancellationToken>((p, _) => capturedProfile = p)
+            .ReturnsAsync((CustomerProfile p, CancellationToken _) => p);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: null));
+
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        capturedProfile.Should().NotBeNull();
+        capturedProfile!.AssetsOwned.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    [InlineData("Camper Mfg. Co.")]
+    public async Task ExecuteAsync_WhenSerialNumberHasNoManufacturer_ShouldNotAppendAssetLedgerEntry(string? manufacturer)
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: manufacturer));
+
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _ledgerRepoMock.Verify(r => r.AppendAsync(
+            It.IsAny<AssetLedgerEntry>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── Serial numbers keyed on manufacturer (issue #808) ───────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSerialNumberHasManufacturer_ShouldRecordOwnershipUnderTheCompositeKey()
+    {
+        SetupFullHappyPath();
+        _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "LANCE:152263", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CustomerProfile?)null);
+
+        CustomerProfile? capturedProfile = null;
+        _profileRepoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .Callback<CustomerProfile, CancellationToken>((p, _) => capturedProfile = p)
+            .ReturnsAsync((CustomerProfile p, CancellationToken _) => p);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: "Lance Camper Mfg. Corp."));
+
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            "ten_test", "LANCE:152263", It.IsAny<CancellationToken>()), Times.Once);
+        capturedProfile.Should().NotBeNull();
+        var owned = capturedProfile!.AssetsOwned.Should().ContainSingle().Subject;
+        owned.AssetId.Should().Be("LANCE:152263");
+        owned.Status.Should().Be(AssetOwnershipStatus.Active);
+        owned.Manufacturer.Should().Be("Lance Camper Mfg. Corp.");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSerialNumberHasManufacturer_ShouldAppendLedgerEntryUnderTheCompositeKey()
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: "Lance"));
+
+        _ledgerRepoMock.Verify(r => r.AppendAsync(
+            It.Is<AssetLedgerEntry>(e => e.AssetId == "LANCE:152263" && e.Manufacturer == "Lance"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSerialNumberHasManufacturer_ShouldKeepTheSerialNumberAsEnteredOnTheServiceRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152 263", manufacturer: "Lance"));
+
+        result.ServiceRequest.AssetInfo.AssetId.Should().Be("152263");
+        result.ServiceRequest.AssetInfo.Manufacturer.Should().Be("Lance");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSameSerialIsOwnedUnderAnotherManufacturer_ShouldNotTransferOwnership()
+    {
+        SetupFullHappyPath();
+        var otherOwner = BuildProfile("cp_other");
+        otherOwner.AssetsOwned.Add(new AssetOwnershipEmbedded
+        {
+            AssetId = "NORTHERNLITE:152263",
+            Status = AssetOwnershipStatus.Active,
+            RequestCount = 1,
+        });
+        _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "NORTHERNLITE:152263", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(otherOwner);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: "Lance"));
+
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            It.IsAny<string>(), "NORTHERNLITE:152263", It.IsAny<CancellationToken>()), Times.Never);
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.Id == "cp_other"),
+            It.IsAny<CancellationToken>()), Times.Never);
+        otherOwner.AssetsOwned.Single().Status.Should().Be(AssetOwnershipStatus.Active);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSameSerialAndManufacturerIsOwnedByAnotherProfile_ShouldTransferOwnership()
+    {
+        SetupFullHappyPath();
+        var otherOwner = BuildProfile("cp_other");
+        otherOwner.AssetsOwned.Add(new AssetOwnershipEmbedded
+        {
+            AssetId = "LANCE:152263",
+            Status = AssetOwnershipStatus.Active,
+            RequestCount = 1,
+        });
+        _profileRepoMock.Setup(r => r.GetByActiveAssetIdAsync("ten_test", "LANCE:152263", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(otherOwner);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: "152263", manufacturer: "Lance Camper"));
+
+        _profileRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<CustomerProfile>(p => p.Id == "cp_other"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        otherOwner.AssetsOwned.Single().Status.Should().Be(AssetOwnershipStatus.Inactive);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenVin_ShouldKeyHistoryOnTheVinWhateverTheManufacturer()
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(manufacturer: "Lance"));
+
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            "ten_test", "1HGBH41JXMN109186", It.IsAny<CancellationToken>()), Times.Once);
+        _ledgerRepoMock.Verify(r => r.AppendAsync(
+            It.Is<AssetLedgerEntry>(e => e.AssetId == "1HGBH41JXMN109186"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ExecuteAsync_WhenVehicleIsSkipped_ShouldCreateTheServiceRequestWithABlankAssetId(string assetId)
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: assetId));
+
+        result.ServiceRequest.AssetInfo.AssetId.Should().BeEmpty();
+        _profileRepoMock.Verify(r => r.GetByActiveAssetIdAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _ledgerRepoMock.Verify(r => r.AppendAsync(
+            It.IsAny<AssetLedgerEntry>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldNormaliseTheAssetIdBeforeStoringIt()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: " 1hgbh41jxmn109186 "));
+
+        result.ServiceRequest.AssetInfo.AssetId.Should().Be("1HGBH41JXMN109186");
+    }
+
+    [Theory]
+    [InlineData("1234<5")]
+    [InlineData("1HGBH41JXMN10918O")]
+    public async Task ExecuteAsync_WhenAssetIdIsMalformed_ShouldThrowArgumentException(string assetId)
+    {
+        SetupFullHappyPath();
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest(assetId: assetId));
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _srRepoMock.Verify(r => r.CreateAsync(
+            It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Step 5: AssetLedgerEntry (non-blocking) ──────────────────────────────
@@ -682,6 +1001,42 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenTokenIsReused_ShouldReturnTheExistingExpiry()
+    {
+        SetupFullHappyPath();
+
+        // A reused token keeps its original expiry, so the client cannot infer it from "now + TTL"
+        // and has to be told (issue #716).
+        var existingExpiry = DateTime.UtcNow.AddDays(12);
+        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlobalCustomerAcct
+            {
+                Id = "gca_test",
+                Email = "jane@example.com",
+                FirstName = "Jane",
+                LastName = "Doe",
+                CreatedByUserId = "intake",
+                MagicLinkToken = "existing:token",
+                MagicLinkExpiresAtUtc = existingExpiry,
+            });
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.MagicLinkToken.Should().Be("existing:token");
+        result.MagicLinkExpiresAtUtc.Should().Be(existingExpiry);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTokenIsGenerated_ShouldReturnItsNewExpiry()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.MagicLinkExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddDays(90), TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenTokenIsNull_ShouldGenerateNewMagicLinkToken()
     {
         SetupFullHappyPath();
@@ -738,18 +1093,6 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ShouldAddAssetIdToGlobalAcctAllKnownAssetIds()
-    {
-        SetupFullHappyPath();
-
-        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
-
-        _globalAcctRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<GlobalCustomerAcct>(a => a.AllKnownAssetIds.Contains("1HGBH41JXMN109186")),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
     public async Task ExecuteAsync_ShouldLinkProfileToGlobalAcct()
     {
         SetupFullHappyPath();
@@ -773,14 +1116,243 @@ public class IntakeOrchestrationServiceTests
         result.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ShouldNotifyWithTheTenantLocationAndE164Phone()
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        // BuildValidRequest submits "801-555-1234"; ACS only accepts E.164 (issue #661).
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            "ten_test", "loc_test", It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(),
+            "+18015551234",
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldNotifyWithTheNormalisedPreferredContactAndOptOuts()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest(emailOptOut: true);
+        request = request with { Customer = request.Customer with { PreferredContact = "  text " } };
+
+        await _sut.ExecuteAsync("test-slug", request);
+
+        // PreferredContact chooses the confirmation channel; the opt-outs veto it (issue #662).
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), "Text",
+            false, true, It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenStoredSmsOptOutAndBoxUnticked_ShouldNotifyWithTheStoredOptOut()
+    {
+        // The confirmation follows the profile after the write, not this submission's boxes (issue #673).
+        var existingProfile = BuildProfile();
+        existingProfile.SmsOptOut = true;
+        existingProfile.SmsOptOutAtUtc = DateTime.UtcNow.AddDays(-5);
+        SetupFullHappyPath(profileExists: true);
+        _profileRepoMock.Setup(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingProfile);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(smsOptOut: false));
+
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            true, false, It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenStoredEmailOptOutAndBoxUnticked_ShouldNotifyWithTheStoredOptOut()
+    {
+        var existingProfile = BuildProfile();
+        existingProfile.EmailOptOut = true;
+        existingProfile.EmailOptOutAtUtc = DateTime.UtcNow.AddDays(-5);
+        SetupFullHappyPath(profileExists: true);
+        _profileRepoMock.Setup(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingProfile);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(emailOptOut: false));
+
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            false, true, It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTextPreferredButStoredSmsOptOut_ShouldAcceptAndNotifyWithTheOptOut()
+    {
+        // The customer cannot see the stored opt-out, so the submission is accepted rather than
+        // refused; NotificationOrchestrator routes the confirmation to email (issue #673).
+        var existingProfile = BuildProfile();
+        existingProfile.SmsOptOut = true;
+        existingProfile.SmsOptOutAtUtc = DateTime.UtcNow.AddDays(-5);
+        SetupFullHappyPath(profileExists: true);
+        _profileRepoMock.Setup(r => r.GetByEmailAsync("ten_test", "jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingProfile);
+        var request = BuildValidRequest();
+        request = request with { Customer = request.Customer with { PreferredContact = "Text" } };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.Should().NotBeNull();
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), "Text",
+            true, false, "jane@example.com", It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenThePhoneCannotBeNormalised_ShouldNotifyWithoutAPhone()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest();
+        request = request with { Customer = request.Customer with { Phone = "555-1234" } };
+
+        await _sut.ExecuteAsync("test-slug", request);
+
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(),
+            null,
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldNotifyWithTheCustomersFirstNameAndAFullTokenLifetime()
+    {
+        SetupFullHappyPath();
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        // A freshly generated status token lives 90 days; the email says so (issue #737).
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string>(), "Jane", It.IsAny<string>(), It.IsAny<string>(), 90, It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTokenIsReused_ShouldNotifyWithTheDaysItHasLeft()
+    {
+        SetupFullHappyPath();
+
+        // A reused token keeps its original expiry (#716), so "90 days" would overstate it.
+        _globalAcctRepoMock.Setup(r => r.GetByEmailAsync("jane@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlobalCustomerAcct
+            {
+                Id = "gca_test",
+                Email = "jane@example.com",
+                FirstName = "Jane",
+                LastName = "Doe",
+                CreatedByUserId = "intake",
+                MagicLinkToken = "existing:token",
+                MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(12).AddHours(-1),
+            });
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), 12, It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ── Step 8: Enqueue packet generation (non-blocking) ─────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldEnqueuePacketGenerationForTheCreatedRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        _packetQueueMock.Verify(q => q.TryEnqueue(
+            It.Is<PacketGenerationJob>(j =>
+                j.TenantId == "ten_test" &&
+                j.ServiceRequestId == result.ServiceRequest.Id &&
+                j.Trigger == "intake")),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenPacketEnqueueThrows_ShouldNotFailIntake()
+    {
+        SetupFullHappyPath();
+        _packetQueueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>()))
+            .Throws(new InvalidOperationException("queue disposed"));
+
+        var act = () => _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenPacketQueueIsFull_ShouldStillReturnServiceRequest()
+    {
+        SetupFullHappyPath();
+        _packetQueueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>())).Returns(false);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.Should().NotBeNull();
+        result.ServiceRequest.TenantId.Should().Be("ten_test");
+    }
+
+    // ── Expected attachment count (issue #516) ───────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldRecordHowManyAttachmentsIntakePromised()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with { ExpectedAttachmentCount = 3 };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.PacketGeneration.ExpectedAttachmentCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNoAttachmentsArePromised_ShouldRecordZero()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.PacketGeneration.ExpectedAttachmentCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenPromisedAttachmentCountIsNegative_ShouldClampToZero()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with { ExpectedAttachmentCount = -2 };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequest.PacketGeneration.ExpectedAttachmentCount.Should().Be(
+            0, "a negative promise must never stall packet generation");
+    }
+
     // ── Full Orchestration ───────────────────────────────────────────────────
 
     [Fact]
     public async Task ExecuteAsync_FullOrchestration_ShouldCreateServiceRequestWithAllFields()
     {
         SetupFullHappyPath();
-        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("AI: Slide System");
 
         var request = BuildValidRequest(includeDiagnostics: true);
         var result = await _sut.ExecuteAsync("test-slug", request);
@@ -790,12 +1362,12 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.TenantId.Should().Be("ten_test");
         result.ServiceRequest.LocationId.Should().Be("loc_test");
         result.ServiceRequest.Status.Should().Be("New");
-        result.ServiceRequest.IssueCategory.Should().Be("AI: Slide System");
+        result.ServiceRequest.IssueCategory.Should().Be("Slides");
         result.ServiceRequest.IssueDescription.Should().Be("Slide won't retract");
         result.ServiceRequest.CustomerSnapshot.FirstName.Should().Be("Jane");
         result.ServiceRequest.CustomerSnapshot.LastName.Should().Be("Doe");
         result.ServiceRequest.AssetInfo.AssetId.Should().Be("1HGBH41JXMN109186");
-        result.ServiceRequest.TechnicianSummary.Should().NotBeNullOrWhiteSpace();
+        result.ServiceRequest.TechnicianSummary.Should().BeNull();
         result.ServiceRequest.DiagnosticResponses.Should().HaveCount(1);
         result.MagicLinkToken.Should().NotBeNullOrWhiteSpace();
     }
@@ -833,10 +1405,601 @@ public class IntakeOrchestrationServiceTests
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    // ── Spec A-13: channel attribution ───────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldPersistTheChannelOnTheServiceRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "qr"));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Qr);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNoChannelSupplied_ShouldRecordItAsPrint()
+    {
+        // A submission that arrived without a src came from printed material, which cannot
+        // carry a query string — not from an unknown channel.
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: null));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Print);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenChannelUnknown_ShouldKeepItRatherThanRejectTheSubmission()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "nfc"));
+
+        result.ServiceRequest.IntakeSource.Should().Be("nfc");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenChannelMalformed_ShouldCoerceItRatherThanRejectTheSubmission()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "<script>"));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Other);
+    }
+
+    // ── Spec A-14: invite prefill (open) ─────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GetInvitePrefillAsync_WhenSlugIsNullOrWhiteSpace_ShouldThrowArgumentException(string? slug)
+    {
+        var act = () => _sut.GetInvitePrefillAsync(slug!, InviteTokenValue);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenSlugNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("unknown-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+
+        var act = () => _sut.GetInvitePrefillAsync("unknown-slug", InviteTokenValue);
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenInviteIsUsable_ShouldReturnFirstNameAndPhone()
+    {
+        SetupInvite(BuildInvite());
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().NotBeNull();
+        result!.FirstName.Should().Be("Jane");
+        result.Phone.Should().Be("+18015551234");
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenTheInviteWasEmailed_ShouldAlsoReturnTheEmail()
+    {
+        SetupInvite(BuildInvite(channel: IntakeInviteChannel.Email, email: "jane@example.com"));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result!.Email.Should().Be("jane@example.com");
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_ShouldPointReadByTheTokenHashInTheSlugsTenant()
+    {
+        SetupInvite(BuildInvite());
+
+        await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        _inviteRepoMock.Verify(r => r.GetByIdAsync("ten_test", InviteToken.Hash(InviteTokenValue), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_ShouldNotRedeemTheInvite()
+    {
+        // Messaging clients fetch the link to build a preview; opening must never spend the token.
+        SetupInvite(BuildInvite());
+
+        await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        _inviteRepoMock.Verify(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenExpired_ShouldReturnNull()
+    {
+        SetupInvite(BuildInvite(expiresAtUtc: DateTime.UtcNow.AddMinutes(-1)));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenAlreadyRedeemed_ShouldReturnNull()
+    {
+        SetupInvite(BuildInvite(redeemedAtUtc: DateTime.UtcNow.AddHours(-1)));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenUnknown_ShouldReturnNull()
+    {
+        SetupInvite(null);
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenInviteBelongsToAnotherLocation_ShouldReturnNull()
+    {
+        SetupInvite(BuildInvite(locationId: "loc_other"));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-token")]
+    public async Task GetInvitePrefillAsync_WhenTokenIsMalformed_ShouldReturnNullWithoutAStorageRead(string? token)
+    {
+        SetupInvite(BuildInvite());
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", token!);
+
+        result.Should().BeNull();
+        _inviteRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetInvitePrefillAsync_WhenLookupFails_ShouldReturnNullSoTheFormStillLoads()
+    {
+        // A-13's "the redirect never fails" extends to invites: a storage fault costs the
+        // customer the prefill, never the form.
+        _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("test-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildSlugLookup());
+        _inviteRepoMock.Setup(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Cosmos unavailable"));
+
+        var result = await _sut.GetInvitePrefillAsync("test-slug", InviteTokenValue);
+
+        result.Should().BeNull();
+    }
+
+    // ── Spec A-14: invite redemption (submit) ────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_WithUsableInvite_ShouldAttributeTheRequestToTheAdvisorAndInvite()
+    {
+        SetupFullHappyPath();
+        var invite = BuildInvite();
+        SetupInvite(invite);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Advisor);
+        result.ServiceRequest.IntakeInviteId.Should().Be(invite.Id);
+        result.ServiceRequest.AdvisorUserId.Should().Be("auth0|advisor");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithUsableInvite_ShouldTagAdvisorEvenWhenTheSubmittedSourceDiffers()
+    {
+        // The invite is the proof of the channel; a src lost or rewritten on the way wins nothing.
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite());
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: null, inviteToken: InviteTokenValue));
+
+        result.ServiceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Advisor);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithUsableInvite_ShouldMarkTheInviteRedeemedWithTheServiceRequestId()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite());
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(inviteToken: InviteTokenValue));
+
+        _inviteRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<IntakeInvite>(i =>
+                i.RedeemedAtUtc.HasValue &&
+                i.ServiceRequestId == result.ServiceRequest.Id &&
+                i.UpdatedByUserId == "intake"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithUsableInvite_ShouldRedeemOnlyAfterTheServiceRequestIsCreated()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite());
+        var order = new List<string>();
+        _srRepoMock.Setup(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("sr"))
+            .ReturnsAsync((ServiceRequest sr, CancellationToken _) => sr);
+        _inviteRepoMock.Setup(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("invite"))
+            .ReturnsAsync((IntakeInvite i, CancellationToken _) => i);
+
+        await _sut.ExecuteAsync("test-slug", BuildValidRequest(inviteToken: InviteTokenValue));
+
+        order.Should().Equal("sr", "invite");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithExpiredInvite_ShouldSubmitWithoutInviteAttribution()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite(expiresAtUtc: DateTime.UtcNow.AddMinutes(-1)));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithRedeemedInvite_ShouldSubmitWithoutInviteAttribution()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite(redeemedAtUtc: DateTime.UtcNow.AddHours(-1)));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithUnknownInvite_ShouldSubmitWithoutInviteAttribution()
+    {
+        SetupFullHappyPath();
+        SetupInvite(null);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithInviteForAnotherLocation_ShouldSubmitWithoutInviteAttribution()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite(locationId: "loc_other"));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithMalformedInviteToken_ShouldSubmitWithoutAStorageRead()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(inviteToken: "not-a-token"));
+
+        result.ServiceRequest.IntakeInviteId.Should().BeNull();
+        _inviteRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenInviteLookupFails_ShouldStillSubmit()
+    {
+        SetupFullHappyPath();
+        _inviteRepoMock.Setup(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Cosmos unavailable"));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(intakeSource: "advisor", inviteToken: InviteTokenValue));
+
+        AssertSubmittedWithoutInvite(result.ServiceRequest);
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenMarkingTheInviteRedeemedFails_ShouldStillSubmitWithAttribution()
+    {
+        SetupFullHappyPath();
+        var invite = BuildInvite();
+        SetupInvite(invite);
+        _inviteRepoMock.Setup(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Cosmos unavailable"));
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest(inviteToken: InviteTokenValue));
+
+        result.ServiceRequest.IntakeInviteId.Should().Be(invite.Id);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithoutInviteToken_ShouldNotTouchInvites()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequest.IntakeInviteId.Should().BeNull();
+        result.ServiceRequest.AdvisorUserId.Should().BeNull();
+        _inviteRepoMock.VerifyNoOtherCalls();
+    }
+
+    // ── Several issues per visit (Spec A-17, issue #806) ───────────────────
+    // Contact and vehicle are entered once; each issue becomes its own service request, and
+    // the submission is still one confirmation, one invite redemption and one packet email.
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSingleIssue_ShouldNotGroupTheRequest()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest());
+
+        result.ServiceRequests.Should().ContainSingle().Which.Should().BeSameAs(result.ServiceRequest);
+        result.ServiceRequest.SubmissionId.Should().BeNull();
+        result.ServiceRequest.SubmissionPosition.Should().Be(0);
+        result.ServiceRequest.SubmissionCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldCreateOneRequestPerIssueInOrder()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        result.ServiceRequests.Should().HaveCount(3);
+        result.ServiceRequests.Select(sr => sr.IssueDescription)
+            .Should().Equal("Slide won't retract", "Fridge is warm", "Awning fabric torn");
+        result.ServiceRequests.Select(sr => sr.IssueCategory)
+            .Should().Equal("Slides", "Appliances", "Awning");
+        result.ServiceRequest.Should().BeSameAs(result.ServiceRequests[0]);
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldLinkEveryRequestToTheLead()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        var leadId = result.ServiceRequests[0].Id;
+        result.ServiceRequests.Should().OnlyContain(sr => sr.SubmissionId == leadId && sr.SubmissionCount == 3);
+        result.ServiceRequests.Select(sr => sr.SubmissionPosition).Should().Equal(1, 2, 3);
+        result.ServiceRequests[0].IsSubmissionLead.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldShareContactVehicleAndVisitAnswers()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        result.ServiceRequests.Should().OnlyContain(sr =>
+            sr.CustomerSnapshot.Email == "jane@example.com"
+            && sr.AssetInfo.AssetId == "1HGBH41JXMN109186"
+            && sr.RvUsage == "Full-time"
+            && sr.CustomerProfileId == "cp_test");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldKeepEachIssuesOwnAnswers()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        var fridge = result.ServiceRequests[1];
+        fridge.Urgency.Should().Be("Today");
+        fridge.IssueDescriptionVerbatim.Should().Be("fridge is warm");
+        fridge.TechnicianSummary.Should().Be("No appliance repair here");
+        fridge.DiagnosticResponses.Should().ContainSingle(d => d.QuestionText == "Is the freezer cold?");
+        fridge.PacketGeneration.ExpectedAttachmentCount.Should().Be(2);
+        result.ServiceRequests[2].PacketGeneration.ExpectedAttachmentCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldCoerceEachCategoryToTheVocabulary()
+    {
+        SetupFullHappyPath();
+        var request = BuildMultiIssueRequest() with
+        {
+            AdditionalIssues = [new IntakeIssueDto { IssueCategory = "Structural", IssueDescription = "Crack" }],
+        };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequests[1].IssueCategory.Should().Be(IssueCategoryVocabulary.FallbackCode);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldSendOneConfirmationForTheLead()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            result.ServiceRequest.Id, It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldQueueOnePacketJobForTheFirstRequest()
+    {
+        SetupFullHappyPath();
+        var enqueued = new List<PacketGenerationJob>();
+        _packetQueueMock.Setup(q => q.TryEnqueue(It.IsAny<PacketGenerationJob>()))
+            .Callback<PacketGenerationJob>(enqueued.Add)
+            .Returns(true);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        // The submission is one packet, generated through its first request (Spec A-17, B-2).
+        enqueued.Select(j => j.ServiceRequestId).Should().Equal(result.ServiceRequests[0].Id);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssuesWithAVin_ShouldAppendOneLedgerEntryPerIssue()
+    {
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        foreach (var sr in result.ServiceRequests)
+        {
+            _ledgerRepoMock.Verify(r => r.AppendAsync(
+                It.Is<AssetLedgerEntry>(e => e.ServiceRequestId == sr.Id && e.IssueCategory == sr.IssueCategory),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssues_ShouldCountEveryRequestOnTheProfileAndAccount()
+    {
+        SetupFullHappyPath();
+        CustomerProfile? savedProfile = null;
+        _profileRepoMock.Setup(r => r.UpdateAsync(It.IsAny<CustomerProfile>(), It.IsAny<CancellationToken>()))
+            .Callback<CustomerProfile, CancellationToken>((p, _) => savedProfile = p)
+            .ReturnsAsync((CustomerProfile p, CancellationToken _) => p);
+        GlobalCustomerAcct? savedAcct = null;
+        _globalAcctRepoMock.Setup(r => r.UpdateAsync(It.IsAny<GlobalCustomerAcct>(), It.IsAny<CancellationToken>()))
+            .Callback<GlobalCustomerAcct, CancellationToken>((a, _) => savedAcct = a)
+            .ReturnsAsync((GlobalCustomerAcct a, CancellationToken _) => a);
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildMultiIssueRequest());
+
+        savedProfile!.TotalRequestCount.Should().Be(3);
+        savedProfile.ServiceRequestIds.Should().Equal(result.ServiceRequests.Select(sr => sr.Id));
+        savedAcct!.LinkedProfiles.Should().ContainSingle().Which.RequestCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSeveralIssuesFromAnInvite_ShouldAttributeEveryRequestAndRedeemOnceWithTheLead()
+    {
+        SetupFullHappyPath();
+        SetupInvite(BuildInvite());
+        var request = BuildMultiIssueRequest() with { InviteToken = InviteTokenValue };
+
+        var result = await _sut.ExecuteAsync("test-slug", request);
+
+        result.ServiceRequests.Should().OnlyContain(sr =>
+            sr.IntakeInviteId == InviteToken.Hash(InviteTokenValue)
+            && sr.AdvisorUserId == "auth0|advisor"
+            && sr.IntakeSource == IntakeSourceVocabulary.Advisor);
+        _inviteRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<IntakeInvite>(i => i.ServiceRequestId == result.ServiceRequest.Id),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenMoreThanTenIssues_ShouldThrowArgumentExceptionAndCreateNothing()
+    {
+        SetupFullHappyPath();
+        var request = BuildValidRequest() with
+        {
+            AdditionalIssues = [.. Enumerable.Range(0, 10)
+                .Select(i => new IntakeIssueDto { IssueCategory = "Other", IssueDescription = $"Issue {i + 2}" })],
+        };
+
+        var act = () => _sut.ExecuteAsync("test-slug", request);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _srRepoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private static ServiceRequestCreateRequestDto BuildMultiIssueRequest() => BuildValidRequest() with
+    {
+        AdditionalIssues =
+        [
+            new IntakeIssueDto
+            {
+                IssueCategory = "Appliances",
+                IssueDescription = "Fridge is warm",
+                IssueDescriptionVerbatim = "fridge is warm",
+                Urgency = "Today",
+                CapabilityMismatchNote = "No appliance repair here",
+                ExpectedAttachmentCount = 2,
+                DiagnosticResponses = [new DiagnosticResponseDto { QuestionText = "Is the freezer cold?" }],
+            },
+            new IntakeIssueDto { IssueCategory = "Awning", IssueDescription = "Awning fabric torn" },
+        ],
+    };
+
+    private const string InviteTokenValue = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    private static IntakeInvite BuildInvite(
+        string locationId = "loc_test", DateTime? expiresAtUtc = null, DateTime? redeemedAtUtc = null,
+        string channel = IntakeInviteChannel.Sms, string? email = null) => new()
+    {
+        Channel = channel,
+        Email = email,
+        Id = InviteToken.Hash(InviteTokenValue),
+        TenantId = "ten_test",
+        LocationId = locationId,
+        AdvisorUserId = "auth0|advisor",
+        FirstName = "Jane",
+        Phone = "+18015551234",
+        ConsentCapturedAtUtc = DateTime.UtcNow.AddMinutes(-5),
+        ExpiresAtUtc = expiresAtUtc ?? DateTime.UtcNow.AddHours(72),
+        RedeemedAtUtc = redeemedAtUtc,
+        CreatedByUserId = "auth0|advisor",
+    };
+
+    private void SetupInvite(IntakeInvite? invite)
+    {
+        _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("test-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildSlugLookup());
+        _inviteRepoMock.Setup(r => r.GetByIdAsync("ten_test", InviteToken.Hash(InviteTokenValue), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(invite);
+        _inviteRepoMock.Setup(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IntakeInvite i, CancellationToken _) => i);
+    }
+
+    private void AssertSubmittedWithoutInvite(ServiceRequest serviceRequest)
+    {
+        // The link still says where the customer came from; only the invite's own attribution
+        // (and the single use it would spend) is withheld.
+        serviceRequest.IntakeSource.Should().Be(IntakeSourceVocabulary.Advisor);
+        serviceRequest.IntakeInviteId.Should().BeNull();
+        serviceRequest.AdvisorUserId.Should().BeNull();
+        _inviteRepoMock.Verify(r => r.UpdateAsync(It.IsAny<IntakeInvite>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static ServiceRequestCreateRequestDto BuildValidRequest(
         bool includeDiagnostics = false,
         bool smsOptOut = false,
-        bool emailOptOut = false)
+        bool emailOptOut = false,
+        string? intakeSource = null,
+        string? inviteToken = null,
+        string assetId = "1HGBH41JXMN109186",
+        string? manufacturer = "Grand Design")
     {
         return new ServiceRequestCreateRequestDto
         {
@@ -846,20 +2009,23 @@ public class IntakeOrchestrationServiceTests
                 LastName = "Doe",
                 Email = "jane@example.com",
                 Phone = "801-555-1234",
+                PreferredContact = "Phone",
             },
             Asset = new AssetInfoDto
             {
-                AssetId = "1HGBH41JXMN109186",
-                Manufacturer = "Grand Design",
+                AssetId = assetId,
+                Manufacturer = manufacturer,
                 Model = "Momentum 395G",
                 Year = 2023,
             },
-            IssueCategory = "Slide System",
+            IssueCategory = "Slides",
             IssueDescription = "Slide won't retract",
             Urgency = "This week",
             RvUsage = "Full-time",
             SmsOptOut = smsOptOut,
             EmailOptOut = emailOptOut,
+            IntakeSource = intakeSource,
+            InviteToken = inviteToken,
             DiagnosticResponses = includeDiagnostics
                 ?
                 [
@@ -977,7 +2143,7 @@ public class IntakeOrchestrationServiceTests
             .ReturnsAsync((GlobalCustomerAcct a, CancellationToken _) => a);
 
         _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Slide System");
+            .ReturnsAsync("Slides");
     }
 
     // ── GetIntakeConfigAsync ─────────────────────────────────────────────────
@@ -994,6 +2160,39 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task GetIntakeConfigAsync_WhenTenantHasNoConfig_ShouldNotBeExpired()
+    {
+        SetupConfigHappyPath();
+
+        var config = await _sut.GetIntakeConfigAsync("test-slug");
+
+        config.IntakeExpired.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenTenantDisabledWithinCaptureWindow_ShouldNotBeExpired()
+    {
+        SetupConfigHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 30);
+
+        var config = await _sut.GetIntakeConfigAsync("test-slug");
+
+        config.IntakeExpired.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenTenantIntakeExpired_ShouldReportExpiredAndKeepTheLocationName()
+    {
+        SetupConfigHappyPath();
+        SetupAccessGate(loginsEnabled: false, disabledDaysAgo: 61);
+
+        var config = await _sut.GetIntakeConfigAsync("test-slug");
+
+        config.IntakeExpired.Should().BeTrue();
+        config.LocationName.Should().Be(BuildSlugLookup().LocationName);
+    }
+
+    [Fact]
     public async Task GetIntakeConfigAsync_WhenSlugNotFound_ShouldThrowKeyNotFoundException()
     {
         _slugLookupRepoMock.Setup(r => r.GetBySlugAsync("unknown-slug", It.IsAny<CancellationToken>()))
@@ -1003,193 +2202,6 @@ public class IntakeOrchestrationServiceTests
 
         await act.Should().ThrowAsync<KeyNotFoundException>()
             .WithMessage("*unknown-slug*");
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenNoToken_ShouldReturnNullPrefills()
-    {
-        SetupConfigHappyPath();
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug");
-
-        result.PrefillCustomer.Should().BeNull();
-        result.PrefillAsset.Should().BeNull();
-        result.TokenExpired.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenExpired_ShouldReturnNullPrefills()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: true, assetIds: ["1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("expired-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "expired-token");
-
-        result.PrefillCustomer.Should().BeNull();
-        result.PrefillAsset.Should().BeNull();
-        result.TokenExpired.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenValidButNoAssets_ShouldReturnCustomerPrefillOnly()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: []);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.PrefillCustomer.Should().NotBeNull();
-        result.PrefillCustomer!.FirstName.Should().Be("Jane");
-        result.PrefillAsset.Should().BeNull();
-        result.TokenExpired.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenValidWithAssetHistory_ShouldReturnPrefillAsset()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        var oldLedgerEntries = new List<AssetLedgerEntry>
-        {
-            new()
-            {
-                AssetId = "OLD_VIN",
-                Manufacturer = "Thor",
-                Model = "Aria 4000",
-                Year = 2019,
-                GlobalCustomerAcctId = acct.Id,
-            }
-        };
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(oldLedgerEntries);
-
-        // The most recently added asset ID is the last in the list
-        var ledgerEntries = new List<AssetLedgerEntry>
-        {
-            new()
-            {
-                AssetId = "1HGBH41JXMN109186",
-                Manufacturer = "Grand Design",
-                Model = "Momentum 395G",
-                Year = 2023,
-                GlobalCustomerAcctId = acct.Id,
-            }
-        };
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ledgerEntries);
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.PrefillAsset.Should().NotBeNull();
-        result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
-        result.PrefillAsset.Manufacturer.Should().Be("Grand Design");
-        result.PrefillAsset.Model.Should().Be("Momentum 395G");
-        result.PrefillAsset.Year.Should().Be(2023);
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenValidWithMultipleAssets_ShouldReturnAllKnownAssets()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>
-            {
-                new() { AssetId = "OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
-            });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>
-            {
-                new() { AssetId = "1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
-            });
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.KnownAssets.Should().HaveCount(2);
-        result.KnownAssets[0].AssetId.Should().Be("OLD_VIN");
-        result.KnownAssets[0].Manufacturer.Should().Be("Thor");
-        result.KnownAssets[1].AssetId.Should().Be("1HGBH41JXMN109186");
-        result.KnownAssets[1].Manufacturer.Should().Be("Grand Design");
-        result.PrefillAsset.Should().NotBeNull();
-        result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenAssetLedgerEmpty_ShouldReturnNullPrefillAssetButIncludeKnownAsset()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["1HGBH41JXMN109186"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>());
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.PrefillCustomer.Should().NotBeNull();
-        result.PrefillAsset.Should().BeNull();
-        result.KnownAssets.Should().HaveCount(1);
-        result.KnownAssets[0].AssetId.Should().Be("1HGBH41JXMN109186");
-        result.KnownAssets[0].Manufacturer.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenSomeAssetsHaveNoLedgerEntries_ShouldIncludeAllKnownAssets()
-    {
-        SetupConfigHappyPath();
-        var acct = BuildGlobalAcctWithMagicLink(expired: false, assetIds: ["OLD_VIN", "1HGBH41JXMN109186", "NO_LEDGER"]);
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("valid-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(acct);
-
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("OLD_VIN", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>
-            {
-                new() { AssetId = "OLD_VIN", Manufacturer = "Thor", Model = "Aria 4000", Year = 2019, GlobalCustomerAcctId = acct.Id }
-            });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("1HGBH41JXMN109186", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>
-            {
-                new() { AssetId = "1HGBH41JXMN109186", Manufacturer = "Grand Design", Model = "Momentum 395G", Year = 2023, GlobalCustomerAcctId = acct.Id }
-            });
-        _ledgerRepoMock.Setup(r => r.GetByAssetIdAsync("NO_LEDGER", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AssetLedgerEntry>());
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "valid-token");
-
-        result.KnownAssets.Should().HaveCount(3);
-        result.KnownAssets[0].AssetId.Should().Be("OLD_VIN");
-        result.KnownAssets[0].Manufacturer.Should().Be("Thor");
-        result.KnownAssets[1].AssetId.Should().Be("1HGBH41JXMN109186");
-        result.KnownAssets[1].Manufacturer.Should().Be("Grand Design");
-        result.KnownAssets[2].AssetId.Should().Be("NO_LEDGER");
-        result.KnownAssets[2].Manufacturer.Should().BeNull();
-        result.PrefillAsset.Should().NotBeNull();
-        result.PrefillAsset!.AssetId.Should().Be("1HGBH41JXMN109186");
-    }
-
-    [Fact]
-    public async Task GetIntakeConfigAsync_WhenTokenNotFoundInDb_ShouldReturnNullPrefills()
-    {
-        SetupConfigHappyPath();
-        _globalAcctRepoMock.Setup(r => r.GetByMagicLinkTokenAsync("unknown-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((GlobalCustomerAcct?)null);
-
-        var result = await _sut.GetIntakeConfigAsync("test-slug", "unknown-token");
-
-        result.PrefillCustomer.Should().BeNull();
-        result.PrefillAsset.Should().BeNull();
-        result.TokenExpired.Should().BeFalse();
     }
 
     [Fact]
@@ -1209,6 +2221,73 @@ public class IntakeOrchestrationServiceTests
         var result = await _sut.GetIntakeConfigAsync("test-slug");
 
         result.LocationPhone.Should().Be("(555) 123-4567");
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenLocationHasBranding_ShouldReturnItForTheIntakeChrome()
+    {
+        SetupConfigHappyPath();
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                CreatedByUserId = "admin",
+                Branding = new LocationBrandingEmbedded
+                {
+                    LogoUrl = "https://cdn.dealer.com/logo.png",
+                    HeaderColor = "#1A5E20",
+                    AccentColor = "#0D47A1",
+                },
+            });
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+        result.Branding.HeaderColor.Should().Be("#1A5E20");
+        result.Branding.AccentColor.Should().Be("#0D47A1");
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenLocationHasDealerQuestions_ShouldReturnThemForStep6()
+    {
+        SetupConfigHappyPath();
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = "loc_test",
+                TenantId = "ten_test",
+                Name = "Test Location",
+                CreatedByUserId = "admin",
+                DealerQuestions = ["Where is the RV stored?", "Do you need a loaner?"],
+            });
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.DealerQuestions.Should().Equal("Where is the RV stored?", "Do you need a loaner?");
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenLocationHasNoDealerQuestions_ShouldReturnNone()
+    {
+        SetupConfigHappyPath();
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.DealerQuestions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetIntakeConfigAsync_WhenLocationHasNoBranding_ShouldReturnEmptyBrandingSoTheDefaultsApply()
+    {
+        SetupConfigHappyPath();
+
+        var result = await _sut.GetIntakeConfigAsync("test-slug");
+
+        result.Branding.Should().NotBeNull();
+        result.Branding.LogoUrl.Should().BeNull();
+        result.Branding.HeaderColor.Should().BeNull();
     }
 
     // ── AssessCapabilitiesAsync ──────────────────────────────────────────────
@@ -1303,12 +2382,12 @@ public class IntakeOrchestrationServiceTests
     {
         SetupConfigHappyPath();
         _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("General");
+            .ReturnsAsync(IssueCategoryVocabulary.FallbackCode);
 
         var result = await _sut.AssessCapabilitiesAsync("test-slug", "general issue");
 
         result.Matched.Should().BeTrue();
-        result.IssueCategory.Should().Be("General");
+        result.IssueCategory.Should().Be(IssueCategoryVocabulary.FallbackCode);
         result.RequiredCapabilities.Should().BeEmpty();
         result.MissingCapabilities.Should().BeEmpty();
     }
@@ -1352,7 +2431,7 @@ public class IntakeOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task AssessCapabilitiesAsync_WhenStructuralCategoryAndPartialMatch_ShouldReportOnlyMissing()
+    public async Task AssessCapabilitiesAsync_WhenSlidesCategoryAndCapabilityMissing_ShouldReportMissing()
     {
         SetupConfigHappyPath();
         _locationRepoMock.Setup(r => r.GetByIdAsync("ten_test", "loc_test", It.IsAny<CancellationToken>()))
@@ -1365,31 +2444,46 @@ public class IntakeOrchestrationServiceTests
                 EnabledCapabilities = ["body-repair", "roof-repair"],
                 CreatedByUserId = "admin",
             });
-        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Structural");
 
-        var result = await _sut.AssessCapabilitiesAsync("test-slug", "slide-out is stuck");
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "slide-out is stuck", "Slides");
 
         result.Matched.Should().BeFalse();
         result.MissingCapabilities.Should().BeEquivalentTo(["slide-out-repair"]);
-        result.RequiredCapabilities.Should().BeEquivalentTo(["body-repair", "roof-repair", "slide-out-repair"]);
+        result.RequiredCapabilities.Should().BeEquivalentTo(["slide-out-repair"]);
     }
 
-    private static GlobalCustomerAcct BuildGlobalAcctWithMagicLink(bool expired, List<string> assetIds)
+    [Fact]
+    public async Task AssessCapabilitiesAsync_WhenAiReturnsOutOfVocabularyCategory_ShouldTreatAsUnknownAndMatch()
     {
-        return new GlobalCustomerAcct
-        {
-            Id = "gca_test",
-            Email = "jane@example.com",
-            FirstName = "Jane",
-            LastName = "Doe",
-            Phone = "801-555-1234",
-            MagicLinkToken = expired ? "expired-token" : "valid-token",
-            MagicLinkExpiresAtUtc = expired ? DateTime.UtcNow.AddDays(-1) : DateTime.UtcNow.AddDays(29),
-            AllKnownAssetIds = assetIds,
-            CreatedByUserId = "intake",
-        };
+        SetupConfigHappyPath();
+        _categorizationMock.Setup(c => c.CategorizeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Structural"); // retired alias — no longer in the vocabulary
+
+        var result = await _sut.AssessCapabilitiesAsync("test-slug", "slide-out is stuck");
+
+        result.Matched.Should().BeTrue();
+        result.RequiredCapabilities.Should().BeEmpty();
+        result.MissingCapabilities.Should().BeEmpty();
     }
+
+    private void SetupAccessGate(bool loginsEnabled, int disabledDaysAgo)
+    {
+        _tenantConfigRepoMock.Setup(r => r.GetAsync("ten_test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildTenantConfig(new TenantAccessGateEmbedded
+            {
+                LoginsEnabled = loginsEnabled,
+                DisabledReason = loginsEnabled ? null : "PastDue",
+                DisabledAtUtc = loginsEnabled ? null : DateTimeOffset.UtcNow.AddDays(-disabledDaysAgo),
+            }));
+    }
+
+    private static TenantConfig BuildTenantConfig(TenantAccessGateEmbedded gate) => new()
+    {
+        Id = "ten_test",
+        TenantId = "ten_test",
+        AccessGate = gate,
+        CreatedByUserId = "admin",
+    };
 
     private void SetupConfigHappyPath()
     {

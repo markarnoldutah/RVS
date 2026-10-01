@@ -8,6 +8,10 @@ build-test.yml          PR gate — build + test, throwaway artifacts
         ▼ (merge to main)
 deploy-staging.yml      Build, test, publish artifacts, deploy to staging
         │
+        ├─ deploy-staging-adhoc.yml   Manual `workflow_dispatch` of a chosen non-`main`
+        │                             branch to the same staging resources for ad-hoc
+        │                             pre-PR validation
+        │
         ▼ (manual trigger)
 deploy-production.yml   Promote exact staging artifacts to production (never rebuilds)
 ```
@@ -18,9 +22,36 @@ deploy-production.yml   Promote exact staging artifacts to production (never reb
 - **deploy-staging.yml** is the single place that builds deployable artifacts. It runs on
   push to `main`, detects which apps changed, builds the full solution, runs all tests,
   then publishes and deploys only the changed apps.
+- **deploy-staging-adhoc.yml** is manual-only. It builds, tests, and optionally deploys a
+  chosen non-`main` branch to the same staging environment/resources when you want ad-hoc
+  validation before opening a PR.
 - **deploy-production.yml** never rebuilds from source. It promotes the exact binaries that
   staging already validated — by downloading the staging run's uploaded artifacts (API + SWAs)
   and deploying them directly to the production resources.
+
+---
+
+## Ad-hoc Staging Deploys
+
+Use **Actions** → **Deploy Branch to Staging (Ad-hoc)** → **Run workflow** when you want to
+manually deploy a significant non-`main` branch to staging before opening a PR. Select the
+branch name in the `branch` input, then choose whether to deploy the API, Intake SWA, and/or
+Manager SWA.
+
+This workflow reuses the same `staging` GitHub environment and authentication model as
+`deploy-staging.yml`, so no new environment configuration is required:
+
+- API deploys use the existing staging OIDC variables (`AZURE_CLIENT_ID`,
+  `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_APP_SERVICE_NAME`).
+- Intake and Manager deploys use the existing staging SWA deployment token secrets
+  (`INTAKE_SWA_TOKEN_STAGING`, `MANAGER_SWA_TOKEN_STAGING`).
+
+> **Important:** Running `deploy-staging-adhoc.yml` overwrites whatever is currently deployed
+> in `staging`, including a prior deploy from `main`. The staging environment stays on that
+> branch until `deploy-staging.yml` runs again from `main`.
+
+The workflow rejects `branch: main` with a fast-fail error and directs you to use
+`deploy-staging.yml` instead.
 
 ---
 
@@ -221,3 +252,5 @@ az staticwebapp secrets list \
 | `Artifact not found` in production | Staging run didn't upload that artifact (app wasn't changed) | Re-run staging with changes, or deploy only the apps that changed |
 | `Artifact not found` + correct staging run | Artifact expired (>30 day retention) | Re-run `deploy-staging.yml` to regenerate artifacts |
 | SWA deploy `401 Unauthorized` | Token is wrong or was rotated | Re-retrieve token and update GitHub secret |
+| Test step logs `No test is available` but the job is green | `TestingPlatformDotnetTestSupport` missing, so `dotnet test` uses VSTest and can't read xUnit v3 | Keep `Tests/Directory.Build.props`; pass trx/coverage flags as MTP syntax after `--` (issue #560) |
+| `dotnet test -- --report-trx` fails with `TypeLoadException` on `IDataConsumer` | MTP extension package version doesn't match the `Microsoft.Testing.Platform` that `xunit.v3` pulls (v1) | Pin `Microsoft.Testing.Extensions.*` to a v1-aligned version (TrxReport 1.9.1, CodeCoverage 18.0.6) |

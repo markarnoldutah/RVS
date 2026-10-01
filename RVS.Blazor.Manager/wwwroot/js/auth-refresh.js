@@ -1,6 +1,6 @@
 // Auth refresh shim — bridges Microsoft's Blazor WASM Authentication library to
 // Auth0's /oauth/token endpoint so access tokens can be renewed via the long-lived
-// refresh_token (15-day rolling per RVS_Technical_PRD.md §10.1) instead of the
+// refresh_token (30-day rotating, Spec C-7 / issue #498) instead of the
 // default iframe silent-renewal path, which fails under third-party-cookie blocking
 // (Safari ITP, Chrome 3rd-party-cookie phase-out) and is bounded by Auth0's
 // 3-day idle SSO cookie.

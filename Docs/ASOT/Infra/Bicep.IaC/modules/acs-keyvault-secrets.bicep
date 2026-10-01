@@ -50,3 +50,7 @@ resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01
     contentType: 'text/plain'
   }
 }
+
+// EventGrid--Inbound--Key is deliberately NOT written here (#678). It is created
+// once by hand, and the .bicepparam files read it back with az.getSecret, so the
+// vault is its only source of truth. See the runbook in RVS_Infrastructure.md.

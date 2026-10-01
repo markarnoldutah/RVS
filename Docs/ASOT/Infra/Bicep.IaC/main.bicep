@@ -46,6 +46,33 @@ param whisperCapacity int = 1
 @description('Optional. Name of the model deployment used for text workloads. Defaults to gpt-4o.')
 param textDeploymentName string = 'gpt-4o'
 
+@description('Optional. Model catalog name for an additional single-purpose deployment used only by the packet preliminary assessment (e.g. "gpt-5"), independent of textDeploymentName. Empty = not deployed; the app falls back to textDeploymentName. This is the intended way to try a stronger model for the assessment call alone, and to revert to gpt-4o (blank this and redeploy) without touching application code.')
+param assessmentModelName string = ''
+
+@description('Model version for the assessment deployment (only used when assessmentModelName is set).')
+param assessmentModelVersion string = '2025-08-07'
+
+@description('SKU for the assessment deployment. Some newer model families (e.g. gpt-5) are not offered under the regional "Standard" SKU textDeploymentName uses — GlobalStandard routes to wherever Microsoft has capacity, DataZoneStandard keeps inference within the US, matching the residency textDeploymentName already has today.')
+@allowed([
+  'GlobalStandard'
+  'DataZoneStandard'
+])
+param assessmentDeploymentSkuName string = 'DataZoneStandard'
+
+@description('Assessment deployment capacity in K TPM. Staging = 30, Prod = 40 (set in parameters/*.bicepparam) — a packet call with photos (#772) reserves ~7.6-9.3K, and an intake\'s step-6 question call ~4K when questionsUseAssessmentDeployment is on (#783). Confirm against remaining model quota before raising.')
+@minValue(1)
+param assessmentDeploymentCapacity int = 1
+
+@description('When true, intake step-6 diagnostic question generation also runs on the assessment deployment (gpt-5, #783); category suggestion and text cleanup stay on textDeploymentName. False (or assessmentModelName blank) keeps questions on gpt-4o — the revert path, no application-code change.')
+param questionsUseAssessmentDeployment bool = false
+
+@description('reasoning_effort for step-6 question generation on the assessment deployment. The call is on the customer\'s path, so only the two fastest settings are allowed.')
+@allowed([
+  'minimal'
+  'low'
+])
+param questionsReasoningEffort string = 'minimal'
+
 // ── Storage Parameters ────────────────────────────────────────
 
 @description('When true, deploys a general-purpose v2 storage account (Standard_LRS) with the rvs-attachments blob container.')
@@ -61,6 +88,9 @@ param storageCorsOrigins string[] = []
 @description('Allow storage account key (shared key) access. Set false in staging/prod to force Entra ID + user-delegation SAS only.')
 param storageAllowSharedKeyAccess bool = true
 
+@description('Optional. Object ID of an Entra ID group granted blob data access on the storage account for developer / manual operations (local runs via AzureCliCredential, ops inspection). Set only in non-production parameter files. Empty = no such grant.')
+param devBlobAccessPrincipalId string = ''
+
 // ── ACS Parameters ────────────────────────────────────────────
 
 @description('When true, deploys an Azure Communication Services resource with Email and SMS capabilities.')
@@ -68,6 +98,26 @@ param deployAcs bool = false
 
 @description('ACS data residency location.')
 param acsDataLocation string = 'United States'
+
+@description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in staging (mail-staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the follow-up link deploy (acsCustomDomainVerified) out of band — README "Deploy Production" step 4. (#532)')
+param acsCustomEmailDomain string = ''
+
+@description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain and, in prod, the rvintake.com apex. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. If it is outside rvintake.com, the reporting domain must publish an RFC 7489 §7.1 authorization record per policy domain — see the dmarcReportAuthorizationAction output. (#532, #608)')
+param dmarcReportingAddress string = ''
+
+@description('When true, links the custom domain to the ACS account. ACS rejects linking an unverified domain, so this must stay false (the default) on the deploy that first creates a new acsCustomEmailDomain — that deploy only creates the domain and writes its DNS records. Once every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified, set this to true in the .bicepparam file and redeploy to perform the link. Once linked it must stay true — false unlinks the domain on the next deploy. (#579)')
+param acsCustomDomainVerified bool = false
+
+@description('E.164 toll-free number this environment\'s ACS resource owns, injected as AzureCommunicationServices__Sms__FromPhoneNumber (#661). Bought in the portal, not by Bicep, so it is a hand-entered string. Empty = no sending number; the API then cannot enable SMS.')
+param acsSmsFromPhoneNumber string = ''
+
+@description('Turns outbound SMS on, injected as AzureCommunicationServices__Sms__Enabled (#661). Leave false until acsSmsFromPhoneNumber has cleared toll-free verification: carriers reject an unverified number\'s traffic, and the API refuses to start with SMS enabled and no number. Only takes effect when deployAcs is true.')
+param acsSmsEnabled bool = false
+
+@description('Shared secret for the inbound Event Grid webhook that carries ACS SMS keywords and delivery reports to the API (issue #665). Event Grid cannot present a bearer token, so the subscription URL carries this and the API checks it. REQUIRED, no default (#678): each .bicepparam reads it from Key Vault (EventGrid--Inbound--Key) with az.getSecret, so the subscription URL and the API always use the same value, and a deploy that cannot resolve it fails instead of quietly skipping the subscription. Never pass it on the command line.')
+@secure()
+@minLength(32)
+param eventGridWebhookKey string
 
 // ── Static Web App Parameters ─────────────────────────────────
 
@@ -80,7 +130,7 @@ param swaLocation string = 'westus2'
 @description('Name of the dedicated resource group for Static Web App resources.')
 param swaResourceGroupName string = 'rg-rvs-${environmentName}-westus2'
 
-@description('SWA SKU tier. Free for test; Standard for staging/production (required for custom auth and custom domains).')
+@description('SWA SKU tier, set per environment in parameters/*.bicepparam. Free supports two custom domains per app, which covers both apps. Standard adds the SLA, SWA-managed custom auth (unused: the Manager signs in with Auth0 from WASM) and a larger app size limit.')
 @allowed([
   'Free'
   'Standard'
@@ -95,23 +145,32 @@ param deployDns bool = false
 @description('Resource group that owns the DNS zones. Apex zones are shared across environments and owned by the prod RG.')
 param dnsResourceGroupName string = 'rg-rvs-prod-westus3'
 
-@description('DNS zone for the Manager SWA (CNAME subdomain in every env).')
-param managerZoneName string = 'rvserviceflow.com'
+@description('Corporate DNS zone. Holds the API origin host (#633) and a no-mail posture (null MX, SPF -all, DMARC reject); no customer-facing hostname lives here. Formerly managerZoneName — the Manager SWA moved to the intake zone in #632.')
+param apiZoneName string = 'rvserviceflow.com'
 
-@description('DNS zone for the Intake SWA (apex in prod, subdomain CNAME in non-prod envs).')
+@description('DNS zone for every customer-facing host: Intake (apex in prod, subdomain CNAME in non-prod envs), Manager, the channel-tagging redirect, the ACS sending domain and the Auth0 login host.')
 param intakeZoneName string = 'rvintake.com'
 
-@description('Subdomain prefix for the Manager SWA CNAME record.')
+@description('The Intake SWA apex validation token, minted once when the apex was registered out of band. Read it from the zone (`az network dns record-set txt show -z rvintake.com -n @`), not from `az staticwebapp hostname show`, whose validationToken reads blank once the apex is Ready. Prod only. It shares the apex TXT record-set with the SPF string (#652), and a deploy PUTs that whole set, so Bicep has to carry the token or it deletes it. Empty = the apex TXT record-set is not declared at all: no SPF, and nothing already in the zone is removed.')
+param intakeApexValidationToken string = ''
+
+@description('Subdomain prefix for the Manager SWA CNAME record, in the INTAKE zone (#632) — "manager" in prod, "manager-<env>" elsewhere. The literal "staging" in the non-prod label is load-bearing: RVS.Blazor.Manager/wwwroot/js/blazor-start.js selects its environment by matching that substring against the browser hostname, so a label without it would boot Production config against staging.')
 param managerDnsPrefix string = environmentName == 'prod' ? 'manager' : 'manager-${environmentName}'
 
 @description('Subdomain prefix for the Intake SWA CNAME record in non-prod envs (e.g. "staging" -> staging.rvintake.com). Ignored in prod where Intake binds to the apex.')
 param intakeDnsPrefix string = environmentName == 'prod' ? '' : environmentName
 
-@description('IPv4 addresses for the Intake apex A record (prod only). SWA does not support Azure DNS alias targeting — Microsoft advertises the regional anycast IPs via the portal after the SWA custom-domain registration is accepted. Leave empty for non-prod; required for prod DNS to resolve to Intake.')
-param intakeApexIpv4Addresses array = []
+@description('Subdomain prefix for the channel-tagging redirect host that fronts the API (Spec A-13, #599) — "go" in prod (go.rvintake.com), "go-<env>" elsewhere (go-staging.rvintake.com). A sibling label rather than a child of the Intake host, so each environment\'s redirect is independent and a single-label wildcard certificate is never needed.')
+param redirectDnsPrefix string = environmentName == 'prod' ? 'go' : 'go-${environmentName}'
 
-@description('TXT record values for the Intake apex domain-ownership validation (prod only). Provided by Azure after the SWA customDomains registration request; typically a single-entry list. Leave empty for non-prod.')
-param intakeApexValidationValues array = []
+@description('Subdomain prefix for the API origin host in the corporate zone (#633) — "api" in prod (api.rvserviceflow.com), "api-<env>" elsewhere (api-staging.rvserviceflow.com). This is the origin the browser apps call; it is not customer-facing, which is why it stays on rvserviceflow.com while every host a human reads moved to rvintake.com. Note the Auth0 resource-server identifier is the same string, but that is an opaque audience value and unrelated — do not couple them.')
+param apiDnsPrefix string = environmentName == 'prod' ? 'api' : 'api-${environmentName}'
+
+@description('Auth0 Universal Login host in the INTAKE zone (Auth0 checklist §6, #627). Deliberately NOT environment-suffixed, unlike every other prefix above: the Free plan includes exactly one custom domain and dev/staging/prod share one Auth0 tenant (#610), so there is a single login host serving all three. A subdomain is also forced — Auth0 does not support an apex custom domain, and the rvintake.com apex is the Intake SWA.')
+param auth0LoginDnsPrefix string = 'login'
+
+@description('CNAME target Auth0 mints for the custom domain, shown once on Branding -> Custom Domains after the domain is added (shaped like <tenant>-cd-<hash>.edge.tenants.us.auth0.com). EMPTY UNTIL THE DOMAIN IS CREATED IN THE PORTAL — the record is then a no-op and login stays on the canonical tenant domain. Tenant-wide and environment-independent, so both environments upsert the identical record and this is not env-guarded; that is also why it is a hand-entered string rather than something the template can derive. Same shape of out-of-band token as the ACS domain verification (#532). Fill it in as Auth0 checklist §6.3, then deploy the DNS resource group.')
+param auth0CustomDomainCnameTarget string = 'dev-2jhzz8xmjggh26pm-cd-mdl9vngn46azp32y.edge.tenants.us.auth0.com'
 
 @description('Object IDs of principals (e.g. the staging GitHub Actions service principal) that need DNS Zone Contributor on the shared zones. Granted at zone scope so they cannot touch other prod resources. Set this in prod params, not staging.')
 param dnsZoneContributorPrincipalIds string[] = []
@@ -121,7 +180,7 @@ param dnsZoneContributorPrincipalIds string[] = []
 @description('When true, deploys an App Service Plan and Web App for the RVS API with Managed Identity.')
 param deployAppService bool = false
 
-@description('App Service Plan SKU. F1 = Free (staging, 60 CPU-min/day). B1 = Basic (MVP prod). S1 = Standard (upgrade: Always On, slots).')
+@description('App Service Plan SKU, set per environment in parameters/*.bicepparam. F1 = Free (60 CPU-min/day, no custom hostnames or certificates). B1 = Basic. S1 = Standard (adds Always On and slots).')
 @allowed([
   'F1'
   'B1'
@@ -173,6 +232,22 @@ param auth0ClientId string = ''
 @description('Auth0 application client secret. Required when deployKeyVault = true.')
 param auth0ClientSecret string = ''
 
+@secure()
+@description('Auth0 tenant domain for the "RVS API Provisioner" M2M app used by the platform-admin tool (issue #563). Optional; the Auth0Provisioner--* secrets are written only when domain, client ID and secret are all set.')
+param auth0ProvisionerDomain string = ''
+
+@secure()
+@description('Client ID of the "RVS API Provisioner" M2M app (issue #563). Optional.')
+param auth0ProvisionerClientId string = ''
+
+@secure()
+@description('Client secret of the "RVS API Provisioner" M2M app (issue #563). Optional.')
+param auth0ProvisionerClientSecret string = ''
+
+@secure()
+@description('Auth0 user id (sub) allowed to use the platform-admin tool, written as Admin--AllowedUserIds--0 (issue #563). Optional.')
+param adminAllowedUserId string = ''
+
 // ── Observability Parameters ──────────────────────────────────
 
 @description('When true, deploys a Log Analytics workspace and Application Insights resource.')
@@ -180,6 +255,30 @@ param deployObservability bool = false
 
 @description('When true and deployObservability + deployAppService are both true, creates a standard availability test on the API /health endpoint.')
 param deployAvailabilityTest bool = false
+
+@description('Seconds between availability test runs, per location. 900 = every 15 minutes (the cheap setting), 300 = every 5. Only used when the test is deployed.')
+@allowed([
+  300
+  900
+])
+param availabilityTestFrequencySeconds int = 900
+
+@description('Availability test location IDs. Each location is billed per run: one location at 900 s is ~2.9K runs/month, three at 300 s ~26K. Add locations as traffic grows; the availability alert waits for all but one to fail. Only used when the test is deployed.')
+@minLength(1)
+param availabilityTestLocations array = [
+  'us-ca-sjc-azr'
+]
+
+@description('Log Analytics workspace retention in days. 30 is the floor the PerGB2018 SKU accepts, and the first 31 days are included in the ingestion price, so values below 31 do not lower the bill. Ingestion volume is what drives cost.')
+@minValue(30)
+@maxValue(730)
+param logAnalyticsRetentionInDays int = 30
+
+@description('Log Analytics daily ingestion cap in GB, as a decimal string (Bicep has no float type). \'-1\' = no cap. Workspace-based App Insights ingests into this workspace, so this caps API telemetry too. When the cap is hit, ingestion stops until the daily reset, and the packet-pipeline alerts (#494) go blind with it.')
+param logAnalyticsDailyCapGb string = '-1'
+
+@description('Email receivers for the ops action group that packet-pipeline critical alerts route to (#494). Each item: { name: string, email: string }. Committed as a real default in both param files (#639) — the Action Groups resource provider does a full-replace PUT, so an empty array here deletes any receiver added by hand in the portal on the next deploy; leaving it empty is not a safe way to defer setting a receiver. Only used when deployObservability = true.')
+param opsAlertEmailReceivers array = []
 
 // ── Variables ─────────────────────────────────────────────────
 
@@ -190,16 +289,13 @@ var resolvedStorageAccountName = empty(storageAccountNameOverride)
   : storageAccountNameOverride
 
 // Environment-aware default CORS origins for browser-based SAS uploads.
+// Two branches only: environmentName is constrained to staging|prod above, so a third
+// (localhost) arm was unreachable — and it listed a port 7008 no project has ever served.
+// Local development does not deploy this template; it uses Cors:AllowedOrigins in
+// RVS.API/appsettings.Development.json.
 var defaultCorsOrigins = environmentName == 'prod'
-  ? ['https://rvintake.com', 'https://manager.rvserviceflow.com']
-  : environmentName == 'staging'
-      ? ['https://staging.rvintake.com', 'https://manager-staging.rvserviceflow.com']
-      : [
-          'https://localhost:7008'
-          'https://localhost:7116'
-          'https://localhost:7200'
-          'https://localhost:7300'
-        ]
+  ? ['https://rvintake.com', 'https://manager.rvintake.com']
+  : ['https://staging.rvintake.com', 'https://manager-staging.rvintake.com']
 
 var resolvedCorsOrigins = !empty(storageCorsOrigins) ? storageCorsOrigins : defaultCorsOrigins
 
@@ -282,6 +378,8 @@ module logAnalytics 'modules/log-analytics.bicep' = if (deployObservability) {
   params: {
     location: location
     workspaceName: logAnalyticsName
+    retentionInDays: logAnalyticsRetentionInDays
+    dailyQuotaGb: logAnalyticsDailyCapGb
     tags: sharedTags
   }
 }
@@ -297,6 +395,29 @@ module appInsights 'modules/app-insights.bicep' = if (deployObservability) {
     logAnalyticsWorkspaceId: deployObservability ? logAnalytics.outputs.resourceId : ''
     deployAvailabilityTest: deployAvailabilityTest && deployAppService
     healthCheckUrl: (deployAvailabilityTest && deployAppService) ? healthCheckUrl : ''
+    availabilityTestFrequencySeconds: availabilityTestFrequencySeconds
+    availabilityTestLocations: availabilityTestLocations
+  }
+}
+
+// ── Monitor Alerts (packet-pipeline critical events #494; availability + telemetry-dark #602) ──
+
+module monitorAlerts 'modules/monitor-alerts.bicep' = if (deployObservability) {
+  name: 'deploy-alerts-${environmentName}'
+  scope: rgPrimary
+  params: {
+    location: location
+    #disable-next-line BCP318
+    appInsightsResourceId: deployObservability ? appInsights.outputs.resourceId : ''
+    #disable-next-line BCP318
+    logAnalyticsWorkspaceResourceId: deployObservability ? logAnalytics.outputs.resourceId : ''
+    environmentName: environmentName
+    tags: sharedTags
+    opsEmailReceivers: opsAlertEmailReceivers
+    #disable-next-line BCP318
+    availabilityTestId: deployObservability ? appInsights.outputs.availabilityTestId : ''
+    availabilityTestLocationCount: length(availabilityTestLocations)
+    availabilityTestFrequencySeconds: availabilityTestFrequencySeconds
   }
 }
 
@@ -331,6 +452,9 @@ module appServiceConfig 'modules/app-service-config.bicep' = if (deployAppServic
     appInsightsConnectionString: (deployAppService && deployObservability) ? appInsights.outputs.connectionString : ''
     #disable-next-line BCP318
     keyVaultUri: (deployAppService && deployKeyVault) ? keyVault.outputs.vaultUri : ''
+    acsEmailFromAddress: (deployAppService && deployAcs) ? acsEmailFromAddress : ''
+    acsSmsEnabled: deployAcs && acsSmsEnabled
+    acsSmsFromPhoneNumber: deployAcs ? acsSmsFromPhoneNumber : ''
     configureStagingSlot: deployStagingSlot
   }
 }
@@ -366,6 +490,7 @@ module storage 'modules/storage-account.bicep' = if (deployStorageAccount) {
       : ''
     corsAllowedOrigins: resolvedCorsOrigins
     allowSharedKeyAccess: storageAllowSharedKeyAccess
+    devBlobAccessPrincipalId: devBlobAccessPrincipalId
     tags: sharedTags
   }
 }
@@ -384,17 +509,38 @@ module openAiNaming 'modules/naming-tags.bicep' = {
   }
 }
 
+// A single-entry array today (the preliminary-assessment model), built here rather
+// than passed as a raw object literal so openai.bicep stays reusable for whatever
+// gets added next (e.g. issue #584's "another module to switch to Sonnet" note —
+// though a Claude/Foundry deployment lives on a different resource kind entirely
+// and would need its own module, not another entry here).
+var additionalOpenAiDeployments = empty(assessmentModelName) ? [] : [
+  {
+    name: assessmentModelName
+    modelName: assessmentModelName
+    modelVersion: assessmentModelVersion
+    skuName: assessmentDeploymentSkuName
+    capacity: assessmentDeploymentCapacity
+  }
+]
+
 module openAi 'modules/openai.bicep' = {
   name: 'deploy-openai-${environmentName}'
   scope: rgPrimary
   params: {
     location: location
-    environmentName: environmentName
     tags: openAiNaming.outputs.tags
     deploymentCapacity: openAiCapacity
     resourceName: openAiNaming.outputs.resourceName
+    additionalDeployments: additionalOpenAiDeployments
   }
 }
+
+// Name of the assessment-only model deployment, or empty when assessmentModelName is unset.
+var openAiAssessmentDeploymentName = empty(assessmentModelName) ? '' : openAi.outputs.additionalDeploymentNames[0]
+
+// Step-6 question generation shares that deployment when switched on (#783); empty keeps it on gpt-4o.
+var openAiQuestionsDeploymentName = questionsUseAssessmentDeployment ? openAiAssessmentDeploymentName : ''
 
 // ── Whisper STT (dedicated region: northcentralus) ────────────
 
@@ -415,7 +561,6 @@ module whisper 'modules/openai-whisper.bicep' = {
   scope: rgWhisper
   params: {
     location: whisperLocation
-    environmentName: environmentName
     tags: whisperNaming.outputs.tags
     whisperCapacity: whisperCapacity
     resourceName: whisperNaming.outputs.resourceName
@@ -433,6 +578,9 @@ module keyVaultSecrets 'modules/openai-keyvault-secrets.bicep' = if (deployKeyVa
     openAiName: openAi.outputs.name
     openAiDeploymentName: openAi.outputs.deploymentName
     openAiTextDeploymentName: textDeploymentName
+    openAiAssessmentDeploymentName: openAiAssessmentDeploymentName
+    openAiQuestionsDeploymentName: openAiQuestionsDeploymentName
+    openAiQuestionsReasoningEffort: questionsReasoningEffort
     whisperOpenAiName: whisper.outputs.name
     whisperOpenAiResourceGroup: rgWhisper.name
     openAiWhisperDeploymentName: whisper.outputs.whisperDeploymentName
@@ -462,8 +610,221 @@ module communicationServices 'modules/communication-services.bicep' = if (deploy
     #disable-next-line BCP318
     tags: deployAcs ? acsNaming.outputs.tags : {}
     dataLocation: acsDataLocation
+    #disable-next-line BCP318
+    apiPrincipalId: (deployAcs && deployAppService) ? appService.outputs.principalId : ''
+    #disable-next-line BCP318
+    stagingSlotPrincipalId: (deployAcs && deployAppService && deployStagingSlot) ? appService.outputs.stagingSlotPrincipalId : ''
+    customDomainName: acsCustomEmailDomain
+    linkCustomDomain: acsCustomDomainVerified
   }
 }
+
+// ── ACS custom sending domain — derived values (#532) ─────────
+// True in staging (mail-staging.rvintake.com) and prod (mail.rvintake.com).
+var acsCustomDomainOn = deployAcs && !empty(acsCustomEmailDomain)
+
+// Packet-email From address: the custom verified subdomain when configured,
+// otherwise the Azure-managed *.azurecomm.net domain. Consumed by
+// app-service-config.bicep above. `acsMailFromSenderDomain` picks the right
+// one; the DoNotReply@ mailbox is fixed on both.
+#disable-next-line BCP318
+var acsMailFromSenderDomain = deployAcs ? (acsCustomDomainOn ? communicationServices.outputs.customFromSenderDomain : communicationServices.outputs.azureManagedMailFrom) : ''
+var acsEmailFromAddress = empty(acsMailFromSenderDomain) ? '' : 'DoNotReply@${acsMailFromSenderDomain}'
+
+// SPF / DKIM / domain-ownership records ACS requires to verify the custom
+// domain — deterministic once the domain resource exists, written into the
+// Intake zone by the dnsIntake module below. `initiate-verification` and the
+// follow-up link deploy stay manual (README "Deploy Production" step 4).
+//
+// ACS's `verificationRecords[*].name` values are NOT zone-relative — confirmed
+// against a live `az communication email domain show` (2026-09-12, when staging's
+// domain was still the two-label mail.staging.rvintake.com): DKIM/DKIM2 come back
+// as a bare selector with no domain suffix at all
+// ('selector1-azurecomm-prod-net._domainkey'), and Domain/SPF come back as the
+// full custom-domain FQDN. Passing either straight through as a dns.bicep
+// record-set name inside the PARENT zone (rvintake.com) is wrong: the FQDN form
+// double-suffixes (the observed failure was
+// 'mail.staging.rvintake.com.rvintake.com'), and the bare-selector form is
+// missing the subdomain host it needs to sit under. Both are corrected here by
+// combining them with the subdomain's own label under the zone — 'mail' for
+// mail.rvintake.com, 'mail-staging' for mail-staging.rvintake.com — the same
+// label the DMARC record below already uses.
+//
+// Since #634 that label is a SINGLE label in every environment: staging's domain
+// was renamed from mail.staging.rvintake.com to mail-staging.rvintake.com to match
+// the <function>-staging convention the other hosts use. The replace() below
+// handles either shape, so this is a parameter change rather than a code one —
+// but a single label is the shape the rest of this template assumes, and it
+// removes the double-suffix trap above rather than relying on the fix.
+var acsCustomDomainSubLabel = acsCustomDomainOn ? replace(acsCustomEmailDomain, '.${intakeZoneName}', '') : ''
+
+var acsCustomDomainCnameRecords = acsCustomDomainOn ? [
+  {
+    #disable-next-line BCP318
+    name: '${communicationServices.outputs.customDomainVerificationRecords.DKIM.name}.${acsCustomDomainSubLabel}'
+    #disable-next-line BCP318
+    target: communicationServices.outputs.customDomainVerificationRecords.DKIM.value
+  }
+  {
+    #disable-next-line BCP318
+    name: '${communicationServices.outputs.customDomainVerificationRecords.DKIM2.name}.${acsCustomDomainSubLabel}'
+    #disable-next-line BCP318
+    target: communicationServices.outputs.customDomainVerificationRecords.DKIM2.value
+  }
+] : []
+
+// DMARC is authored here (not taken from ACS) so we control the policy and the
+// reporting address: p=none surfaces failures without dropping mail while the
+// domain warms. Reports reach a human only if the reporting domain authorizes
+// them — see "DMARC aggregate-report destination (#608)" below.
+var acsCustomDomainDmarcRecord = {
+  name: '_dmarc.${acsCustomDomainSubLabel}'
+  values: [ 'v=DMARC1; p=none; rua=mailto:${dmarcReportingAddress}; adkim=r; aspf=r' ]
+}
+
+// Domain (ownership) + SPF share one record-set name — the subdomain's own
+// label under the zone, not the FQDN ACS returns in .name.
+var acsCustomDomainOwnershipTxtRecords = acsCustomDomainOn ? [
+  {
+    name: acsCustomDomainSubLabel
+    values: [
+      #disable-next-line BCP318
+      communicationServices.outputs.customDomainVerificationRecords.Domain.value
+      #disable-next-line BCP318
+      communicationServices.outputs.customDomainVerificationRecords.SPF.value
+    ]
+  }
+] : []
+var acsCustomDomainTxtRecords = acsCustomDomainOn ? concat(acsCustomDomainOwnershipTxtRecords, [ acsCustomDomainDmarcRecord ]) : []
+
+// ── DMARC aggregate-report destination (#608) ──
+//
+// Reports go to dmarcReportingAddress, which since #608 is
+// support@arnolddigitalsolutions.com, a monitored mailbox on the filing entity's
+// own domain. It is on a different organizational domain from
+// the records that name it, so RFC 7489 §7.1 applies: before sending, a receiver
+// looks up <policy-domain>._report._dmarc.<rua-domain> for a TXT "v=DMARC1", and
+// a conforming one drops the report if it is missing. Those records belong in
+// the arnolddigitalsolutions.com zone, which is at its registrar, not in Azure, so
+// this template cannot declare them. It computes their exact names instead and
+// prints them in the dmarcReportAuthorizationAction output, the same way other
+// out-of-band steps are surfaced. Any policy domain whose record carries this
+// rua needs one: the sending subdomain in every environment and the
+// rvintake.com apex in prod.
+//
+// One explicit record per policy domain, not a *._report._dmarc wildcard. A
+// wildcard would let any domain on the internet send its reports to that mailbox.
+//
+// "Outside rvintake.com" is judged by suffix, which is enough for a single-label
+// TLD like .com. An address inside the intake zone needs no authorization record.
+var dmarcReportingDomain = empty(dmarcReportingAddress) ? '' : toLower(last(split(dmarcReportingAddress, '@')))
+var dmarcReportingIsExternal = !empty(dmarcReportingDomain) && dmarcReportingDomain != intakeZoneName && !endsWith(dmarcReportingDomain, '.${intakeZoneName}')
+var dmarcReportAuthorizationNames = dmarcReportingIsExternal ? concat(
+  acsCustomDomainOn ? [ '${acsCustomEmailDomain}._report._dmarc.${dmarcReportingDomain}' ] : [],
+  (intakeApexIsManaged && deploySwa && deployDns) ? [ '${intakeZoneName}._report._dmarc.${dmarcReportingDomain}' ] : []
+) : []
+
+// ── go.rvintake.com — the channel-tagging redirect (Spec A-13, #599) ──
+//
+// Every distribution path — QR sticker, texted link, printed card — is supposed to route
+// through this host so the hit is logged and the channel observed before the customer reaches
+// the intake form. It fronts the API, not the Intake SWA, because the redirect has to write to
+// the hit log; a static host could serve the redirect but could not count it.
+//
+// Declared here: the CNAME to the Web App and the "asuid" ownership TXT, whose value the site
+// itself supplies (customDomainVerificationId), so neither needs a human.
+//
+// NOT declared here, deliberately, and for the same reason the Intake apex binding is not:
+// the hostname binding waits on DNS to validate, and the App Service managed certificate waits
+// on the binding, so a first bring-up from a single template deadlocks on records the same
+// template has not written yet. Both are one-time out-of-band steps — README.md "Bind the
+// go.<zone> redirect host". Redeploys never touch them.
+var redirectCnameRecords = deployAppService ? [
+  {
+    name: redirectDnsPrefix
+    #disable-next-line BCP318
+    target: appService.outputs.defaultHostname
+  }
+] : []
+
+var redirectTxtRecords = deployAppService ? [
+  {
+    name: 'asuid.${redirectDnsPrefix}'
+    #disable-next-line BCP318
+    values: [ appService.outputs.customDomainVerificationId ]
+  }
+] : []
+
+// ── api.rvserviceflow.com — the API origin (#633) ─────────────
+//
+// Until this, api.rvserviceflow.com existed only as the Auth0 resource-server identifier: an
+// opaque audience string with no DNS behind it, while both Blazor apps called the API at its
+// *.azurewebsites.net default hostname. This binds the name for real.
+//
+// In the CORPORATE zone, unlike every other host: an XHR origin is not something a customer
+// reads. The redirect host above fronts the same Web App from the intake zone, because a link
+// on a QR sticker very much is.
+//
+// Same split as the redirect host: the CNAME and the "asuid" ownership TXT are declared here
+// (the site supplies customDomainVerificationId itself, so neither needs a human), but the
+// hostname binding and the managed certificate are NOT — the binding waits on DNS to validate
+// and the certificate waits on the binding, so a first bring-up from a single template
+// deadlocks on records that template has not written yet. Both are one-time out-of-band steps,
+// per environment — README.md "Bind the api.<zone> host". Redeploys never touch them.
+var apiCnameRecords = deployAppService ? [
+  {
+    name: apiDnsPrefix
+    #disable-next-line BCP318
+    target: appService.outputs.defaultHostname
+  }
+] : []
+
+var apiTxtRecords = deployAppService ? [
+  {
+    name: 'asuid.${apiDnsPrefix}'
+    #disable-next-line BCP318
+    values: [ appService.outputs.customDomainVerificationId ]
+  }
+] : []
+
+// ── manager.rvintake.com — the dealer-facing Manager SWA (#632) ────
+//
+// In the INTAKE zone, not the corporate one: a service advisor signs in here, so it carries the
+// brand every other host they and their customers touch already carries. The corporate zone
+// keeps the API origin, which nobody types.
+//
+// Unlike the redirect host above, this one binds entirely in-template — it is a subdomain
+// CNAME, so swa-custom-domain.bicep can validate it with cname-delegation once the record
+// exists. That is why swaManagerDomain below dependsOn dnsIntake.
+var managerCnameRecords = [
+  {
+    name: managerDnsPrefix
+    #disable-next-line BCP318
+    target: swaManager.outputs.defaultHostname
+  }
+]
+
+// ── login.rvintake.com — the Auth0 Universal Login host (#627) ──────
+//
+// In the INTAKE zone with every other host a human reads: a raw dev-<hash>.us.auth0.com address
+// in the browser bar is the biggest "this looks sketchy" tell for a service advisor signing in.
+//
+// One record for all three environments, not one per environment. The Free plan includes exactly
+// one custom domain and dev/staging/prod share a single Auth0 tenant (#610), so there is nothing
+// to suffix — both environments' deploys upsert the same name with the same value, by design.
+//
+// Inert until auth0CustomDomainCnameTarget is filled in: the value is a token Auth0 mints when
+// the domain is added in the portal, so it cannot be derived here, and until it exists this
+// evaluates to an empty list and the deploy writes nothing. Auth0 checklist §6.3.
+//
+// If Auth0 asks for a TXT verification record instead of a CNAME, build the same shape
+// ({ name: auth0LoginDnsPrefix, values: [ '...' ] }) and append it to dnsIntake's txtRecords.
+var auth0CnameRecords = empty(auth0CustomDomainCnameTarget) ? [] : [
+  {
+    name: auth0LoginDnsPrefix
+    target: auth0CustomDomainCnameTarget
+  }
+]
 
 module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs && deployKeyVault) {
   name: 'deploy-acs-kv-secrets-${environmentName}'
@@ -473,6 +834,28 @@ module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs &
     keyVaultName: deployKeyVault ? keyVault.outputs.name : 'unused'
     #disable-next-line BCP318
     acsName: deployAcs ? communicationServices.outputs.name : 'unused'
+  }
+}
+
+// ── Event Grid: inbound ACS SMS events (issue #665) ───────────
+
+// Needs the API host to deliver to, and the secret the API checks. The key is
+// not part of the condition (#678): it is read from Key Vault by the
+// .bicepparam, so a missing key fails the deploy rather than dropping this
+// module. See the module header for the secret-first ordering a first bring-up
+// needs — Event Grid validates the endpoint as it creates the subscription, so
+// the API has to be running with the secret already.
+module eventGridAcsSms 'modules/eventgrid-acs-sms.bicep' = if (deployAcs && deployAppService) {
+  name: 'deploy-eventgrid-acs-sms-${environmentName}'
+  scope: rgPrimary
+  params: {
+    #disable-next-line BCP318
+    acsName: deployAcs ? communicationServices.outputs.name : 'unused'
+    systemTopicName: 'evgt-rvs-acs-${environmentName}'
+    #disable-next-line BCP318
+    tags: deployAcs ? acsNaming.outputs.tags : {}
+    apiHostName: '${apiDnsPrefix}.${apiZoneName}'
+    eventGridWebhookKey: eventGridWebhookKey
   }
 }
 
@@ -491,7 +874,7 @@ module cosmosKeyVaultSecrets 'modules/cosmos-keyvault-secrets.bicep' = if (deplo
   }
 }
 
-// ── Key Vault Secrets (Storage — Blob + Tables) ───────────────
+// ── Key Vault Secrets (Storage — Blob endpoint) ──────────────
 
 module storageKeyVaultSecrets 'modules/storage-keyvault-secrets.bicep' = if (deployStorageAccount && deployKeyVault) {
   name: 'deploy-storage-kv-secrets-${environmentName}'
@@ -518,6 +901,10 @@ module auth0KeyVaultSecrets 'modules/auth0-keyvault-secrets.bicep' = if (deployK
     auth0ClientSecret: auth0ClientSecret
     auth0TokenUrl: '${auth0Domain}oauth/token'
     auth0AuthorizationUrl: '${auth0Domain}authorize'
+    auth0ProvisionerDomain: auth0ProvisionerDomain
+    auth0ProvisionerClientId: auth0ProvisionerClientId
+    auth0ProvisionerClientSecret: auth0ProvisionerClientSecret
+    adminAllowedUserId: adminAllowedUserId
   }
 }
 
@@ -536,26 +923,8 @@ module appInsightsKeyVaultSecrets 'modules/appinsights-keyvault-secrets.bicep' =
 
 // ── Static Web Apps (Intake + Manager) ────────────────────────
 
-var managerCustomDomains = deployDns ? [
-  {
-    hostname: '${managerDnsPrefix}.${managerZoneName}'
-    validationMethod: 'cname-delegation'
-  }
-] : []
-
-// Intake apex (prod) is two-phase: only bind the custom domain once intakeApexValidationValues
-// has been populated (after Azure generates the SWA ownership token on first deploy).
-var intakeCustomDomains = deployDns && environmentName == 'prod' && !empty(intakeApexValidationValues) ? [
-  {
-    hostname: intakeZoneName
-    validationMethod: 'dns-txt-token'
-  }
-] : deployDns && environmentName != 'prod' ? [
-  {
-    hostname: '${intakeDnsPrefix}.${intakeZoneName}'
-    validationMethod: 'cname-delegation'
-  }
-] : []
+// Custom-domain bindings are declared further down, AFTER the DNS modules —
+// see "SWA custom-domain bindings". The SWA resources themselves carry none.
 
 module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
   name: 'deploy-swa-intake-${environmentName}'
@@ -565,7 +934,6 @@ module swaIntake 'modules/static-web-app.bicep' = if (deploySwa) {
     resourceName: swaIntakeName
     skuName: swaSkuName
     tags: sharedTags
-    customDomains: intakeCustomDomains
   }
 }
 
@@ -577,59 +945,219 @@ module swaManager 'modules/static-web-app.bicep' = if (deploySwa) {
     resourceName: swaManagerName
     skuName: swaSkuName
     tags: sharedTags
-    customDomains: managerCustomDomains
   }
 }
 
-// ── DNS: Manager zone (rvserviceflow.com) — CNAME subdomain ────
-// Every env maps a subdomain of rvserviceflow.com to the Manager SWA.
+// ── DNS: corporate zone (rvserviceflow.com) ───────────────
+// No customer-facing hostname lives here: the Manager SWA moved to the intake
+// zone in #632, so every host a human reads is on rvintake.com. What remains is
+// the API origin (#633) — an XHR target, seen in devtools and a CSP, not on a
+// sticker. The DMARC rua mailbox is not here either: it has been on
+// arnolddigitalsolutions.com since #608.
+//
+// Only the CNAME and asuid TXT are declared. The hostname binding and managed
+// certificate are out-of-band, one-time, per environment: see the apiCnameRecords
+// comment above and README.md "Bind the api.<zone> host".
 
-module dnsManager 'modules/dns.bicep' = if (deploySwa && deployDns) {
-  name: 'deploy-dns-manager-${environmentName}'
+// Mail posture for the corporate zone. It neither sends nor receives: the packet
+// email goes out From mail.rvintake.com, and there are no mailboxes here.
+// Saying so explicitly is what stops the domain being usable for spoofing — with
+// no SPF and no DMARC, anyone can forge From: anything@rvserviceflow.com and a
+// receiver has nothing to check it against. The domain appears in the pilot
+// agreement's history and in the JWT claim namespace, so it is guessable.
+//
+//   null MX (RFC 7505) — preference 0, exchange "." — "accepts no mail", so a
+//     sender fails immediately rather than retrying for days. Replace this entry
+//     with a real exchanger if corporate mailboxes are ever added here.
+//   SPF "-all" with no mechanisms — no host is authorised to send as this domain.
+//   DMARC p=reject — act on that, rather than merely publishing it.
+//
+// No rua on this record, deliberately. The reporting address
+// (dmarcReportingAddress) is on another organizational domain, so a rua here
+// would need one more RFC 7489 §7.1 authorization record at the registrar. A
+// policy-only DMARC record is valid, needs no such record, and there is nothing
+// here worth reporting on anyway.
+var corporateNullMxRecords = [
+  {
+    name: '@'
+    records: [ { preference: 0, exchange: '.' } ]
+  }
+]
+
+var corporateMailPolicyTxtRecords = [
+  {
+    name: '@'
+    values: [ 'v=spf1 -all' ]
+  }
+  {
+    name: '_dmarc'
+    values: [ 'v=DMARC1; p=reject; adkim=s; aspf=s' ]
+  }
+]
+
+module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
+  name: 'deploy-dns-api-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
   params: {
-    zoneName: managerZoneName
-    cnameRecords: [
-      {
-        name: managerDnsPrefix
-        #disable-next-line BCP318
-        target: swaManager.outputs.defaultHostname
-      }
-    ]
+    zoneName: apiZoneName
+    cnameRecords: apiCnameRecords
+    txtRecords: concat(apiTxtRecords, corporateMailPolicyTxtRecords)
+    mxRecords: corporateNullMxRecords
   }
 }
 
 // ── DNS: Intake zone (rvintake.com) ────────────────────────────
-// Prod:    apex A-record + TXT validation (CNAME at apex is invalid per RFC 1034).
-//          intakeApexIpv4Addresses + intakeApexValidationValues must be set before
-//          the apex resolves — they come from Azure after the SWA customDomains
-//          registration is accepted (two-phase deploy).
-// Non-prod: subdomain CNAME (e.g. staging.rvintake.com → default SWA hostname).
+// Non-prod: subdomain CNAME (e.g. staging.rvintake.com → default SWA hostname),
+//           bound below via cname-delegation like the Manager zone.
+// Prod:     the apex. CNAME at apex is invalid (RFC 1034), so this declares an
+//           ALIAS A record targeting the Intake SWA resource — Azure DNS tracks
+//           the SWA's address itself, nothing is pinned in source.
+//
+//           What is deliberately NOT declared for the apex:
+//             • the TXT ownership record  — its value is a token Azure mints
+//               when the custom domain is first registered, so it cannot be
+//               known at authoring time; and
+//             • the customDomains binding — its PUT waits for that TXT to
+//               validate, and re-issuing it from Bicep on every redeploy is a
+//               risk with no benefit once it is Ready.
+//           Both are created ONCE, out of band, by the portal's "Custom Domain
+//           on Azure DNS" flow (or the CLI equivalent) — README.md "Deploy
+//           Production". Incremental deploys leave them alone thereafter.
+
+// The Intake zone also carries the ACS custom-sending-domain records
+// (SPF/DKIM/DMARC for mail.rvintake.com in prod, mail-staging.rvintake.com in
+// staging) when acsCustomEmailDomain is set — see "ACS custom sending domain —
+// derived values (#532)" above. The two use distinct record names, so neither
+// environment's deploy touches the other's. An env without acsCustomEmailDomain
+// leaves acsCustomDomain* empty, so this is a no-op there.
+//
+// It also carries the Auth0 Universal Login record (login.rvintake.com, #627) once
+// auth0CustomDomainCnameTarget is set — see "login.rvintake.com" above. That one is
+// tenant-wide rather than per-environment, so unlike every other record here both
+// environments write the same name and value.
+
+// Mail posture for the intake APEX (#652). The apex sends no mail: the packet
+// email goes out From mail.rvintake.com (prod) / mail-staging.rvintake.com
+// (staging), and each of those has its own _dmarc record above. Without SPF and
+// DMARC here, anyone could forge From: anything@rvintake.com (the brand customers
+// actually see) and a receiver would have nothing to check it against.
+// rvserviceflow.com got the same treatment in #651.
+//
+//   SPF "-all" with no mechanisms: no host is authorised to send as the apex.
+//   DMARC p=reject; sp=reject: act on failures, for the apex and for every
+//     subdomain that lacks a _dmarc record of its own.
+//
+// ⚠ READ THIS BEFORE ADDING A SENDING SUBDOMAIN. A DMARC policy applies to every
+// subdomain with no record of its own, and this one says reject. A new sender
+// under rvintake.com (a second ACS domain, a transactional or marketing provider)
+// that is not given its own _dmarc record has ALL of its mail rejected from the
+// first message. Nothing on the sending side tells you why, and nobody changed a
+// record. Give the new subdomain a _dmarc record, the way acsCustomDomainDmarcRecord
+// does, in the same change that starts it sending.
+//
+// Why sp=reject rather than sp=none: mail.rvintake.com is expected to stay the
+// only sender. sp=none would keep future senders working without that record,
+// but every subdomain would be spoofable until someone remembered to add one.
+// sp= is written out even though reject is also what it would inherit from p=,
+// so the choice is visible here and not left to a default.
+//
+// Null MX and rua (#608). DMARC reports go to dmarcReportingAddress on another
+// domain, so nothing needs to receive mail at rvintake.com. The null MX (RFC 7505:
+// preference 0, exchange ".") says so, and a sender fails at once instead of
+// retrying for days. The rua lets the apex report forgery attempts, and does the
+// same for any subdomain without its own record. It needs its own §7.1
+// authorization record, which is listed in dmarcReportAuthorizationAction.
+// Replace the null MX with a real exchanger only if mailboxes are ever added at
+// rvintake.com.
+//
+// Prod deploy only, like the apex ALIAS: staging writes into this same zone and
+// never touches "@". The SPF string shares the apex TXT record-set with the SWA
+// validation token, and dns.bicep replaces a record-set wholesale. So the TXT set
+// is declared only when intakeApexValidationToken is supplied, and a deploy that
+// cannot re-assert the token never removes it. DMARC and MX live in their own
+// record-sets, so they have no such dependency.
+var intakeApexIsManaged = environmentName == 'prod'
+
+var intakeApexSpfTxtRecords = (intakeApexIsManaged && !empty(intakeApexValidationToken)) ? [
+  {
+    name: '@'
+    values: [ intakeApexValidationToken, 'v=spf1 -all' ]
+  }
+] : []
+
+var intakeApexDmarcTxtRecords = intakeApexIsManaged ? [
+  {
+    name: '_dmarc'
+    values: [ 'v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s${empty(dmarcReportingAddress) ? '' : '; rua=mailto:${dmarcReportingAddress}'}' ]
+  }
+] : []
+
+var intakeApexNullMxRecords = intakeApexIsManaged ? [
+  {
+    name: '@'
+    records: [ { preference: 0, exchange: '.' } ]
+  }
+] : []
 
 module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
   name: 'deploy-dns-intake-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
   params: {
     zoneName: intakeZoneName
-    cnameRecords: environmentName == 'prod' ? [] : [
+    cnameRecords: concat(environmentName == 'prod' ? [] : [
       {
         name: intakeDnsPrefix
         #disable-next-line BCP318
         target: swaIntake.outputs.defaultHostname
       }
-    ]
-    aRecords: (environmentName == 'prod' && !empty(intakeApexIpv4Addresses)) ? [
+    ], managerCnameRecords, acsCustomDomainCnameRecords, redirectCnameRecords, auth0CnameRecords)
+    aRecords: environmentName == 'prod' ? [
       {
         name: '@'
-        ipv4Addresses: intakeApexIpv4Addresses
+        #disable-next-line BCP318
+        targetResourceId: swaIntake.outputs.id
       }
     ] : []
-    txtRecords: (environmentName == 'prod' && !empty(intakeApexValidationValues)) ? [
-      {
-        name: '@'
-        values: intakeApexValidationValues
-      }
-    ] : []
+    txtRecords: concat(acsCustomDomainTxtRecords, redirectTxtRecords, intakeApexSpfTxtRecords, intakeApexDmarcTxtRecords)
+    mxRecords: intakeApexNullMxRecords
+  }
+}
+
+// ── SWA custom-domain bindings ─────────────────────────────────
+// Ordered AFTER the dns modules on purpose: the customDomains PUT is a
+// long-running operation that waits for the CNAME to validate, so the record
+// must exist before the binding is requested (a first bring-up otherwise
+// deadlocks waiting for a record a later module would write). Idempotent on
+// redeploy — an already-Ready binding is a no-op.
+//
+// Intake in prod binds the apex with dns-txt-token and is handled out of band
+// (see the Intake zone comment above), hence the environmentName guard.
+
+module swaManagerDomain 'modules/swa-custom-domain.bicep' = if (deploySwa && deployDns) {
+  name: 'deploy-swa-manager-domain-${environmentName}'
+  scope: rgSwa
+  dependsOn: [
+    dnsIntake
+  ]
+  params: {
+    #disable-next-line BCP318
+    staticSiteName: swaManager.outputs.name
+    hostname: '${managerDnsPrefix}.${intakeZoneName}'
+    validationMethod: 'cname-delegation'
+  }
+}
+
+module swaIntakeDomain 'modules/swa-custom-domain.bicep' = if (deploySwa && deployDns && environmentName != 'prod') {
+  name: 'deploy-swa-intake-domain-${environmentName}'
+  scope: rgSwa
+  dependsOn: [
+    dnsIntake
+  ]
+  params: {
+    #disable-next-line BCP318
+    staticSiteName: swaIntake.outputs.name
+    hostname: '${intakeDnsPrefix}.${intakeZoneName}'
+    validationMethod: 'cname-delegation'
   }
 }
 
@@ -638,14 +1166,14 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
 // Grants DNS Zone Contributor on each zone — NOT on the RG — so
 // non-prod deployers can write record sets without broader access.
 
-module dnsManagerRbac 'modules/dns-zone-contributor.bicep' = if (deploySwa && deployDns && environmentName == 'prod' && !empty(dnsZoneContributorPrincipalIds)) {
-  name: 'deploy-dns-mgr-rbac-${environmentName}'
+module dnsApiRbac 'modules/dns-zone-contributor.bicep' = if (deploySwa && deployDns && environmentName == 'prod' && !empty(dnsZoneContributorPrincipalIds)) {
+  name: 'deploy-dns-api-rbac-${environmentName}'
   scope: resourceGroup(dnsResourceGroupName)
   dependsOn: [
-    dnsManager
+    dnsApi
   ]
   params: {
-    zoneName: managerZoneName
+    zoneName: apiZoneName
     principalIds: dnsZoneContributorPrincipalIds
   }
 }
@@ -683,6 +1211,8 @@ output openAiEndpoint string = openAi.outputs.endpoint
 
 @description('The name of the GPT-4o model deployment.')
 output openAiDeploymentName string = openAi.outputs.deploymentName
+output openAiAssessmentDeploymentName string = openAiAssessmentDeploymentName
+output openAiQuestionsDeploymentName string = openAiQuestionsDeploymentName
 
 @description('The Whisper Azure OpenAI resource endpoint URL.')
 output whisperEndpoint string = whisper.outputs.endpoint
@@ -752,6 +1282,16 @@ output appInsightsConnectionString string = deployObservability ? appInsights.ou
 #disable-next-line BCP318
 output logAnalyticsWorkspaceName string = deployObservability ? logAnalytics.outputs.name : ''
 
+@description('Ops action group resource ID for packet-pipeline alerts (#494). Empty when deployObservability = false.')
+#disable-next-line BCP318
+output opsActionGroupId string = deployObservability ? monitorAlerts.outputs.actionGroupId : ''
+
+@description('Manual follow-up when opsAlertEmailReceivers is empty: the ops action group deploys with no receivers and no alert reaches a human until one is added. Do not "fix" this by adding a receiver in the portal instead — the Action Groups resource provider does a full-replace PUT, so the next deploy silently deletes it (#639). Set the parameter and redeploy.')
+#disable-next-line BCP318
+output opsAlertReceiverAction string = (deployObservability && empty(opsAlertEmailReceivers))
+  ? 'ACTION REQUIRED: set opsAlertEmailReceivers and redeploy — e.g. --parameters opsAlertEmailReceivers=\'[{"name":"oncall","email":"..."}]\'. Do NOT add a receiver via the portal instead: the next deploy will silently delete it (#639). Until a receiver is set via this parameter, packet-pipeline critical alerts fire but notify nobody.'
+  : ''
+
 // ── ACS ───────────────────────────────────────────────────────
 
 @description('ACS resource endpoint URL. Empty when deployAcs = false.')
@@ -769,6 +1309,24 @@ output acsEmailServiceName string = deployAcs ? communicationServices.outputs.em
 @description('Azure-managed MailFrom sender domain. Empty when deployAcs = false.')
 #disable-next-line BCP318
 output acsMailFromDomain string = deployAcs ? communicationServices.outputs.azureManagedMailFrom : ''
+
+@description('Custom sending subdomain in use for the packet email. Empty unless acsCustomEmailDomain is set (#532).')
+output acsCustomEmailDomain string = acsCustomDomainOn ? acsCustomEmailDomain : ''
+
+@description('Packet-email From address applied to the API app settings — custom verified domain when configured, else the Azure-managed domain.')
+output acsEmailFromAddress string = deployAcs ? acsEmailFromAddress : ''
+
+@description('Manual follow-up when a custom sending domain is configured. Bicep provisions the CustomerManaged ACS domain and writes its SPF/DKIM/DMARC records, but cannot initiate verification, link the verified domain to the account, or raise the send quota. Empty when acsCustomEmailDomain is unset.')
+output acsCustomDomainAction string = acsCustomDomainOn
+  ? (acsCustomDomainVerified
+      ? 'Domain linked to the ACS account. If sends fail with DomainNotLinked, confirm every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified. Send quota starts at 30/min, 100/hour; request an increase only when volume warrants it (#603) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.'
+      : 'ACTION REQUIRED: run `az communication email domain initiate-verification` for Domain/SPF/DKIM/DKIM2, confirm every record shows Verified, then set acsCustomDomainVerified=true in the parameter file and redeploy to link the domain to the account — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.')
+  : ''
+
+@description('Manual DNS step that Bicep cannot do (#608). dmarcReportingAddress is on another organizational domain, so RFC 7489 §7.1 requires that domain to publish a TXT "v=DMARC1" at <policy-domain>._report._dmarc.<rua-domain> for every policy domain naming it, or conforming receivers drop the reports. That zone is at its registrar, outside Azure. Empty when the address is inside the intake zone or unset.')
+output dmarcReportAuthorizationAction string = empty(dmarcReportAuthorizationNames)
+  ? ''
+  : 'MANUAL DNS (outside Azure): in the ${dmarcReportingDomain} zone at its registrar, make sure a TXT record with value "v=DMARC1" exists at each of: ${join(dmarcReportAuthorizationNames, ', ')}. Without them, DMARC aggregate reports for these domains are dropped. See Infra/Bicep.IaC/README.md "DMARC aggregate reports".'
 
 // ── SWA ───────────────────────────────────────────────────────
 
@@ -792,9 +1350,9 @@ output swaManagerDeploymentToken string = deploySwa ? swaManager.outputs.deploym
 
 // ── DNS ───────────────────────────────────────────────────────
 
-@description('Azure-assigned nameservers for the Manager DNS zone (rvserviceflow.com). Empty when deployDns = false.')
+@description('Azure-assigned nameservers for the corporate DNS zone (rvserviceflow.com). Empty when deployDns = false.')
 #disable-next-line BCP318
-output dnsManagerNameServers array = (deploySwa && deployDns) ? dnsManager.outputs.nameServers : []
+output dnsApiNameServers array = (deploySwa && deployDns) ? dnsApi.outputs.nameServers : []
 
 @description('Azure-assigned nameservers for the Intake DNS zone (rvintake.com). Empty when deployDns = false.')
 #disable-next-line BCP318
@@ -803,5 +1361,21 @@ output dnsIntakeNameServers array = (deploySwa && deployDns) ? dnsIntake.outputs
 @description('FQDN for the Intake SWA custom domain — apex in prod, subdomain elsewhere.')
 output intakeFqdn string = environmentName == 'prod' ? intakeZoneName : '${intakeDnsPrefix}.${intakeZoneName}'
 
-@description('FQDN for the Manager SWA custom domain.')
-output managerFqdn string = '${managerDnsPrefix}.${managerZoneName}'
+@description('FQDN of the channel-tagging redirect host (Spec A-13, #599). Its DNS records are deployed; the hostname binding and managed certificate are one-time out-of-band steps — README.md "Bind the go.<zone> redirect host".')
+output redirectFqdn string = '${redirectDnsPrefix}.${intakeZoneName}'
+
+@description('FQDN of the API origin host (#633). Its DNS records are deployed; the hostname binding and managed certificate are one-time out-of-band steps — README.md "Bind the api.<zone> host".')
+output apiFqdn string = '${apiDnsPrefix}.${apiZoneName}'
+
+@description('FQDN for the Manager SWA custom domain, in the intake zone (#632).')
+output managerFqdn string = '${managerDnsPrefix}.${intakeZoneName}'
+
+@description('Manual follow-up after a prod deploy. Bicep writes the rvintake.com apex ALIAS record but cannot bind the apex custom domain — Azure mints the ownership token only at registration time. Until this one-time step is done, rvintake.com resolves but https:// fails with a cert error. Empty for non-prod (subdomain CNAMEs bind in-template).')
+output intakeApexAction string = (deploySwa && deployDns && environmentName == 'prod')
+  ? 'ACTION REQUIRED: register the rvintake.com apex on the Intake SWA (dns-txt-token) — see Infra/Bicep.IaC/README.md "Deploy Production" step 2.'
+  : ''
+
+@description('Manual follow-up after any deploy that first introduces the API origin host (#633). Bicep writes the CNAME and the asuid ownership TXT, but the App Service hostname binding waits on DNS to validate and the managed certificate waits on the binding, so neither can be declared in the same template that writes the records. Until this one-time step is run, the host resolves but TLS serves the *.azurewebsites.net wildcard and the apps must keep calling the default hostname.')
+output apiHostBindingAction string = (deployAppService && deployDns)
+  ? 'ACTION REQUIRED: bind ${apiDnsPrefix}.${apiZoneName} on the API Web App and issue its managed certificate — see Infra/Bicep.IaC/README.md "Bind the api.<zone> host". Once it answers, repoint ApiBaseUrl in both Blazor apps and drop the *.azurewebsites.net entries from the Manager CSP.'
+  : ''

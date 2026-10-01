@@ -25,23 +25,45 @@ public sealed class IntakeApiClient
     /// Gets the intake form configuration for a location.
     /// </summary>
     /// <param name="locationSlug">The location slug.</param>
-    /// <param name="token">Optional magic-link token for customer prefill.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<IntakeConfigResponseDto> GetConfigAsync(
         string locationSlug,
-        string? token = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
 
         var url = $"api/intake/{Uri.EscapeDataString(locationSlug)}/config";
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            url += $"?token={Uri.EscapeDataString(token)}";
-        }
 
         return await _httpClient.GetFromJsonAsync<IntakeConfigResponseDto>(url, cancellationToken)
             ?? throw new InvalidOperationException("Failed to deserialize intake config response.");
+    }
+
+    /// <summary>
+    /// Gets what an A-14 advisor invite prefills (<c>Spec A-14</c>, issue #664): the caller's first
+    /// name and phone. Returns <c>null</c> for any non-success response, since an expired, used
+    /// or unknown invite still gets a working blank form. Opening does not spend the invite.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="inviteToken">The raw invite token from the intake URL's <c>inv</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task<IntakeInvitePrefillResponseDto?> GetInvitePrefillAsync(
+        string locationSlug,
+        string inviteToken,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locationSlug);
+        ArgumentException.ThrowIfNullOrWhiteSpace(inviteToken);
+
+        using var response = await _httpClient.GetAsync(
+            $"api/intake/{Uri.EscapeDataString(locationSlug)}/invites/{Uri.EscapeDataString(inviteToken)}",
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        return await response.Content.ReadFromJsonAsync<IntakeInvitePrefillResponseDto>(cancellationToken: cancellationToken);
     }
 
     /// <summary>

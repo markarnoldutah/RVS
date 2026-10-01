@@ -1,4 +1,3 @@
-using Azure.Data.Tables;
 using Azure.Core;
 using Azure.Identity;
 using Azure.Storage.Blobs;
@@ -6,7 +5,12 @@ using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using RVS.API.HealthChecks;
 using RVS.API.Integrations;
 using RVS.API.Middleware;
+using RVS.API.Packets;
+using RVS.API.RateLimiting;
+using RVS.API.Workers;
+using Azure.Data.Tables;
 using RVS.Infra.AzBlobRepository;
+using RVS.Infra.AzTableRepository;
 using RVS.API.Services;
 using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
@@ -25,6 +29,7 @@ using Microsoft.ApplicationInsights.Extensibility;
 using RVS.API.Telemetry;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -98,8 +103,6 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("permissions", "service-requests:create"));
     options.AddPolicy("CanUpdateServiceRequests", policy =>
         policy.RequireClaim("permissions", "service-requests:update"));
-    options.AddPolicy("CanUpdateServiceEvent", policy =>
-        policy.RequireClaim("permissions", "service-requests:update-service-event"));
     options.AddPolicy("CanDeleteServiceRequests", policy =>
         policy.RequireClaim("permissions", "service-requests:delete"));
 
@@ -137,10 +140,22 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("CanReadLookups", policy =>
         policy.RequireClaim("permissions", "lookups:read"));
 
-    // Platform Admin
+    // Advisor intake invites (Spec A-14, issue #663) — send, list and read back in the send dialog
+    options.AddPolicy("CanSendIntakeInvites", policy =>
+        policy.RequireClaim("permissions", "intake-invites:send"));
+
+    // Platform Admin — the permission AND a caller on Admin:AllowedUserIds (Spec P-7, issue #563)
     options.AddPolicy("PlatformAdmin", policy =>
-        policy.RequireClaim("permissions", "platform:tenants:manage"));
+        policy.RequireClaim("permissions", "platform:tenants:manage")
+              .AddRequirements(new RVS.API.Authorization.PlatformAdminAllowlistRequirement()));
 });
+
+// The allowlist behind the PlatformAdmin policy. In Azure: Key Vault Admin--AllowedUserIds--0, --1, …
+builder.Services.Configure<RVS.API.Options.AdminOptions>(
+    builder.Configuration.GetSection(RVS.API.Options.AdminOptions.SectionName));
+builder.Services.AddSingleton<
+    Microsoft.AspNetCore.Authorization.IAuthorizationHandler,
+    RVS.API.Authorization.PlatformAdminAllowlistHandler>();
 
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -164,19 +179,43 @@ builder.Services.AddOpenApi(options =>
     options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
 });
 
-// Rate limiting — protects public intake + status endpoints
+// Rate limiting — protects the public intake + status endpoints. Partitioned per caller
+// IP (Spec X-5) so a single abusive client cannot exhaust the fixed window for everyone;
+// the client IP is read from X-Forwarded-For since the API sits behind Azure infra.
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("StatusEndpoint", cfg =>
-    {
-        cfg.PermitLimit = 10;
-        cfg.Window = TimeSpan.FromMinutes(1);
-    });
-    options.AddFixedWindowLimiter("IntakeEndpoint", cfg =>
-    {
-        cfg.PermitLimit = 20;
-        cfg.Window = TimeSpan.FromMinutes(1);
-    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("StatusEndpoint", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientIpResolver.Resolve(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    options.AddPolicy("IntakeEndpoint", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientIpResolver.Resolve(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    // go.rvintake.com redirect (Spec A-13, issue #599). A looser window than intake on
+    // purpose: this endpoint does no writing to Cosmos and is hit by link-preview fetchers as
+    // well as customers, several per link composed, and an RV park's guests can share one
+    // NATed address. Throttling here costs a customer their intake form.
+    options.AddPolicy("RedirectEndpoint", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientIpResolver.Resolve(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 });
 
 // Register Middleware
@@ -190,7 +229,15 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
     var key = builder.Configuration["CosmosDb:Key"]
         ?? throw new InvalidOperationException("CosmosDb:Key configuration is missing.");
 
-    return new CosmosClient(endpoint, key);
+    // Gateway mode is set explicitly (the .NET SDK default is Direct). The API runs on
+    // Azure App Service with public network access to Cosmos and no VNet integration;
+    // Gateway keeps all traffic on 443, minimises the outbound TCP/SNAT footprint on the
+    // small App Service SKU, and is the mode required if a dedicated gateway / integrated
+    // cache is ever provisioned. Account-level consistency (Session) is configured in
+    // modules/cosmos-db.bicep, not here.
+    var options = new CosmosClientOptions { ConnectionMode = ConnectionMode.Gateway };
+
+    return new CosmosClient(endpoint, key, options);
 });
 
 // Blob Storage client — BlobStorage:Endpoint + DefaultAzureCredential (Managed Identity / user delegation SAS)
@@ -208,14 +255,23 @@ builder.Services.AddSingleton<BlobServiceClient>(sp =>
     return new BlobServiceClient(new Uri(endpoint), credential);
 });
 
-// Azure Tables client
-builder.Services.AddSingleton<TableServiceClient>(sp =>
+// Table Storage client — the append-only go.rvintake.com redirect hit log (Spec A-13,
+// issue #599). Same storage account and same credential story as Blob: DefaultAzureCredential
+// (managed identity) in Azure, AzureCliCredential locally to skip the managed-identity probe.
+// Registered only when an endpoint is configured; without one the repository below falls back
+// to the no-op and hits are dropped rather than the redirect failing.
+var tableStorageEndpoint = builder.Configuration["TableStorage:Endpoint"];
+if (!string.IsNullOrWhiteSpace(tableStorageEndpoint))
 {
-    var connectionString = builder.Configuration["AzureTables:ConnectionString"]
-        ?? throw new InvalidOperationException("AzureTables:ConnectionString configuration is missing.");
+    builder.Services.AddSingleton<TableServiceClient>(sp =>
+    {
+        TokenCredential credential = builder.Environment.IsDevelopment()
+            ? new AzureCliCredential()
+            : new DefaultAzureCredential();
 
-    return new TableServiceClient(connectionString);
-});
+        return new TableServiceClient(new Uri(tableStorageEndpoint), credential);
+    });
+}
 
 #region Repositories
 var cosmosDbId = builder.Configuration["CosmosDb:DatabaseId"] ?? "rvs-db";
@@ -283,8 +339,39 @@ builder.Services.AddScoped<ITenantConfigRepository>(sp =>
     return new CosmosTenantConfigRepository(client, cosmosDbId, logger);
 });
 
-// ITenantAccessRepository — implemented in RVS.Infra.AzTablesRepository (registered separately when ready)
-// builder.Services.AddScoped<ITenantAccessRepository, TablesTenantAccessRepository>();
+builder.Services.AddScoped<ITenantRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosTenantRepository>>();
+    return new CosmosTenantRepository(client, cosmosDbId, logger);
+});
+
+builder.Services.AddScoped<IIntakeInviteRepository>(sp =>
+{
+    var client = sp.GetRequiredService<CosmosClient>();
+    var logger = sp.GetRequiredService<ILogger<CosmosIntakeInviteRepository>>();
+    return new CosmosIntakeInviteRepository(client, cosmosDbId, logger);
+});
+
+// go.rvintake.com redirect hits (Spec A-13, issue #599) — Azure Table Storage, not Cosmos.
+// High-volume writes read occasionally, most of which never convert; Cosmos would charge
+// request units on every machine-made link-preview fetch. Degrades to the no-op when no
+// TableStorage:Endpoint is set, which is what a developer machine without a storage account
+// gets: the redirect still works and the channel still reaches the service request, only the
+// conversion denominator is missing.
+if (!string.IsNullOrWhiteSpace(tableStorageEndpoint))
+{
+    builder.Services.AddScoped<IIntakeRedirectHitRepository>(sp =>
+    {
+        var client = sp.GetRequiredService<TableServiceClient>();
+        var logger = sp.GetRequiredService<ILogger<AzTableIntakeRedirectHitRepository>>();
+        return new AzTableIntakeRedirectHitRepository(client, logger);
+    });
+}
+else
+{
+    builder.Services.AddScoped<IIntakeRedirectHitRepository, NoOpIntakeRedirectHitRepository>();
+}
 #endregion
 
 #region Services
@@ -292,6 +379,7 @@ builder.Services.AddScoped<ILookupService, LookupService>();
 builder.Services.AddScoped<IDealershipService, DealershipService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<ITenantConfigService, TenantConfigService>();
+builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
 builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IGlobalCustomerAcctService, GlobalCustomerAcctService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
@@ -299,6 +387,52 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IIntakeOrchestrationService, IntakeOrchestrationService>();
+builder.Services.AddScoped<IIntakeRedirectService, IntakeRedirectService>();
+builder.Services.AddScoped<IIntakeSourceReportService, IntakeSourceReportService>();
+builder.Services.AddScoped<IIntakeInviteService, IntakeInviteService>();
+
+// Advisor intake invites (Spec A-14, issue #663): expiry, the recent-sends window and the
+// per-advisor/location/tenant caps. Configuration, not constants; bad values stop the app at startup.
+builder.Services.AddOptions<RVS.API.Options.IntakeInviteOptions>()
+    .Bind(builder.Configuration.GetSection(RVS.API.Options.IntakeInviteOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<IIntakeInviteRateLimiter, InMemoryIntakeInviteRateLimiter>();
+// Inbound ACS SMS events over Event Grid (issue #665): carrier keywords and delivery reports.
+// The webhook is anonymous, so the subscription's URL carries a shared secret; with no secret
+// configured the endpoint refuses everything rather than accepting unauthenticated writes.
+builder.Services.AddSingleton<IInboundSmsDeduplicator, InMemoryInboundSmsDeduplicator>();
+builder.Services.AddScoped<IInboundSmsEventService, InboundSmsEventService>();
+builder.Services.AddOptions<RVS.API.Options.EventGridInboundOptions>()
+    .Bind(builder.Configuration.GetSection(RVS.API.Options.EventGridInboundOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddScoped<IPacketPhotoUrlResolver, PacketPhotoUrlResolver>();
+
+// Dealer logo for the packet PDF (Spec A-16, issue #470). Fetched once per generation; a slow or
+// broken logo host costs the packet its logo, never the packet, so the budget is short.
+builder.Services.AddHttpClient<ILocationLogoFetcher, HttpLocationLogoFetcher>()
+    .AddStandardResilienceHandler(options =>
+    {
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(12);
+    });
+
+// Packet generation (issue #434): non-blocking in-process queue + background worker.
+// IPacketGenerationQueue is the seam for a future durable transport (e.g. Azure Storage Queue).
+builder.Services.AddSingleton<IPacketGenerationQueue, ChannelPacketGenerationQueue>();
+builder.Services.AddScoped<IPacketGenerationService, PacketGenerationService>();
+builder.Services.AddHostedService<PacketGenerationWorker>();
+
+// Packet-email delivery tuning (Spec B-4, issues #438, #521): retry backoff and the ACS size
+// budget. Defaults work unset; an out-of-range MaxRequestBytes stops the app at startup.
+builder.Services.AddOptions<RVS.API.Options.PacketEmailOptions>()
+    .Bind(builder.Configuration.GetSection("PacketEmail"))
+    .ValidateOnStart();
+builder.Services.AddSingleton<
+    Microsoft.Extensions.Options.IValidateOptions<RVS.API.Options.PacketEmailOptions>,
+    RVS.API.Options.PacketEmailOptionsValidator>();
 #endregion
 
 #region Integration Clients
@@ -309,6 +443,9 @@ builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
 
 // Intake app URL — used to build QR-code / magic-link URLs pointing at the public Intake SPA
 builder.Services.Configure<RVS.API.Options.IntakeUrlOptions>(builder.Configuration.GetSection("Intake"));
+
+// Manager app URL — used to build deep links pointing at the authenticated Manager SPA
+builder.Services.Configure<RVS.API.Options.ManagerAppUrlOptions>(builder.Configuration.GetSection("ManagerApp"));
 
 // VIN Decoder
 if (useMockIntegrations)
@@ -463,15 +600,51 @@ else
             ?? builder.Configuration["AzureOpenAi:DeploymentName"]
             ?? "gpt-4o";
 
-        builder.Services.AddHttpClient<ICategorizationService, AzureOpenAiCategorizationService>(client =>
+        // QuestionsDeploymentName moves step-6 question generation alone onto a reasoning model
+        // (gpt-5, issue #783); category suggestion stays on TextDeploymentName. Blank (the Key
+        // Vault secret always exists, empty when unset) keeps questions on gpt-4o, as before.
+        var questionsDeploymentName = builder.Configuration["AzureOpenAi:QuestionsDeploymentName"];
+        var questionsOnOwnDeployment = !string.IsNullOrWhiteSpace(questionsDeploymentName);
+        var questionsOptions = Microsoft.Extensions.Options.Options.Create(new AzureOpenAiQuestionsOptions
         {
-            var baseUrl = openAiEndpoint.TrimEnd('/') + $"/openai/deployments/{categorizationDeploymentName}/";
-            client.BaseAddress = new Uri(baseUrl);
+            UseReasoningModelRequest = questionsOnOwnDeployment,
+            ReasoningEffort = builder.Configuration["AzureOpenAi:QuestionsReasoningEffort"]
+                ?? AzureOpenAiQuestionsOptions.DefaultReasoningEffort,
+        });
+
+        void ConfigureOpenAiClient(HttpClient client, string deploymentName)
+        {
+            client.BaseAddress = new Uri(openAiEndpoint.TrimEnd('/') + $"/openai/deployments/{deploymentName}/");
             if (!string.IsNullOrWhiteSpace(openAiApiKey))
             {
                 client.DefaultRequestHeaders.Add("api-key", openAiApiKey);
             }
-        })
+        }
+
+        if (questionsOnOwnDeployment)
+        {
+            builder.Services.AddHttpClient("AzureOpenAiQuestions", client => ConfigureOpenAiClient(client, questionsDeploymentName!))
+            .AddStandardResilienceHandler(options =>
+            {
+                // On the customer's path at step 6: one retry, and a total budget that hands the
+                // customer the question bank after 15 s rather than the text client's 30 s.
+                // The circuit breaker's sampling window must stay at least twice the attempt timeout.
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(12);
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(15);
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+                options.Retry.MaxRetryAttempts = 1;
+            });
+        }
+
+        builder.Services.AddHttpClient("AzureOpenAiCategorization", client => ConfigureOpenAiClient(client, categorizationDeploymentName))
+        .AddTypedClient<ICategorizationService>((textClient, sp) => new AzureOpenAiCategorizationService(
+            textClient,
+            questionsOnOwnDeployment
+                ? sp.GetRequiredService<IHttpClientFactory>().CreateClient("AzureOpenAiQuestions")
+                : textClient,
+            sp.GetRequiredService<RuleBasedCategorizationService>(),
+            questionsOptions,
+            sp.GetRequiredService<ILogger<AzureOpenAiCategorizationService>>()))
         .AddStandardResilienceHandler(options =>
         {
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(15);
@@ -485,32 +658,82 @@ else
     }
 }
 
-// Notifications (Email via ACS, SMS via ACS, Orchestrator)
-if (useMockIntegrations)
+// Preliminary assessment — packet pipeline, off the intake request thread (issue #507)
+builder.Services.AddSingleton<RuleBasedPreliminaryAssessmentService>();
+var assessmentEndpoint = builder.Configuration["AzureOpenAi:Endpoint"];
+if (!useMockIntegrations && !string.IsNullOrWhiteSpace(assessmentEndpoint))
 {
-    builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
-    builder.Services.AddSingleton<ISmsNotificationService, NoOpSmsNotificationService>();
+    // AssessmentDeploymentName lets the packet assessment use a different model than
+    // categorization/refinement (issue #584) without any code change — blank it (Key
+    // Vault secret always exists, empty when unset) to fall back to gpt-4o via
+    // TextDeploymentName.
+    var configuredAssessmentDeployment = builder.Configuration["AzureOpenAi:AssessmentDeploymentName"];
+    var assessmentDeploymentName = !string.IsNullOrWhiteSpace(configuredAssessmentDeployment)
+        ? configuredAssessmentDeployment
+        : builder.Configuration["AzureOpenAi:TextDeploymentName"]
+            ?? builder.Configuration["AzureOpenAi:DeploymentName"]
+            ?? "gpt-4o";
+    var assessmentApiKey = builder.Configuration["AzureOpenAi:ApiKey"];
+
+    // The dedicated deployment is a reasoning model (gpt-5); the gpt-4o fallback is not. The two
+    // take different request shapes, and each rejects the other's.
+    builder.Services.Configure<AzureOpenAiAssessmentOptions>(o =>
+    {
+        o.UseReasoningModelRequest = !string.IsNullOrWhiteSpace(configuredAssessmentDeployment);
+        o.MaxImages = builder.Configuration.GetValue(
+            "AzureOpenAi:AssessmentMaxImages", AzureOpenAiAssessmentOptions.DefaultMaxImages);
+    });
+
+    builder.Services.AddHttpClient<IPreliminaryAssessmentService, AzureOpenAiPreliminaryAssessmentService>(client =>
+    {
+        client.BaseAddress = new Uri(assessmentEndpoint.TrimEnd('/') + $"/openai/deployments/{assessmentDeploymentName}/");
+        if (!string.IsNullOrWhiteSpace(assessmentApiKey))
+        {
+            client.DefaultRequestHeaders.Add("api-key", assessmentApiKey);
+        }
+    })
+    .AddStandardResilienceHandler(options =>
+    {
+        // Up to five photos at detail "high" ride on this call (issue #772), which reads far
+        // slower than text alone. It runs in the packet worker, off the intake thread, so the
+        // longer budget costs no customer anything. The circuit breaker's sampling window must
+        // be at least twice the attempt timeout or the options fail validation at startup.
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(45);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(100);
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(90);
+        options.Retry.MaxRetryAttempts = 2;
+    });
 }
 else
 {
-    var acsEndpoint = builder.Configuration["AzureCommunicationServices:Endpoint"];
-    if (!string.IsNullOrWhiteSpace(acsEndpoint))
-    {
-        var credential = new DefaultAzureCredential();
-        var acsUri = new Uri(acsEndpoint);
-
-        builder.Services.AddSingleton(new Azure.Communication.Email.EmailClient(acsUri, credential));
-        builder.Services.AddScoped<INotificationService, AcsEmailNotificationService>();
-
-        builder.Services.AddSingleton(new Azure.Communication.Sms.SmsClient(acsUri, credential));
-        builder.Services.AddScoped<ISmsNotificationService, AcsSmsNotificationService>();
-    }
-    else
-    {
-        builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
-        builder.Services.AddSingleton<ISmsNotificationService, NoOpSmsNotificationService>();
-    }
+    builder.Services.AddSingleton<IPreliminaryAssessmentService>(sp => sp.GetRequiredService<RuleBasedPreliminaryAssessmentService>());
 }
+
+// Notifications (Email via ACS, SMS via ACS, Orchestrator)
+// Development sends through staging's ACS resource as the az-login identity. Use
+// AzureCliCredential directly, as Blob does, to skip DefaultAzureCredential's
+// ManagedIdentityCredential probe timeout.
+TokenCredential CreateAcsCredential() => builder.Environment.IsDevelopment()
+    ? new AzureCliCredential()
+    : new DefaultAzureCredential();
+
+var acsEndpoint = builder.Configuration["AzureCommunicationServices:Endpoint"];
+if (!useMockIntegrations && !string.IsNullOrWhiteSpace(acsEndpoint))
+{
+    builder.Services.AddSingleton(new Azure.Communication.Email.EmailClient(new Uri(acsEndpoint), CreateAcsCredential()));
+    builder.Services.AddScoped<INotificationService, AcsEmailNotificationService>();
+}
+else
+{
+    builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
+}
+
+// SMS (issue #661): off unless AzureCommunicationServices:Sms:Enabled is true, checked before
+// the endpoint — the endpoint is in every vault for email.
+builder.Services.AddSmsNotifications(
+    builder.Configuration,
+    useMockIntegrations,
+    acsUri => new Azure.Communication.Sms.SmsClient(acsUri, CreateAcsCredential()));
 builder.Services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
 
 // Blob Storage
@@ -521,6 +744,50 @@ if (useMockIntegrations)
 else
 {
     builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
+}
+
+// Image transcoding (issue #508): HEIC/HEIF uploads -> JPEG on confirm so every packet
+// consumer gets a universally-renderable raster. Defaults work unset.
+builder.Services.Configure<RVS.API.Integrations.ImageTranscodeOptions>(builder.Configuration.GetSection("ImageTranscode"));
+if (useMockIntegrations)
+{
+    builder.Services.AddSingleton<IImageTranscoder, NoOpImageTranscoder>();
+}
+else
+{
+    builder.Services.AddSingleton<IImageTranscoder, MagickImageTranscoder>();
+}
+
+// Identity provisioning — the platform-admin tool's Auth0 Management API client (Spec P-2/P-3/P-7,
+// issue #563). Its own M2M application and its own config section: the Auth0Mgmt--* secrets in the
+// staging vault belong to the rvs-config-automation app the Infra/Auth0 scripts use, and the API
+// loads every vault secret. Deliberately no NoOp fallback — when unset, every call throws.
+builder.Services.Configure<RVS.API.Options.Auth0ProvisionerOptions>(
+    builder.Configuration.GetSection(RVS.API.Options.Auth0ProvisionerOptions.SectionName));
+var auth0ProvisionerOptions = builder.Configuration
+    .GetSection(RVS.API.Options.Auth0ProvisionerOptions.SectionName)
+    .Get<RVS.API.Options.Auth0ProvisionerOptions>() ?? new RVS.API.Options.Auth0ProvisionerOptions();
+if (auth0ProvisionerOptions.IsConfigured)
+{
+    builder.Services.AddSingleton<Auth0ManagementTokenCache>();
+    builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddHttpClient<IIdentityProvisioner, Auth0ManagementProvisioner>(client =>
+    {
+        client.BaseAddress = auth0ProvisionerOptions.BaseUri;
+    })
+    // The default HttpClient loggers would record request URIs, and users-by-email carries the email.
+    .RemoveAllLoggers()
+    .AddStandardResilienceHandler(options =>
+    {
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
+        // Never replay a user create or role assignment; re-submitting the admin form is the retry.
+        options.Retry.DisableForUnsafeHttpMethods();
+    });
+}
+else
+{
+    builder.Services.AddSingleton<IIdentityProvisioner, UnconfiguredIdentityProvisioner>();
 }
 #endregion
 

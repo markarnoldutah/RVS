@@ -8,10 +8,12 @@
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
+<KeepSignedInPrompt />
 
-<MudLayout Style="@GetLayoutStyle()">
-    <MudAppBar Elevation="2"
-               Color="Color.Primary">
+<MudLayout>
+    @* No Color= : the app bar takes AppbarBackground (Ink) from the theme. Color="Color.Primary"
+       would paint it Rust, which the brand reserves for action, not structure (Spec THEME-1). *@
+    <MudAppBar Elevation="2">
         @if (_isAuthorized)
         {
             <MudIconButton Icon="@Icons.Material.Filled.Menu"
@@ -20,12 +22,18 @@
                            aria-label="Toggle navigation menu"
                            OnClick="ToggleDrawer" />
         }
-        <MudIconButton Icon="@Icons.Material.Filled.RvHookup"
-                       Color="Color.Inherit"
-                       Href="/"
-                       aria-label="RVS Manager home" />
-        <MudText Typo="Typo.h6" Class="ml-2" Style="@($"color: {(ThemeService.Mode == ThemeMode.HighContrast ? "black" : "white")};")">
-            RVS Manager
+        <MudLink Href="/" aria-label="RV Intake Manager home" Class="d-flex align-center ml-1">
+            @* The full "RV Intake" lockup from md up, the bare tag glyph below it (THEME-1 §4).
+               The link carries the accessible name, so both marks are decorative. *@
+            <BrandWordmark Reversed="true" Height="30px" Title="" Class="d-none d-md-block" />
+            <BrandWordmark Variant="BrandWordmarkVariant.Glyph" Reversed="true" Height="30px" Title="" Class="d-md-none" />
+        </MudLink>
+        @* Completes the lockup to RV Intake Manager — see MainLayout. *@
+        <MudText Typo="Typo.h6" Class="ml-3 d-none d-md-flex">
+            Manager
+        </MudText>
+        <MudText Typo="Typo.h6" Class="ml-3 d-md-none">
+            Intake Manager
         </MudText>
         <MudSpacer />
         @if (_isAuthorized)
@@ -40,8 +48,7 @@
 
     @if (_isAuthorized)
     {
-        <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always"
-                   Style="@(ThemeService.IsDarkMode ? "color: white;" : "")">
+        <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always">
             <NavMenu />
         </MudDrawer>
     }
@@ -100,8 +107,8 @@
     {
         if (firstRender)
         {
+            // The theme is already restored in Program.cs, before the first render (#703).
             await AppState.InitializeAsync();
-            await ThemeService.InitializeAsync();
         }
     }
 
@@ -165,12 +172,5 @@
         return _isAuthorized
             ? string.Empty
             : "min-height: calc(100vh - var(--mud-appbar-height));";
-    }
-
-    private string GetLayoutStyle()
-    {
-        return _isAuthorized
-            ? string.Empty
-            : "background: url('images/tetons-desktop.jpg') center 40%/cover no-repeat fixed; min-height: 100vh;";
     }
 }

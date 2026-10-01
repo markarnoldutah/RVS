@@ -3,7 +3,10 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Services;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
+using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Tests.Services;
 
@@ -13,17 +16,22 @@ public class LocationServiceTests
     private readonly Mock<ISlugLookupRepository> _slugRepoMock = new();
     private readonly Mock<IDealershipRepository> _dealershipRepoMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
+    private readonly Mock<INotificationService> _notificationMock = new();
     private readonly Mock<ILogger<LocationService>> _loggerMock = new();
     private readonly LocationService _sut;
 
     public LocationServiceTests()
     {
         _userContextMock.Setup(u => u.UserId).Returns("usr_test");
+        // The slug lookup denormalizes the dealership name, so every create/slug change reads it.
+        _dealershipRepoMock.Setup(r => r.ListByTenantAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         _sut = new LocationService(
             _locationRepoMock.Object,
             _slugRepoMock.Object,
             _dealershipRepoMock.Object,
             _userContextMock.Object,
+            _notificationMock.Object,
             _loggerMock.Object);
     }
 
@@ -124,7 +132,7 @@ public class LocationServiceTests
     public async Task CreateAsync_ShouldCreateSlugLookupThenLocation()
     {
         var location = BuildLocation();
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
             .ReturnsAsync(location);
@@ -132,7 +140,7 @@ public class LocationServiceTests
         var result = await _sut.CreateAsync("ten_1", location);
 
         result.Should().BeSameAs(location);
-        _slugRepoMock.Verify(r => r.UpsertAsync(
+        _slugRepoMock.Verify(r => r.CreateAsync(
             It.Is<SlugLookup>(s => s.Slug == location.Slug && s.LocationId == location.Id),
             It.IsAny<CancellationToken>()), Times.Once);
         _locationRepoMock.Verify(r => r.CreateAsync(location, It.IsAny<CancellationToken>()), Times.Once);
@@ -142,7 +150,7 @@ public class LocationServiceTests
     public async Task CreateAsync_WhenLocationCreateFails_ShouldRollbackSlugAndRethrow()
     {
         var location = BuildLocation();
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Cosmos conflict"));
@@ -161,7 +169,7 @@ public class LocationServiceTests
 
         _slugRepoMock.Setup(r => r.GetBySlugAsync("preset-slug", It.IsAny<CancellationToken>()))
             .ReturnsAsync((SlugLookup?)null);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
             .ReturnsAsync(location);
@@ -169,23 +177,79 @@ public class LocationServiceTests
         await _sut.CreateAsync("ten_1", location);
 
         location.Slug.Should().Be("preset-slug");
-        _slugRepoMock.Verify(r => r.UpsertAsync(
+        _slugRepoMock.Verify(r => r.CreateAsync(
             It.Is<SlugLookup>(s => s.Slug == "preset-slug"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task CreateAsync_WhenSlugProvidedButTaken_ShouldThrowArgumentException()
+    public async Task CreateAsync_WhenSlugProvidedButTaken_ShouldThrowConflictException()
     {
         var location = BuildLocation();
         location.Slug = "taken-slug";
 
         _slugRepoMock.Setup(r => r.GetBySlugAsync("taken-slug", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SlugLookup { Slug = "taken-slug" });
+            .ReturnsAsync(new SlugLookup { Slug = "taken-slug", TenantId = "ten_other", LocationId = "loc_other" });
 
         var act = () => _sut.CreateAsync("ten_1", location);
 
-        await act.Should().ThrowAsync<ArgumentException>();
+        await act.Should().ThrowAsync<ConflictException>();
         _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ShouldDenormalizeDealershipNameIntoSlugLookup()
+    {
+        // Intake reads SlugLookup.DealershipName (IntakeOrchestrationService); an empty value
+        // rendered a nameless intake page for every location created through the API (#563).
+        var location = BuildLocation();
+        _dealershipRepoMock.Setup(r => r.ListByTenantAsync("ten_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Dealership { TenantId = "ten_1", Name = "Camping World", Slug = "camping-world" }]);
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        await _sut.CreateAsync("ten_1", location);
+
+        _slugRepoMock.Verify(r => r.CreateAsync(
+            It.Is<SlugLookup>(s => s.DealershipName == "Camping World"
+                && s.LocationName == "Salt Lake Service Center"
+                && s.TenantId == "ten_1"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenSlugReservationLosesARace_ShouldThrowConflictAndNotCreateLocation()
+    {
+        // Check-then-write is not enough: two concurrent creates both see the slug free.
+        // The create-only reservation is what actually enforces uniqueness.
+        var location = BuildLocation();
+        _slugRepoMock.Setup(r => r.GetBySlugAsync(location.Slug, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("Slug 'salt-lake-service-center' is already in use."));
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ConflictException>();
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+        _slugRepoMock.Verify(r => r.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenSlugAlreadyReservedForThisLocation_ShouldReuseReservationAndCreateLocation()
+    {
+        // A retry after the location write failed and its rollback also failed (Spec P-6).
+        var location = BuildLocation();
+        _slugRepoMock.Setup(r => r.GetBySlugAsync(location.Slug, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup { Slug = location.Slug, TenantId = "ten_1", LocationId = location.Id });
+        _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.CreateAsync("ten_1", location);
+
+        result.Should().BeSameAs(location);
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -198,7 +262,7 @@ public class LocationServiceTests
             .ReturnsAsync([new Dealership { TenantId = "ten_1", Slug = "camping-world" }]);
         _slugRepoMock.Setup(r => r.GetBySlugAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SlugLookup?)null);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Location e, CancellationToken _) => e);
@@ -220,7 +284,7 @@ public class LocationServiceTests
             .ReturnsAsync(new SlugLookup());
         _slugRepoMock.Setup(r => r.GetBySlugAsync("camping-world-salt-lake-service-center-2", It.IsAny<CancellationToken>()))
             .ReturnsAsync((SlugLookup?)null);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Location e, CancellationToken _) => e);
@@ -240,7 +304,7 @@ public class LocationServiceTests
             .ReturnsAsync([]);
         _slugRepoMock.Setup(r => r.GetBySlugAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SlugLookup?)null);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Location e, CancellationToken _) => e);
@@ -248,6 +312,60 @@ public class LocationServiceTests
         await _sut.CreateAsync("ten_1", location);
 
         location.Slug.Should().Be("salt-lake-service-center");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenPacketConfigExceedsTenRecipients_ShouldThrowArgumentExceptionAndNotPersist()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = [.. Enumerable.Range(1, 11).Select(i => $"advisor{i}@dealer.com")],
+        };
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    [InlineData(11)]
+    public async Task CreateAsync_WhenIntakeMaxAttachmentsOutsideOneToFive_ShouldThrowArgumentExceptionAndNotPersist(int maxAttachments)
+    {
+        var location = BuildLocation();
+        location.IntakeConfig = new IntakeFormConfigEmbedded { MaxAttachments = maxAttachments };
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*between 1 and 5*");
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenPacketConfigHasTenRecipients_ShouldSucceed()
+    {
+        var location = BuildLocation();
+        location.Slug = "preset-slug";
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = [.. Enumerable.Range(1, 10).Select(i => $"advisor{i}@dealer.com")],
+        };
+
+        _slugRepoMock.Setup(r => r.GetBySlugAsync("preset-slug", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SlugLookup?)null);
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.CreateAsync(location, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.CreateAsync("ten_1", location);
+
+        result.Should().BeSameAs(location);
     }
 
     // ── UpdateAsync ──────────────────────────────────────────────────────────
@@ -307,7 +425,7 @@ public class LocationServiceTests
 
         await _sut.UpdateAsync("ten_1", existing.Id, updated);
 
-        _slugRepoMock.Verify(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
         _slugRepoMock.Verify(r => r.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -327,19 +445,565 @@ public class LocationServiceTests
 
         _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
-        _slugRepoMock.Setup(r => r.UpsertAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugLookup());
         _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Location e, CancellationToken _) => e);
 
         var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
 
-        _slugRepoMock.Verify(r => r.UpsertAsync(
+        _slugRepoMock.Verify(r => r.CreateAsync(
             It.Is<SlugLookup>(s => s.Slug == "new-slug"),
             It.IsAny<CancellationToken>()), Times.Once);
         _slugRepoMock.Verify(r => r.DeleteAsync(oldSlug, It.IsAny<CancellationToken>()), Times.Once);
         result.Name.Should().Be("Renamed Location");
         result.UpdatedByUserId.Should().Be("usr_test");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenSlugChanged_ShouldDenormalizeDealershipName()
+    {
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.Slug = "new-slug";
+
+        _dealershipRepoMock.Setup(r => r.ListByTenantAsync("ten_1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Dealership { TenantId = "ten_1", Name = "Camping World", Slug = "camping-world" }]);
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugLookup());
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        _slugRepoMock.Verify(r => r.CreateAsync(
+            It.Is<SlugLookup>(s => s.Slug == "new-slug" && s.DealershipName == "Camping World"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenNewSlugTaken_ShouldThrowConflictAndLeaveLocationAndOldSlug()
+    {
+        var existing = BuildLocation();
+        var oldSlug = existing.Slug;
+        var updated = BuildLocation();
+        updated.Slug = "taken-slug";
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _slugRepoMock.Setup(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConflictException("Slug 'taken-slug' is already in use."));
+
+        var act = () => _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        await act.Should().ThrowAsync<ConflictException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+        _slugRepoMock.Verify(r => r.DeleteAsync(oldSlug, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenPacketConfigExceedsTenRecipients_ShouldThrowArgumentException()
+    {
+        var updated = BuildLocation();
+        updated.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = [.. Enumerable.Range(1, 11).Select(i => $"advisor{i}@dealer.com")],
+        };
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    [InlineData(11)]
+    public async Task UpdateAsync_WhenIntakeMaxAttachmentsOutsideOneToFive_ShouldThrowArgumentException(int maxAttachments)
+    {
+        var updated = BuildLocation();
+        updated.IntakeConfig = new IntakeFormConfigEmbedded { MaxAttachments = maxAttachments };
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*between 1 and 5*");
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── Branding (Spec A-16, issue #470) ────────────────────────────────
+
+    [Theory]
+    [InlineData("http://cdn.dealer.com/logo.png", null, null)]
+    [InlineData(null, "green", null)]
+    [InlineData(null, null, "yellow")]    // an accent must still be #RRGGBB; a light one is darkened, not rejected
+    public async Task CreateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentExceptionAndNotPersist(
+        string? logoUrl, string? headerColor, string? accentColor)
+    {
+        var location = BuildLocation();
+        location.Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl, HeaderColor = headerColor, AccentColor = accentColor };
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("http://cdn.dealer.com/logo.png", null, null)]
+    [InlineData(null, "#FFF", null)]
+    [InlineData(null, null, "#FFF")]
+    public async Task UpdateAsync_WhenBrandingIsInvalid_ShouldThrowArgumentException(
+        string? logoUrl, string? headerColor, string? accentColor)
+    {
+        var updated = BuildLocation();
+        updated.Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl, HeaderColor = headerColor, AccentColor = accentColor };
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenTheAccentIsTooLightForText_ShouldStoreItAsEntered()
+    {
+        // The dealer's colour is kept; the Intake app darkens it for customers at render time.
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.Branding = new LocationBrandingEmbedded { AccentColor = "#FFD54F" };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.Branding.AccentColor.Should().Be("#FFD54F");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldPersistBrandingOntoTheExistingLocation()
+    {
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.Branding = new LocationBrandingEmbedded
+        {
+            LogoUrl = "https://cdn.dealer.com/logo.png",
+            HeaderColor = "#1A5E20",
+            AccentColor = "#0D47A1",
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.Branding.LogoUrl.Should().Be("https://cdn.dealer.com/logo.png");
+        result.Branding.HeaderColor.Should().Be("#1A5E20");
+        result.Branding.AccentColor.Should().Be("#0D47A1");
+    }
+
+    // ── Dealer questions (Spec A-18, issue #785) ────────────────────────
+
+    [Fact]
+    public async Task CreateAsync_WhenMoreThanTwoDealerQuestions_ShouldThrowArgumentExceptionAndNotPersist()
+    {
+        var location = BuildLocation();
+        location.DealerQuestions = ["One?", "Two?", "Three?"];
+
+        var act = () => _sut.CreateAsync("ten_1", location);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _slugRepoMock.Verify(r => r.CreateAsync(It.IsAny<SlugLookup>(), It.IsAny<CancellationToken>()), Times.Never);
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenADealerQuestionIsTooLong_ShouldThrowArgumentException()
+    {
+        var updated = BuildLocation();
+        updated.DealerQuestions = [new string('a', DealerQuestionsValidator.MaxQuestionLength + 1)];
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldPersistDealerQuestionsOntoTheExistingLocation()
+    {
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.DealerQuestions = ["Where is the RV stored?", "Do you need a loaner?"];
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.DealerQuestions.Should().Equal("Where is the RV stored?", "Do you need a loaner?");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldPersistPacketConfigOntoExistingLocation()
+    {
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["svc@dealer.com"],
+            AttachPdf = false,
+            StatusLinkTtlDays = 7,
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+        result.PacketConfig.AttachPdf.Should().BeFalse();
+        result.PacketConfig.StatusLinkTtlDays.Should().Be(7);
+        _locationRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<Location>(l => l.PacketConfig.Recipients.Contains("svc@dealer.com")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ── Time zone (issue #506) ──────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateAsync_WhenTimeZoneIdIsUnknown_ShouldThrowArgumentExceptionAndNotPersist()
+    {
+        var entity = BuildLocation();
+        entity.TimeZoneId = "Mars/Olympus_Mons";
+
+        var act = () => _sut.CreateAsync("ten_1", entity);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenTimeZoneIdIsUnknown_ShouldThrowArgumentException()
+    {
+        var updated = BuildLocation();
+        updated.TimeZoneId = "Mars/Olympus_Mons";
+
+        var act = () => _sut.UpdateAsync("ten_1", updated.Id, updated);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldPersistTheTimeZoneIdOntoTheExistingLocation()
+    {
+        // UpdateAsync copies fields onto the freshly-loaded entity one by one, so a field
+        // missing from that block is silently dropped on every save. This is its guard.
+        var existing = BuildLocation();
+        var updated = BuildLocation();
+        updated.TimeZoneId = "America/Denver";
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.TimeZoneId.Should().Be("America/Denver");
+        _locationRepoMock.Verify(r => r.UpdateAsync(
+            It.Is<Location>(l => l.TimeZoneId == "America/Denver"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithACuratedTimeZone_ShouldPersistIt()
+    {
+        var entity = BuildLocation();
+        entity.TimeZoneId = "America/Denver";
+
+        _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.CreateAsync("ten_1", entity);
+
+        result.TimeZoneId.Should().Be("America/Denver");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenTimeZoneIdIsNull_ShouldSucceed()
+    {
+        // Unset is legal: the packet's Received line stays in UTC.
+        var entity = BuildLocation();
+        entity.TimeZoneId = null;
+
+        _locationRepoMock.Setup(r => r.CreateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.CreateAsync("ten_1", entity);
+
+        result.TimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldCarryDisabledRecipientsAcrossASettingsSave()
+    {
+        var existing = BuildLocation();
+        existing.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients =
+            [
+                new DisabledRecipientEmbedded { Email = "dead@dealer.com", Reason = "Bounced", DisabledAtUtc = DateTime.UtcNow },
+            ],
+        };
+
+        var updated = BuildLocation();
+        updated.PacketConfig = new PacketConfigEmbedded { Recipients = ["live@dealer.com", "second@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.PacketConfig.DisabledRecipients.Should().ContainSingle().Which.Email.Should().Be("dead@dealer.com");
+        result.PacketConfig.Recipients.Should().BeEquivalentTo(["live@dealer.com", "second@dealer.com"]);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenCallerAddsADisabledAddressBackToRecipients_ShouldTreatItAsAReEnable()
+    {
+        var existing = BuildLocation();
+        existing.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients = [new DisabledRecipientEmbedded { Email = "dead@dealer.com" }],
+        };
+
+        var updated = BuildLocation();
+        updated.PacketConfig = new PacketConfigEmbedded { Recipients = ["live@dealer.com", "dead@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, updated);
+
+        result.PacketConfig.DisabledRecipients.Should().BeEmpty();
+        result.PacketConfig.Recipients.Should().Contain("dead@dealer.com");
+    }
+
+    // ── DisableRecipientForBounceAsync (Spec B-4, issue #439) ─────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DisableRecipientForBounceAsync_WhenTenantIdIsNullOrWhiteSpace_ShouldThrowArgumentException(string? tenantId)
+    {
+        var act = () => _sut.DisableRecipientForBounceAsync(tenantId!, "loc_1", "dead@dealer.com", "Bounced");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DisableRecipientForBounceAsync_WhenRecipientEmailIsNullOrWhiteSpace_ShouldThrowArgumentException(string? email)
+    {
+        var act = () => _sut.DisableRecipientForBounceAsync("ten_1", "loc_1", email!, "Bounced");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_WhenLocationNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", "loc_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location?)null);
+
+        var act = () => _sut.DisableRecipientForBounceAsync("ten_1", "loc_missing", "dead@dealer.com", "Bounced");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_ShouldDisableOnlyThatRecipientAndPersist()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["keep@dealer.com", "dead@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "SuppressedRecipient");
+
+        result.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("keep@dealer.com");
+        result.PacketConfig.DisabledRecipients.Should().ContainSingle().Which.Email.Should().Be("dead@dealer.com");
+        result.PacketConfig.Enabled.Should().BeTrue("a bounce never disables the whole configuration");
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_ShouldNotifyEachRemainingRecipient()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["a@dealer.com", "b@dealer.com", "dead@dealer.com"],
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "Bounced");
+
+        _notificationMock.Verify(n => n.SendEmailAsync("a@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notificationMock.Verify(n => n.SendEmailAsync("b@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notificationMock.Verify(n => n.SendEmailAsync("dead@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_WhenNoActiveRecipientsRemain_ShouldNotNotifyAnyone()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["dead@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "Bounced");
+
+        result.PacketConfig.Recipients.Should().BeEmpty();
+        result.PacketConfig.DisabledRecipients.Should().ContainSingle();
+        _notificationMock.Verify(
+            n => n.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_WhenAddressIsNotAnActiveRecipient_ShouldBeNoOp()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["keep@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "stranger@dealer.com", "Bounced");
+
+        result.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("keep@dealer.com");
+        result.PacketConfig.DisabledRecipients.Should().BeEmpty();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notificationMock.Verify(
+            n => n.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_WhenANotificationSendThrows_ShouldStillNotifyTheOthersAndSucceed()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["bad@dealer.com", "good@dealer.com", "dead@dealer.com"],
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+        _notificationMock
+            .Setup(n => n.SendEmailAsync("bad@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("transport down"));
+
+        var act = () => _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "Bounced");
+
+        await act.Should().NotThrowAsync();
+        _notificationMock.Verify(n => n.SendEmailAsync("good@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ── ReEnableRecipientAsync (Spec B-4, issue #439) ────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task ReEnableRecipientAsync_WhenRecipientEmailIsNullOrWhiteSpace_ShouldThrowArgumentException(string? email)
+    {
+        var act = () => _sut.ReEnableRecipientAsync("ten_1", "loc_1", email!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task ReEnableRecipientAsync_WhenLocationNotFound_ShouldThrowKeyNotFoundException()
+    {
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", "loc_missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location?)null);
+
+        var act = () => _sut.ReEnableRecipientAsync("ten_1", "loc_missing", "dead@dealer.com");
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task ReEnableRecipientAsync_ShouldMoveTheAddressBackToActiveAndPersist()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["live@dealer.com"],
+            DisabledRecipients = [new DisabledRecipientEmbedded { Email = "dead@dealer.com" }],
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        var result = await _sut.ReEnableRecipientAsync("ten_1", location.Id, "dead@dealer.com");
+
+        result.PacketConfig.Recipients.Should().BeEquivalentTo(["live@dealer.com", "dead@dealer.com"]);
+        result.PacketConfig.DisabledRecipients.Should().BeEmpty();
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReEnableRecipientAsync_WhenAddressIsNotDisabled_ShouldBeNoOp()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["live@dealer.com"] };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        await _sut.ReEnableRecipientAsync("ten_1", location.Id, "stranger@dealer.com");
+
+        _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── DeleteAsync ──────────────────────────────────────────────────────────

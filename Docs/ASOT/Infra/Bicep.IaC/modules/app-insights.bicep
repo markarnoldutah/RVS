@@ -3,7 +3,10 @@
 // ──────────────────────────────────────────────────────────────
 // Creates a workspace-based Application Insights resource linked
 // to a Log Analytics workspace. Optionally creates a standard
-// availability test (URL ping) on the API /health endpoint.
+// availability test (URL ping) on the API /health endpoint, whose
+// frequency and locations are parameters because each run is billed.
+// monitor-alerts.bicep alerts on the test failing and on the test
+// passing while App Insights records nothing (#602).
 // ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
@@ -26,6 +29,19 @@ param deployAvailabilityTest bool = false
 
 @description('The full URL of the /health endpoint to test (e.g. https://app-rvs-api-staging-wus3-s01-001.azurewebsites.net/health).')
 param healthCheckUrl string = ''
+
+@description('Seconds between availability test runs, per location. 900 cuts runs 3× against 300; the dark-telemetry alert in monitor-alerts.bicep is sized to tolerate either.')
+@allowed([
+  300
+  900
+])
+param availabilityTestFrequencySeconds int = 900
+
+@description('Availability test location IDs (e.g. us-ca-sjc-azr). Each location is billed per run, so one location every 15 minutes is ~2.9K runs/month and three every 5 minutes is ~26K.')
+@minLength(1)
+param availabilityTestLocations array = [
+  'us-ca-sjc-azr'
+]
 
 // ── Resources ─────────────────────────────────────────────────
 
@@ -53,15 +69,11 @@ resource availabilityTest 'Microsoft.Insights/webtests@2022-06-15' = if (deployA
     SyntheticMonitorId: 'avail-${appInsightsName}'
     Name: '${appInsightsName} Health Check'
     Enabled: true
-    Frequency: 300
+    Frequency: availabilityTestFrequencySeconds
     Timeout: 30
     Kind: 'standard'
     RetryEnabled: true
-    Locations: [
-      { Id: 'us-va-ash-azr' }
-      { Id: 'us-ca-sjc-azr' }
-      { Id: 'us-tx-sn1-azr' }
-    ]
+    Locations: [for l in availabilityTestLocations: { Id: l }]
     Request: {
       RequestUrl: healthCheckUrl
       HttpVerb: 'GET'
@@ -82,6 +94,9 @@ output resourceId string = appInsights.id
 
 @description('Name of the Application Insights instance.')
 output name string = appInsights.name
+
+@description('Resource ID of the /health availability test. Empty when no test is deployed.')
+output availabilityTestId string = (deployAvailabilityTest && !empty(healthCheckUrl)) ? availabilityTest.id : ''
 
 @description('Application Insights instrumentation key.')
 output instrumentationKey string = appInsights.properties.InstrumentationKey

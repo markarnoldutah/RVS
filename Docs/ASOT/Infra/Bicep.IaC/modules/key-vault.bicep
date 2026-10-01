@@ -56,6 +56,11 @@ resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' = {
     }
     tenantId: subscription().tenantId
     enableRbacAuthorization: true
+    // Lets ARM resolve az.getSecret references in the .bicepparam files at deploy
+    // time (#678). Only the deployer needs anything more: the
+    // Microsoft.KeyVault/vaults/deploy/action permission, which Contributor and
+    // Owner both carry. It grants no data-plane access to anyone.
+    enabledForTemplateDeployment: true
     enableSoftDelete: enableSoftDelete
     softDeleteRetentionInDays: softDeleteRetentionInDays
     enablePurgeProtection: enablePurgeProtection

@@ -23,6 +23,9 @@ param tags object = {}
 @maxValue(730)
 param retentionInDays int = 30
 
+@description('Daily ingestion cap in GB, as a decimal string (Bicep has no float type), e.g. \'0.08\'. \'-1\' = no cap. Once reached, ingestion stops until the workspace\'s fixed daily reset hour, which also blinds every log alert on this workspace.')
+param dailyQuotaGb string = '-1'
+
 // ── Resources ─────────────────────────────────────────────────
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2025-02-01' = {
@@ -34,6 +37,9 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2025-02-01' = {
       name: 'PerGB2018'
     }
     retentionInDays: retentionInDays
+    workspaceCapping: {
+      dailyQuotaGb: json(dailyQuotaGb)
+    }
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
   }

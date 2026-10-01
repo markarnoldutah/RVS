@@ -88,3 +88,28 @@ For simple issues:
 - [ ] [Task 1]
 - [ ] [Task 2]
 ```
+
+## Deferred / Future-state Template
+
+For work being parked rather than done now. If it carries a revisit condition, also add it
+as a row in the **Future-state register** in `Docs/RVS_Plan.md`.
+
+```markdown
+## Summary
+[One-line description of the work]
+
+## Why this is deferred, not scheduled
+[What makes it not worth doing now]
+
+## Revisit trigger
+[The specific condition that should bring this back: an event, a metric threshold,
+a dependency shipping, a date, or a repeated ask. One primary; a second is optional.
+"Someday" is not a trigger.]
+
+## Lands as
+[Where this goes when the trigger fires: a Spec requirement + issue, an infra issue,
+a decision issue, and so on.]
+
+## Origin
+[The issue / PR / decision this was spun off from]
+```

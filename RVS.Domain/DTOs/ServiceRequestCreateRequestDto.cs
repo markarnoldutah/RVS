@@ -9,6 +9,15 @@ public sealed record ServiceRequestCreateRequestDto
     public required AssetInfoDto Asset { get; init; }
     public required string IssueCategory { get; init; }
     public required string IssueDescription { get; init; }
+
+    /// <summary>
+    /// The customer's words before AI curation (issue #601) — the raw speech-to-text transcript
+    /// when the description was dictated, or the typed text when it was typed and then refined.
+    /// The packet renders it as "Complaint — word for word" so the curated
+    /// <see cref="IssueDescription"/> can always be checked against it. Omit it when no curation
+    /// ran; the packet then shows the submitted description as the complaint.
+    /// </summary>
+    public string? IssueDescriptionVerbatim { get; init; }
     public string? Urgency { get; init; }
     public string? RvUsage { get; init; }
     public string? HasExtendedWarranty { get; init; }
@@ -34,4 +43,57 @@ public sealed record ServiceRequestCreateRequestDto
     /// Null when the assessment matched or was not performed.
     /// </summary>
     public string? CapabilityMismatchNote { get; init; }
+
+    /// <summary>
+    /// Distribution channel the customer arrived through (<c>Spec A-13</c>, issue #599) — the
+    /// <c>src</c> the intake app was opened with, forwarded verbatim. Normalised server-side, so
+    /// an unrecognised or malformed value costs the request its channel, never the submission.
+    /// Absent (the default) is recorded as <c>print</c>.
+    /// </summary>
+    public string? IntakeSource { get; init; }
+
+    /// <summary>
+    /// The A-14 advisor invite token the intake app was opened with (<c>inv</c>, issue #664).
+    /// When it names an unexpired, unredeemed invite for this location, the request is
+    /// attributed to that invite and advisor and the invite is spent. Anything else (absent,
+    /// malformed, unknown, expired, already used) is ignored and the submission goes through.
+    /// </summary>
+    public string? InviteToken { get; init; }
+
+    /// <summary>
+    /// How many attachments the client is about to upload (issue #516). Attachments are
+    /// confirmed after this submission returns, so packet generation waits for this many to
+    /// arrive before rendering — otherwise the packet ships with no photos. Leave at <c>0</c>
+    /// when there is nothing to upload; the packet then generates immediately.
+    /// </summary>
+    public int ExpectedAttachmentCount { get; init; }
+
+    /// <summary>
+    /// The second and later issues of a submission (<c>Spec A-17</c>, issue #806), in the order
+    /// the customer entered them. The first issue is the issue fields on this record, so a
+    /// client that reports one issue sends exactly what it always has. At most
+    /// <see cref="Validation.IntakeIssuesValidator.MaxIssuesPerSubmission"/> issues in total.
+    /// </summary>
+    public List<IntakeIssueDto>? AdditionalIssues { get; init; }
+
+    /// <summary>
+    /// Every issue in this submission, the first one built from this record's own issue fields,
+    /// then <see cref="AdditionalIssues"/> in order.
+    /// </summary>
+    public IReadOnlyList<IntakeIssueDto> AllIssues()
+    {
+        var lead = new IntakeIssueDto
+        {
+            IssueCategory = IssueCategory,
+            IssueDescription = IssueDescription,
+            IssueDescriptionVerbatim = IssueDescriptionVerbatim,
+            Urgency = Urgency,
+            DiagnosticResponses = DiagnosticResponses,
+            CapabilityMismatchNote = CapabilityMismatchNote,
+            ExpectedAttachmentCount = ExpectedAttachmentCount,
+        };
+
+        return [lead, .. AdditionalIssues ?? []];
+    }
 }
+

@@ -20,9 +20,14 @@
     color: var(--rvs-status-in-progress-fg);
 }
 
-.rvs-status-awaiting-parts {
-    background-color: var(--rvs-status-awaiting-parts-bg);
-    color: var(--rvs-status-awaiting-parts-fg);
+.rvs-status-waiting-on-parts {
+    background-color: var(--rvs-status-waiting-on-parts-bg);
+    color: var(--rvs-status-waiting-on-parts-fg);
+}
+
+.rvs-status-waiting-on-customer {
+    background-color: var(--rvs-status-waiting-on-customer-bg);
+    color: var(--rvs-status-waiting-on-customer-fg);
 }
 
 .rvs-status-completed {

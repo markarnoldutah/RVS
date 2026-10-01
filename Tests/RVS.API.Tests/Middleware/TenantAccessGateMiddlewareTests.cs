@@ -135,6 +135,49 @@ public sealed class TenantAccessGateMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_TenantDisabled_ShouldReturnCodeAndTheTenantsOwnMessage()
+    {
+        // Issue #625: the manager app needs a stable code to tell "tenant disabled" apart from
+        // any other 403, and the text and contact to show the signed-in user.
+        var ctx = CreateAuthenticatedContext("/api/some-endpoint");
+        _tenantConfigServiceMock
+            .Setup(s => s.GetAccessGateAsync("t1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantAccessGateEmbedded
+            {
+                LoginsEnabled = false,
+                DisabledReason = "PastDue",
+                DisabledMessage = "Your subscription is on hold.",
+                SupportContactEmail = "support@example.com"
+            });
+
+        await _middleware.InvokeAsync(ctx, _tenantConfigServiceMock.Object);
+
+        ctx.Response.Body.Seek(0, SeekOrigin.Begin);
+        using var reader = new StreamReader(ctx.Response.Body);
+        var doc = JsonDocument.Parse(await reader.ReadToEndAsync());
+        doc.RootElement.GetProperty("code").GetString().Should().Be("tenant_disabled");
+        doc.RootElement.GetProperty("disabledMessage").GetString().Should().Be("Your subscription is on hold.");
+        doc.RootElement.GetProperty("supportContactEmail").GetString().Should().Be("support@example.com");
+        doc.RootElement.TryGetProperty("disabledReason", out _).Should().BeFalse("the reason is internal, not for the end user");
+    }
+
+    [Fact]
+    public async Task InvokeAsync_AuthenticatedNoTenantId_ShouldNotUseTheTenantDisabledCode()
+    {
+        var identity = new ClaimsIdentity([], "TestAuth");
+        var context = new DefaultHttpContext { User = new ClaimsPrincipal(identity) };
+        context.Request.Path = "/api/some-endpoint";
+        context.Response.Body = new MemoryStream();
+
+        await _middleware.InvokeAsync(context, _tenantConfigServiceMock.Object);
+
+        context.Response.Body.Seek(0, SeekOrigin.Begin);
+        using var reader = new StreamReader(context.Response.Body);
+        var doc = JsonDocument.Parse(await reader.ReadToEndAsync());
+        doc.RootElement.TryGetProperty("code", out _).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task InvokeAsync_TenantEnabled_ShouldPassThrough()
     {
         var ctx = CreateAuthenticatedContext("/api/some-endpoint");

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Moq;
 using RVS.API.Services;
 using RVS.Domain.DTOs;
@@ -13,12 +14,21 @@ public class AttachmentServiceTests
     private readonly Mock<IServiceRequestRepository> _repoMock = new();
     private readonly Mock<IBlobStorageService> _blobMock = new();
     private readonly Mock<IUserContextAccessor> _userContextMock = new();
+    private readonly Mock<IImageTranscoder> _transcoderMock = new();
+    private readonly Mock<ILocationRepository> _locationRepoMock = new();
     private readonly AttachmentService _sut;
 
     public AttachmentServiceTests()
     {
         _userContextMock.Setup(u => u.UserId).Returns("usr_test");
-        _sut = new AttachmentService(_repoMock.Object, _blobMock.Object, _userContextMock.Object);
+        _transcoderMock.Setup(t => t.CanNormalize(It.IsAny<string>())).Returns(false);
+        _sut = new AttachmentService(
+            _repoMock.Object,
+            _blobMock.Object,
+            _userContextMock.Object,
+            _transcoderMock.Object,
+            _locationRepoMock.Object,
+            Mock.Of<ILogger<AttachmentService>>());
     }
 
     // ── GenerateUploadSasAsync ───────────────────────────────────────────────
@@ -79,24 +89,60 @@ public class AttachmentServiceTests
     }
 
     [Fact]
-    public async Task GenerateUploadSasAsync_WhenMaxAttachmentsExceeded_ShouldThrowArgumentException()
+    public async Task GenerateUploadSasAsync_WhenFiveAttachmentsAndNoLocationConfig_ShouldRejectSixth()
     {
-        var sr = BuildServiceRequest();
-        for (var i = 0; i < 10; i++)
-        {
-            sr.Attachments.Add(new ServiceRequestAttachmentEmbedded
-            {
-                FileName = $"file{i}.jpg",
-                ContentType = "image/jpeg"
-            });
-        }
+        var sr = BuildServiceRequestWithAttachments(5);
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(sr);
 
-        var act = () => _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg", maxAttachments: 10);
+        var act = () => _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg");
 
         await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*Maximum of 10*");
+            .WithMessage("*Maximum of 5*");
+    }
+
+    [Fact]
+    public async Task GenerateUploadSasAsync_WhenLocationCapIsThreeAndThreeAttached_ShouldThrowArgumentException()
+    {
+        var sr = BuildServiceRequestWithAttachments(3);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        SetupLocationCap(sr.LocationId, 3);
+
+        var act = () => _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg");
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Maximum of 3*");
+        _blobMock.Verify(b => b.GenerateUploadSasUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateUploadSasAsync_WhenLocationCapIsThreeAndTwoAttached_ShouldIssueSas()
+    {
+        var sr = BuildServiceRequestWithAttachments(2);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        SetupLocationCap(sr.LocationId, 3);
+        _blobMock.Setup(b => b.GenerateUploadSasUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("https://blob/sas");
+
+        var result = await _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg");
+
+        result.SasUrl.Should().Be("https://blob/sas");
+    }
+
+    [Fact]
+    public async Task GenerateUploadSasAsync_WhenStoredLocationCapIsAboveFive_ShouldStillRejectSixth()
+    {
+        var sr = BuildServiceRequestWithAttachments(5);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        SetupLocationCap(sr.LocationId, 10);
+
+        var act = () => _sut.GenerateUploadSasAsync("ten_1", sr.Id, "photo.jpg", "image/jpeg");
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Maximum of 5*");
     }
 
     [Fact]
@@ -257,25 +303,33 @@ public class AttachmentServiceTests
     }
 
     [Fact]
-    public async Task ConfirmAttachmentAsync_WhenMaxAttachmentsExceeded_ShouldThrowArgumentException()
+    public async Task ConfirmAttachmentAsync_WhenFiveAttachmentsAndNoLocationConfig_ShouldRejectSixth()
     {
-        var sr = BuildServiceRequest();
-        for (var i = 0; i < 10; i++)
-        {
-            sr.Attachments.Add(new ServiceRequestAttachmentEmbedded
-            {
-                FileName = $"file{i}.jpg",
-                ContentType = "image/jpeg"
-            });
-        }
+        var sr = BuildServiceRequestWithAttachments(5);
         _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(sr);
 
         var request = BuildConfirmRequest();
-        var act = () => _sut.ConfirmAttachmentAsync("ten_1", sr.Id, request, maxAttachments: 10);
+        var act = () => _sut.ConfirmAttachmentAsync("ten_1", sr.Id, request);
 
         await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*Maximum of 10*");
+            .WithMessage("*Maximum of 5*");
+    }
+
+    [Fact]
+    public async Task ConfirmAttachmentAsync_WhenLocationCapIsThreeAndThreeAttached_ShouldThrowArgumentException()
+    {
+        var sr = BuildServiceRequestWithAttachments(3);
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        SetupLocationCap(sr.LocationId, 3);
+
+        var request = BuildConfirmRequest();
+        var act = () => _sut.ConfirmAttachmentAsync("ten_1", sr.Id, request);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Maximum of 3*");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -328,6 +382,174 @@ public class AttachmentServiceTests
         result.BlobUri.Should().Be("ten_1/sr_1/att_photo.jpg");
         sr.Attachments.Should().HaveCount(1);
         sr.UpdatedByUserId.Should().Be("usr_test");
+    }
+
+    [Fact]
+    public async Task ConfirmAttachmentAsync_WhenTranscoderDeclinesTheType_ShouldNotTouchBlobBytesOrNormalize()
+    {
+        var sr = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        _blobMock.Setup(b => b.BlobExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.ConfirmAttachmentAsync("ten_1", sr.Id, BuildConfirmRequest());
+
+        result.ContentType.Should().Be("image/jpeg");
+        result.BlobUri.Should().Be("ten_1/sr_1/att_photo.jpg");
+        _transcoderMock.Verify(t => t.Normalize(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _blobMock.Verify(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _blobMock.Verify(b => b.UploadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _blobMock.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ConfirmAttachmentAsync_WhenHeicUpload_ShouldTranscodeStoreJpegAndDeleteOriginal()
+    {
+        var sr = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        _blobMock.Setup(b => b.BlobExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var heicBytes = new byte[] { 1, 2, 3, 4 };
+        var jpegBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0x10, 0x20, 0x30 };
+        _transcoderMock.Setup(t => t.CanNormalize("image/heic")).Returns(true);
+        _blobMock.Setup(b => b.DownloadAsync("rvs-attachments", "ten_1/sr_1/att_photo.heic", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(heicBytes);
+        _transcoderMock.Setup(t => t.Normalize(heicBytes, "image/heic", It.IsAny<CancellationToken>()))
+            .Returns(new ImageTranscodeResult(jpegBytes, "image/jpeg", 4032, 3024));
+
+        var request = BuildConfirmRequest() with
+        {
+            BlobName = "ten_1/sr_1/att_photo.heic",
+            FileName = "photo.heic",
+            ContentType = "image/heic",
+            SizeBytes = 900_000
+        };
+
+        var result = await _sut.ConfirmAttachmentAsync("ten_1", sr.Id, request);
+
+        result.ContentType.Should().Be("image/jpeg");
+        result.FileName.Should().Be("photo.jpg");
+        result.BlobUri.Should().Be("ten_1/sr_1/att_photo.jpg");
+        result.SizeBytes.Should().Be(jpegBytes.Length);
+
+        _blobMock.Verify(b => b.UploadAsync(
+            "rvs-attachments", "ten_1/sr_1/att_photo.jpg", It.IsAny<Stream>(), "image/jpeg", It.IsAny<CancellationToken>()),
+            Times.Once);
+        _blobMock.Verify(b => b.DeleteAsync(
+            "rvs-attachments", "ten_1/sr_1/att_photo.heic", It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        sr.Attachments.Should().ContainSingle()
+            .Which.ContentType.Should().Be("image/jpeg");
+    }
+
+    [Fact]
+    public async Task ConfirmAttachmentAsync_WhenFullResolutionJpeg_ShouldStoreNormalisedBytesInPlace()
+    {
+        var sr = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        _blobMock.Setup(b => b.BlobExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var originalBytes = new byte[4_000_000];
+        var smallerJpeg = new byte[] { 0xFF, 0xD8, 0xFF, 1, 2, 3, 4, 5 };
+        _transcoderMock.Setup(t => t.CanNormalize("image/jpeg")).Returns(true);
+        _blobMock.Setup(b => b.DownloadAsync("rvs-attachments", "ten_1/sr_1/att_photo.jpg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(originalBytes);
+        _transcoderMock.Setup(t => t.Normalize(originalBytes, "image/jpeg", It.IsAny<CancellationToken>()))
+            .Returns(new ImageTranscodeResult(smallerJpeg, "image/jpeg", 1600, 1200));
+
+        var result = await _sut.ConfirmAttachmentAsync("ten_1", sr.Id, BuildConfirmRequest());
+
+        result.ContentType.Should().Be("image/jpeg");
+        result.FileName.Should().Be("photo.jpg");
+        result.BlobUri.Should().Be("ten_1/sr_1/att_photo.jpg", "a JPEG that stays a JPEG is overwritten under the same blob name");
+        result.SizeBytes.Should().Be(smallerJpeg.Length);
+
+        _blobMock.Verify(b => b.UploadAsync(
+            "rvs-attachments", "ten_1/sr_1/att_photo.jpg", It.IsAny<Stream>(), "image/jpeg", It.IsAny<CancellationToken>()),
+            Times.Once);
+        _blobMock.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never, "an in-place overwrite has no separate original to delete");
+    }
+
+    [Fact]
+    public async Task ConfirmAttachmentAsync_WhenPngUpload_ShouldStayPngAndOverwriteInPlace()
+    {
+        var sr = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        _blobMock.Setup(b => b.BlobExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var originalBytes = new byte[2_000_000];
+        var smallerPng = new byte[] { 0x89, 0x50, 0x4E, 0x47, 1, 2, 3 };
+        _transcoderMock.Setup(t => t.CanNormalize("image/png")).Returns(true);
+        _blobMock.Setup(b => b.DownloadAsync("rvs-attachments", "ten_1/sr_1/att_shot.png", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(originalBytes);
+        _transcoderMock.Setup(t => t.Normalize(originalBytes, "image/png", It.IsAny<CancellationToken>()))
+            .Returns(new ImageTranscodeResult(smallerPng, "image/png", 1600, 900));
+
+        var request = BuildConfirmRequest() with
+        {
+            BlobName = "ten_1/sr_1/att_shot.png",
+            FileName = "shot.png",
+            ContentType = "image/png",
+            SizeBytes = 2_000_000
+        };
+
+        var result = await _sut.ConfirmAttachmentAsync("ten_1", sr.Id, request);
+
+        result.ContentType.Should().Be("image/png");
+        result.FileName.Should().Be("shot.png");
+        result.BlobUri.Should().Be("ten_1/sr_1/att_shot.png");
+        result.SizeBytes.Should().Be(smallerPng.Length);
+
+        _blobMock.Verify(b => b.UploadAsync(
+            "rvs-attachments", "ten_1/sr_1/att_shot.png", It.IsAny<Stream>(), "image/png", It.IsAny<CancellationToken>()),
+            Times.Once);
+        _blobMock.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ConfirmAttachmentAsync_WhenNormaliserReturnsNull_ShouldKeepOriginalUpload()
+    {
+        var sr = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", sr.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sr);
+        _blobMock.Setup(b => b.BlobExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        _transcoderMock.Setup(t => t.CanNormalize("image/jpeg")).Returns(true);
+        _blobMock.Setup(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new byte[] { 1, 2, 3, 4 });
+        _transcoderMock.Setup(t => t.Normalize(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((ImageTranscodeResult?)null);
+
+        var result = await _sut.ConfirmAttachmentAsync("ten_1", sr.Id, BuildConfirmRequest());
+
+        result.ContentType.Should().Be("image/jpeg");
+        result.FileName.Should().Be("photo.jpg");
+        result.BlobUri.Should().Be("ten_1/sr_1/att_photo.jpg");
+        result.SizeBytes.Should().Be(2048);
+
+        _blobMock.Verify(b => b.UploadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _blobMock.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── DeleteAttachmentAsync ────────────────────────────────────────────────
@@ -387,4 +609,28 @@ public class AttachmentServiceTests
         IssueCategory = "Test",
         Priority = "High"
     };
+
+    private static ServiceRequest BuildServiceRequestWithAttachments(int count)
+    {
+        var sr = BuildServiceRequest();
+        for (var i = 0; i < count; i++)
+        {
+            sr.Attachments.Add(new ServiceRequestAttachmentEmbedded
+            {
+                FileName = $"file{i}.jpg",
+                ContentType = "image/jpeg"
+            });
+        }
+
+        return sr;
+    }
+
+    private void SetupLocationCap(string locationId, int maxAttachments) =>
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", locationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Location
+            {
+                Id = locationId,
+                TenantId = "ten_1",
+                IntakeConfig = new IntakeFormConfigEmbedded { MaxAttachments = maxAttachments },
+            });
 }

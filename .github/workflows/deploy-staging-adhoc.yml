@@ -1,0 +1,286 @@
+name: Deploy Branch to Staging (Ad-hoc)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build and deploy to staging (must not be main)"
+        required: true
+        type: string
+      deploy_api:
+        description: "Deploy API"
+        type: boolean
+        default: true
+      deploy_intake:
+        description: "Deploy Intake SWA"
+        type: boolean
+        default: true
+      deploy_manager:
+        description: "Deploy Manager SWA"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Guard: refuse to run against main — use the normal staging deployment instead
+  # ---------------------------------------------------------------------------
+  guard:
+    name: Validate Branch Input
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject main branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH_INPUT: ${{ inputs.branch }}
+        run: |
+          BRANCH_NAME="$BRANCH_INPUT"
+
+          case "$BRANCH_NAME" in
+            refs/heads/*)
+              BRANCH_NAME="${BRANCH_NAME#refs/heads/}"
+              ;;
+            refs/*|origin/*)
+              echo "::error::This workflow only accepts branch names. Do not pass tag, pull request, or origin refs."
+              exit 1
+              ;;
+          esac
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            echo "::error::This workflow only deploys non-main branches. Use deploy-staging.yml instead."
+            exit 1
+          fi
+
+          ENCODED_BRANCH=$(printf '%s' "$BRANCH_NAME" | jq -sRr '@uri')
+
+          if ! gh api "/repos/$REPO/branches/$ENCODED_BRANCH" >/dev/null 2>&1; then
+            echo "::error::'$BRANCH_INPUT' is not an existing branch in $REPO."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Build & Test (full solution — always runs for the selected branch)
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build & Test
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache wasm-tools workload
+        id: cache-wasm
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/share/dotnet/metadata
+            /usr/share/dotnet/packs
+            /usr/share/dotnet/library-packs
+          key: wasm-tools-${{ runner.os }}-${{ env.DOTNET_VERSION }}
+
+      - name: Install wasm-tools workload
+        if: steps.cache-wasm.outputs.cache-hit != 'true'
+        run: dotnet workload install wasm-tools
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.slnx') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore RVS.slnx
+
+      - name: Build solution
+        run: dotnet build RVS.slnx --configuration Release
+
+      # Tests run on Microsoft.Testing.Platform (see Tests/Directory.Build.props and
+      # issue #560). A test failure here fails this job, which every deploy-* job
+      # below `needs:`, so a red suite blocks the staging deploy.
+      - name: Run Domain tests
+        run: >-
+          dotnet test Tests/RVS.Domain.Tests/RVS.Domain.Tests.csproj
+          --configuration Release --no-build
+          --
+          --report-trx --report-trx-filename domain-results.trx
+          --coverage --coverage-output-format cobertura --coverage-output domain.cobertura.xml
+          --results-directory ${{ github.workspace }}/TestResults
+
+      - name: Run API tests
+        run: >-
+          dotnet test Tests/RVS.API.Tests/RVS.API.Tests.csproj
+          --configuration Release --no-build
+          --
+          --report-trx --report-trx-filename api-results.trx
+          --coverage --coverage-output-format cobertura --coverage-output api.cobertura.xml
+          --results-directory ${{ github.workspace }}/TestResults
+
+      - name: Run UI Shared tests
+        run: >-
+          dotnet test Tests/RVS.UI.Shared.Tests/RVS.UI.Shared.Tests.csproj
+          --configuration Release --no-build
+          --
+          --report-trx --report-trx-filename ui-shared-results.trx
+          --coverage --coverage-output-format cobertura --coverage-output ui-shared.cobertura.xml
+          --results-directory ${{ github.workspace }}/TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-adhoc-test-results-${{ github.run_id }}
+          path: |
+            ./TestResults/**/*.trx
+            ./TestResults/**/*.cobertura.xml
+          retention-days: 14
+
+      - name: Publish API
+        if: inputs.deploy_api
+        run: >-
+          dotnet publish RVS.API/RVS.API.csproj
+          --configuration Release --no-build --output ./publish/api
+
+      - name: Upload API artifact
+        if: inputs.deploy_api
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-publish-adhoc-${{ github.run_id }}
+          path: ./publish/api
+          retention-days: 7
+
+      - name: Publish Blazor Intake
+        if: inputs.deploy_intake
+        run: >-
+          dotnet publish RVS.Blazor.Intake/RVS.Blazor.Intake.csproj
+          --configuration Release --output ./publish/intake
+
+      - name: Upload Intake artifact
+        if: inputs.deploy_intake
+        uses: actions/upload-artifact@v4
+        with:
+          name: intake-wwwroot-adhoc-${{ github.run_id }}
+          path: ./publish/intake/wwwroot
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Publish Blazor Manager
+        if: inputs.deploy_manager
+        run: >-
+          dotnet publish RVS.Blazor.Manager/RVS.Blazor.Manager.csproj
+          --configuration Release --output ./publish/manager
+
+      - name: Upload Manager artifact
+        if: inputs.deploy_manager
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-wwwroot-adhoc-${{ github.run_id }}
+          path: ./publish/manager/wwwroot
+          retention-days: 7
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Deploy API to staging App Service (westus3)
+  # ---------------------------------------------------------------------------
+  deploy-api:
+    name: Deploy API to Staging
+    needs: build-and-test
+    if: inputs.deploy_api
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download API artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: api-publish-adhoc-${{ github.run_id }}
+          path: ./api
+
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy API to staging
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.API_APP_SERVICE_NAME }}
+          package: ./api
+
+      - name: Azure logout
+        if: always()
+        run: az logout
+
+  # ---------------------------------------------------------------------------
+  # Deploy Intake SWA to staging (westus2)
+  # ---------------------------------------------------------------------------
+  deploy-intake:
+    name: Deploy Intake SWA to Staging
+    needs: build-and-test
+    if: inputs.deploy_intake
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Download Intake artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: intake-wwwroot-adhoc-${{ github.run_id }}
+          path: ./intake
+
+      - name: Deploy Intake to staging
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.INTAKE_SWA_TOKEN_STAGING }}
+          repo_token: ${{ github.token }}
+          action: upload
+          app_location: ./intake
+          skip_app_build: true
+
+  # ---------------------------------------------------------------------------
+  # Deploy Manager SWA to staging (westus2)
+  # ---------------------------------------------------------------------------
+  deploy-manager:
+    name: Deploy Manager SWA to Staging
+    needs: build-and-test
+    if: inputs.deploy_manager
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Download Manager artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: manager-wwwroot-adhoc-${{ github.run_id }}
+          path: ./manager
+
+      - name: Deploy Manager to staging
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.MANAGER_SWA_TOKEN_STAGING }}
+          repo_token: ${{ github.token }}
+          action: upload
+          app_location: ./manager
+          skip_app_build: true

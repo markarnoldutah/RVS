@@ -1,5 +1,16 @@
 # Copilot Instructions — ASP.NET Core API
 
+## Working an Issue
+
+When the user says **"Execute Issue #abc"** (where `abc` is a valid GitHub Issue number), before doing any work:
+
+1. Create a new branch off the current base branch (usually `main`) named `abc-some-meaningful-identifier` — `abc` is the issue number, followed by a short kebab-case slug describing the issue (e.g. `431-packet-html-render`).
+2. Check out that branch, then perform the work for the issue on it.
+
+Do not commit issue work directly to `main`. If the branch already exists, check it out and continue on it rather than creating a duplicate.
+
+**Never commit or push automatically.** Do the work, leave the changes in the working tree, and stop. Run `git commit` or `git push` only when the user explicitly asks for it in that same message — creating a branch or being told to "execute" an issue is not permission to commit.
+
 ## Project Structure
 
 - `<App>.API` — Controllers, Services, Mappers, Middleware, Integrations
@@ -151,17 +162,24 @@ All feature implementation MUST follow Red → Green → Refactor. This is not o
 
 ### UI Component Library — MudBlazor
 
-All Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`, `RVS.MAUI.Tech`) use **MudBlazor 9.x** (Material Design 3). Do not use Microsoft.FluentUI.AspNetCore.Components.
+Both Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`) use **MudBlazor 9.x** (Material Design 3). Do not use Microsoft.FluentUI.AspNetCore.Components. There is no MAUI project — the technician app is archived.
 
 ### Setup (per project)
-- `wwwroot/index.html` (WASM) or `App.razor` (hosted): link `MudBlazor.min.css`, Roboto font, `MudBlazor.min.js`
+- `wwwroot/index.html` (WASM) or `App.razor` (hosted): link `MudBlazor.min.css`, `_content/RVS.UI.Shared/fonts/fonts.css` (self-hosted Space Grotesk — never a Google Fonts CDN link), `MudBlazor.min.js`
 - `Program.cs`: call `builder.Services.AddMudServices()`
 - `_Imports.razor`: add `@using MudBlazor`
 - Root layout: wrap body content in `<MudThemeProvider>`, `<MudPopoverProvider>`, `<MudDialogProvider>`, `<MudSnackbarProvider>`
 
 ### Theme
-- Define a single `MudTheme` in `MainLayout.razor` with `PaletteLight` (Primary `#1565C0`, Secondary `#00897B`)
-- Apply `<MudThemeProvider Theme="_theme" />` — never inline ad-hoc colours
+Brand is **"RV Intake" — Denim & Rust** (Spec THEME-1, issue #702; brief in `Docs/ASOT/Brand/`).
+- The palette lives in `RVS.UI.Shared/Theme/` — `RvsBrand` (tokens), `ManagerTheme` and `IntakeTheme` (a `Theme` and a `HighContrast` each). Never declare a `MudTheme` in `MainLayout.razor` or in an app.
+- Ink (Denim) `#2F4C6B` is structure — app bar, drawer, nav, headings. Text-safe Rust `#A8431F` is action — buttons, links, active nav, focus rings; `#E8956D` on dark surfaces. The logo Rust `#C1502E` (`RvsBrand.AccentLogo`) is for the logo files only — it fails AA as text. Paper (Cream) `#F6F1E7` is text on Ink; the Intake ground is white (#470, dealer branding — Spec A-16); Manager uses `#FAF8F3`.
+- Layouts bind, they do not define: `<MudThemeProvider Theme="ThemeService.CurrentTheme" />` (plus `IsDarkMode` in Manager). `ThemeService` stays per app and only selects the mode.
+- Never put `Color="Color.Primary"` on `MudAppBar` — that paints structure with the action colour. Leave it off so the bar takes `AppbarBackground`.
+- Semantic colours are not brand-derived and are WCAG-AA audited. `Error` is crimson `#A3123F`, but every error state also carries an icon — never tell error from primary by colour alone. Dark-mode `*ContrastText` is the dark ground `#1B2A3C`. Leave `Tertiary` at the MudBlazor default.
+- High contrast is deliberately not brand-coloured — legibility outranks identity there.
+- Never inline ad-hoc colours; `wwwroot/css/design-tokens.css` mirrors `RvsBrand.cs` and the two change together.
+- Logos: use the `BrandWordmark` component (`Horizontal` / `Stacked` / `Glyph` / `Wordmark`, `Reversed` on dark surfaces). It loads the "Service Tag" kit's outlined SVGs from `RVS.UI.Shared/wwwroot/brand/`.
 
 ### Component Conventions
 - Layout: `MudLayout` → `MudAppBar` → `MudMainContent`
@@ -190,7 +208,8 @@ All Blazor frontend projects (`RVS.Blazor.Intake`, `RVS.Blazor.Manager`, `RVS.MA
 This project is the approved MudBlazor prototype for the full wizard flow. Use it as the reference implementation when migrating or building new pages in `RVS.Blazor.Intake`.
 
 ### Project Documentation
-- Treat `Docs/ASOT/*.md` as the authoritative source for PRD/architecture decisions.
-- When answering questions about product behavior, always check `Docs/ASOT/` first.
-- Prefer the docs in `Docs/ASOT/` over older notes elsewhere in the repo.
+- Product canon is at `Docs/`: `RVS_Overview.md` (what this is), `RVS_Spec.md` (**if a requirement isn't there, it isn't in scope**), `RVS_Plan.md` (build order and open questions), `RVS_Money.md` (unit economics, cost structure, revenue scenarios), `RVS_GoLive_Activities.md` (agreed actions parked for production go-live), `RVS_Archive_Index.md` (what was cut and why). There is no fixed number of canon documents — one authoritative home per fact, and a new one gets registered here, in `CLAUDE.md` and in `RVS_Overview.md` on the same commit.
+- `Docs/ASOT/*.md` describes **what is built** — Architecture, DataModel, Infrastructure, Identity, FrontEnd, PacketComposition. Where code and Spec disagree, each doc has a coverage or gap table. The Spec is the target; ASOT is the current state.
+- `Docs/ARCHIVE/` and `Docs/Obsolete/` are frozen snapshots. Never cite them as current.
+- Scope was deliberately reduced to: anonymous intake → a one-page packet emailed to the service department → a thin manager app. DMS integration, two-way SMS, the technician app, scheduling, analytics/benchmarking, billing tiers and OEM data licensing are archived. Code for several still exists as a descope target — do not extend it.
 - .Bicep files in `Docs/ASOT/Infra/Bicep.IaC/` are the source of truth for Azure resource configuration. Do not rely on hand-drawn diagrams or outdated documentation for infrastructure details.

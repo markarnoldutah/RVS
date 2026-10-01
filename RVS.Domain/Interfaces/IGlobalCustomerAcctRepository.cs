@@ -30,6 +30,10 @@ public interface IGlobalCustomerAcctRepository
     /// </summary>
     /// <param name="entity">The global customer account entity to persist.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="Exceptions.ConflictException">
+    /// A document with the same id already exists — for an id from
+    /// <see cref="GlobalCustomerAcct.IdForEmail"/>, an account for the same email (issue #679).
+    /// </exception>
     Task<GlobalCustomerAcct> CreateAsync(GlobalCustomerAcct entity, CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -1,21 +1,36 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject ThemeService ThemeService
+@inject IntakeWizardState WizardState
+@inject NavigationManager Navigation
 
-<MudThemeProvider Theme="ThemeService.CurrentTheme" />
+@* The dealer's accent replaces Rust on their own intake page (Spec A-16); IntakeChrome decides. *@
+<MudThemeProvider Theme="@_chrome.ThemeOr(ThemeService.CurrentTheme)" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="2" Color="Color.Primary">
-        <MudIconButton Icon="@Icons.Material.Filled.RvHookup"
-                       Color="Color.Inherit"
-                       Href="/"
-                       aria-label="Back to the homepage" />
-        <MudText Typo="Typo.h6" Class="ml-2">
-            RV Intake
-        </MudText>
+    @* No Color= : the app bar takes AppbarBackground (Ink) from the theme. Color="Color.Primary"
+       would paint it Rust, which the brand reserves for action, not structure (Spec THEME-1).
+       On a location's own intake page the dealer's colour and logo replace both (Spec A-16,
+       issue #470); IntakeChrome decides which, and a null style leaves the theme's bar. *@
+    <MudAppBar Elevation="2" Style="@_chrome.AppBarStyle">
+        @if (_chrome.HasDealerLogo)
+        {
+            <DealerLogo Url="@(_chrome.DealerLogoUrl ?? string.Empty)" Alt="@_chrome.DealerName" Height="32px"
+                        Plated="@_chrome.LogoOnPlate">
+                <Fallback>
+                    <BrandWordmark Reversed="@_chrome.UseReversedMark" Height="32px" Title="RV Intake" />
+                </Fallback>
+            </DealerLogo>
+        }
+        else
+        {
+            <MudLink Href="/" aria-label="Back to the homepage" Class="d-flex align-center">
+                <BrandWordmark Reversed="@_chrome.UseReversedMark" Height="32px" Title="" />
+            </MudLink>
+        }
         <MudSpacer />
         <ThemeSwitcher />
     </MudAppBar>
@@ -27,9 +42,10 @@
                     @Body
                 </ChildContent>
                 <ErrorContent Context="ex">
-                    <MudAlert Severity="Severity.Error" Class="my-4">@ex.Message</MudAlert>
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="my-4">@ex.Message</MudAlert>
                 </ErrorContent>
             </ErrorBoundary>
+            <SiteFooter />
         </MudContainer>
     </MudMainContent>
 </MudLayout>
@@ -41,13 +57,43 @@
 </div>
 
 @code {
+    private IntakeChrome _chrome = IntakeChrome.Default;
+
     protected override void OnInitialized()
     {
-        ThemeService.OnThemeChanged += StateHasChanged;
+        _chrome = ResolveChrome();
+        ThemeService.OnThemeChanged += OnThemeChanged;
+        WizardState.OnChange += OnChromeInputChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private IntakeChrome ResolveChrome() => IntakeChrome.Resolve(
+        WizardState.Config, Navigation.ToBaseRelativePath(Navigation.Uri), ThemeService.IsHighContrast);
+
+    private void OnThemeChanged()
+    {
+        _chrome = ResolveChrome();
+        StateHasChanged();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => OnChromeInputChanged();
+
+    // The wizard state changes on nearly every keystroke; re-render the layout only when that
+    // changes what the header shows — the config loading, or leaving the location's page.
+    private void OnChromeInputChanged()
+    {
+        var next = ResolveChrome();
+        if (next != _chrome)
+        {
+            _chrome = next;
+            StateHasChanged();
+        }
     }
 
     public void Dispose()
     {
-        ThemeService.OnThemeChanged -= StateHasChanged;
+        ThemeService.OnThemeChanged -= OnThemeChanged;
+        WizardState.OnChange -= OnChromeInputChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 }

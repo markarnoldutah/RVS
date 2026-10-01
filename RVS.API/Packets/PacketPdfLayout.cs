@@ -1,0 +1,503 @@
+using System.Globalization;
+using RVS.Domain.Packets;
+
+namespace RVS.API.Packets;
+
+/// <summary>
+/// The ordered, degradation-resolved content model for the PDF packet — the single place
+/// that decides <em>what</em> appears and in <em>what</em> order (<c>Spec B-2</c>).
+///
+/// It is a pure transform of a <see cref="ServicePacket"/>: no I/O, no QuestPDF types, no
+/// page geometry. <see cref="PacketPdfRenderer"/> paints this model; keeping the two apart
+/// lets the content be unit-tested as plain data and cross-checked against
+/// <see cref="PacketHtmlRenderer"/> so the HTML and PDF renderings cannot diverge
+/// (issue <c>#432</c>).
+///
+/// The section set, ordering and degradation rules deliberately match
+/// <see cref="PacketHtmlRenderer"/> line for line.
+/// </summary>
+internal sealed record PacketPdfLayout
+{
+    /// <summary>Photo thumbnails on the first page; the rest go to an appendix page.</summary>
+    private const int PhotosOnFirstPageLimit = 6;
+
+    /// <summary>
+    /// The tracking-number label, as the HTML masthead spells it (issue <c>#735</c>). Shared
+    /// with the painter, which lifts that row out of the Location column into the refbox.
+    /// </summary>
+    public const string ReferenceLabel = "Intake #";
+
+    public required IReadOnlyList<PacketPdfLayoutSection> Sections { get; init; }
+
+    /// <summary>
+    /// The submission timestamp for the top-of-masthead <c>Received</c> line, formatted
+    /// <c>yyyy-MM-dd h:mm tt</c> plus a zone: the location's own zone when it sets one
+    /// (<c>… 8:30 AM MDT</c>), UTC otherwise (issues #506, #735). Taken straight from
+    /// <see cref="PacketOrigin.ReceivedDisplay"/> so it matches the HTML rendering exactly.
+    /// This is the one Received line on the packet — the Location column no longer repeats
+    /// it (issue #492 items 4–5).
+    /// </summary>
+    public required string ReceivedDisplay { get; init; }
+
+    /// <summary>
+    /// The customer name for the masthead headline, family-name-first (<c>Last, First</c>),
+    /// rendered above the year/make/model line. <c>null</c> when no name is available.
+    /// </summary>
+    public string? CustomerHeadline { get; init; }
+
+    /// <summary>
+    /// The AI disclosure that closes the packet, after the last section (issue #780) — it
+    /// replaced the per-section "AI-generated" badges. Taken straight from
+    /// <see cref="ServicePacket.AiDisclaimer"/> so it matches the HTML footer word for word.
+    /// <c>null</c> when the packet carries no AI content.
+    /// </summary>
+    public string? AiDisclaimer { get; init; }
+
+    public static PacketPdfLayout Build(ServicePacket packet)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        var sections = new List<PacketPdfLayoutSection>();
+
+        sections.Add(BuildUnit(packet.Unit));
+        sections.Add(BuildCustomer(packet.Customer));
+        sections.Add(BuildOrigin(packet.Origin));
+        sections.Add(BuildCategory(packet.IssueCategory));
+
+        // The curated issue and the AI assessment sit above the verbatim complaint so the
+        // service manager reads the concise problem recreation first, then the customer's own
+        // words (matches PacketHtmlRenderer; Spec B-2, issue #601).
+        var curatedIssue = BuildCuratedIssue(packet.CuratedIssue);
+        if (curatedIssue is not null)
+        {
+            sections.Add(curatedIssue);
+        }
+
+        var aiSummary = BuildAiSummary(packet.AiSummary);
+        if (aiSummary is not null)
+        {
+            sections.Add(aiSummary);
+        }
+
+        sections.Add(BuildDescription(packet.IssueDescription));
+        sections.Add(BuildDiagnostics(packet.Diagnostics));
+
+        var photos = BuildPhotos(packet.Photos);
+        if (photos is not null)
+        {
+            sections.Add(photos);
+        }
+
+        var pasteBlock = BuildPasteBlock(packet.PasteBlock);
+        if (pasteBlock is not null)
+        {
+            sections.Add(pasteBlock);
+        }
+
+        var statusLink = BuildStatusLink(packet.StatusLink);
+        if (statusLink is not null)
+        {
+            sections.Add(statusLink);
+        }
+
+        // Projected from the packet, not re-derived: PacketHtmlRenderer reads the same
+        // property, so the two renderings cannot drift (issue #506).
+        var received = packet.Origin.ReceivedDisplay;
+
+        var customerHeadline = string.IsNullOrWhiteSpace(packet.Customer.SortableName)
+            ? null
+            : packet.Customer.SortableName;
+
+        return new PacketPdfLayout
+        {
+            Sections = sections,
+            ReceivedDisplay = received,
+            CustomerHeadline = customerHeadline,
+            AiDisclaimer = packet.AiDisclaimer,
+        };
+    }
+
+    // ── 1. Unit header ────────────────────────────────────────────────────
+
+    private static PacketPdfLayoutSection BuildUnit(PacketUnitHeader unit)
+    {
+        var descriptor = string.Join(
+            ' ',
+            new[] { unit.Year?.ToString(CultureInfo.InvariantCulture), unit.Make, unit.Model }
+                .Where(part => !string.IsNullOrWhiteSpace(part)));
+
+        var rows = new List<PacketPdfLayoutRow>();
+        AddRow(rows, "Year", unit.Year?.ToString(CultureInfo.InvariantCulture));
+        AddRow(rows, "Manufacturer", unit.Make);
+        AddRow(rows, "Model", unit.Model);
+        if (unit.HasVin)
+        {
+            rows.Add(new PacketPdfLayoutRow("Serial# (VIN)", unit.Vin!));
+        }
+
+        return new PacketPdfLayoutSection
+        {
+            Id = "unit",
+            Heading = string.IsNullOrWhiteSpace(descriptor) ? "Unit details not provided" : descriptor,
+            Rows = rows,
+        };
+    }
+
+    // ── 2. Customer ──────────────────────────────────────────────────────
+
+    private static PacketPdfLayoutSection BuildCustomer(PacketCustomer customer)
+    {
+        var rows = new List<PacketPdfLayoutRow>();
+        AddRow(rows, "Phone", customer.Phone);
+        AddRow(rows, "Email", customer.Email);
+        AddRow(rows, "Preferred contact", customer.PreferredContact);
+
+        return new PacketPdfLayoutSection
+        {
+            Id = "customer",
+            Heading = "Customer",
+            Body = customer.FullName,
+            Rows = rows,
+        };
+    }
+
+    // ── 3. Origin ────────────────────────────────────────────────────────
+
+    private static PacketPdfLayoutSection BuildOrigin(PacketOrigin origin)
+    {
+        var rows = new List<PacketPdfLayoutRow>();
+        AddRow(rows, "Location", origin.LocationName);
+        AddRow(rows, "Location phone", origin.LocationPhone);
+
+        // The Received line moved to the top of the masthead (issue #492 items 4–5); the
+        // Intake # row is kept for the layout's plain-text projection but the painter draws
+        // it in the top refbox, not this column.
+        rows.Add(new PacketPdfLayoutRow(ReferenceLabel, origin.ReferenceCode));
+
+        return new PacketPdfLayoutSection
+        {
+            Id = "origin",
+            Heading = "Location",
+            Rows = rows,
+        };
+    }
+
+    // ── 4. Category ──────────────────────────────────────────────────────
+
+    private static PacketPdfLayoutSection BuildCategory(string? category) => new()
+    {
+        Id = "category",
+        Heading = "Issue category",
+        Body = string.IsNullOrWhiteSpace(category) ? "Uncategorized" : category,
+    };
+
+    // ── 4b. Issue — the curated restatement of the complaint (issue #601) ─
+
+    private static PacketPdfLayoutSection? BuildCuratedIssue(string? curatedIssue) =>
+        curatedIssue is null
+            ? null
+            : new PacketPdfLayoutSection
+            {
+                Id = "curated-issue",
+                Heading = "Issue",
+                Body = curatedIssue,
+            };
+
+    // ── 6. Reported issue — the customer's words, verbatim ──────────────
+
+    private static PacketPdfLayoutSection BuildDescription(string description) => new()
+    {
+        Id = "description",
+        // The HTML's heading and sub-heading on one line (issue #735).
+        Heading = "Reported issue — customer's words verbatim",
+        Verbatim = description,
+        // Issue #580: the reported-issue block reads as plain text, no bordered frame.
+        Framed = false,
+    };
+
+    // ── 7. Diagnostic Q&A — the expert block ────────────────────────────
+
+    private static PacketPdfLayoutSection BuildDiagnostics(IReadOnlyList<PacketDiagnosticEntry> diagnostics)
+    {
+        var entries = diagnostics
+            .Select(d => new PacketPdfLayoutDiagnostic(d.Question, d.Answers))
+            .ToList();
+
+        return new PacketPdfLayoutSection
+        {
+            Id = "diagnostics",
+            Heading = "Reported symptoms & diagnostic Q&A",
+            Diagnostics = entries,
+            DiagnosticsEmpty = entries.Count == 0,
+        };
+    }
+
+    // ── 5. AI summary — a preliminary assessment, above the complaint ───
+
+    private static PacketPdfLayoutSection? BuildAiSummary(PacketAiSummary? summary)
+    {
+        if (summary is null)
+        {
+            return null;
+        }
+
+        var rows = new List<PacketPdfLayoutRow>();
+        var lists = new List<PacketPdfLayoutList>();
+
+        if (summary.HasStructuredAssessment)
+        {
+            AddRow(rows, "Probable cause", summary.ProbableCause);
+            AddRow(rows, "Confidence", summary.Confidence);
+
+            if (summary.PossibleFixes.Count > 0)
+            {
+                lists.Add(new PacketPdfLayoutList("Possible fixes", summary.PossibleFixes, Numbered: true));
+            }
+
+            if (summary.LikelyParts.Count > 0)
+            {
+                lists.Add(new PacketPdfLayoutList("Likely parts", summary.LikelyParts, Numbered: false));
+            }
+        }
+
+        // What was read off the photos (issue #772) — kept when the assessment abstained.
+        if (summary.HasPhotoFindings)
+        {
+            lists.Add(new PacketPdfLayoutList(
+                PacketPhotoFinding.Heading, [.. summary.PhotoFindings.Select(f => f.Display)], Numbered: false));
+        }
+
+        return new PacketPdfLayoutSection
+        {
+            Id = "ai-summary",
+            Heading = "Preliminary assessment",
+            Body = summary.Text,
+            Rows = rows,
+            Lists = lists,
+            Note = summary.HasStructuredAssessment ? PacketAiSummary.AdvisoryNote : null,
+        };
+    }
+
+    // ── 8. Photos ───────────────────────────────────────────────────────
+
+    private static PacketPdfLayoutSection? BuildPhotos(IReadOnlyList<PacketPhoto> photos)
+    {
+        var renderable = photos.Where(p => IsHttpUrl(p.Url)).ToList();
+        if (renderable.Count == 0)
+        {
+            return null;
+        }
+
+        return new PacketPdfLayoutSection
+        {
+            Id = "photos",
+            Heading = "Photos",
+            Photos = renderable,
+            PhotosOnFirstPage = Math.Min(PhotosOnFirstPageLimit, renderable.Count),
+        };
+    }
+
+    // ── 9. Paste block ─────────────────────────────────────────────────
+
+    private static PacketPdfLayoutSection? BuildPasteBlock(string? pasteBlock)
+    {
+        if (string.IsNullOrWhiteSpace(pasteBlock))
+        {
+            return null;
+        }
+
+        return new PacketPdfLayoutSection
+        {
+            Id = "paste-block",
+            Heading = "Copy & Paste Ready",
+            Verbatim = pasteBlock,
+        };
+    }
+
+    // ── 10. Status link ───────────────────────────────────────────────
+
+    private static PacketPdfLayoutSection? BuildStatusLink(PacketStatusLink? statusLink)
+    {
+        if (statusLink is null || string.IsNullOrWhiteSpace(statusLink.Url))
+        {
+            return null;
+        }
+
+        return new PacketPdfLayoutSection
+        {
+            Id = "status-link",
+            Heading = "Customer status page",
+            Link = new PacketPdfLayoutLink(statusLink.Url, IsHttpUrl(statusLink.Url)),
+        };
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    private static void AddRow(List<PacketPdfLayoutRow> rows, string label, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            rows.Add(new PacketPdfLayoutRow(label, value));
+        }
+    }
+
+    private static bool IsHttpUrl(string? url) =>
+        !string.IsNullOrWhiteSpace(url)
+        && (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            || url.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// A stable plain-text projection of the layout, in section order. Used by the
+    /// renderer's tests to assert content and ordering without parsing PDF bytes, and as
+    /// the parity anchor against <see cref="PacketHtmlRenderer"/>.
+    /// </summary>
+    public string ToPlainText()
+    {
+        // Masthead preamble: the top-of-packet Received line and the family-name-first
+        // customer headline, in the order the renderer paints them above the sections.
+        var preambleLines = new List<string> { $"Received: {ReceivedDisplay}" };
+        if (CustomerHeadline is not null)
+        {
+            preambleLines.Add(CustomerHeadline);
+        }
+
+        var blocks = new List<string> { string.Join("\n", preambleLines) };
+        blocks.AddRange(Sections.Select(RenderSectionText));
+        if (AiDisclaimer is not null)
+        {
+            blocks.Add(AiDisclaimer);
+        }
+
+        return string.Join("\n\n", blocks) + "\n";
+    }
+
+    private static string RenderSectionText(PacketPdfLayoutSection section)
+    {
+        var lines = new List<string> { $"[section:{section.Id}]" };
+
+        lines.Add(section.Heading);
+
+        // Body before rows: for the customer section the name leads, then the contact
+        // rows — matching PacketHtmlRenderer (name in <p class="name">, then the rows).
+        if (section.Body is not null)
+        {
+            lines.Add(section.Body);
+        }
+
+        foreach (var row in section.Rows)
+        {
+            lines.Add($"{row.Label}: {row.Value}");
+        }
+
+        foreach (var list in section.Lists)
+        {
+            lines.Add($"{list.Label}:");
+            lines.AddRange(list.Items.Select((item, i) => list.Numbered ? $"  {i + 1}. {item}" : $"  - {item}"));
+        }
+
+        if (section.Note is not null)
+        {
+            lines.Add(section.Note);
+        }
+
+        if (section.Verbatim is not null)
+        {
+            lines.Add(section.Verbatim);
+        }
+
+        if (section.DiagnosticsEmpty)
+        {
+            lines.Add("No diagnostic questions were answered.");
+        }
+
+        foreach (var entry in section.Diagnostics)
+        {
+            lines.Add(entry.Question);
+            if (entry.Answers.Count == 0)
+            {
+                lines.Add("  - (no answer given)");
+            }
+
+            foreach (var answer in entry.Answers)
+            {
+                lines.Add($"  - {answer}");
+            }
+        }
+
+        foreach (var photo in section.Photos)
+        {
+            lines.Add(string.IsNullOrWhiteSpace(photo.Caption)
+                ? photo.FileName
+                : $"{photo.FileName} — {photo.Caption}");
+        }
+
+        if (section.Link is not null)
+        {
+            lines.Add(section.Link.Url);
+        }
+
+        return string.Join("\n", lines);
+    }
+}
+
+/// <summary>One packet section, resolved for rendering. Payload fields are mutually
+/// mostly-exclusive — a section uses whichever of rows / body / verbatim / diagnostics /
+/// photos / link applies to it.</summary>
+internal sealed record PacketPdfLayoutSection
+{
+    /// <summary>Stable section id, matching the HTML renderer's <c>section:*</c> markers.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>Section heading. For the unit header this is the year/make/model line itself.</summary>
+    public required string Heading { get; init; }
+
+    /// <summary>Label/value rows.</summary>
+    public IReadOnlyList<PacketPdfLayoutRow> Rows { get; init; } = [];
+
+    /// <summary>Labelled lists, after the rows (the assessment's possible fixes and likely parts).</summary>
+    public IReadOnlyList<PacketPdfLayoutList> Lists { get; init; } = [];
+
+    /// <summary>A small italic note closing the section's rows and lists (the assessment's advisory note).</summary>
+    public string? Note { get; init; }
+
+    /// <summary>A single free-text paragraph (customer name, category, AI summary).</summary>
+    public string? Body { get; init; }
+
+    /// <summary>Verbatim text, whitespace preserved (description, paste block).</summary>
+    public string? Verbatim { get; init; }
+
+    /// <summary>When <c>true</c> (the default), <see cref="Verbatim"/> renders in a bordered
+    /// block. The reported-issue section (issue <c>#580</c>) opts out so it reads as plain text.</summary>
+    public bool Framed { get; init; } = true;
+
+    /// <summary>Diagnostic question/answer entries.</summary>
+    public IReadOnlyList<PacketPdfLayoutDiagnostic> Diagnostics { get; init; } = [];
+
+    /// <summary><c>true</c> when the diagnostics section has no entries and shows a placeholder.</summary>
+    public bool DiagnosticsEmpty { get; init; }
+
+    /// <summary>Renderable photos (those with an http(s) URL), in order.</summary>
+    public IReadOnlyList<PacketPhoto> Photos { get; init; } = [];
+
+    /// <summary>How many photos render on the first page; the remainder go to an appendix page.</summary>
+    public int PhotosOnFirstPage { get; init; }
+
+    /// <summary>The status link, or <c>null</c> when this is not the status-link section.</summary>
+    public PacketPdfLayoutLink? Link { get; init; }
+
+    /// <summary><c>true</c> when there are more photos than fit on the first page.</summary>
+    public bool HasAppendix => Photos.Count > PhotosOnFirstPage;
+}
+
+/// <summary>A label/value line.</summary>
+internal sealed record PacketPdfLayoutRow(string Label, string Value);
+
+/// <summary>A labelled list of items, numbered when order carries meaning.</summary>
+internal sealed record PacketPdfLayoutList(string Label, IReadOnlyList<string> Items, bool Numbered);
+
+/// <summary>One diagnostic question and its answer(s).</summary>
+internal sealed record PacketPdfLayoutDiagnostic(string Question, IReadOnlyList<string> Answers);
+
+/// <summary>The status link. <see cref="Active"/> is <c>false</c> for a non-http(s) URL,
+/// which renders as inert text rather than a clickable link.</summary>
+internal sealed record PacketPdfLayoutLink(string Url, bool Active);

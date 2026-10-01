@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using RVS.Domain.Integrations;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Integrations;
 
@@ -26,8 +27,8 @@ public sealed class AzureOpenAiIssueTextRefinementService : IIssueTextRefinement
         "and produce a clear, concise customer issue description while preserving all RV-specific terms and details. " +
         "Return ONLY a JSON object: {\"cleaned_description\": \"<cleaned text>\", \"confidence\": <0.0-1.0>}.";
 
-    private static readonly string[] ValidCategories =
-        ["Electrical", "Plumbing", "HVAC", "Appliance", "Structural", "Slide-Out", "Awning"];
+    // The controlled issue-category vocabulary (Spec A-5). Kept in sync via IssueCategoryVocabulary.
+    private static readonly string[] ValidCategories = [.. IssueCategoryVocabulary.Codes];
 
     private static readonly string[] ValidUrgencies =
         ["Low", "Medium", "High", "Critical"];

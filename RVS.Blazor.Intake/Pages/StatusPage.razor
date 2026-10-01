@@ -33,7 +33,7 @@ else if (_errorState == ErrorState.InvalidToken)
                            Color="Color.Primary"
                            FullWidth="true"
                            StartIcon="@Icons.Material.Filled.Search"
-                           Href="/status"
+                           Href="/status?manual=true"
                            Style="text-transform: none;">
                     Try a Different Number
                 </MudButton>
@@ -129,45 +129,85 @@ else if (_statusResponse is not null)
                         <MudCard Elevation="3">
                             <MudCardContent>
                                 <MudStack Spacing="3">
+                                    @* Which dealer this request is with (issue #793), so a customer with
+                                       requests at several can tell the cards apart. The name stands in
+                                       when there is no logo, or it will not load. *@
+                                    @if (sr.LocationLogoUrl is not null || !string.IsNullOrWhiteSpace(sr.LocationName))
+                                    {
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                                            @if (sr.LocationLogoUrl is not null)
+                                            {
+                                                <DealerLogo Url="@sr.LocationLogoUrl"
+                                                            Alt="@(string.IsNullOrWhiteSpace(sr.LocationName) ? "Dealer logo" : string.Empty)"
+                                                            Height="40px" MaxWidth="180px" />
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(sr.LocationName))
+                                            {
+                                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                                                    @sr.LocationName
+                                                </MudText>
+                                            }
+                                        </MudStack>
+                                    }
+
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-                                        <StatusBadge Status="@sr.Status" />
-                                        @if (!string.IsNullOrWhiteSpace(sr.LocationName))
-                                        {
-                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
-                                                @sr.LocationName
-                                            </MudText>
-                                        }
+                                        <MudChip T="string"
+                                                 Label="true"
+                                                 Variant="Variant.Filled"
+                                                 Color="@CustomerStatusFormatting.GetStatusColor(sr.Status)"
+                                                 Class="ma-0"
+                                                 Style="font-weight: 600;">
+                                            @CustomerStatusFormatting.GetStatusLabel(sr.Status)
+                                        </MudChip>
                                     </MudStack>
 
                                     <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
-                                        @GetStatusDescription(sr.Status)
+                                        @CustomerStatusFormatting.DescribeStatus(sr.Status)
                                     </MudText>
+
+                                    @if (!string.IsNullOrWhiteSpace(sr.StatusNote))
+                                    {
+                                        <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Filled"
+                                                  Icon="@Icons.Material.Outlined.Info"
+                                                  Style="white-space: pre-wrap;">
+                                            @sr.StatusNote
+                                        </MudAlert>
+                                    }
 
                                     <MudDivider />
 
                                     <MudSimpleTable Elevation="0" Class="review-table">
                                         <tbody>
                                             <tr>
-                                                <td><strong>Issue Category</strong></td>
-                                                <td>@(string.IsNullOrWhiteSpace(sr.IssueCategory) ? "—" : sr.IssueCategory)</td>
+                                                <td><strong>Unit</strong></td>
+                                                <td>@(string.IsNullOrWhiteSpace(sr.Unit) ? "—" : sr.Unit)</td>
                                             </tr>
-                                            @if (!string.IsNullOrWhiteSpace(sr.AssetDisplay))
+                                            @if (!string.IsNullOrWhiteSpace(sr.IssueCategory))
                                             {
                                                 <tr>
-                                                    <td><strong>Vehicle</strong></td>
-                                                    <td>@sr.AssetDisplay</td>
+                                                    <td><strong>Issue Category</strong></td>
+                                                    <td>@sr.IssueCategory</td>
                                                 </tr>
                                             }
                                             <tr>
                                                 <td><strong>Submitted</strong></td>
-                                                <td>@sr.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
+                                                <td>@sr.SubmittedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
                                             </tr>
                                             <tr>
-                                                <td><strong>Last Updated</strong></td>
+                                                <td><strong>Location Phone</strong></td>
                                                 <td>
-                                                    @(sr.UpdatedAtUtc.HasValue
-                                                        ? sr.UpdatedAtUtc.Value.ToLocalTime().ToString("MMM d, yyyy")
-                                                        : "—")
+                                                    @if (CustomerStatusFormatting.ToTelHref(sr.LocationPhone) is { } telHref)
+                                                    {
+                                                        <MudLink Href="@telHref"
+                                                                 Color="Color.Primary"
+                                                                 Underline="Underline.Always">
+                                                            @CustomerStatusFormatting.FormatPhoneForDisplay(sr.LocationPhone)
+                                                        </MudLink>
+                                                    }
+                                                    else
+                                                    {
+                                                        @(CustomerStatusFormatting.FormatPhoneForDisplay(sr.LocationPhone) ?? "—")
+                                                    }
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -180,13 +220,20 @@ else if (_statusResponse is not null)
             </MudGrid>
         }
 
-        <MudStack AlignItems="AlignItems.Center">
+        <MudStack AlignItems="AlignItems.Center" Spacing="1">
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Home"
                        Href="/"
                        Style="text-transform: none;">
                 Return Home
+            </MudButton>
+            @* The lookup page opens the link this device remembers; this is the way past it. *@
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       Href="/status?manual=true"
+                       Style="text-transform: none;">
+                Look up a different confirmation number
             </MudButton>
         </MudStack>
     </MudStack>
@@ -197,6 +244,7 @@ else if (_statusResponse is not null)
     [Inject] private HttpClient Http { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private ILogger<StatusPage> Logger { get; set; } = default!;
+    [Inject] private StatusLinkStore StatusLinks { get; set; } = default!;
 
     private CustomerStatusResponseDto? _statusResponse;
     private bool _loading = true;
@@ -220,14 +268,20 @@ else if (_statusResponse is not null)
             if (response.IsSuccessStatusCode)
             {
                 _statusResponse = await response.Content.ReadFromJsonAsync<CustomerStatusResponseDto>();
+
+                // Remember the link on this device so "Check Request Status" opens it next time
+                // (issue #716). Re-saved on every load, so a renewed expiry is picked up.
+                await StatusLinks.SaveAsync(Token, _statusResponse?.MagicLinkExpiresAtUtc);
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 _errorState = ErrorState.InvalidToken;
+                await StatusLinks.ForgetIfSavedAsync(Token);
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.Gone)
             {
                 _errorState = ErrorState.ExpiredToken;
+                await StatusLinks.ForgetIfSavedAsync(Token);
             }
             else
             {
@@ -257,14 +311,4 @@ else if (_statusResponse is not null)
         ExpiredToken,
         Unexpected
     }
-
-    private static string GetStatusDescription(string status) => status?.Trim().ToLowerInvariant() switch
-    {
-        "new" => "Your request has been received and is awaiting review by a service advisor.",
-        "in progress" or "in-progress" => "A technician is actively working on your service request.",
-        "awaiting parts" or "awaiting-parts" => "Your repair requires parts that have been ordered. We'll update you when they arrive.",
-        "completed" => "Your service has been completed. Please contact the dealership for pickup details.",
-        "cancelled" => "This service request has been cancelled.",
-        _ => "Your request is being processed."
-    };
 }

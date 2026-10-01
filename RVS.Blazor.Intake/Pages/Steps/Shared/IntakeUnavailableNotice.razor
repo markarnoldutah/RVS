@@ -1,0 +1,27 @@
+@* Spec A-19 (issue #478): shown in place of the wizard when the location's tenant has been
+   disabled past the capture window. Deliberately neutral: no dealer phone or email, never another
+   dealer, and not a 404 — the slug may be on signage, and a dead link reads as "this company is
+   gone". Not styled as an error either; nothing the customer did caused it. *@
+
+<MudPaper Elevation="2" Class="pa-8 rounded-lg" Style="width: 100%;" role="status">
+    <MudStack AlignItems="AlignItems.Center" Spacing="4">
+        <MudIcon Icon="@Icons.Material.Outlined.Info" Style="font-size: 4rem; color: var(--mud-palette-text-secondary);" />
+        <MudText Typo="Typo.h5" Align="Align.Center" Style="color: var(--mud-palette-text-primary);">
+            @Message
+        </MudText>
+        @if (!string.IsNullOrWhiteSpace(LocationName))
+        {
+            <MudText Typo="Typo.body1" Align="Align.Center" Style="color: var(--mud-palette-text-secondary);">
+                Online service requests for @LocationName are unavailable at the moment.
+            </MudText>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    /// <summary>The headline, shared with the refusal a late submission gets.</summary>
+    public const string Message = "This location isn't accepting online service requests right now.";
+
+    /// <summary>The location the customer was trying to reach, when the config was loaded.</summary>
+    [Parameter] public string? LocationName { get; set; }
+}

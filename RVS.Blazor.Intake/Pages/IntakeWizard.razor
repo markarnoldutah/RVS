@@ -16,6 +16,13 @@
         </MudPaper>
     </MudStack>
 }
+else if (_state.Config is { IntakeExpired: true })
+{
+    @* Spec A-19: a session restored past Step 1 reloads the config, so it lands here too. *@
+    <MudStack AlignItems="AlignItems.Center" Style="max-width: 560px; margin: 0 auto;">
+        <IntakeUnavailableNotice LocationName="@_state.Config.LocationName" />
+    </MudStack>
+}
 else
 {
 <MudStack AlignItems="AlignItems.Center" Spacing="4"
@@ -30,20 +37,21 @@ else
                            Color="Color.Default"
                            StartIcon="@Icons.Material.Filled.ArrowBack"
                            OnClick="HandlePreviousStep"
+                           Disabled="_state.IsSubmitting"
                            Style="text-transform: none;"
                            aria-label="Go back">
                     Back
                 </MudButton>
                 <MudSpacer />
                 <MudText Typo="Typo.caption">
-                    Step @_state.CurrentStep of @_state.TotalSteps
+                    @StepProgressLabel
                 </MudText>
             </MudStack>
         </MudPaper>
     }
 
     @* Wizard step content *@
-    <div style="width: 100%;" @key="_state.CurrentStep" class="wizard-step">
+    <div style="width: 100%;" @key="_state.CurrentStep" @ref="_stepElement" tabindex="-1" class="wizard-step">
         @switch (_state.CurrentStep)
         {
             case 1:
@@ -77,6 +85,8 @@ else
             case 8:
                 <Step8_ReviewSubmitStep State="_state"
                                         OnEdit="HandleEditStep"
+                                        OnEditIssue="HandleEditIssue"
+                                        OnAddIssue="HandleAddIssue"
                                         OnSubmitted="HandleSubmitted" />
                 break;
         }
@@ -86,19 +96,59 @@ else
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
-    [SupplyParameterFromQuery(Name = "token")] public string? Token { get; set; }
+
+    // Spec A-13 (issue #599): the channel tag the go.rvintake.com redirect puts on the intake
+    // URL. Carried through the wizard and sent with the submission so the resulting service
+    // request records which distribution path produced it. A bare intake URL has none; the API
+    // records that as print.
+    [SupplyParameterFromQuery(Name = "src")] public string? Src { get; set; }
+
+    // Spec A-14 (issue #664): the advisor invite token. Step 1 uses it to prefill first name and
+    // phone; the submission carries it, and that is where the API spends it. An unusable token
+    // just means a blank form.
+    [SupplyParameterFromQuery(Name = "inv")] public string? Inv { get; set; }
+
+    // The wizard step, so the browser's Back and Forward buttons walk the wizard instead of
+    // leaving the form. Absent on the entry link; stamped in during initialization, after which
+    // every step change pushes a history entry carrying it. WizardStepUrlSync holds the rules.
+    [SupplyParameterFromQuery(Name = WizardStepUrlSync.StepParameterName)] public int? Step { get; set; }
 
     [Inject] private IntakeWizardState _state { get; set; } = default!;
+    [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private List<string> _validationErrors = [];
     private bool _initializing = true;
+
+    // History entries this page has pushed. Back can only be delegated to the browser while this
+    // is above zero; a refresh resets it while leaving the entries in place, so after one the
+    // first Back rewrites the URL instead. That is the safe direction to be wrong in: pressing
+    // Back on a history entry that is not ours would walk the customer off the form.
+    private int _pushedEntries;
+
+    // Whether a step has ever been seen in the URL on this page. Until the stamp written during
+    // initialization lands, a missing step means "not stamped yet", not "Step 1" — Blazor runs
+    // OnParametersSetAsync once with the parameters the page loaded with, which for the entry
+    // link is no step at all, and acting on that would throw a restored session back to Step 1.
+    private bool _sawUrlStep;
+    private ElementReference _stepElement;
+    private WizardStepEntry _stepEntry = default!;
+
+    /// <summary>The JS function in <c>wwwroot/js/interop.js</c> that steps back in history.</summary>
+    private const string HistoryBackFunction = "rvs_historyBack";
+
+    protected override void OnInitialized()
+    {
+        _stepEntry = new WizardStepEntry(JS);
+    }
 
     protected override async Task OnInitializedAsync()
     {
         _state.OnChange += StateHasChanged;
        _state.Slug = Slug;
-       _state.Token = Token;
+       _state.IntakeSource = Src;
+       _state.InviteToken = Inv;
 
         await _state.RestoreAsync();
 
@@ -107,16 +157,117 @@ else
         {
             await _state.ClearAsync();
             _state.Slug = Slug;
-           _state.Token = Token;
+           _state.IntakeSource = Src;
+           _state.InviteToken = Inv;
+        }
+        else if (!string.IsNullOrWhiteSpace(Src))
+        {
+            // A restored session predates this visit's link. The URL just used is the truer
+            // account of how the customer got here, so it wins — but only when it says
+            // something: a bare reload must not erase the channel of the link that started
+            // the session.
+            _state.IntakeSource = Src;
         }
 
+        // Same rule for the invite: a new one in the URL replaces the session's, and its
+        // prefill has not been applied yet; a bare reload keeps the session's.
+        if (!string.IsNullOrWhiteSpace(Inv) && Inv != _state.InviteToken)
+        {
+            _state.InviteToken = Inv;
+            _state.IsInvitePrefilled = false;
+        }
+
+        // Issue #740: a refresh past Step 1 restores the session but not the config.
+        await _state.EnsureConfigAsync(ct => IntakeApi.GetConfigAsync(_state.Slug, ct));
+
         _initializing = false;
+
+        // Puts the step in the URL before the customer can press anything, so the first history
+        // entry is one of ours and the entry link itself is never what Back returns to.
+        await SyncStepWithUrlAsync(isFirstLoad: true);
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Issues #645, #766: every step starts at the top of the page, with no field focused.
+        if (!_initializing)
+        {
+            await _stepEntry.OnRenderedAsync(_state.CurrentStep, _stepElement);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         _state.Slug = Slug;
-        _state.Token = Token;
+        if (!string.IsNullOrWhiteSpace(Src))
+        {
+            _state.IntakeSource = Src;
+        }
+        if (!string.IsNullOrWhiteSpace(Inv))
+        {
+            _state.InviteToken = Inv;
+        }
+
+        // Runs again on a query-only navigation — which is what Back, Forward and an edited
+        // address bar all are — with the same component instance and its state intact.
+        if (!_initializing && (Step is not null || _sawUrlStep))
+        {
+            await SyncStepWithUrlAsync(isFirstLoad: false);
+        }
+    }
+
+    /// <summary>
+    /// Brings the URL's step and the wizard's step back into agreement, whichever moved.
+    /// </summary>
+    private async Task SyncStepWithUrlAsync(bool isFirstLoad)
+    {
+        _sawUrlStep |= Step is not null;
+
+        var sync = WizardStepUrlSync.Reconcile(Step, _state.CurrentStep, _state.MaxStepReached, isFirstLoad);
+
+        switch (sync.Action)
+        {
+            case WizardStepSyncAction.AdoptUrlStep:
+                // The history moved; count the entry it consumed or added so Back keeps working.
+                _pushedEntries = sync.Step < _state.CurrentStep
+                    ? Math.Max(0, _pushedEntries - 1)
+                    : _pushedEntries + 1;
+                await _state.GoToStepFromHistoryAsync(sync.Step);
+                _validationErrors = [];
+                _state.FieldErrors = [];
+                break;
+
+            case WizardStepSyncAction.RewriteUrl:
+                Navigation.NavigateTo(StepUri(sync.Step), replace: true);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The current URL with <paramref name="step"/> as its step, keeping the location slug and
+    /// every other query parameter the link arrived with — the A-13 channel tag, the A-14 invite
+    /// and the magic-link token all ride there.
+    /// </summary>
+    private string StepUri(int step) =>
+        Navigation.GetUriWithQueryParameter(WizardStepUrlSync.StepParameterName, step);
+
+    /// <summary>
+    /// Pushes a history entry for the step the wizard has just moved to, so the browser's Back
+    /// button returns to the step before it.
+    /// </summary>
+    private void PushStep()
+    {
+        var uri = StepUri(_state.CurrentStep);
+
+        // A push to the URL already showing would add an entry that Back could only return to
+        // the same step from, making it look broken. Nothing moved, so there is nothing to record.
+        if (string.Equals(uri, Navigation.Uri, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _pushedEntries++;
+        Navigation.NavigateTo(uri);
     }
 
     private async Task HandleNextStep()
@@ -139,13 +290,29 @@ else
         }
 
         _validationErrors = [];
+        PushStep();
     }
 
     private async Task HandlePreviousStep()
     {
+        if (_state.IsSubmitting) return;
+
+        // Delegate to the browser, so the wizard's Back button and the browser's are one action:
+        // the history entry decides the step, and Forward still works. This lands on Review after
+        // an edit for free, because the edit jump was pushed from Review.
+        if (_pushedEntries > 0)
+        {
+            await JS.InvokeVoidAsync(HistoryBackFunction);
+            return;
+        }
+
+        // No entry of ours to step back onto — the page was refreshed mid-wizard, which resets
+        // the count but not the history. Move the wizard, then correct the URL in place so the
+        // history never gains an entry that points forward.
         _validationErrors = [];
         _state.FieldErrors = [];
         await _state.GoToPreviousStepAsync();
+        Navigation.NavigateTo(StepUri(_state.CurrentStep), replace: true);
     }
 
     private async Task HandleEditStep(int step)
@@ -153,6 +320,30 @@ else
         _validationErrors = [];
         _state.ReturnToStepAfterEdit = _state.CurrentStep;
         await _state.GoToStepAsync(step);
+        PushStep();
+    }
+
+    /// <summary>
+    /// "Step 5 of 8", or "Issue 2 · Step 5 of 8" on the per-issue steps once the visit has
+    /// several issues, so the count never seems to start over (<c>Spec A-17</c>).
+    /// </summary>
+    private string StepProgressLabel =>
+        _state.IssueCount > 1 && _state.CurrentStep is >= 5 and <= 7
+            ? $"Issue {_state.ActiveIssueIndex + 1} · Step {_state.CurrentStep} of {_state.TotalSteps}"
+            : $"Step {_state.CurrentStep} of {_state.TotalSteps}";
+
+    private async Task HandleEditIssue((int Index, int Step) target)
+    {
+        _validationErrors = [];
+        await _state.EditIssueAsync(target.Index, target.Step);
+        PushStep();
+    }
+
+    private async Task HandleAddIssue()
+    {
+        _validationErrors = [];
+        await _state.StartNewIssueAsync();
+        PushStep();
     }
 
     private void HandleSubmitted()
@@ -167,7 +358,9 @@ else
             url += $"&uploadFailures={_state.FailedUploadCount}";
         }
 
-        Navigation.NavigateTo(url);
+        // Replace, so Back from the confirmation page cannot return to a wizard that has already
+        // been submitted.
+        Navigation.NavigateTo(url, replace: true);
     }
 
     public void Dispose()

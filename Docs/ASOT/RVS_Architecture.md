@@ -1,0 +1,204 @@
+# RVS — Architecture
+
+**Version:** 1.0 · September 4, 2026
+**Scope:** The backend as it exists in this repository. Verified against source, not aspiration.
+
+Product canon is `../RVS_Overview.md`, `../RVS_Spec.md`, `../RVS_Plan.md`. This document describes *what is built*. Where the code and the Spec disagree, the Spec is the target and this document records the gap.
+
+---
+
+## Solution layout
+
+| Project | Role | Under new scope |
+|---|---|---|
+| `RVS.API` | ASP.NET Core 10 Web API — controllers, services, mappers, middleware, integrations | Core |
+| `RVS.Domain` | Entities, DTOs, interfaces, validation. Zero infra dependencies | Core |
+| `RVS.Infra.AzCosmosRepository` | Cosmos repositories | Core |
+| `RVS.Infra.AzBlobRepository` | Blob storage, SAS generation | Core |
+| `RVS.Infra.AzTableRepository` | Append-only `go.rvintake.com` redirect hit log (Table Storage, `#599`) | Core |
+| `RVS.Blazor.Intake` | Anonymous intake WASM app | Core |
+| `RVS.Blazor.Manager` | Authenticated manager WASM app | Core, needs descoping |
+| `RVS.UI.Shared` | Typed API clients, validators, badge components | Core |
+| `RVS.Data.Cosmos.Seed` | Idempotent container creation + test data | Core |
+
+---
+
+## Request flow
+
+Intake (anonymous) and Manager (bearer token) both call `RVS.API`. Middleware order is load-bearing and lives in `RVS.API/Program.cs`:
+
+1. Dev-only OpenAPI / Swagger UI
+2. HTTPS redirection (non-dev)
+3. CORS — named, environment-specific policy. Never `AllowAnyOrigin`
+4. Rate limiter — `IntakeEndpoint` (20/min), `StatusEndpoint` (10/min), `RedirectEndpoint` (120/min, `#599`), each partitioned per caller IP (`X-Forwarded-For`, socket fallback); `429` on reject
+5. `ExceptionHandlingMiddleware` — `IMiddleware`, singleton
+6. Authentication → Authorization
+7. `CorrelationLoggingMiddleware` — after auth so claims are populated
+8. `TenantAccessGateMiddleware`
+9. `/health` (anonymous)
+10. `MapControllers()`
+
+Controllers open with `_claimsService.GetTenantIdOrThrow()`, delegate to a sealed scoped service, and map entities to DTOs. The one exception is `AdminTenantsController` (#563): its caller is RVS staff acting on another tenant, so `tenantId` comes from the route and the `PlatformAdmin` policy (permission plus allowlist) is what authorizes it. No `try/catch` in controllers — exceptions map centrally (`ArgumentException` → 400, `UnauthorizedAccessException` → 401, `KeyNotFoundException` → 404, `ConflictException` → 409, `MagicLinkExpiredException` → 410, else 500), returning `{ message, errorId }`.
+
+Every Cosmos query is single-partition on `tenantId`. Cross-partition access is structurally prevented rather than policed. Three deliberate exceptions: `CosmosTenantRepository.ListAllAsync`, which lists every tenant for the admin tool and is reachable only through `api/admin/tenants`; and, for inbound ACS events (#665), `CosmosCustomerProfileRepository.ListByPhoneE164AcrossTenantsAsync` and `CosmosIntakeInviteRepository.GetByAcsMessageIdAcrossTenantsAsync`. Both of the latter serve a webhook that arrives with a phone number or an ACS message id and no tenant at all, and the shared toll-free number is blocked by the carrier for every dealer at once, so a keyword has to reach all of their records — see `RVS_DataModel.md`.
+
+---
+
+## API surface as built
+
+**Anonymous**
+
+| Route | Notes |
+|---|---|
+| `GET /health` | — |
+| `POST api/events/acs-sms` | Event Grid webhook for inbound ACS SMS (#665). Anonymous — Event Grid presents no token — so the subscription URL carries a shared secret checked in fixed time against `EventGrid:Inbound:Key`; unset key means 503 for everything. Answers the subscription validation handshake, and returns 200 for events it ignores so Event Grid does not retry them |
+| `GET api/intake/{slug}/config` | Location, branding, dealer questions, accepted file types, issue categories and the A-19 expiry flag. Takes no token: A-7's `?token=` prefill was removed (#815) |
+| `GET api/intake/{slug}/invites/{token}` | A-14 invite prefill (#664): first name, phone and email (#693) while the invite is unexpired, unredeemed and for this location. Read-only (opening never redeems). One 404 for every other case, a failed lookup included |
+| `POST api/intake/{slug}/service-requests` | Create. An optional `inviteToken` redeems an A-14 invite (#664) |
+| `POST api/intake/{slug}/service-requests/{srId}/attachments/upload-url` · `.../confirm` | Direct-to-blob SAS |
+| `GET api/intake/{slug}/decode-vin/{vin}` | NHTSA vPIC |
+| `POST api/intake/{slug}/ai/extract-vin` · `transcribe-issue` · `refine-issue-text` · `suggest-category` · `suggest-insights` | See AI surface below |
+| `POST api/intake/{slug}/diagnostic-questions` · `assess-capabilities` | — |
+| `GET api/status/{token}` | Customer status feed |
+| `GET /{locationSlug}` · `GET /go/{locationSlug}` | `go.rvintake.com` channel-tagging redirect (`Spec A-13`, `#599`). Optional `?src=`; absent means `print`. Optional `?inv=` (an A-14 invite token, #663) is passed through to the intake URL untouched and unlogged; a malformed one is dropped. 302 with `Cache-Control: no-store`, never 301 — a cached redirect is followed without touching the endpoint, and every later tap would go unlogged. Both templates carry a slug-shaped route constraint so nothing else at the API root is swallowed; `/{locationSlug}` is what the `go` host serves and `/go/{locationSlug}` is the same endpoint on the API's own hostname |
+
+**Authenticated** (per-permission policies, not roles)
+
+`api/dealerships/{dealershipId}/service-requests` — POST, GET `{srId}`, POST `search`, PUT `{srId}`, DELETE `{srId}`
+`.../service-requests/{srId}/attachments` — POST `upload-url`, POST `confirm`, GET `{attachmentId}/sas`, DELETE `{attachmentId}`
+`api/dealerships` — GET, GET `{id}`, PUT `{id}`
+`api/locations` — GET, GET `{id}`, POST, PUT `{id}`, GET `{id}/qr-code`, GET `{id}/intake-links`, GET `{id}/intake-sources`
+`api/locations/{locationId}/intake-invites` — POST, GET (the current advisor's sends for the shift), GET `{id}`, GET `capability` (`{ smsEnabled, emailEnabled }`, environment-wide, so the dialog offers only a channel that works before anyone types; #666, #693) — all behind `CanSendIntakeInvites` (`intake-invites:send`, `Spec A-14`, #663)
+`api/lookups/{category}` · `api/tenants/config` (POST/GET/PUT) · `api/tenants/access-gate`
+`api/dealerships/{dealershipId}/analytics/service-requests/summary`
+
+**Platform admin** (`PlatformAdmin`: `platform:tenants:manage` **and** a caller on `Admin:AllowedUserIds`; tenant from the route, not the token — #563)
+
+`api/admin/tenants` — GET, POST, PUT `{tenantId}`, POST `{tenantId}/users`, POST `{tenantId}/users/{userId}/password-ticket`, PUT `{tenantId}/access-gate`, POST `{tenantId}/locations`
+
+Note: the `{dealershipId}` route segment is decorative. Scoping always comes from the token, never the URL.
+
+### Channel attribution (`Spec A-13`, `#599`)
+
+One redirect in front of every distribution path, so there is one place a channel can be observed:
+
+- `GoController` → `IntakeRedirectService` resolves the slug (for the hit's partition only), normalises `src` through `IntakeSourceVocabulary`, appends a hit, and 302s. Every failure on that path is caught and logged: an unknown slug redirects anyway (the Intake app owns the "no such location" page, and a 404 here would turn a typo on a printed sticker into a dead link), and a hit-log outage costs the hit, never the redirect.
+- `IntakeLinkBuilder` is the only place a customer-facing link is composed — `ShortLink` for what a dealer hands out, `IntakeUrl` for the redirect target. The QR endpoint, `GET {id}/intake-links` and the provisioning response all go through it, which is what makes "did we repoint everything?" a question with an answer.
+- Hits land in Azure Table Storage (`AzTableIntakeRedirectHitRepository`), partitioned by `locationId`, row key `{inverted ticks}-{guid}` so ascending row-key order — the only order Table Storage offers — reads newest-first. Append-only; no update, no delete. `NoOpIntakeRedirectHitRepository` takes over when `TableStorage:Endpoint` is unset, which is a developer machine with no storage account.
+- `IntakeSourceReportService` joins the two stores per location (`GET api/locations/{id}/intake-sources`): submissions from Cosmos, hits from Table Storage, conversion rate from both. Link-preview fetchers are flagged on write (`BotUserAgentFilter`) and excluded from reported hit counts; the unfiltered number is kept alongside for diagnosis only. **Submissions by source is the metric; raw hits are the denominator and nothing else.**
+
+
+### Advisor intake invites (`Spec A-14`, `#663`)
+
+`IntakeInvitesController` → `IntakeInviteService`. A texted invite is refused, in this order and before anything is written: no consent (400), a number that isn't US/Canada (400), texting disabled (409, `ISmsNotificationService.IsEnabled`), a number that has opted out of texts (409), a rate limit (429, `RateLimitExceededException`). Then the invite is **persisted before the text is sent**, so the consent record exists whatever happens to the send; the link is `IntakeLinkBuilder.ShortLink(…, src=advisor, inv=token)`, the body comes from `IntakeInviteContent` (laddered to two GSM-7 segments, never shortening the link), and `SendSmsAsync` returns the ACS message id, stored on the invite with `deliveryStatus = queued` (`failed` when nothing went out). A failure recording that is logged, not surfaced: the text is already out, and a 500 would prompt a second one.
+
+An emailed invite (`channel: email`, #693) runs the same sequence with email in place of text: no consent (400), an address `EmailValidator` rejects (400), email unavailable (409, `INotificationService.IsEnabled`, `false` for `NoOpNotificationService`), an address whose tenant profile has `emailOptOut` (409), the same rate limit, then persist, send, record. The body is `IntakeInviteContent.BuildEmail…` (HTML with what the advisor typed encoded, plus a plain-text part, no STOP/HELP tail), sent through `INotificationService.SendTransactionalEmailAsync`, which awaits ACS and returns the operation id or `null` without throwing. Nothing reports email delivery, so the invite stays `queued` (the dialog shows *Emailed*) or `failed`. A missing `channel` means `sms`, so older clients are unchanged.
+
+Self-entry skips consent, sending, the opt-out check and the rate limits, works while texting and email are off, and returns the prefilled `IntakeUrl` (direct to the intake app) once; the token is not recoverable afterwards.
+
+Rate limits are `InMemoryIntakeInviteRateLimiter`: one budget for both channels, in sliding one-hour windows per advisor, per location and per tenant (`IntakeInvites:MaxPer…PerHour`, 20 / 60 / 100 by default), all-or-nothing under one lock, per process like the tenant SMS limiter. `InMemoryTenantSmsRateLimiter` still caps every SMS behind it. Sends ask ACS for delivery reports; consuming them is #665.
+
+**Redemption and prefill (#664)** live in `IntakeOrchestrationService`, because both start from the anonymous slug. The slug gives the tenant; the invite is a point read by `InviteToken.Hash(token)`, and it counts only while `IsRedeemableAt(now)` and its `locationId` matches the slug's. A malformed token never reaches storage, and a failed read is logged and treated as no invite: A-13's "the redirect never fails" extends to invites, so nothing on the invite path can break the form or the submission.
+
+- **Open** (`GET api/intake/{slug}/invites/{token}`) returns first name and phone and writes nothing. Link previews fetch the URL, so opening must not spend the token.
+- **Submit** carries `inviteToken`. A usable invite makes the request `intakeSource = advisor` with `intakeInviteId` and `advisorUserId`, and after the request is created the invite gets `redeemedAtUtc` and `serviceRequestId`. That write is best-effort: the request already stands and is already attributed. An unusable invite is ignored and the request keeps whatever `src` it carried. The replace has no ETag check, so two submissions racing on one token within the same moment could both be attributed. That is accepted: it takes the customer submitting twice at once.
+
+---
+
+## Integrations
+
+One flag, `Integrations:UseMocks`, read once at startup. **It is `false` in every appsettings file, including Development.** The practical fallback is secondary: if an endpoint setting is absent, registration silently degrades to the rule-based or no-op implementation.
+
+| Capability | Real | Fallback |
+|---|---|---|
+| VIN decode | NHTSA vPIC | — (graceful failure) |
+| VIN extraction from photo | Azure OpenAI gpt-4o vision | Mock |
+| Speech-to-text | Azure OpenAI Whisper (northcentralus) | Mock |
+| Issue-text refinement | Azure OpenAI | `RuleBasedIssueTextRefinementService` (deliberately thin) |
+| Categorization + diagnostic questions | Azure OpenAI. Category suggestion on gpt-4o (text deployment); question generation on the gpt-5 assessment deployment when `AzureOpenAi:QuestionsDeploymentName` is set (`#783`, set in staging and prod), on its own client with a 15 s budget, else gpt-4o | `RuleBasedCategorizationService` |
+| Packet preliminary assessment — probable cause, possible fixes, likely parts (`#507`); reads up to 5 photos for data plates, fault codes and visible observations (`#772`) | Azure OpenAI gpt-4o (text deployment), called from the packet pipeline once per request | `RuleBasedPreliminaryAssessmentService` (per-category table, low confidence) |
+| Email | Azure Communication Services | NoOp |
+| Packet email size fitting (`#521`) | `PacketEmailSizeFitter` (pure, Domain) — trims attachments to ACS's 10 MB request ceiling, base64 accounted for | none needed; a pure transform with no I/O |
+| SMS (`#661`) — gated by `AzureCommunicationServices:Sms:Enabled`, default off (`ISmsNotificationService.IsEnabled` exposes it, so `NotificationOrchestrator` routes a `Text` confirmation to email while off, `#662`); from-number per location via `ISmsSenderNumberResolver`; recipient normalised to E.164 by `PhoneNumberNormalizer`; capped per tenant per hour by `InMemoryTenantSmsRateLimiter`; `SendSmsAsync` returns the ACS message id (null when nothing went out) and asks for a delivery report (`#663`) | Azure Communication Services, only when enabled **and** an endpoint is set | `NoOpSmsNotificationService` — whenever SMS is disabled, mocks are on, or no endpoint |
+| Image normalisation on upload — downscale + re-encode every raster (`#508` HEIC/HEIF → JPEG; `#562` widened to JPEG/PNG/WebP, `MaxEdgePixels` 4096 → 1600, PNG kept as PNG, never grows an already-web-safe file) | `MagickImageTranscoder` (Magick.NET + libheif, in-process) | `NoOpImageTranscoder` — keeps the original; HEIC then shows the packet placeholder |
+
+All external clients use `AddStandardResilienceHandler` with per-client timeouts.
+
+---
+
+## Coverage against the Spec
+
+This is the honest state of `../RVS_Spec.md`.
+
+| Req | Status | Notes |
+|---|---|---|
+| A-1 anonymous + rate limit | **Built** | |
+| A-2 collects contact, VIN, description, media | **Built** | 8-step wizard, not 7 |
+| A-3 VIN decode, graceful degrade | **Built** | "Continue Anyway" path exists |
+| A-4 AI follow-up questions | **Built** | |
+| A-5 AI category suggestion | **Built** | |
+| A-6 attachments, SAS direct upload | **Built** | Binaries never transit the API |
+| A-7 returning-customer prefill | **Cancelled** (Spec A-7, #815) | Superseded by opt-in device memory (#811), which is client-side only. The config `?token=` path, Step 1 prefill, the Step 3 known-vehicle picker and `GlobalCustomerAcct.allKnownAssetIds` were removed |
+| A-8 create + ledger + token + enqueue packet | **Built** | Create, ledger, token, and packet enqueue (`IntakeOrchestrationService` step 8) all built. Enqueue is non-blocking; issue #434 |
+| B-1 packet generation | **Built** | `IPacketGenerationQueue` (in-process channel) → `PacketGenerationWorker` → `PacketGenerationService`: compose, render HTML + PDF, store PDF, attempt-tracked on `ServiceRequest.packetGeneration`, 3-strikes `LogCritical` alert, on-demand regen endpoint. Issue #434 |
+| B-2 … B-7 packet contents, render, delivery | **Partial** | Composition (#430), HTML (#431), PDF (#432), photo SAS (#433), generation (#434), DMS paste block (#436), packet email send (#437), delivery idempotency + retry/backoff (#438), email attachment set fitted to the ACS 10 MB message ceiling (#521) built. Per-location packet config on `Location.packetConfig` + `api/locations` (#435) built; paste-block cap consumed by #436, and `enabled` / `recipients` / `attachPdf` / `includePhotos` consumed by #437. #437 emails the HTML packet (paste-block text fallback) with PDF + photo attachments to the configured recipients via ACS from `PacketGenerationService` after a successful generation; #438 makes that send idempotent per `(serviceRequestId, packetVersion)` and retries it three times with exponential backoff then a `LogCritical` alert, tracked on `ServiceRequest.packetEmailDelivery`. #439 adds hard-bounce recipient disabling at the domain + service layer (`PacketConfigEmbedded.disabledRecipients[]`, `LocationService.DisableRecipientForBounceAsync` / `ReEnableRecipientAsync`: disable one address, notify the rest, `LogWarning`/`LogCritical`) — the inbound bounce signal that would invoke it is not wired yet. See `RVS_PacketComposition.md` |
+| C-1 list, filter | **Built** | Far heavier than specced — 10 search fields |
+| C-2 detail + status + resend | **Partial** | Detail and status exist; the detail dialog shows packet-generation state, the exhausted-retries failure, and a Regenerate action, and a link to the latest packet PDF (#443, `GET …/packet/pdf`, a 1-hour read SAS). **No resend** |
+| C-3 set status | **Built** | Vocabulary matches Spec C-3 / C-8 (aligned to code in issue #428) |
+| C-4 disposition + reason code | **Built** | Issue #445. `PUT api/dealerships/{id}/service-requests/{srId}/disposition` (`CanUpdateServiceRequests`) with a `reasonCode` from the fixed `DispositionReasons` set (`Duplicate`, `Spam`, `WrongLocation`, `CustomerWithdrew`; anything else → 422). Sets status `Cancelled` and stores `ServiceRequest.Disposition`, allowed from any status. Moving the status off `Cancelled` (update or board drag) clears it. The reason is on the detail and summary DTOs so the list and board can tell it apart from a plain cancel. It is manager-only: the customer status page still shows just `Cancelled` |
+| C-5 resend packet | **Not built** | |
+| C-6 per-location settings | **Partial** | Location CRUD + capabilities + B-6 `packetConfig` (recipients, attach-PDF, include-photos, paste-block cap, status-link TTL) and A-16 `branding` (logo, header colour, #470) read/written via `api/locations` (#435). No manager-app settings UI yet |
+| C-7 email link into the manager app | **Built** | Issues #498, #743. The packet email's *Open Manager* button opens `/sr/{id}` in the signed-in manager app (persistent session, see `RVS_Identity.md`), where every status is one tap. No anonymous write surface. #743 dropped the per-status `?action=` links |
+| C-9 customer-facing status notes | **Built** | Issue #500 (overrides the original X-1 "no conversation, no messaging"). `ServiceRequest.CustomerStatusNote` (one nullable embedded note; overwritten on edit). Set/cleared via `PUT api/dealerships/{id}/service-requests/{srId}/status-note` (`CanUpdateServiceRequests`); `CustomerStatusNoteValidator` caps at 280 chars + rejects `< >` and control chars (ordinary punctuation allowed) → 422. Manager entry in the detail dialog's right column; rendered as an advisory line on `StatusPage.razor`. One-directional; note text never logged |
+| X-1 customer status page | **Built, different design** | See token model below. Payload trimmed in #442 (`CustomerStatusItemResponseDto`) to unit, submission date, status, location phone; no customer identity or issue text crosses the boundary. #500 adds a manager-authored note field (`StatusNote`, C-9) to the payload; #741 adds `IssueCategory` — the A-5 display name via `IssueCategoryVocabulary.GetName`, never the customer's text; #793 adds `LocationName` and `LocationLogoUrl` (the location's A-16 branding logo, https only), each location looked up once per call; the surface stays display-only for the customer — no inbound path |
+| X-2 ledger write on submission | **Built** | `IntakeOrchestrationService` appends per intake, best-effort |
+| X-3 anonymization license | **Paperwork** | Not a code item. Highest-leverage open item in the whole set |
+| X-4 tenancy | **Built** | |
+| X-5 tokens ≥128 bits, hashed, TTL | **Resolved, not yet built** | Model decided in issue #427 — SHA-256-hashed, per-customer status token + per-request C-7 links. Implementation and migration in #440 / #441 |
+| X-6 time-limited read SAS | **Built** | |
+| A-9 voice input (Whisper transcription) | **Built** | `ai/transcribe-issue`, steps 3 and 5; `VinTranscriptCleaner` on the VIN field. Specced in issue #429 |
+| A-10 VIN from photo (gpt-4o vision) | **Built** | `ai/extract-vin`, step 3; auto-fill ≥ 0.7, auto-decode ≥ 0.9. Specced in issue #429 |
+| A-11 issue insights (urgency, RV usage) | **Built** | `ai/suggest-insights`, step 5; persisted on `ServiceRequest` with provider/confidence. Specced in issue #429 |
+| A-12 capability pre-check | **Built** | `assess-capabilities`, step 5 → 6 boundary; non-blocking alert. Specced in issue #429 |
+| A-13 channel-tagged intake links | **Built** | Issue #599. `GoController` (`/{slug}` and `/go/{slug}`, anonymous, `RedirectEndpoint` 120/min) → `IntakeRedirectService`: normalise `src`, append a hit, 302 no-store. `IntakeSourceVocabulary` keeps unknown-but-well-formed tags and coerces malformed ones to `other`, so the redirect never fails on a `src`. Hits go to Table Storage (`intakeRedirectHits`, partitioned by `locationId`); `src` is persisted as `ServiceRequest.intakeSource` and reported by `GET api/locations/{id}/intake-sources`. The QR endpoint, `GET {id}/intake-links` and the provisioning `intakeUrl` all compose through `IntakeLinkBuilder` against the redirect host. **Hostname binding:** the DNS records for `go.<zone>` are in Bicep, but the App Service hostname binding and its managed certificate are one-time manual steps — `Infra/Bicep.IaC/README.md`, "Bind the go.<zone> redirect host". **Done in both environments (September 17 2026)**; `go.rvintake.com` and `go-staging.rvintake.com` both serve their own certificates. In an environment where it is *not* done, leave `Intake:RedirectBaseUrl` unset: the API then falls back to the Intake host and hands out working but untagged links. **Still to write:** the three device guides (iOS / stock Android / Samsung) in `../Guides/`, which need menu paths verified on real hardware |
+| A-14 advisor intake invite | **Partial** | Send side built (#663): `intake-invites` container, `InviteToken` (hash-only storage), `POST/GET api/locations/{locationId}/intake-invites` behind `CanSendIntakeInvites`, consent / opt-out / `Sms:Enabled` / per-advisor-location-tenant rate-limit refusals, self-entry, `src=advisor`, `inv` pass-through on the redirect. Redemption, prefill and attribution built (#664): `GET api/intake/{slug}/invites/{token}`, redeemed on submission, `intakeInviteId` / `advisorUserId` on the request. Manager dialog built (#666): `SendIntakeLinkDialog` on `Home` and `Locations` via `IntakeInviteApiClient` — see `RVS_FrontEnd.md`. The Auth0 permission `intake-invites:send` is an owner action (#659). Inbound events built (#665): `EventsController` → `InboundSmsEventService`. `SmsKeywordVocabulary` classifies exact keywords only — `STOP` and its synonyms opt out, `START` / `UNSTOP` opt back in, both silently because the carrier already replied; `HELP` / `INFO` get one fixed reply (`InboundSmsReplyContent.Help`, pinned by test because it is submitted on the verification application) sent through `ISmsNotificationService.SendSystemSmsAsync` — no tenant, no location, the shared number, no per-tenant cap, gated by `Sms:Enabled`, and guarded by `IInboundSmsDeduplicator` so a redelivered event cannot text twice. Everything else is ignored; `CustomerProfile.ApplySmsKeyword` applies it to **every** tenant's record of the number and ignores an event older than `smsKeywordAtUtc`, which covers Event Grid's at-least-once, unordered delivery. Delivery reports match an invite by `acsMessageId` and set `deliveryStatus`. Email as a second channel built (#693): `channel` / `email` on the invite, `emailEnabled` on the capability, the email refusals, the email in the prefill; no email delivery reports. Still to do: the owner actions in #659 |
+| P-1 … P-8 platform provisioning | **Built, not yet run end to end** | Issue #563. `AdminTenantsController` → `TenantProvisioningService` (Cosmos steps with fixed ids, then `IIdentityProvisioner`) → `Auth0ManagementProvisioner` (typed `HttpClient`, cached client-credentials token, no SDK); `UnconfiguredIdentityProvisioner` throws when `Auth0Provisioner:*` is unset. Manager `/admin` pages with `AdminApiClient`. `PlatformAdmin` = permission + `PlatformAdminAllowlistHandler`, covered by an integration test (dealer 403, not allowlisted 403, admin 200). Also fixed: `LocationService` now fills `SlugLookup.dealershipName` and reserves slugs create-only (`ISlugLookupRepository.CreateAsync`, 409 on a taken slug). Needs the one-time Auth0 setup (Auth0 checklist §5); the local and staging end-to-end runs and the first prod tenant are still to do |
+| P-9 … P-12 tenant user admin | **Built, not yet run against Auth0** | Issue #647. `GET/PUT/DELETE api/admin/tenants/{tenantId}/users[/{userId}]` and `PUT …/users/{userId}/access` on `AdminTenantsController`; `TenantProvisioningService` checks the user's `tenantId` against the route before any write. `Auth0ManagementProvisioner` lists by user search on `app_metadata.tenantId` (v3, 100 per page, tenant id restricted to `[A-Za-z0-9_-]` before it enters the query) plus one `GET users/{id}/roles` per user; edits PATCH only `name` and `app_metadata.locationIds`; role changes assign first, then remove the other `dealer:*` roles (`EnsureUserAsync` does the same for an existing user); block is `PATCH {blocked}`; delete tolerates 404. Manager page `/admin/tenants/{tenantId}/users` (`AdminUsers.razor`). Needs `delete:users read:role_members delete:role_members` added to the provisioner application (Auth0 checklist §5) |
+
+**B is built through idempotent, retried email delivery; hard-bounce disabling is built at the domain + service layer with its inbound signal still to wire.** Composition, both renderers, photo SAS, generation orchestration (#430–#434), the DMS paste block (#436), the packet email send (#437), and delivery idempotency + retry/backoff (#438) are in. The paste block is `PasteBlockGenerator` (`RVS.Domain/Packets/`) — a fenced, ASCII-safe block ordered category → verbatim description → status link, with the description truncated at a word boundary to the location's `pasteBlockCharacterCap`; `PacketGenerationService` assembles it into `PacketCompositionContext.PasteBlock`. #437 emails a service manager: after a successful generation `PacketGenerationService` builds a `PacketEmailMessage` with `PacketEmailComposer` (`RVS.Domain/Packets/`, pure) and sends it through `INotificationService.SendPacketEmailAsync` on the existing ACS integration — subject `New SR: {last name}: {year} {make} {model} - {category}` (#775), packet HTML inline with the paste block as the text-only alternative, PDF + original photos attached per `packetConfig`, to `packetConfig.recipients`. It no-ops when the location config is absent, disabled, or has no recipients. #438 wraps that send in a delivery state machine on `ServiceRequest.packetEmailDelivery` (`PacketEmailDeliveryEmbedded`): skip if the current `packetVersion` is already recorded delivered (idempotent per `(serviceRequestId, packetVersion)`); otherwise up to 3 attempts with an exponential backoff (`PacketEmailOptions.RetryBaseDelay`, default 2 s, doubled each retry), every attempt logged under a `CorrelationId` scope, then one `LogCritical` alert on exhaustion. A delivery failure never fails generation. `Dealership.ServiceEmail` is still populated and mapped but read by no code path — recipients live on `Location.packetConfig` (#435). #439 adds `packetConfig.disabledRecipients[]` and `LocationService.DisableRecipientForBounceAsync` / `ReEnableRecipientAsync`: a hard bounce parks one address (never the whole config), the remaining recipients are notified, and losing the last recipient raises a `LogCritical` for App Insights; the disabled list survives a settings save and re-enables when its address is re-added to `recipients`. What remains for #439: the inbound ACS delivery-report path that would call the disable method. The `statusLinkTtlDays` config field still awaits its consumer. The location logo (now `Location.branding.logoUrl`, #470) is consumed: fetched once per generation for the PDF and referenced by URL in the HTML.
+
+---
+
+## Conflicts to resolve before building B
+
+**1. Token model — resolved (issue #427, closes Q7).** X-5 is met by: SHA-256-hashed storage with the raw token never persisted; the **status token staying per-customer** on `GlobalCustomerAcct` (TTL cut to ≤ 30 days, sliding renewal on use); and **C-7 one-click action links being per-request and per-action** (single-purpose, short fixed TTL or single-use). Both scopes share one generation / hash / TTL / audit helper — the "same machinery" the Plan calls for, at the X-5 bar. The prior ASOT decision that chose unhashed storage is overturned: its own stated trigger — a token that can write — is met by C-7. Migration (#441): backfill hashes from the current plaintext pre-GA, then drop the plaintext `magicLinkToken` field; issued links keep working. Still a code and data-migration change (#440), not a doc edit.
+
+**2. Voice and vision AI — resolved (issue #429, closes Q8).** `ai/transcribe-issue` (Whisper), `ai/extract-vin` (gpt-4o vision), `ai/suggest-insights`, and `assess-capabilities` are all in scope and are now specced as Spec A-9–A-12. Nothing archived; no descope sub-issue on #423. Each keeps its rule-based / no-op fallback and none blocks submission. The Whisper and gpt-4o accounts stay but move behind a `deployWhisper` (and gpt-4o) flag in issue #467, defaulted on, so the spend is per-environment and reversible.
+
+---
+
+## Descope backlog
+
+Built for capability the Overview archives. Deleting this is real work and is not currently in the build order.
+
+- **Analytics** — `AnalyticsController`, `AnalyticsService`, `IAnalyticsService`, `GetForAnalyticsAsync`, `ServiceRequestAnalyticsResponseDto`
+- ~~**Scheduling / assignment fields** on `ServiceRequest`~~ — **no longer a descope target.** #459 closed `not_planned` on 2026-09-22, so `assignedTechnicianId`, `scheduledDateUtc` and `requiredSkills` stay. `assignedBayId` was removed separately in #713, because retiring `ServiceRequestEdit` left it with no editor. (`boardSequence` was never on this list: it orders the Kanban board's columns, and the board is kept — #456 closed `not_planned`, Plan decision log Sep 21 2026)
+- **Messaging** — `MessageEmbedded` is defined and referenced nowhere
+- **Scaffolding** — `WeatherForecastController`, `WeatherForecast.cs`
+- **`rv-warranty-rules`** — seeded, no repository, never read
+
+---
+
+## Known gaps and defects
+
+| Item | Detail |
+|---|---|
+| Tenant access gate | `TenantAccessGateMiddleware` reads `LoginsEnabled` from Cosmos `tenant-configs` via `ITenantConfigService.GetAccessGateAsync` and returns 403 for a disabled tenant. The dead `ITenantAccessRepository` interface and the `RVS.Infra.AzTablesRepository` / `RVS.Infra.AzCredentials` projects (plus the `AzureTables--ConnectionString` secret) were removed in issue #462. Remaining work is the end-to-end "disabled tenant → 403" test tracked in #465 |
+| Container naming | Bicep and seeder agree on 11 kebab-case containers (`intake-invites` added in #663). Older docs claimed 9 camelCase |
+| No Cosmos integrated cache | `CosmosClient` runs in `ConnectionMode.Gateway` (set explicitly in `RVS.API/Program.cs` and the seeder, issue #477) but there is no integrated cache: it needs a provisioned dedicated gateway (`SqlDedicatedGateway`) in `modules/cosmos-db.bicep` plus per-read `DedicatedGatewayRequestOptions`, none of which exist. If a hot read path (e.g. the tenant access gate) ever needs optimizing, the choice is an in-memory cache (archived `O-4`) or actually provisioning the dedicated gateway — tracked as issue #557 and future-state register `FS-1` in `RVS_Plan.md`, parked pending a measured need |
+
+---
+
+## Backend patterns
+
+Controller, service, mapper, entity, DTO and DI conventions are specified in `/CLAUDE.md` and `.github/instructions/`. They are not restated here — that file is the one developers and agents actually load.

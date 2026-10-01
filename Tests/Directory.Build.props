@@ -1,0 +1,26 @@
+<Project>
+
+  <!--
+    Route "dotnet test" through Microsoft.Testing.Platform (MTP) for every test
+    project under Tests/. xunit.v3 assemblies are self-executing MTP apps; without
+    this, "dotnet test" takes the legacy VSTest path, finds no discoverer that can
+    read xUnit v3, logs "No test is available", and exits 0 - a green run that
+    executed nothing. See issue #560.
+  -->
+  <PropertyGroup>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <!-- xunit.v3 MTP test assemblies are self-executing, so they must be Exe. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <!--
+    MTP extensions shared by all three test projects:
+      TrxReport    enables "..report-trx"  (replaces VSTest "..logger trx;...")
+      CodeCoverage enables "..coverage"    (replaces VSTest "..collect:XPlat Code Coverage")
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="1.9.1" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.0.6" />
+  </ItemGroup>
+
+</Project>

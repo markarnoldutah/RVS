@@ -12,6 +12,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.7" />
+    <!-- The shared MudBlazor theme (Theme/, Spec THEME-1) lives here so the brand palette
+         has one home instead of drifting between the two apps. Keep this version in lockstep
+         with RVS.Blazor.Intake and RVS.Blazor.Manager. -->
+    <PackageReference Include="MudBlazor" Version="9.4.0" />
   </ItemGroup>
 
   <ItemGroup>

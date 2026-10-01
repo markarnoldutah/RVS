@@ -1,0 +1,1059 @@
+using System.Collections;
+using System.Reflection;
+using FluentAssertions;
+using RVS.Domain.Entities;
+using RVS.Domain.Packets;
+
+namespace RVS.Domain.Tests.Packets;
+
+/// <summary>
+/// Tests for <see cref="PacketComposer"/> — the pure transform that assembles a
+/// <see cref="ServicePacket"/> from a <see cref="ServiceRequest"/> plus a
+/// <see cref="PacketCompositionContext"/>, per <c>Spec B-2</c>.
+/// </summary>
+public class PacketComposerTests
+{
+    // ── Fixtures ────────────────────────────────────────────────────────────
+
+    private static ServiceRequest FullyPopulatedRequest(
+        string id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890") => new()
+    {
+        Id = id,
+        TenantId = "ten_1",
+        LocationId = "loc_1",
+        Status = "New",
+        IssueCategory = "Electrical",
+        IssueDescription = "  Generator quits after ten minutes. Smells hot.  ",
+        TechnicianSummary = "  Likely overheating on the generator windings.  ",
+        Priority = "High",
+        CustomerSnapshot = new CustomerSnapshotEmbedded
+        {
+            FirstName = "Dale",
+            LastName = "Gribble",
+            Email = "dale@example.com",
+            Phone = "555-0101",
+            PreferredContact = "Text",
+        },
+        AssetInfo = new AssetInfoEmbedded
+        {
+            AssetId = "1FDXE45S12HB00001",
+            Manufacturer = "Winnebago",
+            Model = "View",
+            Year = 2021,
+        },
+        DiagnosticResponses =
+        [
+            new DiagnosticResponseEmbedded
+            {
+                QuestionText = "Does the generator start at all?",
+                SelectedOptions = ["Yes, then dies"],
+                FreeTextResponse = "Dies after about 10 minutes",
+            },
+            new DiagnosticResponseEmbedded
+            {
+                QuestionText = "Any warning lights?",
+                SelectedOptions = ["Temp light"],
+                FreeTextResponse = null,
+            },
+        ],
+        Attachments =
+        [
+            new ServiceRequestAttachmentEmbedded
+            {
+                AttachmentId = "att_photo_1",
+                FileName = "generator.jpg",
+                ContentType = "image/jpeg",
+                BlobUri = "https://blob/generator.jpg",
+            },
+            new ServiceRequestAttachmentEmbedded
+            {
+                AttachmentId = "att_voice_1",
+                FileName = "note.m4a",
+                ContentType = "audio/mp4",
+                BlobUri = "https://blob/note.m4a",
+            },
+        ],
+    };
+
+    private static PacketCompositionContext FullContext() => new()
+    {
+        LocationName = "Salt Lake Service Center",
+        LocationPhone = "555-0199",
+        LocationTimeZoneId = "America/Denver",
+        SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
+        StatusLinkUrl = "https://rvintake.com/status/abc123",
+        PasteBlock = "ELECTRICAL\nGenerator quits after ten minutes.\nhttps://rvintake.com/status/abc123",
+        PhotoUrls = new Dictionary<string, string>
+        {
+            ["att_photo_1"] = "https://blob/generator.jpg?sas=read",
+        },
+    };
+
+    // ── Guard clauses ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Compose_WhenRequestIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => PacketComposer.Compose(null!, FullContext());
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void Compose_WhenContextIsNull_ShouldThrowArgumentNullException()
+    {
+        var act = () => PacketComposer.Compose(FullyPopulatedRequest(), null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    // ── Manager-app deep links (Spec C-7, issue #498) ───────────────────────
+
+    [Fact]
+    public void Compose_WhenContextHasManagerLinks_ShouldCarryThemOntoThePacket()
+    {
+        var links = ManagerDeepLinks.Build("https://manager.example", "sr_1");
+        var context = FullContext() with { ManagerLinks = links };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.ManagerLinks.Should().BeSameAs(links);
+    }
+
+    [Fact]
+    public void Compose_WhenContextHasNoManagerLinks_ShouldLeaveThemNull()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.ManagerLinks.Should().BeNull();
+    }
+
+    // ── Happy path ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Compose_WhenFullyPopulated_ShouldMapEverySectionInB2Order()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        // 1. Unit header
+        packet.Unit.Year.Should().Be(2021);
+        packet.Unit.Make.Should().Be("Winnebago");
+        packet.Unit.Model.Should().Be("View");
+        packet.Unit.Vin.Should().Be("1FDXE45S12HB00001");
+        packet.Unit.HasVin.Should().BeTrue();
+
+        // 2. Customer + preferred contact
+        packet.Customer.FullName.Should().Be("Dale Gribble");
+        packet.Customer.FirstName.Should().Be("Dale");
+        packet.Customer.LastName.Should().Be("Gribble");
+        packet.Customer.SortableName.Should().Be("Gribble, Dale");
+        packet.Customer.Phone.Should().Be("555-0101");
+        packet.Customer.Email.Should().Be("dale@example.com");
+        packet.Customer.PreferredContact.Should().Be("Text");
+
+        // 3. Location + timestamp + reference code
+        packet.Origin.LocationName.Should().Be("Salt Lake Service Center");
+        packet.Origin.LocationPhone.Should().Be("555-0199");
+        packet.Origin.LocationTimeZoneId.Should().Be("America/Denver");
+        packet.Origin.SubmittedAtUtc.Should().Be(new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero));
+        packet.Origin.ReferenceCode.Should().Be("A1B2C3D4");
+
+        // 4. Issue category
+        packet.IssueCategory.Should().Be("Electrical");
+
+        // 5. AI summary, disclosed as AI-generated (rendered above the description)
+        packet.AiSummary.Should().NotBeNull();
+        packet.AiSummary!.Text.Should().Be("Likely overheating on the generator windings.");
+        packet.AiSummary.IsAiGenerated.Should().BeTrue();
+
+        // 6. Description, verbatim
+        packet.IssueDescription.Should().Be("  Generator quits after ten minutes. Smells hot.  ");
+
+        // 7. Diagnostic Q&A
+        packet.Diagnostics.Should().HaveCount(2);
+        packet.Diagnostics[0].Question.Should().Be("Does the generator start at all?");
+        packet.Diagnostics[0].Answers.Should().Equal("Yes, then dies", "Dies after about 10 minutes");
+
+        // 8. Photos
+        packet.Photos.Should().ContainSingle();
+        packet.Photos[0].Url.Should().Be("https://blob/generator.jpg?sas=read");
+        packet.Photos[0].FileName.Should().Be("generator.jpg");
+
+        // 9. Paste block
+        packet.PasteBlock.Should().Be("ELECTRICAL\nGenerator quits after ten minutes.\nhttps://rvintake.com/status/abc123");
+
+        // 10. Status link
+        packet.StatusLink.Should().NotBeNull();
+        packet.StatusLink!.Url.Should().Be("https://rvintake.com/status/abc123");
+
+        // Branding — defaults to the product brand when the context supplies no override.
+        packet.Branding.BrandName.Should().Be("RV Intake");
+        packet.Branding.HasLogo.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Compose_WhenIdHasNoHyphen_ShouldUpperCaseWholeIdAsReferenceCode()
+    {
+        var request = FullyPopulatedRequest("abc123");
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Origin.ReferenceCode.Should().Be("ABC123");
+    }
+
+    // ── Degradation: preferred contact ─────────────────────────────────────
+
+    [Fact]
+    public void Compose_WhenPreferredContactBlank_ShouldSetPreferredContactNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.PreferredContact = "   ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenPreferredContactNull_ShouldSetPreferredContactNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.PreferredContact = null;
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.PreferredContact.Should().BeNull();
+    }
+
+    // ── Degradation: VIN ────────────────────────────────────────────────────
+
+    [Fact]
+    public void Compose_WhenVinAbsent_ShouldDegradeUnitHeader()
+    {
+        var request = FullyPopulatedRequest();
+        request.AssetInfo = new AssetInfoEmbedded
+        {
+            AssetId = "   ",
+            Manufacturer = "Winnebago",
+            Model = "View",
+            Year = 2021,
+        };
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Unit.HasVin.Should().BeFalse();
+        packet.Unit.Vin.Should().BeNull();
+        packet.Unit.Year.Should().Be(2021);
+        packet.Unit.Make.Should().Be("Winnebago");
+        packet.Unit.Model.Should().Be("View");
+    }
+
+    [Fact]
+    public void Compose_WhenYearMakeModelAllAbsent_ShouldLeaveUnitFieldsNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.AssetInfo = new AssetInfoEmbedded { AssetId = "1FDXE45S12HB00001" };
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Unit.Year.Should().BeNull();
+        packet.Unit.Make.Should().BeNull();
+        packet.Unit.Model.Should().BeNull();
+        packet.Unit.Vin.Should().Be("1FDXE45S12HB00001");
+    }
+
+    // ── Customer name parts (issue #492 item 3) ───────────────────────────
+
+    [Fact]
+    public void Compose_ShouldCarryDiscreteCustomerNameParts()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.FirstName = "  Dale  ";
+        request.CustomerSnapshot.LastName = "  Gribble  ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.FirstName.Should().Be("  Dale  ", "the composer keeps the snapshot value; the renderer trims");
+        packet.Customer.LastName.Should().Be("  Gribble  ");
+        packet.Customer.SortableName.Should().Be("Gribble, Dale");
+    }
+
+    [Fact]
+    public void Compose_WhenLastNameBlank_SortableNameShouldFallBackToFirstName()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.FirstName = "Dale";
+        request.CustomerSnapshot.LastName = "   ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.LastName.Should().BeNull();
+        packet.Customer.SortableName.Should().Be("Dale");
+    }
+
+    [Fact]
+    public void Compose_WhenBothNamePartsBlank_SortableNameShouldFallBackToFullName()
+    {
+        var request = FullyPopulatedRequest();
+        request.CustomerSnapshot.FirstName = " ";
+        request.CustomerSnapshot.LastName = " ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Customer.SortableName.Should().Be(packet.Customer.FullName);
+    }
+
+    // ── Location time zone (issue #506) ──────────────────────────────────
+
+    [Fact]
+    public void Compose_ShouldCarryTheLocationTimeZoneIdOntoTheOrigin()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.Origin.LocationTimeZoneId.Should().Be("America/Denver");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Compose_WhenContextTimeZoneIdIsBlank_ShouldLeaveItNull(string? timeZoneId)
+    {
+        var context = FullContext() with { LocationTimeZoneId = timeZoneId };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Origin.LocationTimeZoneId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_ShouldExposeAReceivedDisplayInTheLocationZone()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        // 14:30 UTC is 08:30 in Denver on 5 September, during daylight saving.
+        packet.Origin.ReceivedDisplay.Should().Be("2026-09-05 8:30 AM MDT");
+    }
+
+    [Fact]
+    public void Compose_WhenNoTimeZoneIsSet_ShouldExposeAUtcReceivedDisplay()
+    {
+        var context = FullContext() with { LocationTimeZoneId = null };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Origin.ReceivedDisplay.Should().Be("2026-09-05 2:30 PM UTC");
+    }
+
+    // ── Branding (issue #492 items 1–2) ──────────────────────────────────
+
+    [Fact]
+    public void Compose_ByDefault_ShouldUseTheProductBrand()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.Branding.Should().BeSameAs(PacketBranding.Default);
+        packet.Branding.BrandName.Should().Be("RV Intake");
+        packet.Branding.LogoUrl.Should().BeNull();
+        packet.Branding.PoweredByLogoUrl.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenContextSuppliesBrandName_ShouldUseIt()
+    {
+        var context = FullContext() with { BrandName = "  Acme RV Group  " };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.BrandName.Should().Be("Acme RV Group");
+    }
+
+    [Fact]
+    public void Compose_WhenContextSuppliesALogoUrl_ShouldCarryItAndKeepTheDefaultName()
+    {
+        var context = FullContext() with { LogoUrl = "  https://cdn.dealer.example/logo.png  " };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.BrandName.Should().Be("RV Intake");
+        packet.Branding.LogoUrl.Should().Be("https://cdn.dealer.example/logo.png");
+        packet.Branding.HasLogo.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("http://cdn.dealer.example/logo.png")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("data:image/png;base64,AAAA")]
+    public void Compose_WhenContextLogoUrlIsNotHttps_ShouldDropIt(string logoUrl)
+    {
+        // The HTML is the email body, so whatever lands in the logo's src is fetched by the
+        // recipient's mail client. Only https gets that far (issue #470).
+        var context = FullContext() with { LogoUrl = logoUrl };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.HasLogo.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Compose_WhenContextSuppliesAPoweredByLogoUrl_ShouldCarryIt()
+    {
+        var context = FullContext() with
+        {
+            PoweredByLogoUrl = "https://rvintake.com/_content/RVS.UI.Shared/brand/logo-horizontal.png",
+        };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.PoweredByLogoUrl.Should().Be("https://rvintake.com/_content/RVS.UI.Shared/brand/logo-horizontal.png");
+        packet.Branding.BrandName.Should().Be("RV Intake");
+    }
+
+    [Fact]
+    public void Compose_WhenContextBrandNameBlank_ShouldFallBackToDefault()
+    {
+        var context = FullContext() with { BrandName = "   " };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.Branding.BrandName.Should().Be("RV Intake");
+    }
+
+    // ── Degradation: category ───────────────────────────────────────────────
+
+    [Fact]
+    public void Compose_WhenIssueCategoryBlank_ShouldSetCategoryNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.IssueCategory = "   ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.IssueCategory.Should().BeNull();
+    }
+
+    // ── Degradation: diagnostics ────────────────────────────────────────────
+
+    [Fact]
+    public void Compose_WhenNoDiagnosticResponses_ShouldReturnEmptyDiagnostics()
+    {
+        var request = FullyPopulatedRequest();
+        request.DiagnosticResponses = [];
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Diagnostics.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Fact]
+    public void Compose_WhenDiagnosticQuestionBlank_ShouldSkipThatEntry()
+    {
+        var request = FullyPopulatedRequest();
+        request.DiagnosticResponses =
+        [
+            new DiagnosticResponseEmbedded { QuestionText = "  ", SelectedOptions = ["orphan"] },
+            new DiagnosticResponseEmbedded { QuestionText = "Real question?", SelectedOptions = ["Yes"] },
+        ];
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Diagnostics.Should().ContainSingle();
+        packet.Diagnostics[0].Question.Should().Be("Real question?");
+    }
+
+    [Fact]
+    public void Compose_ShouldCombineSelectedOptionsAndFreeTextIntoAnswers()
+    {
+        var request = FullyPopulatedRequest();
+        request.DiagnosticResponses =
+        [
+            new DiagnosticResponseEmbedded
+            {
+                QuestionText = "What have you tried?",
+                SelectedOptions = ["Reset breaker", "Checked fuel"],
+                FreeTextResponse = "Also swapped the battery",
+            },
+        ];
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Diagnostics[0].Answers.Should().Equal("Reset breaker", "Checked fuel", "Also swapped the battery");
+    }
+
+    [Fact]
+    public void Compose_WhenDiagnosticFreeTextBlank_ShouldOmitItFromAnswers()
+    {
+        var request = FullyPopulatedRequest();
+        request.DiagnosticResponses =
+        [
+            new DiagnosticResponseEmbedded
+            {
+                QuestionText = "Warning lights?",
+                SelectedOptions = ["Temp light"],
+                FreeTextResponse = "   ",
+            },
+        ];
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Diagnostics[0].Answers.Should().Equal("Temp light");
+    }
+
+    // ── Degradation: photos ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Compose_WhenNoImageAttachments_ShouldReturnEmptyPhotos()
+    {
+        var request = FullyPopulatedRequest();
+        request.Attachments =
+        [
+            new ServiceRequestAttachmentEmbedded
+            {
+                AttachmentId = "att_voice_1",
+                FileName = "note.m4a",
+                ContentType = "audio/mp4",
+            },
+        ];
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Photos.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Fact]
+    public void Compose_WhenImageAttachmentHasNoUrlInContext_ShouldOmitThatPhoto()
+    {
+        var request = FullyPopulatedRequest();
+        request.Attachments =
+        [
+            new ServiceRequestAttachmentEmbedded
+            {
+                AttachmentId = "att_photo_1",
+                FileName = "generator.jpg",
+                ContentType = "image/jpeg",
+            },
+            new ServiceRequestAttachmentEmbedded
+            {
+                AttachmentId = "att_photo_2",
+                FileName = "panel.jpg",
+                ContentType = "image/jpeg",
+            },
+        ];
+
+        // context only resolves att_photo_1
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.Photos.Should().ContainSingle();
+        packet.Photos[0].FileName.Should().Be("generator.jpg");
+    }
+
+    [Fact]
+    public void Compose_WhenAttachmentIsVideo_ShouldIncludeInPhotosWithIsVideoTrue()
+    {
+        // Videos must not be silently dropped from the packet (issue #583) — they render
+        // as a hyperlinked placeholder rather than an embedded raster image.
+        var request = FullyPopulatedRequest();
+        request.Attachments =
+        [
+            new ServiceRequestAttachmentEmbedded
+            {
+                AttachmentId = "att_video_1",
+                FileName = "walkaround.mp4",
+                ContentType = "video/mp4",
+            },
+        ];
+
+        var context = FullContext() with
+        {
+            PhotoUrls = new Dictionary<string, string>
+            {
+                ["att_video_1"] = "https://blob/walkaround.mp4?sas=read",
+            },
+        };
+
+        var packet = PacketComposer.Compose(request, context);
+
+        packet.Photos.Should().ContainSingle();
+        packet.Photos[0].FileName.Should().Be("walkaround.mp4");
+        packet.Photos[0].ContentType.Should().Be("video/mp4");
+        packet.Photos[0].IsVideo.Should().BeTrue();
+        packet.Photos[0].Url.Should().Be("https://blob/walkaround.mp4?sas=read");
+    }
+
+    [Fact]
+    public void Compose_WhenAttachmentIsImage_ShouldSetIsVideoFalse()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.Photos.Should().ContainSingle();
+        packet.Photos[0].ContentType.Should().Be("image/jpeg");
+        packet.Photos[0].IsVideo.Should().BeFalse();
+    }
+
+    // ── Degradation: AI summary ─────────────────────────────────────────────
+
+    [Fact]
+    public void Compose_WhenTechnicianSummaryBlank_ShouldSetAiSummaryNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.TechnicianSummary = "   ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenTechnicianSummaryNull_ShouldSetAiSummaryNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.TechnicianSummary = null;
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary.Should().BeNull();
+    }
+
+    // ── Structured preliminary assessment (issue #507) ──────────────────────
+
+    private static PreliminaryAssessmentEmbedded Assessment(
+        string confidence = "medium",
+        string? probableCause = "  Overheating from a clogged generator air intake.  ",
+        List<string>? possibleFixes = null,
+        List<string>? likelyParts = null) => new()
+    {
+        ProbableCause = probableCause,
+        PossibleFixes = possibleFixes ?? ["  Clear the air intake and cooling fins  ", "Replace the high-temp shutdown switch"],
+        LikelyParts = likelyParts ?? ["Air filter", "  High-temp shutdown switch "],
+        Confidence = confidence,
+        Provider = "AzureOpenAiPreliminaryAssessmentService",
+        GeneratedAtUtc = new DateTime(2026, 9, 5, 14, 31, 0, DateTimeKind.Utc),
+    };
+
+    [Fact]
+    public void Compose_WhenNoAssessmentStored_ShouldCarryNoStructuredFields()
+    {
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), FullContext());
+
+        packet.AiSummary!.HasStructuredAssessment.Should().BeFalse();
+        packet.AiSummary.ProbableCause.Should().BeNull();
+        packet.AiSummary.PossibleFixes.Should().BeEmpty();
+        packet.AiSummary.LikelyParts.Should().BeEmpty();
+        packet.AiSummary.Confidence.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentStored_ShouldMapItIntoThePreliminaryAssessment_Trimmed()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment();
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary.Should().NotBeNull();
+        packet.AiSummary!.Text.Should().Be("Likely overheating on the generator windings.");
+        packet.AiSummary.HasStructuredAssessment.Should().BeTrue();
+        packet.AiSummary.ProbableCause.Should().Be("Overheating from a clogged generator air intake.");
+        packet.AiSummary.PossibleFixes.Should().Equal(
+            "Clear the air intake and cooling fins",
+            "Replace the high-temp shutdown switch");
+        packet.AiSummary.LikelyParts.Should().Equal("Air filter", "High-temp shutdown switch");
+        packet.AiSummary.Confidence.Should().Be("Medium");
+    }
+
+    [Fact]
+    public void Compose_ShouldKeepPossibleFixesInTheirStoredOrder_MostPlausibleFirst()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(possibleFixes: ["Third", "First", "Second"]);
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.PossibleFixes.Should().Equal("Third", "First", "Second");
+    }
+
+    [Fact]
+    public void Compose_ShouldDropBlankPossibleFixesAndLikelyParts()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(
+            possibleFixes: ["", "  ", "Reset the breaker"],
+            likelyParts: ["   ", "Breaker"]);
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.PossibleFixes.Should().Equal("Reset the breaker");
+        packet.AiSummary.LikelyParts.Should().Equal("Breaker");
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentAbstained_ShouldCarryNoStructuredFields_ButKeepTheSummaryText()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(confidence: "abstain");
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.Text.Should().Be("Likely overheating on the generator windings.");
+        packet.AiSummary.HasStructuredAssessment.Should().BeFalse();
+        packet.AiSummary.ProbableCause.Should().BeNull();
+        packet.AiSummary.PossibleFixes.Should().BeEmpty();
+        packet.AiSummary.LikelyParts.Should().BeEmpty();
+        packet.AiSummary.Confidence.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentConfidenceIsOutsideTheVocabulary_ShouldTreatItAsAbstained()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(confidence: "certain");
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.HasStructuredAssessment.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentHasNoContent_ShouldCarryNoStructuredFields()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment(probableCause: "  ", possibleFixes: [], likelyParts: []);
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.HasStructuredAssessment.Should().BeFalse();
+        packet.AiSummary.Confidence.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentStoredButTechnicianSummaryBlank_ShouldStillRenderTheAssessment()
+    {
+        var request = FullyPopulatedRequest();
+        request.TechnicianSummary = null;
+        request.PreliminaryAssessment = Assessment();
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary.Should().NotBeNull();
+        packet.AiSummary!.Text.Should().BeNull();
+        packet.AiSummary.ProbableCause.Should().Be("Overheating from a clogged generator air intake.");
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentAbstainedAndTechnicianSummaryBlank_ShouldSetAiSummaryNull()
+    {
+        var request = FullyPopulatedRequest();
+        request.TechnicianSummary = "  ";
+        request.PreliminaryAssessment = Assessment(confidence: "abstain");
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary.Should().BeNull();
+    }
+
+    // ── Photo findings (issue #772) ─────────────────────────────────────────
+
+    /// <summary>A request with a video ahead of two photos, so photo positions are not attachment indexes.</summary>
+    private static ServiceRequest RequestWithPhotos()
+    {
+        var request = FullyPopulatedRequest();
+        request.Attachments =
+        [
+            new ServiceRequestAttachmentEmbedded { AttachmentId = "att_video", FileName = "walkaround.mp4", ContentType = "video/mp4", BlobUri = "b/v" },
+            new ServiceRequestAttachmentEmbedded { AttachmentId = "att_voice", FileName = "note.m4a", ContentType = "audio/mp4", BlobUri = "b/n" },
+            new ServiceRequestAttachmentEmbedded { AttachmentId = "att_fridge", FileName = "fridge-plate.jpg", ContentType = "image/jpeg", BlobUri = "b/f" },
+            new ServiceRequestAttachmentEmbedded { AttachmentId = "att_ceiling", FileName = "ceiling.jpg", ContentType = "image/jpeg", BlobUri = "b/c" },
+        ];
+        return request;
+    }
+
+    private static PacketCompositionContext ContextWithPhotos() => FullContext() with
+    {
+        PhotoUrls = new Dictionary<string, string>
+        {
+            ["att_video"] = "https://blob/walkaround.mp4?sas",
+            ["att_fridge"] = "https://blob/fridge-plate.jpg?sas",
+            ["att_ceiling"] = "https://blob/ceiling.jpg?sas",
+        },
+    };
+
+    private static PhotoFindingsEmbedded Findings() => new()
+    {
+        DataPlates =
+        [
+            new PhotoDataPlateEmbedded
+            {
+                Component = "Refrigerator", Manufacturer = "Dometic", ModelNumber = "RM2652",
+                SerialNumber = "12345678", AttachmentId = "att_fridge",
+            },
+        ],
+        FaultCodes = [new PhotoFaultCodeEmbedded { Component = "Thermostat", Code = "E1", AttachmentId = "att_ceiling" }],
+        Observations = [new PhotoObservationEmbedded { Text = "Water staining on the ceiling panel", AttachmentId = "att_ceiling" }],
+    };
+
+    [Fact]
+    public void Compose_WhenPhotoFindingsStored_ShouldListThem_PlatesThenCodesThenObservations_CitedByPhotoPositionAndName()
+    {
+        var request = RequestWithPhotos();
+        request.PreliminaryAssessment = Assessment();
+        request.PreliminaryAssessment.PhotoFindings = Findings();
+
+        var packet = PacketComposer.Compose(request, ContextWithPhotos());
+
+        packet.AiSummary!.HasPhotoFindings.Should().BeTrue();
+        packet.AiSummary.PhotoFindings.Select(f => f.Display).Should().Equal(
+            "Refrigerator — Dometic RM2652 · S/N 12345678 (photo 2, fridge-plate.jpg)",
+            "Thermostat — code E1 (photo 3, ceiling.jpg)",
+            "Water staining on the ceiling panel (photo 3, ceiling.jpg)");
+    }
+
+    [Fact]
+    public void Compose_ShouldFormatPartialPlatesAndFaultMeanings()
+    {
+        var request = RequestWithPhotos();
+        request.PreliminaryAssessment = Assessment();
+        request.PreliminaryAssessment.PhotoFindings = new PhotoFindingsEmbedded
+        {
+            DataPlates =
+            [
+                new PhotoDataPlateEmbedded { Component = "Water heater", SerialNumber = "A1", AttachmentId = "att_fridge" },
+                new PhotoDataPlateEmbedded { Component = "Furnace", ModelNumber = "SF-35", AttachmentId = "att_fridge" },
+            ],
+            FaultCodes = [new PhotoFaultCodeEmbedded { Component = "Generator", Code = "36", Meaning = "Out of fuel", AttachmentId = "att_fridge" }],
+        };
+
+        var packet = PacketComposer.Compose(request, ContextWithPhotos());
+
+        packet.AiSummary!.PhotoFindings.Select(f => f.Text).Should().Equal(
+            "Water heater — S/N A1",
+            "Furnace — SF-35",
+            "Generator — code 36: Out of fuel");
+    }
+
+    [Fact]
+    public void Compose_WhenACitedPhotoHasNoReadUrl_ShouldCiteItByFileNameOnly()
+    {
+        var request = RequestWithPhotos();
+        request.PreliminaryAssessment = Assessment();
+        request.PreliminaryAssessment.PhotoFindings = Findings();
+        var context = ContextWithPhotos() with
+        {
+            PhotoUrls = new Dictionary<string, string> { ["att_ceiling"] = "https://blob/ceiling.jpg?sas" },
+        };
+
+        var packet = PacketComposer.Compose(request, context);
+
+        packet.AiSummary!.PhotoFindings[0].PhotoLabel.Should().Be("fridge-plate.jpg");
+        packet.AiSummary.PhotoFindings[1].PhotoLabel.Should().Be("photo 1, ceiling.jpg");
+    }
+
+    [Fact]
+    public void Compose_ShouldDropAFindingCitingAnAttachmentNoLongerOnTheRequest()
+    {
+        var request = RequestWithPhotos();
+        request.PreliminaryAssessment = Assessment();
+        request.PreliminaryAssessment.PhotoFindings = Findings();
+        request.Attachments.RemoveAll(a => a.AttachmentId == "att_fridge");
+
+        var packet = PacketComposer.Compose(request, ContextWithPhotos());
+
+        packet.AiSummary!.PhotoFindings.Should().HaveCount(2);
+        packet.AiSummary.PhotoFindings.Should().NotContain(f => f.Text.Contains("Dometic"));
+    }
+
+    [Fact]
+    public void Compose_WhenAssessmentAbstainedWithPhotoFindings_ShouldKeepTheFindings()
+    {
+        var request = RequestWithPhotos();
+        request.TechnicianSummary = null;
+        request.PreliminaryAssessment = Assessment(confidence: "abstain", probableCause: null, possibleFixes: [], likelyParts: []);
+        request.PreliminaryAssessment.PhotoFindings = Findings();
+
+        var packet = PacketComposer.Compose(request, ContextWithPhotos());
+
+        packet.AiSummary.Should().NotBeNull();
+        packet.AiSummary!.HasStructuredAssessment.Should().BeFalse();
+        packet.AiSummary.Confidence.Should().BeNull();
+        packet.AiSummary.PhotoFindings.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void Compose_WhenNoPhotoFindings_ShouldCarryAnEmptyList()
+    {
+        var request = FullyPopulatedRequest();
+        request.PreliminaryAssessment = Assessment();
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.AiSummary!.HasPhotoFindings.Should().BeFalse();
+        packet.AiSummary.PhotoFindings.Should().BeEmpty();
+    }
+
+    // ── Verbatim description ────────────────────────────────────────────────
+
+    [Fact]
+    public void Compose_ShouldCopyIssueDescriptionVerbatim()
+    {
+        var request = FullyPopulatedRequest();
+        request.IssueDescription = "\tit won't \"start\" — tried everything…  \n";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.IssueDescription.Should().Be("\tit won't \"start\" — tried everything…  \n");
+    }
+
+    // ── Curated issue vs verbatim complaint (issue #601) ───────────────────
+    //
+    // The packet carries two texts: the curated restatement, rendered as "Issue" above the
+    // Preliminary assessment, and the customer's words before curation, rendered lower as
+    // "Complaint — word for word". The complaint block always renders, so it falls back to
+    // the submitted text; the Issue section only appears when curation actually said
+    // something different.
+
+    [Fact]
+    public void Compose_WhenVerbatimDiffersFromSubmitted_ShouldCurateAboveAndShowVerbatimAsTheComplaint()
+    {
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = "um so like the genny it uh quits after like ten minutes and smells hot";
+        request.IssueDescription = "Generator quits after ten minutes. Smells hot.";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.CuratedIssue.Should().Be("Generator quits after ten minutes. Smells hot.");
+        packet.IssueDescription.Should()
+            .Be("um so like the genny it uh quits after like ten minutes and smells hot");
+    }
+
+    [Fact]
+    public void Compose_WhenVerbatimIsNull_ShouldFallBackToSubmittedTextAndOmitTheCuratedIssue()
+    {
+        // Service requests captured before #601 stored one text only. The complaint block must
+        // still render, and there is nothing curated to put above it.
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = null;
+        request.IssueDescription = "Generator quits after ten minutes.";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.IssueDescription.Should().Be("Generator quits after ten minutes.");
+        packet.CuratedIssue.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("Generator quits after ten minutes.")]
+    [InlineData("  Generator quits after ten minutes.  ")]
+    public void Compose_WhenCurationAddedNothing_ShouldOmitTheCuratedIssue(string verbatim)
+    {
+        // A typed description with the refinement call unavailable, so both texts are the same
+        // words. Rendering them under two headings is the duplication #601 reported.
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = verbatim;
+        request.IssueDescription = "Generator quits after ten minutes.";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.CuratedIssue.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_WhenVerbatimIsBlank_ShouldFallBackToSubmittedTextAndOmitTheCuratedIssue()
+    {
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = "   ";
+        request.IssueDescription = "Generator quits after ten minutes.";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.IssueDescription.Should().Be("Generator quits after ten minutes.");
+        packet.CuratedIssue.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_ShouldTrimTheCuratedIssueButNeverTheVerbatimComplaint()
+    {
+        var request = FullyPopulatedRequest();
+        request.IssueDescriptionVerbatim = "\tum so the genny quits  \n";
+        request.IssueDescription = "  Generator quits after ten minutes.  ";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        packet.CuratedIssue.Should().Be("Generator quits after ten minutes.");
+        packet.IssueDescription.Should().Be("\tum so the genny quits  \n");
+    }
+
+    // ── Degradation: context-supplied fields ───────────────────────────────
+
+    [Fact]
+    public void Compose_WhenPasteBlockAndStatusLinkAbsentFromContext_ShouldLeaveThemNull()
+    {
+        var context = new PacketCompositionContext
+        {
+            SubmittedAtUtc = new DateTimeOffset(2026, 9, 5, 14, 30, 0, TimeSpan.Zero),
+        };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.PasteBlock.Should().BeNull();
+        packet.StatusLink.Should().BeNull();
+        packet.Origin.LocationName.Should().BeNull();
+        packet.Origin.LocationPhone.Should().BeNull();
+        packet.Photos.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Compose_WhenStatusLinkUrlBlank_ShouldSetStatusLinkNull()
+    {
+        var context = FullContext() with { StatusLinkUrl = "   " };
+
+        var packet = PacketComposer.Compose(FullyPopulatedRequest(), context);
+
+        packet.StatusLink.Should().BeNull();
+    }
+
+    // ── Never leaks pricing / other-customer data ──────────────────────────
+
+    [Fact]
+    public void Compose_ShouldNeverExposePricingOrRepairData()
+    {
+        var request = FullyPopulatedRequest();
+        request.Priority = "High";
+
+        var packet = PacketComposer.Compose(request, FullContext());
+
+        var forbidden = new[]
+        {
+            "price", "pricing", "cost", "labor", "labour", "quote",
+            "partsused", "laborhours", "serviceevent", "repairaction",
+        };
+        var names = CollectPropertyNames(typeof(ServicePacket), []);
+
+        names.Should().NotContain(n => forbidden.Any(f => n.Contains(f, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static HashSet<string> CollectPropertyNames(Type type, HashSet<Type> seen)
+    {
+        var names = new HashSet<string>();
+        if (!seen.Add(type))
+        {
+            return names;
+        }
+
+        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            names.Add(prop.Name);
+
+            var t = prop.PropertyType;
+            if (typeof(IEnumerable).IsAssignableFrom(t) && t.IsGenericType)
+            {
+                t = t.GetGenericArguments()[^1];
+            }
+
+            if (t.Namespace == "RVS.Domain.Packets")
+            {
+                names.UnionWith(CollectPropertyNames(t, seen));
+            }
+        }
+
+        return names;
+    }
+}

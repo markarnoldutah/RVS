@@ -1,0 +1,874 @@
+using System.Globalization;
+using System.Net;
+using System.Text;
+
+namespace RVS.Domain.Packets;
+
+/// <summary>
+/// Renders a <see cref="ServicePacket"/> to a single self-contained HTML document with an
+/// embedded print stylesheet (<c>Spec B-3</c>, issue <c>#431</c>). This HTML is the
+/// primary packet artifact and is also used verbatim as the delivery email body.
+///
+/// It is a pure transform: string in, string out. It reads the composed
+/// <see cref="ServicePacket"/> in <c>Spec B-2</c> order and never inspects a
+/// <c>ServiceRequest</c>. It performs no I/O. Images are neither embedded nor named — they
+/// travel as the email's own attachments, which mail clients already show as clickable
+/// thumbnails (issues <c>#580</c>, <c>#735</c>); only videos, which are never attached, get a
+/// link. The two brand images — the dealer's masthead logo and the "Powered by" RV Intake mark
+/// (issue <c>#470</c>) — are referenced by https URL from <see cref="PacketBranding"/>, never
+/// embedded: Gmail and Outlook drop <c>data:</c> images, and neither renders SVG.
+///
+/// Layout follows the Integrated Dealer Systems (IDS) work-order idiom so a service
+/// manager reads it on daily muscle memory: a right-aligned tracking number in the
+/// masthead (<c>Intake #</c>, mirroring IDS <c>W/O #</c>), stacked Customer / Location / Unit
+/// blocks (issue <c>#800</c>), then the curated <c>Issue</c> and the AI <c>Preliminary assessment</c> above
+/// <c>Reported issue</c> (the verbatim customer text, pre-curation) so the concise problem
+/// recreation is read first and can be checked against the customer's own words, and a running
+/// page footer carrying the reference and page count. It deliberately omits everything IDS
+/// uses for the repair-authorization contract — pricing, parts/labour tables, signatures,
+/// arbitration text — none of which belongs in an intake packet (<c>Spec B-2</c>).
+///
+/// Design constraints, all verified structurally by the renderer's tests:
+/// <list type="bullet">
+///   <item>Prints cleanly at Letter and A4 — <c>@page</c> declares margins only and never
+///   pins a paper size, so the printer's own paper selection wins.</item>
+///   <item>Legible in greyscale — structure is carried by borders, weight, and textual
+///   labels, never by colour alone.</item>
+///   <item>The diagnostic Q&amp;A block is the visually dominant one; it is the block that
+///   must read as expert.</item>
+///   <item>Email-client-safe layout: this HTML is used verbatim as the packet delivery
+///   email body, and Gmail/Outlook silently drop <c>display:flex</c> and
+///   <c>display:grid</c>. Every band (masthead top, the Customer / Location / Unit identity
+///   band, the static footer) is therefore a presentational <c>&lt;table&gt;</c> with its
+///   cell geometry carried in <c>style=</c> attributes so it keeps its shape when the
+///   <c>&lt;style&gt;</c> block is stripped.</item>
+/// </list>
+/// </summary>
+public static class PacketHtmlRenderer
+{
+    /// <summary>
+    /// Renders <paramref name="packet"/> to a complete HTML5 document string.
+    /// </summary>
+    /// <param name="packet">The composed packet.</param>
+    /// <param name="managerAppServiceRequestUrl">
+    /// When non-blank, a deep link into the Manager app for this service request, shown as a
+    /// note under the photo list: some photos could not be attached to the email (the ACS size
+    /// budget, <c>PacketEmailSizeFitter</c>, issue <c>#521</c>) and are visible only there.
+    /// <c>null</c> — the default — omits the note; pass it only when the caller has already
+    /// determined that at least one photo attachment was dropped (issue <c>#580</c>).
+    /// </param>
+    public static string Render(ServicePacket packet, string? managerAppServiceRequestUrl = null)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        return RenderDocument([packet], [managerAppServiceRequestUrl]);
+    }
+
+    /// <summary>
+    /// Renders every issue of a multi-issue submission (<c>Spec A-17</c>, issue #806) as one
+    /// packet, laid out like a dealer's work order: the masthead — unit, customer, location and
+    /// the first issue's Intake # — once at the top, a short list of the issues, then each issue
+    /// in submission order under its own heading, with its own status buttons and paste block,
+    /// flowing onto as many sheets as it takes. One footer and one AI disclosure close it. A
+    /// single packet renders exactly as <see cref="Render"/> would.
+    /// </summary>
+    /// <param name="packets">
+    /// One composed packet per issue, in the order the customer reported them. The first supplies
+    /// the masthead; the rest contribute their issue sections only.
+    /// </param>
+    /// <param name="photosDropped">
+    /// <c>true</c> when the email's size budget left at least one photo attachment off (issue
+    /// <c>#521</c>). Each issue that has images then carries the note pointing at its own
+    /// request in the Manager app, since there is no telling from here whose photo it was.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="packets"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="packets"/> is empty.</exception>
+    public static string RenderCombined(IReadOnlyList<ServicePacket> packets, bool photosDropped = false)
+    {
+        ArgumentNullException.ThrowIfNull(packets);
+        if (packets.Count == 0)
+        {
+            throw new ArgumentException("At least one packet is required.", nameof(packets));
+        }
+
+        return RenderDocument(packets, [.. packets.Select(p => photosDropped ? DroppedPhotoNoteUrl(p) : null)]);
+    }
+
+    /// <summary>
+    /// The Manager-app link for the dropped-photo note on <paramref name="packet"/>: its own
+    /// request, and only when it had an image to lose.
+    /// </summary>
+    private static string? DroppedPhotoNoteUrl(ServicePacket packet) =>
+        packet.Photos.Any(p => !p.IsVideo) ? packet.ManagerLinks?.RequestUrl : null;
+
+    private static string RenderDocument(IReadOnlyList<ServicePacket> packets, IReadOnlyList<string?> droppedPhotoNoteUrls)
+    {
+        var lead = packets[0];
+        var isMultiIssue = packets.Count > 1;
+
+        // One string, three surfaces: the masthead, the @page running footer, and the static
+        // end-of-flow footer. Derived on the packet (issue #506) so the PDF renderer reads the
+        // very same value rather than a second copy of the same expression.
+        var received = lead.Origin.ReceivedDisplay;
+
+        var sb = new StringBuilder(4096 * packets.Count);
+
+        sb.Append("<!DOCTYPE html>\n");
+        sb.Append("<html lang=\"en\">\n<head>\n");
+        sb.Append("<meta charset=\"utf-8\">\n");
+        sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
+        sb.Append("<title>Service Packet ").Append(Text(lead.Origin.ReferenceCode)).Append("</title>\n");
+        sb.Append("<style>\n").Append(BuildStylesheet(RunningFooterText(lead.Origin.ReferenceCode, received, lead.Branding.BrandName)))
+            .Append("\n</style>\n");
+        sb.Append("</head>\n<body>\n");
+        sb.Append("<main class=\"packet\">\n");
+
+        AppendMasthead(sb, lead, received);
+
+        if (isMultiIssue)
+        {
+            AppendIssueIndex(sb, packets);
+        }
+
+        for (var i = 0; i < packets.Count; i++)
+        {
+            var packet = packets[i];
+            if (isMultiIssue)
+            {
+                // The heading carries the category, so the issue's own category section would
+                // only repeat it.
+                AppendIssueHeading(sb, packet, i + 1, packets.Count);
+                AppendOpenManager(sb, packet.ManagerLinks);
+            }
+            else
+            {
+                AppendOpenManager(sb, packet.ManagerLinks);
+                AppendCategory(sb, packet.IssueCategory);
+            }
+
+            // The curated issue and the AI assessment sit above the verbatim complaint: a service
+            // manager should see the concise recreation of the issue first, then the customer's
+            // own words, then the diagnostic detail (issue #431 follow-up, #601; Spec B-2).
+            AppendCuratedIssue(sb, packet.CuratedIssue);
+            AppendAiSummary(sb, packet.AiSummary);
+            AppendDescription(sb, packet.IssueDescription);
+            AppendDiagnostics(sb, packet.Diagnostics);
+            AppendPhotos(sb, packet.Photos, droppedPhotoNoteUrls[i]);
+            AppendPasteBlock(sb, packet.PasteBlock);
+            AppendOpenManager(sb, packet.ManagerLinks);
+
+            // The status page is the customer's and lists every issue (Spec X-1), so a
+            // multi-issue packet links it once, after the last issue.
+            if (!isMultiIssue)
+            {
+                AppendStatusLink(sb, packet.StatusLink);
+            }
+        }
+
+        if (isMultiIssue)
+        {
+            AppendStatusLink(sb, lead.StatusLink);
+        }
+
+        AppendFooter(sb, lead.Origin.ReferenceCode, received, lead.Branding.PoweredByLogoUrl, ServicePacket.AiDisclaimerFor(packets));
+
+        sb.Append("</main>\n</body>\n</html>\n");
+
+        return sb.ToString();
+    }
+
+    // ── Several issues (Spec A-17, issue #806) ───────────────────────────
+    //
+    // A work order lists its lines under one header, so a multi-issue packet does too: an index
+    // of the issues under the masthead, then a heading bar per issue naming its position,
+    // category and its own Intake # (each issue is its own request, and its own line in the
+    // DMS). Presentational <table>s with inline geometry, for the same mail-client reason as the
+    // masthead.
+
+    private static void AppendIssueIndex(StringBuilder sb, IReadOnlyList<ServicePacket> packets)
+    {
+        sb.Append("<!-- section:issue-index -->\n");
+        sb.Append("<section class=\"issue-index\">\n");
+        sb.Append("<h2>").Append(packets.Count.ToString(CultureInfo.InvariantCulture)).Append(" issues</h2>\n");
+        sb.Append("<table role=\"presentation\" width=\"100%\" style=\"width:100%;border-collapse:collapse;\">\n");
+
+        for (var i = 0; i < packets.Count; i++)
+        {
+            var packet = packets[i];
+            sb.Append("<tr>\n");
+            sb.Append("<td style=\"padding:0 3mm 1mm 0;white-space:nowrap;vertical-align:top;\">")
+                .Append((i + 1).ToString(CultureInfo.InvariantCulture)).Append(".</td>\n");
+            sb.Append("<td style=\"padding:0 3mm 1mm 0;width:100%;vertical-align:top;\"><strong>")
+                .Append(Text(CategoryLabel(packet.IssueCategory))).Append("</strong></td>\n");
+            sb.Append("<td style=\"padding:0 0 1mm;white-space:nowrap;vertical-align:top;\">Intake #")
+                .Append(Text(packet.Origin.ReferenceCode)).Append("</td>\n");
+            sb.Append("</tr>\n");
+        }
+
+        sb.Append("</table>\n</section>\n");
+    }
+
+    private static void AppendIssueHeading(StringBuilder sb, ServicePacket packet, int position, int count)
+    {
+        sb.Append("<!-- section:issue -->\n");
+        sb.Append("<table role=\"presentation\" class=\"issue-head\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin:8mm 0 4mm;border-top:2px solid #000;border-bottom:1px solid #000;\">\n<tr>\n");
+        sb.Append("<td style=\"padding:2mm 0;font-size:12pt;font-weight:700;vertical-align:middle;\">Issue ")
+            .Append(position.ToString(CultureInfo.InvariantCulture)).Append(" of ").Append(count.ToString(CultureInfo.InvariantCulture))
+            .Append(" · ").Append(Text(CategoryLabel(packet.IssueCategory))).Append("</td>\n");
+        sb.Append("<td style=\"padding:2mm 0;text-align:right;white-space:nowrap;vertical-align:middle;\">Intake #")
+            .Append(Text(packet.Origin.ReferenceCode)).Append("</td>\n");
+        sb.Append("</tr>\n</table>\n");
+    }
+
+    private static string CategoryLabel(string? category) =>
+        string.IsNullOrWhiteSpace(category) ? "Uncategorized" : category.Trim();
+
+    // ── Manager-app link (Spec C-7, issues #498, #743) ───────────────────
+    //
+    // Delivery chrome, not a Spec B-2 section: one "Open Manager" button on its own line, once
+    // under the masthead (under each issue's heading in a multi-issue packet) and again after
+    // the paste block, so the manager reaches it from the top or from the bottom of the
+    // packet. It opens the request page, where every status is one tap away — the email used
+    // to carry a button per status as well and #743 dropped them. The print stylesheet hides
+    // it. The link is a plain navigation into the signed-in manager app — it carries no token
+    // and writes nothing, so a mail-security scanner fetching it changes no state.
+    //
+    // A filled Rust primary button (Spec THEME-1, issue #735), styled inline because a mail
+    // client may strip the <style> block. A <p> with an inline-block anchor, never flex/grid,
+    // for the same email-client reason as the masthead. The Domain cannot reference
+    // RVS.UI.Shared, so the hex value mirrors RvsBrand — change them together.
+
+    /// <summary>Text-safe Rust, <c>RvsBrand.Accent</c> — 6.02:1 under white button text.</summary>
+    private const string BrandAccent = "#A8431F";
+
+    private const string PrimaryButtonStyle =
+        "display:inline-block;padding:2mm 4mm;border-radius:4px;font-weight:700;text-decoration:none;"
+        + "background-color:" + BrandAccent + ";color:#ffffff;border:1px solid " + BrandAccent + ";";
+
+    private static void AppendOpenManager(StringBuilder sb, PacketManagerLinks? links)
+    {
+        if (links is null || !IsHttpUrl(links.RequestUrl))
+        {
+            return;
+        }
+
+        sb.Append("<!-- section:manager-actions -->\n");
+        sb.Append("<p class=\"manager-actions\" style=\"margin:4mm 0;\"><a href=\"").Append(Attr(links.RequestUrl))
+            .Append("\" style=\"").Append(PrimaryButtonStyle).Append("\">Open Manager</a></p>\n");
+    }
+
+    // ── Masthead: sections 1 (unit), 2 (customer), 3 (origin) ──────────────
+    //
+    // IDS puts the tracking number top-right. We mirror that: the letterhead, Intake # and
+    // full received timestamp in the refbox, the customer name (Last, First) above the
+    // year/make/model headline, then Customer, Location and Unit stacked (issue #800). The
+    // band and the refbox row are presentational <table>s, not flex/grid — mail clients drop
+    // those. The Spec B-2 section markers stay in order (unit, customer, origin) so the
+    // ordering contract is unchanged.
+
+    private static void AppendMasthead(
+        StringBuilder sb, ServicePacket packet, string received)
+    {
+        var unit = packet.Unit;
+        var customer = packet.Customer;
+        var origin = packet.Origin;
+        var branding = packet.Branding;
+
+        sb.Append("<!-- section:unit -->\n");
+        sb.Append("<header class=\"masthead\" style=\"border-bottom:2px solid #000;padding-bottom:3mm;\">\n");
+
+        // Masthead top: the dealer's logo, when the location sets one (Spec A-16, issue #470),
+        // top left; the letterhead above the tracking number, right (issue #800). The letterhead
+        // names the document, not the brand (issue #794) — the brand name is in the running footer.
+        // A presentational <table>, never flexbox: this HTML is used verbatim as the packet
+        // delivery email body, and Gmail/Outlook drop `display:flex`, which would collapse
+        // this row into a single stacked column. Column geometry is carried inline so it
+        // survives even when the <style> block is stripped.
+        sb.Append("<table role=\"presentation\" class=\"masthead-top\" width=\"100%\" style=\"width:100%;border-collapse:collapse;\">\n<tr>\n");
+        // Two lines of body text (10.5pt/1.4, about 10mm) of whitespace below the logo row
+        // (issue #794). Inline cell padding, since mail clients strip <style> and ignore table margins.
+        sb.Append("<td class=\"brand\" style=\"vertical-align:top;")
+            .Append(branding.HasLogo ? "padding-bottom:10mm;" : string.Empty)
+            .Append("\">\n");
+        if (branding.HasLogo)
+        {
+            // Height as an attribute too: Outlook ignores CSS sizes on images. The width is left
+            // to the aspect ratio, which a dealer's logo does not share with anyone else's.
+            sb.Append("<img class=\"masthead-logo\" src=\"").Append(Attr(branding.LogoUrl!))
+                .Append("\" alt=\"\" height=\"45\" style=\"height:12mm;width:auto;max-width:60mm;vertical-align:middle;margin-right:4mm;border:0;\">\n");
+        }
+
+        sb.Append("</td>\n");
+        sb.Append("<td class=\"refbox\" style=\"vertical-align:top;text-align:right;white-space:nowrap;\">\n");
+        sb.Append("<div class=\"letterhead\" style=\"font-size:13pt;font-weight:700;\">Service Intake Packet</div>\n");
+        sb.Append("<p class=\"rvsno\" style=\"margin:0;font-size:12pt;\">Intake #: <strong>").Append(Text(origin.ReferenceCode)).Append("</strong></p>\n");
+        // Received line carries the full timestamp — date + time in the dealership's own
+        // zone when the location sets one, UTC otherwise (issue #506). It is the one Received
+        // line on the packet (the Location column no longer repeats it).
+        sb.Append("<p class=\"received\" style=\"margin:0.5mm 0 0;font-size:9pt;\">Received: ").Append(Text(received)).Append("</p>\n");
+        sb.Append("</td>\n</tr>\n</table>\n");
+
+        // Title line: customer name (family-name-first) and unit descriptor on one line,
+        // same size, bold (issue #580) — e.g. "Gribble, Dale : 2021 Winnebago View".
+        var sortableName = customer.SortableName;
+        var descriptor = string.Join(
+            ' ',
+            new[] { unit.Year?.ToString(CultureInfo.InvariantCulture), unit.Make, unit.Model }
+                .Where(part => !string.IsNullOrWhiteSpace(part)));
+        var descriptorText = string.IsNullOrWhiteSpace(descriptor) ? "Unit details not provided" : descriptor;
+        var titleLine = string.IsNullOrWhiteSpace(sortableName) ? descriptorText : $"{sortableName} : {descriptorText}";
+        sb.Append("<p class=\"packet-title\">").Append(Text(titleLine)).Append("</p>\n");
+
+        // Identity band — Customer, Location, Unit stacked top to bottom, one full-width row
+        // each (issue #800; three side-by-side columns until then). A presentational <table>,
+        // never CSS grid (same email-client reason as the masthead top), with each cell's
+        // geometry inline so the band keeps its shape when a mail client discards <style>.
+        sb.Append("<table role=\"presentation\" class=\"idcols\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:3mm;\">\n");
+
+        sb.Append("<!-- section:customer -->\n");
+        sb.Append("<tr>\n<td class=\"col customer\" style=\"").Append(IdentityCellStyle).Append("\">\n<h2>Customer</h2>\n");
+        sb.Append("<p class=\"name\" style=\"font-weight:700;margin:0 0 1mm;\">").Append(Text(customer.FullName)).Append("</p>\n");
+        // The customer's phone and email are links so the manager can call or reply in one tap
+        // (issue #735). The location's own phone is not: nobody calls their own front desk.
+        AppendLinkRow(sb, "Phone", customer.Phone, TelHref(customer.Phone));
+        AppendLinkRow(sb, "Email", customer.Email, MailtoHref(customer.Email));
+        AppendRow(sb, "Preferred contact", customer.PreferredContact);
+        sb.Append("</td>\n</tr>\n");
+
+        sb.Append("<!-- section:origin -->\n");
+        sb.Append("<tr>\n<td class=\"col origin\" style=\"").Append(IdentityCellStyle).Append("\">\n<h2>Location</h2>\n");
+        AppendRow(sb, "Location", origin.LocationName);
+        AppendRow(sb, "Location phone", origin.LocationPhone);
+        sb.Append("</td>\n</tr>\n");
+
+        sb.Append("<tr>\n<td class=\"col unit\" style=\"").Append(IdentityCellStyle).Append("\">\n<h2>Unit</h2>\n");
+        var hasUnitRow = false;
+        hasUnitRow |= AppendRow(sb, "Year", unit.Year?.ToString(CultureInfo.InvariantCulture));
+        hasUnitRow |= AppendRow(sb, "Manufacturer", unit.Make);
+        hasUnitRow |= AppendRow(sb, "Model", unit.Model);
+        if (unit.HasVin)
+        {
+            sb.Append("<p class=\"row\" style=\"margin:0 0 1mm;\">Serial# (VIN): <span>").Append(Text(unit.Vin!)).Append("</span></p>\n");
+            hasUnitRow = true;
+        }
+
+        if (!hasUnitRow)
+        {
+            sb.Append("<p class=\"empty\" style=\"font-style:italic;margin:0 0 1mm;\">Not recorded</p>\n");
+        }
+
+        sb.Append("</td>\n</tr>\n</table>\n");
+        sb.Append("</header>\n");
+    }
+
+    /// <summary>
+    /// One identity-band cell: full width, with a 3 mm gap below it before the next section
+    /// (issue #800). Padding, not margin — mail clients ignore margins on table cells.
+    /// </summary>
+    private const string IdentityCellStyle = "vertical-align:top;width:100%;padding:0 0 3mm;font-size:9.5pt;";
+
+    // ── 4. Category ────────────────────────────────────────────────────────
+
+    private static void AppendCategory(StringBuilder sb, string? category)
+    {
+        sb.Append("<!-- section:category -->\n");
+        sb.Append("<section class=\"category\">\n");
+        sb.Append("<h2>Issue category</h2>\n");
+        sb.Append("<p>")
+            .Append(string.IsNullOrWhiteSpace(category) ? "Uncategorized" : Text(category))
+            .Append("</p>\n");
+        sb.Append("</section>\n");
+    }
+
+    // ── 4b. Issue — the curated restatement of the complaint (issue #601) ──
+    //
+    // Sits between the category and the assessment: the manager reads the clean version of the
+    // problem first and can drop to the verbatim complaint below to check it. Named in the
+    // footer's AI disclaimer (issue #780) for the same reason the assessment is — the packet
+    // never passes machine wording off as the customer's.
+
+    private static void AppendCuratedIssue(StringBuilder sb, string? curatedIssue)
+    {
+        if (curatedIssue is null)
+        {
+            return;
+        }
+
+        sb.Append("<!-- section:curated-issue -->\n");
+        sb.Append("<section class=\"curated-issue\">\n");
+        sb.Append("<h2>Issue</h2>\n");
+        sb.Append("<p>").Append(Text(curatedIssue)).Append("</p>\n");
+        sb.Append("</section>\n");
+    }
+
+    // ── 6. Reported issue — the customer's words, verbatim (IDS "COMPLAINT") ──
+
+    private static void AppendDescription(StringBuilder sb, string description)
+    {
+        sb.Append("<!-- section:description -->\n");
+        sb.Append("<section class=\"description\">\n");
+        sb.Append("<h2>Reported issue <span class=\"sub\">— customer's words verbatim</span></h2>\n");
+        sb.Append("<pre class=\"verbatim\">").Append(Text(description)).Append("</pre>\n");
+        sb.Append("</section>\n");
+    }
+
+    // ── 7. Diagnostic Q&A — the expert block ─────────────────────────────
+
+    private static void AppendDiagnostics(StringBuilder sb, IReadOnlyList<PacketDiagnosticEntry> diagnostics)
+    {
+        sb.Append("<!-- section:diagnostics -->\n");
+        sb.Append("<section class=\"diagnostics\">\n");
+        sb.Append("<h2>Reported symptoms &amp; diagnostic Q&amp;A</h2>\n");
+
+        if (diagnostics.Count == 0)
+        {
+            sb.Append("<p class=\"empty\">No diagnostic questions were answered.</p>\n");
+        }
+        else
+        {
+            sb.Append("<dl>\n");
+            foreach (var entry in diagnostics)
+            {
+                sb.Append("<dt>").Append(Text(entry.Question)).Append("</dt>\n");
+                if (entry.Answers.Count == 0)
+                {
+                    sb.Append("<dd class=\"no-answer\">(no answer given)</dd>\n");
+                    continue;
+                }
+
+                foreach (var answer in entry.Answers)
+                {
+                    sb.Append("<dd>").Append(Text(answer)).Append("</dd>\n");
+                }
+            }
+
+            sb.Append("</dl>\n");
+        }
+
+        sb.Append("</section>\n");
+    }
+
+    // ── 5. AI summary — a preliminary assessment, disclosed in the footer ─
+    //     Positioned above the complaint (see Render): the manager reads the concise
+    //     problem recreation first.
+
+    private static void AppendAiSummary(StringBuilder sb, PacketAiSummary? summary)
+    {
+        if (summary is null)
+        {
+            return;
+        }
+
+        sb.Append("<!-- section:ai-summary -->\n");
+        sb.Append("<section class=\"ai-summary\">\n");
+        sb.Append("<h2>Preliminary assessment</h2>\n");
+        if (summary.Text is not null)
+        {
+            sb.Append("<p>").Append(Text(summary.Text)).Append("</p>\n");
+        }
+
+        if (summary.HasStructuredAssessment)
+        {
+            AppendRow(sb, "Probable cause", summary.ProbableCause);
+            AppendRow(sb, "Confidence", summary.Confidence);
+            AppendAssessmentList(sb, "ol", "possible-fixes", "Possible fixes", summary.PossibleFixes);
+            AppendAssessmentList(sb, "ul", "likely-parts", "Likely parts", summary.LikelyParts);
+        }
+
+        // What was read off the photos (issue #772). It stands apart from the structured
+        // assessment: an abstained assessment still shows a data plate read cleanly.
+        AppendAssessmentList(
+            sb, "ul", "photo-findings", PacketPhotoFinding.Heading, [.. summary.PhotoFindings.Select(f => f.Display)]);
+
+        if (summary.HasStructuredAssessment)
+        {
+            sb.Append("<p class=\"advisory\" style=\"margin:2mm 0 0;font-size:8.5pt;font-style:italic;\">")
+                .Append(Text(PacketAiSummary.AdvisoryNote)).Append("</p>\n");
+        }
+
+        sb.Append("</section>\n");
+    }
+
+    private static void AppendAssessmentList(
+        StringBuilder sb, string tag, string cssClass, string label, IReadOnlyList<string> items)
+    {
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        sb.Append("<p class=\"list-label\" style=\"margin:2mm 0 1mm;font-weight:700;\">").Append(label).Append("</p>\n");
+        sb.Append('<').Append(tag).Append(" class=\"").Append(cssClass)
+            .Append("\" style=\"margin:0 0 1mm;padding-left:6mm;\">\n");
+        foreach (var item in items)
+        {
+            sb.Append("<li>").Append(Text(item)).Append("</li>\n");
+        }
+
+        sb.Append("</").Append(tag).Append(">\n");
+    }
+
+    // ── 8. Photos ─────────────────────────────────────────────────────────
+    //
+    // Images are not listed at all: they are sent as email attachments, which the mail client
+    // already shows as clickable thumbnails, so neither an <img> (issue #580) nor a line naming
+    // the file (issue #735) adds anything. The section survives only for what the thumbnails
+    // cannot show — a video, or a note that some images were left off the email.
+
+    private static void AppendPhotos(StringBuilder sb, IReadOnlyList<PacketPhoto> photos, string? managerAppServiceRequestUrl)
+    {
+        var videos = photos.Where(p => p.IsVideo && IsHttpUrl(p.Url)).ToList();
+        var hasDroppedImageNote = !string.IsNullOrWhiteSpace(managerAppServiceRequestUrl);
+        if (videos.Count == 0 && !hasDroppedImageNote)
+        {
+            return;
+        }
+
+        sb.Append("<!-- section:photos -->\n");
+        sb.Append("<section class=\"photos\">\n");
+        sb.Append("<h2>Photos</h2>\n");
+        // Videos are never attached to the email (too large) and never render as a thumbnail
+        // either, so they get a plain hyperlink to the resolved read URL instead (issue #583).
+        foreach (var video in videos)
+        {
+            sb.Append("<p class=\"photo-line\">video ").Append(Text(video.FileName))
+                .Append(" — <a href=\"").Append(Attr(video.Url)).Append("\">view video</a></p>\n");
+        }
+
+        // One or more photo attachments did not fit the ACS size budget (PacketEmailSizeFitter,
+        // issue #521) and were left off this email — point the reader at the Manager app instead
+        // of silently dropping them (issue #580).
+        if (hasDroppedImageNote)
+        {
+            sb.Append("<p class=\"photo-note\">Some images can only be shown in the manager app. <a href=\"")
+                .Append(Attr(managerAppServiceRequestUrl!)).Append("\">Click here to view</a>.</p>\n");
+        }
+
+        sb.Append("</section>\n");
+    }
+
+    // ── 9. Paste block ───────────────────────────────────────────────────
+
+    private static void AppendPasteBlock(StringBuilder sb, string? pasteBlock)
+    {
+        if (string.IsNullOrWhiteSpace(pasteBlock))
+        {
+            return;
+        }
+
+        sb.Append("<!-- section:paste-block -->\n");
+        sb.Append("<section class=\"paste-block\">\n");
+        sb.Append("<h2>Copy &amp; Paste Ready</h2>\n");
+        // No mail client runs script, so a real copy-to-clipboard button cannot work here
+        // (issue #735). user-select: all is the next best thing: one click selects the whole
+        // block, fences included, ready for Ctrl/Cmd-C. Inline, so a stripped <style> keeps it;
+        // a client that ignores it still allows an ordinary click-drag selection.
+        sb.Append("<pre class=\"dms-text\" style=\"-webkit-user-select:all;user-select:all;\">")
+            .Append(Text(pasteBlock)).Append("</pre>\n");
+        sb.Append("</section>\n");
+    }
+
+    // ── 10. Status link ─────────────────────────────────────────────────
+
+    private static void AppendStatusLink(StringBuilder sb, PacketStatusLink? statusLink)
+    {
+        if (statusLink is null || string.IsNullOrWhiteSpace(statusLink.Url))
+        {
+            return;
+        }
+
+        sb.Append("<!-- section:status-link -->\n");
+        sb.Append("<section class=\"status-link\">\n");
+        sb.Append("<h2>Customer status page</h2>\n");
+
+        if (IsHttpUrl(statusLink.Url))
+        {
+            sb.Append("<p><a href=\"").Append(Attr(statusLink.Url)).Append("\">")
+                .Append(Text(statusLink.Url)).Append("</a></p>\n");
+        }
+        else
+        {
+            sb.Append("<p>").Append(Text(statusLink.Url)).Append("</p>\n");
+        }
+
+        sb.Append("</section>\n");
+    }
+
+    // ── Running footer (mirrors IDS "Printed On … © … Page N of N") ───────
+
+    /// <summary>The "Powered by" mark's rendered size, in CSS pixels — the lockup's 390.4 x 108 aspect.</summary>
+    private const int PoweredByLogoWidthPx = 72;
+
+    private const int PoweredByLogoHeightPx = 20;
+
+    private static void AppendFooter(
+        StringBuilder sb, string referenceCode, string received, string? poweredByLogoUrl, string? aiDisclaimer)
+    {
+        // A static end-of-flow footer for engines that ignore @page margin boxes
+        // (Safari); the @page rule in the stylesheet repeats the reference line on every
+        // printed page where supported. A presentational <table> so the two ends stay on
+        // one line in a mail client (no flexbox).
+        sb.Append("<table role=\"presentation\" class=\"packet-foot\" width=\"100%\" style=\"width:100%;border-collapse:collapse;margin-top:8mm;border-top:1px solid #000;font-size:8pt;\">\n<tr>\n");
+        sb.Append("<td style=\"padding-top:2mm;vertical-align:middle;\">Intake #").Append(Text(referenceCode)).Append(" · ").Append(Text(received)).Append("</td>\n");
+
+        // "Powered by" the RV Intake mark (issue #470), on the right of the reference line
+        // (issue #800 — it replaced "<brand> — service intake packet" there, and a centred row
+        // of its own below): the packet is the dealer's, the platform signs it once, at the end.
+        // The mark is a hosted PNG with explicit size attributes for Outlook; with no URL the
+        // product is named in text instead.
+        sb.Append("<td class=\"powered-by\" style=\"padding-top:2mm;vertical-align:middle;text-align:right;white-space:nowrap;\">Powered by ");
+        if (IsHttpUrl(poweredByLogoUrl))
+        {
+            sb.Append("<img src=\"").Append(Attr(poweredByLogoUrl!)).Append("\" alt=\"").Append(PacketBranding.ProductName)
+                .Append("\" width=\"").Append(PoweredByLogoWidthPx.ToString(CultureInfo.InvariantCulture))
+                .Append("\" height=\"").Append(PoweredByLogoHeightPx.ToString(CultureInfo.InvariantCulture))
+                .Append("\" style=\"width:").Append(PoweredByLogoWidthPx.ToString(CultureInfo.InvariantCulture))
+                .Append("px;height:").Append(PoweredByLogoHeightPx.ToString(CultureInfo.InvariantCulture))
+                .Append("px;vertical-align:middle;border:0;\">");
+        }
+        else
+        {
+            sb.Append("<strong>").Append(PacketBranding.ProductName).Append("</strong>");
+        }
+
+        sb.Append("</td>\n</tr>\n");
+
+        // The one AI disclosure, in place of per-section badges (issue #780). Once, at the end
+        // of the flow — not in the @page running footer, which would repeat it on every sheet.
+        if (aiDisclaimer is not null)
+        {
+            sb.Append("<tr>\n<td colspan=\"2\" class=\"ai-disclaimer\" style=\"padding-top:1.5mm;vertical-align:top;font-style:italic;\">")
+                .Append(Text(aiDisclaimer)).Append("</td>\n</tr>\n");
+        }
+
+        sb.Append("</table>\n");
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    /// <summary>Appends a <c>Label: value</c> row; returns <c>false</c> and appends nothing when the value is blank.</summary>
+    private static bool AppendRow(StringBuilder sb, string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        sb.Append("<p class=\"row\" style=\"margin:0 0 1mm;\">").Append(label).Append(": <span>")
+            .Append(Text(value)).Append("</span></p>\n");
+        return true;
+    }
+
+    /// <summary>
+    /// Appends a <c>Label: value</c> row whose value is a link to <paramref name="href"/>, or a
+    /// plain row when <paramref name="href"/> is <c>null</c>; appends nothing when the value is blank.
+    /// </summary>
+    private static void AppendLinkRow(StringBuilder sb, string label, string? value, string? href)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (href is null)
+        {
+            AppendRow(sb, label, value);
+            return;
+        }
+
+        sb.Append("<p class=\"row\" style=\"margin:0 0 1mm;\">").Append(label).Append(": <span><a href=\"")
+            .Append(Attr(href)).Append("\">").Append(Text(value)).Append("</a></span></p>\n");
+    }
+
+    /// <summary>
+    /// A <c>tel:</c> URI for <paramref name="phone"/>: its digits, keeping a leading <c>+</c>,
+    /// with the display formatting dropped. <c>null</c> when there are no digits to dial.
+    /// </summary>
+    private static string? TelHref(string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone))
+        {
+            return null;
+        }
+
+        var digits = new string(phone.Where(char.IsAsciiDigit).ToArray());
+        if (digits.Length == 0)
+        {
+            return null;
+        }
+
+        return phone.TrimStart().StartsWith('+') ? $"tel:+{digits}" : $"tel:{digits}";
+    }
+
+    /// <summary>A <c>mailto:</c> URI for <paramref name="email"/>, or <c>null</c> when it is blank.</summary>
+    private static string? MailtoHref(string? email) =>
+        string.IsNullOrWhiteSpace(email) ? null : $"mailto:{email.Trim()}";
+
+    /// <summary>
+    /// The running-footer text baked into the <c>@page</c> margin box. CSS
+    /// <c>content:</c> is a quoted string, so it must be ASCII and carry no <c>"</c> or
+    /// <c>\</c>; the reference code and timestamp are already in that alphabet. The
+    /// timestamp stays in it because its zone abbreviation comes from
+    /// <see cref="Validation.DealershipTimeZones"/> rather than from
+    /// <see cref="TimeZoneInfo"/>'s locale-dependent display names (issue #506).
+    /// </summary>
+    private static string RunningFooterText(string referenceCode, string received, string brandName)
+    {
+        var raw = $"Intake #{referenceCode} / {received} / {brandName}";
+        var sb = new StringBuilder(raw.Length);
+        foreach (var ch in raw)
+        {
+            if (ch is not ('"' or '\\') && !char.IsControl(ch))
+            {
+                sb.Append(ch);
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>HTML-encodes text for element content.</summary>
+    private static string Text(string value) => WebUtility.HtmlEncode(value);
+
+    /// <summary>HTML-encodes a value for a double-quoted attribute (e.g. the <c>&amp;</c> in a SAS URL).</summary>
+    private static string Attr(string value) => WebUtility.HtmlEncode(value);
+
+    private static bool IsHttpUrl(string? url) =>
+        !string.IsNullOrWhiteSpace(url)
+        && (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            || url.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The embedded print stylesheet. Greyscale-safe: every distinction is a border,
+    /// a weight, or a label — no information is carried by colour. <c>@page</c> sets
+    /// margins only and never a paper size, so a single document prints cleanly on both
+    /// US Letter and A4.
+    /// </summary>
+    private static string BuildStylesheet(string runningFooterText) => $$"""
+        @page {
+          margin: 14mm 14mm 18mm;
+          @bottom-left { content: "{{runningFooterText}}"; font-size: 8pt; color: #000; }
+          @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #000; }
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+          margin: 0;
+          color: #000;
+          background: #fff;
+          font: 10.5pt/1.4 "Helvetica Neue", Arial, "Liberation Sans", sans-serif;
+          -webkit-print-color-adjust: economy;
+          print-color-adjust: economy;
+        }
+
+        .packet {
+          /* A4 printable width (210mm - 2x14mm) is the narrower target; Letter is wider,
+             so sizing to A4 prints cleanly on both. */
+          max-width: 182mm;
+          margin: 0 auto;
+          padding: 8mm;
+        }
+
+        .packet-title { font-size: 13pt; font-weight: 700; margin: 3mm 0 0; }
+        h2 {
+          font-size: 11pt;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          margin: 0 0 2mm;
+          padding-bottom: 1mm;
+          border-bottom: 1px solid #000;
+        }
+        h2 .sub { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 9pt; }
+
+        section, header { margin: 0 0 6mm; break-inside: avoid; }
+
+        /* Masthead — logo top left, letterhead over the tracking number top right, then the
+           stacked Customer / Location / Unit band. Bands are presentational <table>s, not
+           flex/grid: the same HTML is used as the packet delivery email body and mail clients
+           drop flex/grid layout. */
+        .masthead { border-bottom: 2px solid #000; padding-bottom: 3mm; }
+        .masthead-top { width: 100%; border-collapse: collapse; }
+        .masthead-top .brand { vertical-align: top; }
+        .masthead-logo { height: 12mm; width: auto; vertical-align: middle; margin-right: 4mm; }
+        .letterhead { font-size: 13pt; font-weight: 700; }
+        .refbox { text-align: right; white-space: nowrap; vertical-align: top; }
+        .refbox .rvsno { margin: 0; font-size: 12pt; }
+        .refbox .rvsno strong { font-size: 13pt; }
+        .refbox .received { margin: 0.5mm 0 0; font-size: 9pt; }
+
+        .idcols { width: 100%; border-collapse: collapse; margin-top: 3mm; }
+        .idcols .col { vertical-align: top; width: 100%; padding: 0 0 3mm; font-size: 9.5pt; }
+        .idcols .col h2 { font-size: 8.5pt; margin-bottom: 1.5mm; }
+        .idcols .col p { margin: 0 0 1mm; }
+        .idcols .col .name { font-weight: 700; }
+        .idcols .col .empty { font-style: italic; }
+
+        .row, .name { margin: 0 0 1mm; }
+
+        .description .verbatim,
+        pre.dms-text {
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          font: 10pt/1.45 "Courier New", "Liberation Mono", monospace;
+          padding: 0;
+          margin: 0;
+        }
+
+        /* Copy & paste block keeps a frame — it is meant to be lifted into a DMS field,
+           and the border marks its boundaries. The reported-issue block (issue #580) does not. */
+        pre.dms-text {
+          border: 1px solid #000;
+          padding: 3mm;
+        }
+
+        /* The diagnostic Q&A is the block that must read as expert: bold questions and a
+           left-rule accent per answer. Emphasis survives greyscale without a frame. */
+        .diagnostics { margin-bottom: 8mm; }
+        .diagnostics dl { margin: 0; }
+        /* The questions are ours and match the rest of the page (issue #780). */
+        .diagnostics dt {
+          font-weight: 700;
+          margin: 3mm 0 1mm;
+        }
+        .diagnostics dt:first-child { margin-top: 0; }
+        /* The answers are the customer's own words, so they share the verbatim description's
+           typewriter face (issue #735). Face only: the pre-wrap of the shared rule above would
+           render the newlines between the tags as blank lines. */
+        .diagnostics dd {
+          margin: 0 0 0 5mm;
+          padding-left: 3mm;
+          border-left: 2px solid #000;
+          font-family: "Courier New", "Liberation Mono", monospace;
+        }
+        .diagnostics .empty { margin: 0; font-style: italic; }
+        .diagnostics .no-answer { font-style: italic; }
+
+        .photo-line { margin: 0 0 1mm; }
+        .photo-note { margin: 2mm 0 0; font-style: italic; }
+        .photo-note a { color: #000; }
+
+        .status-link a { color: #000; }
+
+        .issue-head { break-after: avoid; page-break-after: avoid; }
+
+        .packet-foot {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 8mm;
+          border-top: 1px solid #000;
+          font-size: 8pt;
+        }
+        .packet-foot td { padding-top: 2mm; }
+        .packet-foot .ai-disclaimer { padding-top: 1.5mm; font-style: italic; }
+
+        @media print {
+          body { font-size: 10pt; }
+          a { text-decoration: underline; }
+          .packet { padding: 0; }
+          /* Manager-app status links are email chrome (issue #498) — never on paper. */
+          .manager-actions { display: none; }
+        }
+        """;
+}

@@ -24,6 +24,8 @@ public class LocationsControllerTests
 
     private const string IntakeBaseUrl = "https://rvintake.com";
 
+    private const string RedirectBaseUrl = "https://go.rvintake.com";
+
     public LocationsControllerTests()
     {
         _claimsService = BuildClaimsService(TenantId);
@@ -95,6 +97,42 @@ public class LocationsControllerTests
     }
 
     [Fact]
+    public async Task Create_ShouldPassPacketConfigThroughToService()
+    {
+        Location? captured = null;
+        _serviceMock.Setup(s => s.CreateAsync(TenantId, It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Location, CancellationToken>((_, l, _) => captured = l)
+            .ReturnsAsync(BuildLocation());
+
+        var request = new LocationCreateRequestDto
+        {
+            Name = "New Location",
+            Slug = "new-location",
+            PacketConfig = new PacketConfigDto { Recipients = ["svc@dealer.com"], IncludePhotos = false }
+        };
+        await _sut.Create(request, CancellationToken.None);
+
+        captured.Should().NotBeNull();
+        captured!.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+        captured.PacketConfig.IncludePhotos.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetById_ShouldReturnPacketConfigInDetailDto()
+    {
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded { Recipients = ["svc@dealer.com"] };
+        _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.GetById(location.Id, CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<LocationDetailDto>().Subject;
+        dto.PacketConfig.Recipients.Should().ContainSingle().Which.Should().Be("svc@dealer.com");
+    }
+
+    [Fact]
     public async Task GetQrCode_ShouldReturnPngFileResult()
     {
         var location = BuildLocation();
@@ -142,6 +180,47 @@ public class LocationsControllerTests
         var fileResult = result.Should().BeOfType<FileContentResult>().Subject;
         fileResult.FileDownloadName.Should().Be($"qr-{location.Slug}.png");
         fileResult.FileContents.Should().NotBeEmpty();
+    }
+
+    // ── Spec A-13: channel-tagged links ──────────────────────────────────
+
+    [Fact]
+    public async Task GetIntakeLinks_ShouldRouteEveryChannelThroughTheRedirectHost()
+    {
+        var location = BuildLocation();
+        _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var sut = new LocationsController(_serviceMock.Object, _claimsService, MsOptions.Create(
+            new IntakeUrlOptions { BaseUrl = IntakeBaseUrl, RedirectBaseUrl = RedirectBaseUrl }));
+
+        var result = await sut.GetIntakeLinks(location.Id, CancellationToken.None);
+
+        var dto = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<LocationIntakeLinksResponseDto>().Subject;
+
+        dto.PrintUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}");
+        dto.QrUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=qr");
+        dto.TextReplacementUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=textrepl");
+        dto.QuickReplyUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=quickreply");
+        dto.ManagerAppUrl.Should().Be($"{RedirectBaseUrl}/{location.Slug}?src=mgrapp");
+    }
+
+    [Fact]
+    public async Task GetIntakeLinks_WhenNoRedirectHostConfigured_ShouldFallBackToTheIntakeApp()
+    {
+        // An environment with no go host bound still hands out working links; they simply
+        // arrive untagged rather than failing.
+        var location = BuildLocation();
+        _serviceMock.Setup(s => s.GetByIdAsync(TenantId, location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+
+        var result = await _sut.GetIntakeLinks(location.Id, CancellationToken.None);
+
+        var dto = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<LocationIntakeLinksResponseDto>().Subject;
+
+        dto.PrintUrl.Should().Be($"{IntakeBaseUrl}/{location.Slug}");
     }
 
     private static Location BuildLocation(string id = "loc_test", string name = "Test Location") => new()

@@ -8,22 +8,25 @@ namespace RVS.API.Services;
 
 /// <summary>
 /// Service for managing <see cref="ServiceRequest"/> entities.
-/// Provides search, CRUD, status transitions, batch outcome, and delete operations.
+/// Provides search, CRUD, status transitions, and delete operations.
 /// </summary>
 public sealed class ServiceRequestService : IServiceRequestService
 {
     private readonly IServiceRequestRepository _repository;
     private readonly IUserContextAccessor _userContext;
-
-    private const int MaxBatchSize = 25;
+    private readonly IPacketGenerationService _packetGenerationService;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ServiceRequestService"/>.
     /// </summary>
-    public ServiceRequestService(IServiceRequestRepository repository, IUserContextAccessor userContext)
+    public ServiceRequestService(
+        IServiceRequestRepository repository,
+        IUserContextAccessor userContext,
+        IPacketGenerationService packetGenerationService)
     {
         _repository = repository;
         _userContext = userContext;
+        _packetGenerationService = packetGenerationService;
     }
 
     /// <inheritdoc />
@@ -34,6 +37,24 @@ public sealed class ServiceRequestService : IServiceRequestService
 
         return await _repository.GetByIdAsync(tenantId, id, cancellationToken)
             ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ServiceRequest>> GetSubmissionMembersAsync(string tenantId, string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        var request = await _repository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
+
+        if (!request.IsInMultiIssueSubmission)
+        {
+            return [request];
+        }
+
+        var members = await _repository.GetBySubmissionIdAsync(tenantId, request.SubmissionId!, cancellationToken);
+        return members.Count > 0 ? members : [request];
     }
 
     /// <inheritdoc />
@@ -101,82 +122,10 @@ public sealed class ServiceRequestService : IServiceRequestService
         }
 
         existing.Status = newStatus;
+        existing.ClearDispositionIfReopened();
         existing.MarkAsUpdated(_userContext.UserId);
 
         return await _repository.UpdateAsync(existing, cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public async Task<BatchOutcomeResponseDto> BatchOutcomeAsync(string tenantId, BatchOutcomeRequestDto request, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.ServiceRequestIds);
-
-        if (request.ServiceRequestIds.Count > MaxBatchSize)
-        {
-            throw new ArgumentException($"Batch size exceeds maximum of {MaxBatchSize}.");
-        }
-
-        if (request.ServiceRequestIds.Count == 0)
-        {
-            throw new ArgumentException("At least one service request ID is required.");
-        }
-
-        var succeeded = new List<string>();
-        var failed = new List<BatchOutcomeFailureDto>();
-
-        foreach (var srId in request.ServiceRequestIds)
-        {
-            try
-            {
-                var sr = await _repository.GetByIdAsync(tenantId, srId, cancellationToken);
-
-                if (sr is null)
-                {
-                    failed.Add(new BatchOutcomeFailureDto
-                    {
-                        ServiceRequestId = srId,
-                        Reason = $"Service request '{srId}' not found."
-                    });
-                    continue;
-                }
-
-                if (!string.Equals(sr.TenantId, tenantId, StringComparison.Ordinal))
-                {
-                    failed.Add(new BatchOutcomeFailureDto
-                    {
-                        ServiceRequestId = srId,
-                        Reason = $"Service request '{srId}' does not belong to tenant '{tenantId}'."
-                    });
-                    continue;
-                }
-
-                sr.ServiceEvent ??= new ServiceEventEmbedded();
-                sr.ServiceEvent.FailureMode = request.FailureMode ?? sr.ServiceEvent.FailureMode;
-                sr.ServiceEvent.RepairAction = request.RepairAction ?? sr.ServiceEvent.RepairAction;
-                sr.ServiceEvent.PartsUsed = request.PartsUsed ?? sr.ServiceEvent.PartsUsed;
-                sr.ServiceEvent.LaborHours = request.LaborHours ?? sr.ServiceEvent.LaborHours;
-                sr.MarkAsUpdated(_userContext.UserId);
-
-                await _repository.UpdateAsync(sr, cancellationToken);
-                succeeded.Add(srId);
-            }
-            catch (Exception ex)
-            {
-                failed.Add(new BatchOutcomeFailureDto
-                {
-                    ServiceRequestId = srId,
-                    Reason = ex.Message
-                });
-            }
-        }
-
-        return new BatchOutcomeResponseDto
-        {
-            Succeeded = succeeded,
-            Failed = failed
-        };
     }
 
     /// <inheritdoc />
@@ -189,5 +138,64 @@ public sealed class ServiceRequestService : IServiceRequestService
             ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
 
         await _repository.DeleteAsync(tenantId, id, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<ServiceRequest> SetCustomerStatusNoteAsync(string tenantId, string id, string? note, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        // C-9: validate before touching the store. The note text is never included in the
+        // exception message, an activity tag, or a log entry.
+        var validation = CustomerStatusNoteValidator.Validate(note);
+        if (!validation.IsValid)
+        {
+            throw new ArgumentException(validation.ErrorMessage, nameof(note));
+        }
+
+        var existing = await _repository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
+
+        existing.SetCustomerStatusNote(note, _userContext.UserId);
+
+        return await _repository.UpdateAsync(existing, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<ServiceRequest> CloseWithDispositionAsync(string tenantId, string id, string reasonCode, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        if (!DispositionReasons.IsValid(reasonCode))
+        {
+            throw new ArgumentException($"Unknown disposition reason '{reasonCode}'.", nameof(reasonCode));
+        }
+
+        var existing = await _repository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Service request '{id}' not found.");
+
+        existing.CloseWithDisposition(reasonCode, _userContext.UserId);
+
+        return await _repository.UpdateAsync(existing, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task RegeneratePacketAsync(string tenantId, string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        return _packetGenerationService.RequestRegenerationAsync(tenantId, id, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<PacketPdfLinkDto> GetPacketPdfLinkAsync(string tenantId, string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        return _packetGenerationService.GetPdfLinkAsync(tenantId, id, cancellationToken);
     }
 }

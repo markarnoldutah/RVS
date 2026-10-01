@@ -1,0 +1,674 @@
+@using RVS.Domain.Entities
+@inject IntakeInviteApiClient InviteClient
+@inject LookupApiClient LookupClient
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@implements IAsyncDisposable
+
+@* ──────────────────────────────────────────────────────────────────────────
+   Send intake link (Spec A-14, issues #666, #693). The advisor is on the phone:
+   the whole dialog is a name, a text-or-email choice, one contact field, one
+   tick box and a button. Everything slower — the recent-sends list, delivery
+   status — loads around that and never blocks it.
+
+   The consent tick box is the legal gate, so Send stays disabled until it is
+   ticked. For a text, the script it refers to is one tap away in the panel
+   below it. The choice only appears when both channels work.
+   ────────────────────────────────────────────────────────────────────────── *@
+<MudDialog Visible="Visible" VisibleChanged="OnVisibleChanged" Options="DialogOptions">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Send" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Send intake link</MudText>
+        </MudStack>
+    </TitleContent>
+
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width: min(420px, 80vw);">
+            @if (LocationId is null)
+            {
+                <MudAlert Severity="Severity.Info">
+                    Choose a location first, then send the link.
+                </MudAlert>
+            }
+            else
+            {
+                @if (_permissionDenied is not null)
+                {
+                    <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.Lock">
+                        @_permissionDenied
+                    </MudAlert>
+                }
+                else
+                {
+                    @if (_loadingCapability)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                    else if (!CanSendAny)
+                    {
+                        @* Not a dead Send button: say why, and leave the working path visible. *@
+                        <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.SmsFailed">
+                            <MudText Typo="Typo.body2"><strong>Texting is not yet enabled.</strong></MudText>
+                            <MudText Typo="Typo.body2">
+                                Our texting number is still waiting on carrier approval. Use
+                                <strong>Fill it in myself</strong> to take the details on the call.
+                            </MudText>
+                        </MudAlert>
+                    }
+                    else if (!_smsEnabled)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Filled.Email">
+                            Texting is waiting on carrier approval, so the link goes by email for now.
+                        </MudAlert>
+                    }
+
+                    <MudTextField T="string" @bind-Value="_firstName"
+                                  Label="First name"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  MaxLength="IntakeInviteCreateRequestDto.FirstNameMaxLength"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Person"
+                                  Placeholder="Jane"
+                                  Immediate="true"
+                                  autocomplete="off" />
+
+                    @if (_smsEnabled && _emailEnabled)
+                    {
+                        <MudRadioGroup T="string" Value="_channel" ValueChanged="OnChannelChanged">
+                            <MudStack Row="true" Spacing="2">
+                                <MudRadio T="string" Value="IntakeInviteChannel.Sms" Color="Color.Primary" Dense="true">Text</MudRadio>
+                                <MudRadio T="string" Value="IntakeInviteChannel.Email" Color="Color.Primary" Dense="true">Email</MudRadio>
+                            </MudStack>
+                        </MudRadioGroup>
+                    }
+
+                    @if (IsEmailMode)
+                    {
+                        <MudTextField T="string" @bind-Value="_email"
+                                      Label="Email address"
+                                      InputType="InputType.Email"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      MaxLength="IntakeInviteCreateRequestDto.EmailMaxLength"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Email"
+                                      Placeholder="jane@example.com"
+                                      HelperText="@EmailHelperText"
+                                      Immediate="true"
+                                      autocomplete="off" />
+                    }
+                    else
+                    {
+                        <MudTextField T="string" @bind-Value="_phone"
+                                      Label="Mobile number"
+                                      InputType="InputType.Telephone"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Phone"
+                                      Placeholder="(801) 555-1234"
+                                      HelperText="@PhoneHelperText"
+                                      Immediate="true"
+                                      autocomplete="off" />
+                    }
+
+                    @if (IsEmailMode)
+                    {
+                        <MudCheckBox T="bool" @bind-Value="_consentCaptured"
+                                     Color="Color.Primary"
+                                     Dense="true"
+                                     Label="The customer asked for the link by email, at this address." />
+                    }
+                    else if (_smsEnabled)
+                    {
+                        <MudCheckBox T="bool" @bind-Value="_consentCaptured"
+                                     Color="Color.Primary"
+                                     Dense="true"
+                                     Label="I read the consent script and the customer said yes to this text." />
+
+                        <MudExpansionPanels Elevation="0" Outlined="true" Dense="true">
+                            <MudExpansionPanel Text="What to say" Dense="true">
+                                @* The published script, Docs/Guides/Advisor_Text_Consent_Script.md.
+                                   Tick the box only after a clear yes. *@
+                                <MudText Typo="Typo.body2" Style="font-style: italic;">
+                                    “I can text you a link so you can send us the details and some photos of
+                                    the problem. It’s one text from <strong>@(LocationName ?? "[your store name]")</strong>, sent
+                                    through our RV Intake service, to this number:
+                                    <strong>@ScriptPhone</strong>. It’s just the one message with a
+                                    link — you’d only get more texts if you ask for text updates on the form.
+                                    We won’t use it for marketing. Standard message and data rates may apply,
+                                    and you can reply STOP any time to stop texts, or HELP for help.
+                                    Is it OK if I send that now?”
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                                    Wait for a clear yes. Anything unsure, ask once more. A no means
+                                    <strong>Fill it in myself</strong> — don’t send.
+                                </MudText>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
+
+                    @if (_error is not null)
+                    {
+                        <MudAlert Severity="Severity.Error">@_error</MudAlert>
+                    }
+
+                    @if (_selfEntryUrl is not null)
+                    {
+                        <CopyField Label="Prefilled intake form"
+                                   Value="@_selfEntryUrl"
+                                   Hint="Your browser blocked the new tab. Open this link to fill the form in." />
+                    }
+
+                    @if (_recent.Count > 0)
+                    {
+                        <MudDivider />
+                        <MudText Typo="Typo.subtitle2">Sent this shift</MudText>
+                        <MudList T="string" Dense="true" Gutters="false">
+                            @foreach (var invite in _recent)
+                            {
+                                var display = IntakeInviteStatusFormatting.Describe(invite, DateTime.UtcNow);
+                                <MudListItem T="string">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="width: 100%;">
+                                        <MudStack Spacing="0" Style="min-width: 0; flex-grow: 1;">
+                                            <MudText Typo="Typo.body2">
+                                                <strong>@invite.FirstName</strong>
+                                                @IntakeInviteStatusFormatting.FormatContact(invite)
+                                            </MudText>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <MudText Typo="Typo.caption" Color="@ToColor(display.Tone)">
+                                                    @display.Label
+                                                </MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    · @invite.CreatedAtUtc.ToLocalTime().ToString("t")
+                                                </MudText>
+                                            </MudStack>
+                                        </MudStack>
+                                        @if (CanResend(invite))
+                                        {
+                                            <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.Refresh"
+                                                       Disabled="@_busy"
+                                                       OnClick="@(() => Resend(invite))"
+                                                       Style="text-transform: none;">
+                                                Resend
+                                            </MudButton>
+                                        }
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                        @if (CanSendAny)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                <strong>Resend</strong> puts their details back in the form. Tick the box and
+                                tap <strong>Send</strong> for a new link.
+                            </MudText>
+                        }
+                    }
+                }
+
+                @if (_locationLink is not null)
+                {
+                    @* The link itself, for the advisor who is not sending it from here: pasting it
+                       into their own text, a chat, a work order note. It carries src=mgrapp, so a
+                       hand-pasted link is still counted as the channel it actually went out on —
+                       which a link typed from memory never is. *@
+                    <MudDivider />
+                    <CopyField Label="Link for this location"
+                               Value="@_locationLink"
+                               Hint="The same form the QR sticker opens. Paste it anywhere you send it yourself." />
+                }
+            }
+        </MudStack>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton OnClick="CloseAsync" Style="text-transform: none;">Close</MudButton>
+        <MudSpacer />
+        @if (LocationId is not null && _permissionDenied is null)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.EditNote"
+                       Disabled="@(!CanFillItInMyself)"
+                       OnClick="FillItInMyselfAsync"
+                       Style="text-transform: none;">
+                Fill it in myself
+            </MudButton>
+            @if (CanSendAny)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Send"
+                           Disabled="@(!CanSend)"
+                           OnClick="SendAsync"
+                           Style="text-transform: none;">
+                    @if (_busy)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Send
+                </MudButton>
+            }
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly DialogOptions DialogOptions = new()
+    {
+        MaxWidth = MaxWidth.ExtraSmall,
+        FullWidth = true,
+        CloseOnEscapeKey = true
+    };
+
+    /// <summary>How long the dialog keeps re-reading an invite waiting on a delivery report.</summary>
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(4);
+    private const int MaxPolls = 15;
+
+    /// <summary>Whether the dialog is shown.</summary>
+    [Parameter]
+    public bool Visible { get; set; }
+
+    /// <summary>Raised when the dialog opens or closes, for <c>@bind-Visible</c>.</summary>
+    [Parameter]
+    public EventCallback<bool> VisibleChanged { get; set; }
+
+    /// <summary>The location whose intake form the invite opens. No location, nothing to send.</summary>
+    [Parameter]
+    public string? LocationId { get; set; }
+
+    /// <summary>
+    /// The location's name, read aloud in the consent script as the store the text comes from —
+    /// the same name the text itself opens with. Falls back to a placeholder.
+    /// </summary>
+    [Parameter]
+    public string? LocationName { get; set; }
+
+    private string _firstName = string.Empty;
+    private string _phone = string.Empty;
+    private string _email = string.Empty;
+    private string _channel = IntakeInviteChannel.Sms;
+    private bool _consentCaptured;
+    private bool _smsEnabled;
+    private bool _emailEnabled;
+    private bool _loadingCapability;
+    private bool _busy;
+    private string? _error;
+    private string? _permissionDenied;
+    private string? _selfEntryUrl;
+    private string? _locationLink;
+    private List<IntakeInviteSummaryResponseDto> _recent = [];
+
+    private bool _wasVisible;
+    private string? _loadedForLocationId;
+    private CancellationTokenSource? _pollCts;
+
+    private bool HasFirstName => !string.IsNullOrWhiteSpace(_firstName);
+
+    private bool HasValidPhone => PhoneNumberNormalizer.Normalize(_phone) is not null;
+
+    private bool HasValidEmail => !string.IsNullOrWhiteSpace(_email) && EmailValidator.Validate(_email).IsValid;
+
+    private bool CanSendAny => _smsEnabled || _emailEnabled;
+
+    // Email is shown when it's the chosen channel, or the only one that works. With neither, the
+    // phone field stays: it still prefills a self-entry form.
+    private bool IsEmailMode => _emailEnabled && (_channel == IntakeInviteChannel.Email || !_smsEnabled);
+
+    private bool IsChannelEnabled(string channel) =>
+        channel == IntakeInviteChannel.Email ? _emailEnabled : _smsEnabled;
+
+    // Consent is the gate the script and the carriers both turn on. Nothing else unlocks Send.
+    private bool CanSend => !_busy && CanSendAny && _consentCaptured && HasFirstName
+        && (IsEmailMode ? HasValidEmail : _smsEnabled && HasValidPhone);
+
+    // Self-entry sends nothing, so the contact is optional — but one that's there must be valid.
+    private bool CanFillItInMyself => !_busy && HasFirstName
+        && (IsEmailMode
+            ? string.IsNullOrWhiteSpace(_email) || HasValidEmail
+            : string.IsNullOrWhiteSpace(_phone) || HasValidPhone);
+
+    // The script says "read the number back": once a valid number is typed, give it to them.
+    private string ScriptPhone =>
+        HasValidPhone
+            ? IntakeInviteStatusFormatting.FormatPhone(PhoneNumberNormalizer.Normalize(_phone))
+            : "[read the number back]";
+
+    private string PhoneHelperText =>
+        string.IsNullOrWhiteSpace(_phone) || HasValidPhone
+            ? "US or Canada mobile number"
+            : "That doesn't look like a US or Canada number";
+
+    private string EmailHelperText =>
+        string.IsNullOrWhiteSpace(_email) || HasValidEmail
+            ? "Where to send the link"
+            : "That doesn't look like an email address";
+
+    /// <summary>
+    /// Consent is given for one channel, so switching clears the tick box. The other field keeps
+    /// what was typed in case the advisor switches back.
+    /// </summary>
+    private void OnChannelChanged(string channel)
+    {
+        _channel = channel;
+        _consentCaptured = false;
+        _error = null;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reload on every open — delivery reports and other sends land while it's closed — and
+        // when the location changes underneath an open dialog.
+        var opened = Visible && !_wasVisible;
+        var locationChanged = Visible && !string.Equals(LocationId, _loadedForLocationId, StringComparison.Ordinal);
+        _wasVisible = Visible;
+
+        if (LocationId is null || !(opened || locationChanged))
+        {
+            return;
+        }
+
+        // A caller's details belong to the location they rang; don't carry them to another one.
+        if (_loadedForLocationId is not null && !string.Equals(LocationId, _loadedForLocationId, StringComparison.Ordinal))
+        {
+            ClearForm();
+        }
+
+        _loadedForLocationId = LocationId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        _permissionDenied = null;
+        _loadingCapability = true;
+
+        await LoadLocationLinkAsync();
+
+        try
+        {
+            var capability = await InviteClient.GetCapabilityAsync(LocationId!);
+            _smsEnabled = capability.SmsEnabled;
+            _emailEnabled = capability.EmailEnabled;
+        }
+        catch (IntakeInviteApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            // The manager app can't read `permissions` client-side — Auth0 RBAC writes them to
+            // the access token only, never the id token — so a 403 is the first and only signal.
+            _permissionDenied = ex.Message;
+            return;
+        }
+        catch (Exception ex)
+        {
+            _smsEnabled = false;
+            _emailEnabled = false;
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loadingCapability = false;
+        }
+
+        if (!IsChannelEnabled(_channel))
+        {
+            _channel = _smsEnabled ? IntakeInviteChannel.Sms : IntakeInviteChannel.Email;
+        }
+
+        await RefreshRecentAsync();
+    }
+
+    /// <summary>
+    /// Reads the location's channel-tagged link (<c>Spec A-13</c>, issue #756). It is read on its
+    /// own, before the capability call, because it is governed by a different permission: an
+    /// advisor who cannot send invites can still copy the link, and a location whose links cannot
+    /// be read simply shows none rather than failing the dialog.
+    /// </summary>
+    private async Task LoadLocationLinkAsync()
+    {
+        try
+        {
+            var links = await LookupClient.GetLocationIntakeLinksAsync(LocationId!);
+            _locationLink = links.ManagerAppUrl;
+        }
+        catch (Exception)
+        {
+            _locationLink = null;
+        }
+    }
+
+    private async Task RefreshRecentAsync()
+    {
+        try
+        {
+            _recent = await InviteClient.ListRecentAsync(LocationId!);
+        }
+        catch (IntakeInviteApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            _permissionDenied = ex.Message;
+        }
+        catch (Exception)
+        {
+            // The recent list is context, not the job. A failure here must not stop a send.
+            _recent = [];
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SendAsync()
+    {
+        if (!CanSend)
+        {
+            return;
+        }
+
+        await CreateInviteAsync(consentCaptured: true, selfEntry: false);
+    }
+
+    /// <summary>
+    /// Puts an earlier invite's name, channel and address back in the form. It does not send:
+    /// tokens are single-use, so a resend is a new invite, and a new invite needs its own consent
+    /// tick. The list spans the shift, not one call, so a yes heard earlier may not cover this send.
+    /// </summary>
+    private void Resend(IntakeInviteSummaryResponseDto invite)
+    {
+        _firstName = invite.FirstName;
+        _channel = invite.Channel;
+        if (invite.Channel == IntakeInviteChannel.Email)
+        {
+            _email = invite.Email ?? string.Empty;
+        }
+        else
+        {
+            _phone = IntakeInviteStatusFormatting.FormatPhone(invite.Phone);
+        }
+
+        _consentCaptured = false;
+        _error = null;
+    }
+
+    private async Task FillItInMyselfAsync()
+    {
+        await CreateInviteAsync(consentCaptured: false, selfEntry: true);
+    }
+
+    private async Task CreateInviteAsync(bool consentCaptured, bool selfEntry)
+    {
+        // Send only the field on screen: the other one may hold a stale value from a switch.
+        var emailMode = IsEmailMode;
+        var firstName = _firstName.Trim();
+
+        _busy = true;
+        _error = null;
+        _selfEntryUrl = null;
+        StateHasChanged();
+
+        try
+        {
+            var created = await InviteClient.SendAsync(LocationId!, new IntakeInviteCreateRequestDto
+            {
+                FirstName = firstName,
+                Channel = emailMode ? IntakeInviteChannel.Email : IntakeInviteChannel.Sms,
+                Phone = emailMode || string.IsNullOrWhiteSpace(_phone) ? null : _phone,
+                Email = !emailMode || string.IsNullOrWhiteSpace(_email) ? null : _email.Trim(),
+                ConsentCaptured = consentCaptured,
+                SelfEntry = selfEntry
+            });
+
+            if (selfEntry)
+            {
+                await OpenSelfEntryAsync(created.IntakeUrl);
+            }
+            else
+            {
+                Snackbar.Add(emailMode ? $"Link emailed to {firstName}." : $"Link sent to {firstName}.", Severity.Success);
+                ClearForm();
+            }
+
+            await RefreshRecentAsync();
+            StartPolling();
+        }
+        catch (IntakeInviteApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            _permissionDenied = ex.Message;
+        }
+        catch (IntakeInviteApiException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenSelfEntryAsync(string? intakeUrl)
+    {
+        if (string.IsNullOrWhiteSpace(intakeUrl))
+        {
+            _error = "The invite was created but no form link came back. Try again.";
+            return;
+        }
+
+        try
+        {
+            // The mint has to happen first, so this call lands after an await and a popup
+            // blocker may refuse it. When it does, the link is shown instead of lost.
+            var opened = await JS.InvokeAsync<bool>("rvs_openInNewTab", intakeUrl);
+            if (!opened)
+            {
+                _selfEntryUrl = intakeUrl;
+                return;
+            }
+
+            ClearForm();
+        }
+        catch (JSException)
+        {
+            _selfEntryUrl = intakeUrl;
+        }
+    }
+
+    /// <summary>
+    /// Re-reads the invites until the carrier has answered for all of them, so the status goes
+    /// Sent → Delivered in front of the advisor without them touching anything.
+    /// </summary>
+    private void StartPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+        _pollCts = new CancellationTokenSource();
+        var token = _pollCts.Token;
+
+        _ = PollAsync(token);
+    }
+
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(PollInterval);
+
+            for (var i = 0; i < MaxPolls; i++)
+            {
+                if (!await timer.WaitForNextTickAsync(cancellationToken))
+                {
+                    return;
+                }
+
+                if (!_recent.Any(IntakeInviteStatusFormatting.IsAwaitingDeliveryReport))
+                {
+                    return;
+                }
+
+                await RefreshRecentAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Dialog closed, or a newer send took over.
+        }
+    }
+
+    private void StopPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+        _pollCts = null;
+    }
+
+    private void ClearForm()
+    {
+        _firstName = string.Empty;
+        _phone = string.Empty;
+        _email = string.Empty;
+        _consentCaptured = false;
+    }
+
+    /// <summary>
+    /// A link that has already been used is finished; anything else can be sent again, on the
+    /// channel it first went by, while that channel still works. A self-entry invite was never
+    /// sent, so there is nothing to resend.
+    /// </summary>
+    private bool CanResend(IntakeInviteSummaryResponseDto invite) =>
+        !invite.IsSelfEntry && invite.RedeemedAtUtc is null && IsChannelEnabled(invite.Channel)
+        && !string.IsNullOrWhiteSpace(invite.Channel == IntakeInviteChannel.Email ? invite.Email : invite.Phone);
+
+    private static Color ToColor(IntakeInviteStatusTone tone) => tone switch
+    {
+        IntakeInviteStatusTone.Progress => Color.Info,
+        IntakeInviteStatusTone.Success => Color.Success,
+        IntakeInviteStatusTone.Error => Color.Error,
+        _ => Color.Secondary
+    };
+
+    private async Task OnVisibleChanged(bool visible)
+    {
+        if (!visible)
+        {
+            StopPolling();
+            _selfEntryUrl = null;
+            _error = null;
+        }
+
+        Visible = visible;
+        await VisibleChanged.InvokeAsync(visible);
+    }
+
+    private Task CloseAsync() => OnVisibleChanged(false);
+
+    public ValueTask DisposeAsync()
+    {
+        StopPolling();
+        return ValueTask.CompletedTask;
+    }
+}

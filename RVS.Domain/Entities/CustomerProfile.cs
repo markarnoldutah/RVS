@@ -1,5 +1,7 @@
 using Newtonsoft.Json;
 
+using RVS.Domain.Validation;
+
 namespace RVS.Domain.Entities;
 
 /// <summary>
@@ -29,6 +31,15 @@ public class CustomerProfile : EntityBase
     public string? Phone { get; set; }
 
     /// <summary>
+    /// <see cref="Phone"/> in E.164 (<c>+18015551234</c>), or <c>null</c> when it does not
+    /// normalise. <see cref="Phone"/> keeps what the customer typed; this is the form a lookup
+    /// can match on, which is what lets an inbound STOP find every dealer's record of a number
+    /// (issue #665). Set by <c>PhoneNumberNormalizer</c> wherever the phone is written.
+    /// </summary>
+    [JsonProperty("phoneE164")]
+    public string? PhoneE164 { get; set; }
+
+    /// <summary>
     /// When <c>true</c>, the customer has opted out of SMS notifications.
     /// Default is <c>false</c> (both email and SMS are sent).
     /// </summary>
@@ -55,6 +66,15 @@ public class CustomerProfile : EntityBase
     /// </summary>
     [JsonProperty("smsOptOutAtUtc")]
     public DateTime? SmsOptOutAtUtc { get; set; }
+
+    /// <summary>
+    /// When the last inbound keyword (<c>STOP</c> / <c>START</c> / <c>UNSTOP</c>) that RVS acted
+    /// on was sent. Event Grid delivers at least once and in no fixed order, so an event older
+    /// than this is ignored rather than allowed to undo a later one (issue #665).
+    /// Null when no keyword has ever arrived for this number.
+    /// </summary>
+    [JsonProperty("smsKeywordAtUtc")]
+    public DateTime? SmsKeywordAtUtc { get; set; }
 
     /// <summary>
     /// UTC timestamp when the customer opted out of email notifications.
@@ -90,6 +110,73 @@ public class CustomerProfile : EntityBase
     [JsonProperty("totalRequestCount")]
     public int TotalRequestCount { get; set; }
 
+    /// <summary>
+    /// Applies an inbound carrier keyword (<c>Spec A-2</c>'s out-of-scope note, issue #665).
+    /// <see cref="SmsKeyword.OptOut"/> sets <see cref="SmsOptOut"/>, <see cref="SmsKeyword.OptIn"/>
+    /// clears it — and a keyword is the only thing that clears it, because intake can set an
+    /// opt-out but never clears one (issue #673). <see cref="SmsKeyword.Help"/> changes nothing:
+    /// it is answered with a fixed reply, and is neither consent nor a revocation.
+    ///
+    /// An event at or before <see cref="SmsKeywordAtUtc"/> is ignored, which covers both the
+    /// duplicate deliveries and the out-of-order pairs Event Grid is allowed to produce.
+    /// <see cref="SmsOptOutAtUtc"/> keeps the *first* opt-out's time, since that is the evidence
+    /// of when the customer asked; a repeat only advances <see cref="SmsKeywordAtUtc"/>.
+    /// </summary>
+    /// <param name="keyword">What the inbound text meant.</param>
+    /// <param name="eventAtUtc">When the customer sent it, per the ACS event.</param>
+    /// <returns><c>true</c> when the record changed and needs persisting.</returns>
+    public bool ApplySmsKeyword(SmsKeyword keyword, DateTime eventAtUtc)
+    {
+        // HELP is answered, not recorded: it is neither consent nor a revocation.
+        if (keyword is SmsKeyword.None or SmsKeyword.Help)
+        {
+            return false;
+        }
+
+        if (SmsKeywordAtUtc is { } last && eventAtUtc <= last)
+        {
+            return false;
+        }
+
+        SmsKeywordAtUtc = eventAtUtc;
+
+        if (keyword == SmsKeyword.OptOut)
+        {
+            SmsOptOutAtUtc ??= eventAtUtc;
+            SmsOptOut = true;
+            return true;
+        }
+
+        SmsOptOut = false;
+        SmsOptOutAtUtc = null;
+        SmsOptInAtUtc = eventAtUtc;
+        return true;
+    }
+
+    /// <summary>
+    /// Applies the opt-out boxes from an intake submission (Spec A-2, issue #673). A ticked box
+    /// sets the opt-out and stamps its time if unset; an unticked box changes nothing. The form
+    /// never shows a stored opt-out, so an unticked box is not a choice to opt back in. Only <see cref="ApplySmsKeyword"/> clears <see cref="SmsOptOut"/>;
+    /// nothing clears <see cref="EmailOptOut"/> yet.
+    /// </summary>
+    /// <param name="smsOptOut">The submission's SMS opt-out box.</param>
+    /// <param name="emailOptOut">The submission's email opt-out box.</param>
+    /// <param name="atUtc">When the submission was received.</param>
+    public void ApplyIntakeOptOuts(bool smsOptOut, bool emailOptOut, DateTime atUtc)
+    {
+        if (smsOptOut)
+        {
+            SmsOptOut = true;
+            SmsOptOutAtUtc ??= atUtc;
+        }
+
+        if (emailOptOut)
+        {
+            EmailOptOut = true;
+            EmailOptOutAtUtc ??= atUtc;
+        }
+    }
+
     // ── Convenience helpers (not persisted) ──
 
     /// <summary>
@@ -113,7 +200,7 @@ public class CustomerProfile : EntityBase
     /// Deactivates the active ownership entry for the specified asset.
     /// No-op if the asset is not actively owned by this profile.
     /// </summary>
-    /// <param name="assetId">Asset identifier (VIN), e.g. <c>1FTFW1ET5EKE12345</c>.</param>
+    /// <param name="assetId">Vehicle-history key, e.g. <c>1FTFW1ET5EKE12345</c> or <c>LANCE:152263</c>.</param>
     public void DeactivateAsset(string assetId)
     {
         var active = GetActiveInteraction(assetId);
@@ -174,7 +261,8 @@ public class CustomerProfile : EntityBase
 public class AssetOwnershipEmbedded
 {
     /// <summary>
-    /// Asset identifier — the 17-character Vehicle Identification Number (VIN).
+    /// Vehicle-history key from <see cref="Validation.VehicleHistoryKey"/>: the VIN, or
+    /// <c>MANUFACTURER:SERIAL</c> for a rig with only a serial number (issue #808).
     /// </summary>
     [JsonProperty("assetId")]
     public string AssetId { get; set; } = string.Empty;

@@ -4,54 +4,91 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RVS Service Flow</title>
+    <title>RV Intake Manager</title>
     <base href="/" />
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    <!-- Self-hosted Space Grotesk (Spec THEME-1): the intake PWA has to render in brand
+         from cache in a service bay, so no Google Fonts CDN dependency here. -->
+    <link href="_content/RVS.UI.Shared/fonts/fonts.css" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link href="_content/RVS.UI.Shared/css/design-tokens.css" rel="stylesheet" />
     <link rel="stylesheet" href="css/app.css" />
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link href="RVS.Blazor.Manager.styles.css" rel="stylesheet" />
+    <!-- Installable PWA (issue #498) -->
+    <meta name="theme-color" content="#2F4C6B" />
+    <link href="manifest.webmanifest" rel="manifest" />
+    <link rel="icon" href="favicon.ico" sizes="48x48" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 </head>
 
+<!-- No inline <script> anywhere in this file: the Content-Security-Policy in
+     staticwebapp.config.json forbids it. Put script in wwwroot/js/ instead. -->
 <body>
     <div id="app">
         <!-- Loading screen — replaced by Blazor once the WASM runtime initializes.
-             On the first load we show the full branded splash.  After the auth
-             callback (same session) the WASM runtime is cached so we show a
-             minimal spinner instead to avoid a jarring double-splash. -->
-        <script>
-            (function () {
-                var isReturn = sessionStorage.getItem('rvs-wasm-loaded') === '1';
-                if (!isReturn) sessionStorage.setItem('rvs-wasm-loaded', '1');
-                document.documentElement.setAttribute('data-splash', isReturn ? 'minimal' : 'full');
-            })();
-        </script>
+             js/splash-mode.js picks the full splash or the minimal post-login spinner, and
+             grounds both in the theme the user last chose. -->
+        <script src="js/splash-mode.js"></script>
         <style>
+            /* A plain surface, not a photograph. Manager is an all-hours console, and a
+               cover-scaled hero re-scaled and flashed through every authentication state
+               change — splash, AuthStatePanel, app (#703). All three now paint the same
+               ground, so the only thing that changes is the content.
+
+               These hex values mirror ManagerTheme's Background / TextPrimary / Primary
+               (RvsBrand, Spec THEME-1) and are repeated here only because this markup
+               renders before MudThemeProvider exists. Change them with RvsBrand.cs. */
             #splash-bg {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
                 min-height: 100vh;
-                font-family: Roboto, Helvetica, Arial, sans-serif;
-                background:
-                    url('images/tetons-mobile.jpg') center 25% / cover no-repeat;
+                font-family: 'Space Grotesk', Roboto, Helvetica, Arial, sans-serif;
+                background: #FAF8F3;            /* RvsBrand.PaperNeutral */
+                color: #20344A;                 /* RvsBrand.TextOnPaper */
+                --splash-track: rgba(32, 52, 74, 0.26);
+                --splash-bar: #A8431F;          /* RvsBrand.Accent */
             }
-            @media (min-width: 768px) {
-                #splash-bg {
-                    background:
-                        url('images/tetons-desktop.jpg') center 40% / cover no-repeat;
-                }
+            html[data-theme="dark"] #splash-bg {
+                background: #1B2A3C;            /* RvsBrand.InkDarkSurface */
+                color: #F0ECE1;                 /* RvsBrand.TextOnInk */
+                --splash-track: rgba(240, 236, 225, 0.35);
+                --splash-bar: #E8956D;          /* RvsBrand.AccentOnDark */
             }
-            /* Minimal splash on return from auth callback — plain background, spinner only */
-            html[data-splash="minimal"] #splash-bg {
-                background: #FAFAFA;
-                min-height: 100vh;
+            html[data-theme="highcontrast"] #splash-bg {
+                background: #000000;
+                color: #FFFFFF;
+                --splash-track: #666666;
+                --splash-bar: #FFFF00;
             }
+            /* Minimal splash on return from the auth callback — same ground, bar only. */
             html[data-splash="minimal"] #splash-bg .splash-brand { display: none; }
-            html[data-splash="minimal"] .splash-bar > div { background: #3F51B5; }
+            .splash-brand h3 {
+                margin: 0 0 8px;
+                font-weight: 500;
+                font-size: 1.5rem;
+            }
+            .splash-brand p {
+                margin: 0 0 24px;
+                font-size: 0.875rem;
+                text-align: center;
+                opacity: 0.7;
+            }
+            .splash-bar {
+                width: 200px;
+                height: 4px;
+                background: var(--splash-track);
+                border-radius: 2px;
+                overflow: hidden;
+            }
+            .splash-bar > div {
+                width: 40%;
+                height: 100%;
+                background: var(--splash-bar);
+                border-radius: 2px;
+                animation: loading-progress 1.5s ease-in-out infinite;
+            }
             @keyframes loading-progress {
                 0%   { transform: translateX(-150%); }
                 100% { transform: translateX(350%); }
@@ -59,25 +96,11 @@
         </style>
         <div id="splash-bg">
             <div class="splash-brand">
-                <!--<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24"
-                     fill="#ffffff" style="margin-bottom:24px;" aria-hidden="true">
-                    <path d="M20 17v-6c0-1.1-.9-2-2-2h-3V7c0-1.1-.9-2-2-2H7c-1.1 0-2 .9-2 2v4H2v6h2
-                             c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h2zm-14
-                             2c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM7 13V7h6v6H7zm10
-                             6c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm1-6h-4V9h3c.55 0
-                             1 .45 1 1v3z"/>
-                </svg>-->
-                <h3 style="margin:0 0 8px;font-weight:500;font-size:1.5rem;color:#ffffff;text-shadow:0 2px 4px rgba(0,0,0,0.5);">
-                    RVS Service Flow
-                </h3>
-                <p style="margin:0 0 24px;font-size:0.875rem;color:#e0e0e0;text-shadow:0 1px 3px rgba(0,0,0,0.5);text-align:center;">
-                    Loading application&hellip;
-                </p>
+                <h3>RV Intake Manager</h3>
+                <p>Loading application&hellip;</p>
             </div>
-            <div class="splash-bar" style="width:200px;height:4px;background:rgba(255,255,255,0.3);border-radius:2px;overflow:hidden;"
-                 role="progressbar" aria-label="Loading application">
-                <div style="width:40%;height:100%;background:#ffffff;border-radius:2px;
-                            animation:loading-progress 1.5s ease-in-out infinite;"></div>
+            <div class="splash-bar" role="progressbar" aria-label="Loading application">
+                <div></div>
             </div>
             <!-- Reserves the same vertical space as AuthStatePanel's (hidden) MudButton Size.Large
                  so the centered stack lines up identically and the swap to AuthStatePanel is jank-free. -->
@@ -90,46 +113,19 @@
         <a href="." class="reload">Reload</a>
         <span class="dismiss">🗙</span>
     </div>
+    <!-- Must precede AuthenticationService.js: restores the persisted sign-in before the library reads it (issue #498). -->
+    <script src="js/session-persist.js"></script>
     <script src="_content/Microsoft.AspNetCore.Components.WebAssembly.Authentication/AuthenticationService.js"></script>
 
-    <!-- Application Insights JS SDK v3 — connection string injected at deploy time via appsettings.json -->
+    <!-- Application Insights JS SDK v3 — connection string read from appsettings.json by js/app-insights.js -->
     <script src="https://js.monitor.azure.com/scripts/b/ai.3.gbl.min.js"></script>
-    <script>
-        // Load App Insights connection string from Blazor appsettings.json at startup
-        (async function () {
-            try {
-                var resp = await fetch('appsettings.json');
-                if (!resp.ok) return;
-                var cfg = await resp.json();
-                var cs = (cfg.ApplicationInsights && cfg.ApplicationInsights.ConnectionString) || "";
-                if (!cs) return;
-                var sdkInstance = new Microsoft.ApplicationInsights.ApplicationInsights({
-                    config: { connectionString: cs }
-                });
-                sdkInstance.loadAppInsights();
-                sdkInstance.trackPageView();
-                window.appInsights = sdkInstance;
-            } catch (e) { /* appsettings.json may not exist in dev */ }
-        })();
-    </script>
+    <script src="js/app-insights.js"></script>
 
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="js/download.js"></script>
     <script src="js/auth-refresh.js"></script>
     <script src="_framework/blazor.webassembly.js" autostart="false"></script>
-    <script>
-        // .NET 10: blazor.boot.json was inlined into dotnet.js, so the
-        // blazor-environment response header is no longer read. Detect
-        // the environment at runtime from the hostname instead.
-        const hostname = window.location.hostname;
-        let env = 'Production';
-        if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-            env = 'Development';
-        } else if (hostname.includes('mango') || hostname.includes('staging')) {
-            env = 'Staging';
-        }
-        Blazor.start({ environment: env });
-    </script>
+    <script src="js/blazor-start.js"></script>
 </body>
 
 </html>

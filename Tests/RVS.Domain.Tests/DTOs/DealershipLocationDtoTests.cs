@@ -61,6 +61,7 @@ public class DealershipLocationDtoTests
             Name = "Main Service Center",
             Slug = "main-service-center",
             Phone = "555-5678",
+            TimeZoneId = "America/Denver",
             Address = new AddressDto
             {
                 Address1 = "123 Main St",
@@ -78,8 +79,16 @@ public class DealershipLocationDtoTests
 
         dto.Address.Should().NotBeNull();
         dto.Address!.City.Should().Be("Salt Lake City");
+        dto.TimeZoneId.Should().Be("America/Denver");
         dto.IntakeConfig.Should().NotBeNull();
         dto.IntakeConfig!.AllowAnonymousIntake.Should().BeFalse();
+    }
+
+    [Fact]
+    public void LocationDetailDto_TimeZoneId_ShouldDefaultToNull()
+    {
+        // An unset zone is legal and leaves the packet's Received line in UTC (issue #506).
+        new LocationDetailDto().TimeZoneId.Should().BeNull();
     }
 
     [Fact]
@@ -101,5 +110,44 @@ public class DealershipLocationDtoTests
 
         dto.AcceptedFileTypes.Should().BeEmpty();
         dto.AiContext.Should().BeNull();
+    }
+
+    [Fact]
+    public void PacketConfigDto_DefaultsRequireOnlyARecipient()
+    {
+        var dto = new PacketConfigDto();
+
+        dto.Enabled.Should().BeTrue();
+        dto.Recipients.Should().BeEmpty();
+        dto.DisabledRecipients.Should().BeEmpty();
+        dto.AttachPdf.Should().BeTrue();
+        dto.IncludePhotos.Should().BeTrue();
+        dto.PasteBlockCharacterCap.Should().Be(2500);
+        dto.StatusLinkTtlDays.Should().Be(30);
+    }
+
+    [Fact]
+    public void LocationBrandingDto_DefaultsToTheRvIntakeBrand()
+    {
+        var dto = new LocationBrandingDto();
+
+        dto.LogoUrl.Should().BeNull();
+        dto.HeaderColor.Should().BeNull();
+        dto.AccentColor.Should().BeNull();
+    }
+
+    [Fact]
+    public void LocationDetailDto_HasPacketConfigDefault()
+    {
+        var dto = new LocationDetailDto
+        {
+            Id = "loc-1",
+            TenantId = "tenant-1",
+            Name = "Main Service Center",
+            Slug = "main-service-center"
+        };
+
+        dto.PacketConfig.Should().NotBeNull();
+        dto.PacketConfig.Enabled.Should().BeTrue();
     }
 }

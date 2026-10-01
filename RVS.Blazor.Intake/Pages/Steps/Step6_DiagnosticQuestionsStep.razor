@@ -5,7 +5,7 @@
            required capabilities. Otherwise no UI is rendered for this. *@
         @if (State.CapabilityAssessment is { Matched: false })
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined"
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled"
                       Icon="@Icons.Material.Filled.Warning">
                 @GetCapabilityFallbackMessage()
             </MudAlert>
@@ -31,17 +31,19 @@
                 </MudText>
             </MudStack>
         }
-        else if (_error is not null)
-        {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
-                @_error You can skip this step and continue.
-            </MudAlert>
-        }
         else
         {
+            @if (_error is not null)
+            {
+                @* The location's own questions (Spec A-18) still show below when the AI call fails. *@
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
+                    @_error @ErrorFollowUp
+                </MudAlert>
+            }
+
             @if (!string.IsNullOrWhiteSpace(State.SmartSuggestion))
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true"
+                <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true"
                           Icon="@Icons.Material.Filled.Lightbulb">
                     <strong>Suggestion:</strong> @State.SmartSuggestion
                 </MudAlert>
@@ -94,7 +96,9 @@
                                 <MudTextField Value="@(GetResponse(questionIndex)?.FreeTextResponse ?? "")"
                                               ValueChanged="(string value) => SetFreeText(questionIndex, value)"
                                               T="string"
-                                              Placeholder="Additional details..."
+                                              Immediate="true"
+                                              DebounceInterval="300"
+                                              Placeholder="@FreeTextPlaceholder(question)"
                                               Lines="2"
                                               Variant="Variant.Outlined"
                                               Margin="Margin.Dense" />
@@ -132,22 +136,20 @@
         _isLoading = true;
         try
         {
-            var request = State.BuildCreateRequest();
+            // The issue on screen, not the submission, whose issue fields lead with the first
+            // issue (issue #810).
+            var request = State.BuildActiveIssueRequest();
             var response = await IntakeApi.GetDiagnosticQuestionsAsync(State.Slug, request);
 
-            State.DiagnosticQuestions = response.Questions;
-            State.SmartSuggestion = response.SmartSuggestion;
-
-            State.DiagnosticResponses = response.Questions.Select(q => new DiagnosticResponseDto
-            {
-                QuestionText = q.QuestionText,
-                SelectedOptions = [],
-                FreeTextResponse = null
-            }).ToList();
+            State.ApplyDiagnosticQuestions(response);
+            await State.PersistAsync();
         }
         catch (Exception)
         {
             _error = "Unable to generate diagnostic questions.";
+
+            // No AI questions, but the location's own still apply (Spec A-18, issue #785).
+            State.ApplyDiagnosticQuestions(new DiagnosticQuestionsResponseDto());
         }
         finally
         {
@@ -155,12 +157,20 @@
         }
     }
 
+    // A dealer question (Spec A-18) has no options, so its text box is the whole answer.
+    private static string FreeTextPlaceholder(DiagnosticQuestionDto question) =>
+        question.Options.Count > 0 ? "Additional details..." : "Your answer";
+
+    private string ErrorFollowUp => State.DiagnosticQuestions.Count > 0
+        ? "You can answer the questions below, or skip them and continue."
+        : "You can skip this step and continue.";
+
     private DiagnosticResponseDto? GetResponse(int index)
     {
         return index < State.DiagnosticResponses.Count ? State.DiagnosticResponses[index] : null;
     }
 
-    private void ToggleOption(int questionIndex, string option)
+    private async Task ToggleOption(int questionIndex, string option)
     {
         if (questionIndex >= State.DiagnosticResponses.Count) return;
 
@@ -174,14 +184,18 @@
 
         State.DiagnosticResponses[questionIndex] = response with { SelectedOptions = options };
         StateHasChanged();
+
+        // Issue #736: saved as given, not on Continue — Back, or a reload Android forces, must not lose it.
+        await State.PersistAsync();
     }
 
-    private void SetFreeText(int questionIndex, string? value)
+    private async Task SetFreeText(int questionIndex, string? value)
     {
         if (questionIndex >= State.DiagnosticResponses.Count) return;
 
         var response = State.DiagnosticResponses[questionIndex];
         State.DiagnosticResponses[questionIndex] = response with { FreeTextResponse = value };
+        await State.PersistAsync();
     }
 
     private async Task HandleNext()

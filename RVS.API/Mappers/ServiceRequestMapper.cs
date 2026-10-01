@@ -1,5 +1,6 @@
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
+using RVS.Domain.Validation;
 
 namespace RVS.API.Mappers;
 
@@ -29,6 +30,7 @@ public static class ServiceRequestMapper
             Asset = entity.AssetInfo.ToDto(),
             IssueCategory = entity.IssueCategory ?? string.Empty,
             IssueDescription = entity.IssueDescription,
+            IssueDescriptionVerbatim = entity.IssueDescriptionVerbatim,
             TechnicianSummary = entity.TechnicianSummary,
             Urgency = entity.Urgency,
             RvUsage = entity.RvUsage,
@@ -36,15 +38,54 @@ public static class ServiceRequestMapper
             ApproxPurchaseDate = entity.ApproxPurchaseDate,
             Priority = entity.Priority,
             AssignedTechnicianId = entity.AssignedTechnicianId,
-            AssignedBayId = entity.AssignedBayId,
             ScheduledDateUtc = entity.ScheduledDateUtc,
             RequiredSkills = entity.RequiredSkills,
             BoardSequence = entity.BoardSequence,
             DiagnosticResponses = entity.DiagnosticResponses.Select(d => d.ToDto()).ToList(),
             Attachments = entity.Attachments.Select(a => a.ToDto()).ToList(),
             AiEnrichment = entity.AiEnrichment?.ToDto(),
+            IntakeSource = entity.IntakeSource,
+            IntakeInviteId = entity.IntakeInviteId,
+            AdvisorUserId = entity.AdvisorUserId,
+            SubmissionId = entity.SubmissionId,
+            SubmissionPosition = entity.SubmissionPosition,
+            SubmissionCount = entity.SubmissionCount,
+            CustomerStatusNote = entity.CustomerStatusNote is { } note
+                ? new CustomerStatusNoteDto { Text = note.Text, UpdatedAtUtc = note.UpdatedAtUtc }
+                : null,
+            Disposition = entity.Disposition is { } disposition
+                ? new ServiceRequestDispositionDto
+                {
+                    ReasonCode = disposition.ReasonCode,
+                    ReasonLabel = DispositionReasons.GetLabel(disposition.ReasonCode),
+                    DisposedAtUtc = disposition.DisposedAtUtc
+                }
+                : null,
+            PacketGeneration = entity.PacketGeneration.ToDto(),
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
+        };
+    }
+
+    /// <summary>
+    /// Maps packet-generation state to a <see cref="PacketGenerationDto"/> (<c>Spec C-2</c>,
+    /// issue #443). <see cref="PacketGenerationEmbedded.LastError"/> and
+    /// <see cref="PacketGenerationEmbedded.PdfBlobPath"/> are deliberately not carried.
+    /// </summary>
+    public static PacketGenerationDto ToDto(this PacketGenerationEmbedded packet)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        return new PacketGenerationDto
+        {
+            Status = packet.Status,
+            AttemptCount = packet.AttemptCount,
+            MaxAttempts = PacketGenerationEmbedded.MaxAttempts,
+            RetriesExhausted = packet.Status == "Failed"
+                && packet.AttemptCount >= PacketGenerationEmbedded.MaxAttempts,
+            LastAttemptAtUtc = packet.LastAttemptAtUtc,
+            GeneratedAtUtc = packet.GeneratedAtUtc,
+            PacketVersion = packet.PacketVersion
         };
     }
 
@@ -55,32 +96,73 @@ public static class ServiceRequestMapper
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var year = entity.AssetInfo.Year.HasValue ? $"{entity.AssetInfo.Year} " : string.Empty;
-        var manufacturer = entity.AssetInfo.Manufacturer is not null ? $"{entity.AssetInfo.Manufacturer} " : string.Empty;
-        var model = entity.AssetInfo.Model ?? string.Empty;
-        var assetDisplay = (year + manufacturer + model).Trim();
-
-        var hasOutcome = entity.ServiceEvent is not null
-            && (!string.IsNullOrWhiteSpace(entity.ServiceEvent.FailureMode)
-                || !string.IsNullOrWhiteSpace(entity.ServiceEvent.RepairAction));
-
         return new ServiceRequestSummaryResponseDto
         {
             Id = entity.Id,
             LocationId = entity.LocationId,
             Status = entity.Status,
+            DispositionReasonCode = entity.Disposition?.ReasonCode,
             CustomerFullName = $"{entity.CustomerSnapshot.FirstName} {entity.CustomerSnapshot.LastName}".Trim(),
-            AssetDisplay = string.IsNullOrWhiteSpace(assetDisplay) ? null : assetDisplay,
+            AssetDisplay = ComposeAssetDisplay(entity.AssetInfo),
             IssueCategory = entity.IssueCategory ?? string.Empty,
             TechnicianSummary = entity.TechnicianSummary,
             AttachmentCount = entity.Attachments.Count,
             AssignedTechnicianId = entity.AssignedTechnicianId,
             Priority = entity.Priority,
             BoardSequence = entity.BoardSequence,
-            HasOutcome = hasOutcome,
+            SubmissionId = entity.SubmissionId,
+            SubmissionPosition = entity.SubmissionPosition,
+            SubmissionCount = entity.SubmissionCount,
             CreatedAtUtc = entity.CreatedAtUtc,
             UpdatedAtUtc = entity.UpdatedAtUtc
         };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="ServiceRequest"/> to the customer-facing status view
+    /// (<c>Spec X-1</c> / <c>C-9</c>): the unit, the issue category's display name, the submission
+    /// date, the current status, the servicing location's name, logo and phone number, and any
+    /// manager-authored status note. No customer identity and no free-text problem description
+    /// are carried across this boundary.
+    /// </summary>
+    /// <param name="entity">The service request.</param>
+    /// <param name="location">The servicing location, or <c>null</c> when it cannot be found.</param>
+    public static CustomerStatusItemResponseDto ToCustomerStatusItemDto(this ServiceRequest entity, Location? location)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var logoUrl = location?.Branding?.LogoUrl?.Trim();
+
+        return new CustomerStatusItemResponseDto
+        {
+            Unit = ComposeAssetDisplay(entity.AssetInfo),
+            IssueCategory = IssueCategoryVocabulary.GetName(entity.IssueCategory),
+            SubmittedAtUtc = entity.CreatedAtUtc,
+            Status = entity.Status,
+            LocationPhone = TrimToNull(location?.Phone),
+            LocationName = TrimToNull(location?.Name),
+            LocationLogoUrl = LocationBrandingValidator.IsHttpsUrl(logoUrl) ? logoUrl : null,
+            StatusNote = string.IsNullOrWhiteSpace(entity.CustomerStatusNote?.Text)
+                ? null
+                : entity.CustomerStatusNote.Text
+        };
+    }
+
+    private static string? TrimToNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Builds the "year make model" display string for a unit, or <c>null</c> when none
+    /// of those fields are populated.
+    /// </summary>
+    private static string? ComposeAssetDisplay(AssetInfoEmbedded assetInfo)
+    {
+        var year = assetInfo.Year.HasValue ? $"{assetInfo.Year} " : string.Empty;
+        var manufacturer = assetInfo.Manufacturer is not null ? $"{assetInfo.Manufacturer} " : string.Empty;
+        var model = assetInfo.Model ?? string.Empty;
+        var display = (year + manufacturer + model).Trim();
+
+        return string.IsNullOrWhiteSpace(display) ? null : display;
     }
 
     /// <summary>
@@ -103,6 +185,9 @@ public static class ServiceRequestMapper
             Status = "New",
             IssueCategory = dto.IssueCategory.Trim(),
             IssueDescription = dto.IssueDescription.Trim(),
+            IssueDescriptionVerbatim = string.IsNullOrWhiteSpace(dto.IssueDescriptionVerbatim)
+                ? null
+                : dto.IssueDescriptionVerbatim.Trim(),
             Urgency = dto.Urgency?.Trim(),
             RvUsage = dto.RvUsage?.Trim(),
             HasExtendedWarranty = dto.HasExtendedWarranty?.Trim(),
@@ -112,7 +197,8 @@ public static class ServiceRequestMapper
                 FirstName = dto.Customer.FirstName.Trim(),
                 LastName = dto.Customer.LastName.Trim(),
                 Email = dto.Customer.Email.Trim(),
-                Phone = dto.Customer.Phone?.Trim()
+                Phone = dto.Customer.Phone?.Trim(),
+                PreferredContact = PreferredContactMethod.Normalize(dto.Customer.PreferredContact)
             },
             AssetInfo = new AssetInfoEmbedded
             {
@@ -145,6 +231,7 @@ public static class ServiceRequestMapper
         ArgumentNullException.ThrowIfNull(dto);
 
         entity.Status = dto.Status.Trim();
+        entity.ClearDispositionIfReopened();
         entity.IssueDescription = dto.IssueDescription.Trim();
         entity.IssueCategory = dto.IssueCategory?.Trim();
         entity.TechnicianSummary = dto.TechnicianSummary?.Trim();
@@ -154,11 +241,9 @@ public static class ServiceRequestMapper
         entity.HasExtendedWarranty = dto.HasExtendedWarranty?.Trim();
         entity.ApproxPurchaseDate = dto.ApproxPurchaseDate?.Trim();
         entity.AssignedTechnicianId = dto.AssignedTechnicianId?.Trim();
-        entity.AssignedBayId = dto.AssignedBayId?.Trim();
         entity.ScheduledDateUtc = dto.ScheduledDateUtc;
         entity.RequiredSkills = dto.RequiredSkills;
         entity.BoardSequence = dto.BoardSequence ?? entity.BoardSequence;
-        entity.ServiceEvent = dto.ServiceEvent?.ToEmbedded();
 
         if (dto.Customer is not null)
         {
@@ -167,7 +252,8 @@ public static class ServiceRequestMapper
                 FirstName = dto.Customer.FirstName.Trim(),
                 LastName = dto.Customer.LastName.Trim(),
                 Email = dto.Customer.Email.Trim(),
-                Phone = dto.Customer.Phone?.Trim()
+                Phone = dto.Customer.Phone?.Trim(),
+                PreferredContact = PreferredContactMethod.Normalize(dto.Customer.PreferredContact)
             };
         }
 
@@ -183,42 +269,6 @@ public static class ServiceRequestMapper
         }
 
         entity.MarkAsUpdated(updatedByUserId);
-    }
-
-    /// <summary>
-    /// Maps a <see cref="ServiceEventDto"/> to a <see cref="ServiceEventEmbedded"/>.
-    /// </summary>
-    public static ServiceEventEmbedded ToEmbedded(this ServiceEventDto dto)
-    {
-        ArgumentNullException.ThrowIfNull(dto);
-
-        return new ServiceEventEmbedded
-        {
-            ComponentType = dto.ComponentType?.Trim(),
-            FailureMode = dto.FailureMode?.Trim(),
-            RepairAction = dto.RepairAction?.Trim(),
-            PartsUsed = dto.PartsUsed,
-            LaborHours = dto.LaborHours,
-            ServiceDateUtc = dto.ServiceDateUtc
-        };
-    }
-
-    /// <summary>
-    /// Maps a <see cref="ServiceEventEmbedded"/> to a <see cref="ServiceEventDto"/>.
-    /// </summary>
-    public static ServiceEventDto ToDto(this ServiceEventEmbedded entity)
-    {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        return new ServiceEventDto
-        {
-            ComponentType = entity.ComponentType,
-            FailureMode = entity.FailureMode,
-            RepairAction = entity.RepairAction,
-            PartsUsed = entity.PartsUsed,
-            LaborHours = entity.LaborHours,
-            ServiceDateUtc = entity.ServiceDateUtc
-        };
     }
 
     /// <summary>
@@ -251,7 +301,8 @@ public static class ServiceRequestMapper
             FirstName = snapshot.FirstName,
             LastName = snapshot.LastName,
             Email = snapshot.Email,
-            Phone = snapshot.Phone
+            Phone = snapshot.Phone,
+            PreferredContact = snapshot.PreferredContact
         };
     }
 

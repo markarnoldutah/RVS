@@ -61,6 +61,24 @@ public sealed class ServiceRequestApiClient
     }
 
     /// <summary>
+    /// Gets every request reported on the same intake visit as this one (Spec A-17), in
+    /// submission order and including this request.
+    /// </summary>
+    public async Task<IReadOnlyList<ServiceRequestSummaryResponseDto>> GetSubmissionAsync(
+        string dealershipId,
+        string serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+
+        return await _httpClient.GetFromJsonAsync<List<ServiceRequestSummaryResponseDto>>(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/submission",
+            cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize submission response.");
+    }
+
+    /// <summary>
     /// Searches service requests with filter criteria.
     /// </summary>
     public async Task<ServiceRequestSearchResultResponseDto> SearchAsync(
@@ -107,25 +125,92 @@ public sealed class ServiceRequestApiClient
     }
 
     /// <summary>
-    /// Applies outcome fields to multiple service requests in a single batch.
+    /// Sets or clears the manager-authored customer status note (<c>Spec C-9</c>) for a service
+    /// request. Pass <paramref name="note"/> as null or blank to clear it. The server caps the
+    /// length at 280 characters and rejects blocked characters with <c>422</c>.
     /// </summary>
-    public async Task<BatchOutcomeResponseDto> BatchOutcomeAsync(
+    public async Task<ServiceRequestDetailResponseDto> SetStatusNoteAsync(
         string dealershipId,
-        BatchOutcomeRequestDto request,
+        string serviceRequestId,
+        string? note,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
 
-        var response = await _httpClient.PatchAsJsonAsync(
-            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/batch-outcome",
-            request,
+        var response = await _httpClient.PutAsJsonAsync(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/status-note",
+            new ServiceRequestStatusNoteRequestDto { Note = note },
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadFromJsonAsync<BatchOutcomeResponseDto>(
+        return await response.Content.ReadFromJsonAsync<ServiceRequestDetailResponseDto>(
             cancellationToken: cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize batch outcome response.");
+            ?? throw new InvalidOperationException("Failed to deserialize status-note response.");
+    }
+
+    /// <summary>
+    /// Closes a service request without work (<c>Spec C-4</c>) with one of the fixed reason codes
+    /// (<c>DispositionReasons.All</c>). The request moves to <c>Cancelled</c>; an unknown reason
+    /// is rejected with <c>422</c>.
+    /// </summary>
+    public async Task<ServiceRequestDetailResponseDto> SetDispositionAsync(
+        string dealershipId,
+        string serviceRequestId,
+        string reasonCode,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reasonCode);
+
+        var response = await _httpClient.PutAsJsonAsync(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/disposition",
+            new ServiceRequestDispositionRequestDto { ReasonCode = reasonCode },
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<ServiceRequestDetailResponseDto>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize disposition response.");
+    }
+
+    /// <summary>
+    /// Regenerates the request's service packet (<c>Spec B-1</c>, issue #434). The API resets
+    /// packet generation to <c>Pending</c>, enqueues a fresh job, and answers <c>202 Accepted</c>
+    /// with no body — generation runs in the background.
+    /// </summary>
+    public async Task RegeneratePacketAsync(
+        string dealershipId,
+        string serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+
+        var response = await _httpClient.PostAsync(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/packet/regenerate",
+            content: null,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>
+    /// Gets a short-lived read link to the request's latest generated packet PDF
+    /// (<c>Spec C-2</c>, issue #443). The API answers <c>404</c> when no packet exists yet.
+    /// </summary>
+    public async Task<PacketPdfLinkDto> GetPacketPdfLinkAsync(
+        string dealershipId,
+        string serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dealershipId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceRequestId);
+
+        return await _httpClient.GetFromJsonAsync<PacketPdfLinkDto>(
+            $"api/dealerships/{Uri.EscapeDataString(dealershipId)}/service-requests/{Uri.EscapeDataString(serviceRequestId)}/packet/pdf",
+            cancellationToken)
+            ?? throw new InvalidOperationException("Failed to deserialize packet PDF link response.");
     }
 
     /// <summary>

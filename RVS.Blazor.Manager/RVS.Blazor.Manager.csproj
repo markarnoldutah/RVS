@@ -20,4 +20,12 @@
     <ProjectReference Include="..\RVS.Domain\RVS.Domain.csproj" />
   </ItemGroup>
 
+  <!-- Serve the OSS third-party notices with the published bundle (covers MudBlazor,
+       the Blazor WASM runtime, and the other MIT components in this app). -->
+  <ItemGroup>
+    <Content Include="..\THIRD-PARTY-NOTICES.md" Link="wwwroot\THIRD-PARTY-NOTICES.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

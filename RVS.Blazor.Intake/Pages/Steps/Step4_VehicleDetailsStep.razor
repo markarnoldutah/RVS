@@ -10,22 +10,42 @@
 
         @if (!string.IsNullOrWhiteSpace(State.Vin))
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true"
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true"
                       Icon="@Icons.Material.Filled.Pin">
-                VIN: @State.Vin
+                @(State.HasVin ? "VIN" : "Serial number"): @State.Vin
             </MudAlert>
         }
 
-        @if (State.VinLookupSucceeded)
+        @if (State.VehicleSkipped)
         {
-            <MudAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true">
+            @* Issue #807: the rig is in storage. Nothing here is required; the dealer collects the rest. *@
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true">
+                You skipped your RV's VIN. Fill in anything you know below, or just tap Continue. The service team will get the rest from you.
+            </MudAlert>
+        }
+        else if (State.VinLookupSucceeded)
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Dense="true">
                 Vehicle information retrieved from VIN lookup.
+            </MudAlert>
+        }
+        else if (State.VehicleDetailsFromPhoto)
+        {
+            @* Issue #807: read off the plate by AI, so the customer checks it; every field below stays editable. *@
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true">
+                We filled in what we could read from your photo. Check it and change anything that's wrong.
+            </MudAlert>
+        }
+        else if (State.HasVin)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true">
+                No vehicle information was found for this VIN. Please enter details manually below.
             </MudAlert>
         }
         else
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
-                No vehicle information was found for this VIN. Please enter details manually below.
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true">
+                Please enter your RV's details below.
             </MudAlert>
         }
 
@@ -154,16 +174,19 @@
         }
     }
 
+    // A skipped vehicle (issue #807) makes every field here optional; a value entered is still checked.
+    private bool IsRequired => _submitted && !State.VehicleSkipped;
+
     private string? ValidateManufacturer(string? value) =>
-        _submitted && string.IsNullOrWhiteSpace(value) ? "Manufacturer is required" : null;
+        IsRequired && string.IsNullOrWhiteSpace(value) ? "Manufacturer is required" : null;
 
     private string? ValidateModel(string? value) =>
-        _submitted && string.IsNullOrWhiteSpace(value) ? "Model is required" : null;
+        IsRequired && string.IsNullOrWhiteSpace(value) ? "Model is required" : null;
 
     private string? ValidateYear(int? value)
     {
         if (!_submitted) return null;
-        if (!value.HasValue) return "Year is required";
+        if (!value.HasValue) return IsRequired ? "Year is required" : null;
         if (value < 1900) return "Year must be 1900 or later";
         if (value > DateTime.UtcNow.Year + 2) return $"Year must not exceed {DateTime.UtcNow.Year + 2}";
         return null;
@@ -183,12 +206,12 @@
     private string? ValidateApproxPurchaseDate(DateTime? date)
     {
         if (!_submitted) return null;
-        if (date is null) return "Approximate purchase date is required";
+        if (date is null) return IsRequired ? "Approximate purchase date is required" : null;
         return date > DateTime.Today ? "Purchase date cannot be in the future" : null;
     }
 
     private string? ValidateExtendedWarranty(string? value) =>
-        _submitted && string.IsNullOrWhiteSpace(value) ? "Extended warranty selection is required" : null;
+        IsRequired && string.IsNullOrWhiteSpace(value) ? "Extended warranty selection is required" : null;
 
     private async Task HandleNext()
     {

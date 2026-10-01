@@ -1,0 +1,115 @@
+# ══════════════════════════════════════════════════════════════
+# RVS Azure Infrastructure — Deployment & Verification Commands
+# ══════════════════════════════════════════════════════════════
+
+# ── RG Scaffold – create all resource groups in one shot ──────
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/rg-scaffold.bicep --name "rvs-rg-scaffold-$(date +%Y%m%d%H%M)" --query "properties.outputs.resourceGroupNames.value" -o json
+
+# ── Deploy Staging ────────────────────────────────────────────
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --name "rvs-staging-$(date +%Y%m%d%H%M)"
+
+# Powershell Compatible
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --name "rvs-staging-$ts"
+
+# ── Deploy Production — TWO-PHASE (Intake apex requires Azure-issued TXT/IPs) ─
+
+# Phase 1: stand up everything; rvintake.com zone is created empty (apex unbound)
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase1.bicepparam --name "rvs-prod-phase1-$(date +%Y%m%d%H%M)"
+
+# Between phases: register apex with the SWA and grab the validation token + apex IPs
+az staticwebapp hostname add  --name stapp-rvs-intake-prod --hostname rvintake.com --resource-group rg-rvs-prod-westus2
+az staticwebapp hostname show --name stapp-rvs-intake-prod --hostname rvintake.com --resource-group rg-rvs-prod-westus2
+# → Paste validationToken and ipAddresses into prod_phase2.bicepparam
+
+# Phase 2: bind apex (A + TXT). All subsequent prod deploys use phase 2.
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam --name "rvs-prod-phase2-$(date +%Y%m%d%H%M)"
+
+# ── SKU Upgrades ──────────────────────────────────────────────
+
+# Upgrade App Service B1 → S1 (staging)
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --parameters appServiceSkuName='S1' --name "rvs-staging-sku-$(date +%Y%m%d%H%M)"
+
+# Upgrade Cosmos DB Serverless → Provisioned Autoscale (prod)
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/prod_phase2.bicepparam --parameters cosmosCapacityMode='Provisioned' cosmosAutoscaleMaxThroughput=4000 --name "rvs-prod-cosmos-$(date +%Y%m%d%H%M)"
+
+# Upgrade SWA Free → Standard (dev)
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/dev.bicepparam --parameters swaSkuName='Standard' --name "rvs-dev-swa-$(date +%Y%m%d%H%M)"
+
+# ── Post-Deploy Verification ─────────────────────────────────
+
+# App Service
+az webapp show --name app-rvs-api-staging-wus3 --resource-group rg-rvs-staging-westus3 --query '{name:name, state:state, identity:identity.principalId, defaultHostName:defaultHostName}' -o json
+
+# Cosmos DB
+az cosmosdb show --name cosmos-rvs-data-staging-wus3 --resource-group rg-rvs-staging-westus3 --query '{name:name, endpoint:documentEndpoint, capabilities:capabilities[].name}' -o json
+
+# Key Vault
+az keyvault show --name kv-rvs-staging-wus3 --resource-group rg-rvs-staging-westus3 --query '{name:name, vaultUri:properties.vaultUri, rbac:properties.enableRbacAuthorization}' -o json
+
+# Storage (verify rvs-attachments container exists)
+az storage container show --name rvs-attachments --account-name strvsstagingwus3001 --auth-mode login --query '{name:name, publicAccess:properties.publicAccess}' -o json
+
+# Application Insights
+az monitor app-insights component show --app appi-rvs-api-staging-wus3 --resource-group rg-rvs-staging-westus3 --query '{name:name, connectionString:connectionString}' -o json
+
+# Log Analytics
+az monitor log-analytics workspace show --workspace-name law-rvs-obs-staging-wus3 --resource-group rg-rvs-staging-westus3 --query '{name:name, customerId:customerId}' -o json
+
+# ── SWA Deployment Tokens ─────────────────────────────────────
+
+# Retrieve tokens (store as GitHub Secrets)
+az staticwebapp secrets list --name stapp-rvs-intake-staging  --resource-group rg-rvs-staging-westus2 --query "properties.apiKey" -o tsv
+az staticwebapp secrets list --name stapp-rvs-manager-staging --resource-group rg-rvs-staging-westus2 --query "properties.apiKey" -o tsv
+
+# Store as GitHub Secrets
+gh secret set SWA_TOKEN_INTAKE_STAGING  --body "$(az staticwebapp secrets list --name stapp-rvs-intake-staging  --resource-group rg-rvs-staging-westus2 --query 'properties.apiKey' -o tsv)" --repo markarnoldutah/RVS
+gh secret set SWA_TOKEN_MANAGER_STAGING --body "$(az staticwebapp secrets list --name stapp-rvs-manager-staging --resource-group rg-rvs-staging-westus2 --query 'properties.apiKey' -o tsv)" --repo markarnoldutah/RVS
+
+# ── Add Stripe Webhook Secret to Key Vault ────────────────────
+az keyvault secret set --vault-name kv-rvs-staging-wus3 --name "Stripe--WebhookSecret" --value "<YOUR_STRIPE_WEBHOOK_SECRET>"
+
+# ── OpenAI Verification ──────────────────────────────────────
+az cognitiveservices account show --name oai-rvs-ai-staging-wus3-s01-001 --resource-group rg-rvs-staging-westus3 --query '{name:name, endpoint:properties.endpoint}' -o json
+az cognitiveservices account deployment list --name oai-rvs-ai-staging-wus3-s01-001 --resource-group rg-rvs-staging-westus3 --query '[].{name:name, model:properties.model.name}' -o table
+
+# ── ACS Verification ─────────────────────────────────────────
+az communication show --name acs-rvs-notify-staging-wus3-s01-001 --resource-group rg-rvs-staging-westus3 --query '{name:name, hostName:hostName}' -o json
+
+# ── DNS Verification ──────────────────────────────────────────
+az network dns zone show --name rvserviceflow.com --resource-group rg-rvs-prod-westus3 --query "nameServers" -o table
+
+
+# PowerShell Compatible — write JSON to temp file (avoids PowerShell quote-stripping)
+$tmpFile = New-TemporaryFile
+[ordered]@{ name="github-actions-staging"; issuer="https://token.actions.githubusercontent.com"; subject="repo:$GITHUB_ORG/$GITHUB_REPO`:environment:staging"; audiences=@("api://AzureADTokenExchange") } | ConvertTo-Json -Compress | Set-Content -Path $tmpFile -Encoding UTF8
+az ad app federated-credential create --id $APP_ID --parameters $tmpFile
+Remove-Item $tmpFile
+
+$tmpFile = New-TemporaryFile
+[ordered]@{ name="github-actions-production"; issuer="https://token.actions.githubusercontent.com"; subject="repo:$GITHUB_ORG/$GITHUB_REPO`:environment:production"; audiences=@("api://AzureADTokenExchange") } | ConvertTo-Json -Compress | Set-Content -Path $tmpFile -Encoding UTF8
+az ad app federated-credential create --id $APP_ID --parameters $tmpFile
+Remove-Item $tmpFile
+
+az role assignment create --assignee $APP_ID --role "Contributor" --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
+
+az role assignment list --assignee "$APP_ID" --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" -o table
+
+# CLEANUP
+# You still need Azure CLI to retrieve the tokens once
+az login
+
+# Staging tokens
+az staticwebapp secrets list --name "stapp-rvs-intake-staging" --resource-group "rg-rvs-staging-westus2" --query "properties.apiKey" --output tsv
+az staticwebapp secrets list --name "stapp-rvs-manager-staging" --resource-group "rg-rvs-staging-westus2" --query "properties.apiKey" --output tsv
+
+# Production tokens
+az staticwebapp secrets list --name "<intake-swa-name>" --resource-group "rg-rvs-production-westus2" --query "properties.apiKey" --output tsv
+az staticwebapp secrets list --name "<manager-swa-name>" --resource-group "rg-rvs-production-westus2" --query "properties.apiKey" --output tsv
+
+
+$ts = Get-Date -Format "yyyyMMddHHmm"
+az deployment sub create --location westus3 --template-file Docs/ASOT/Infra/Bicep.IaC/main.bicep --parameters Docs/ASOT/Infra/Bicep.IaC/parameters/staging.bicepparam --name "rvs-staging-$ts"
+
+
+az webapp config set --resource-group rg-rvs-staging-westus3 --name app-rvs-api-staging-wus3 --dotnet-version "v10.0"

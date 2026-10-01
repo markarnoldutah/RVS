@@ -53,6 +53,16 @@ public class Dealership : EntityBase
 /// </summary>
 public class IntakeFormConfigEmbedded
 {
+    /// <summary>Smallest per-request attachment cap a location may configure.</summary>
+    public const int MinAttachmentCap = 1;
+
+    /// <summary>
+    /// Largest per-request attachment cap a location may configure, and the default (<c>Spec A-6</c>,
+    /// issue #777). Sized to the photo-grounded assessment, which sends at most five photos to the
+    /// model per call (#772), and to the PDF's six first-page photo slots.
+    /// </summary>
+    public const int MaxAttachmentCap = 5;
+
     /// <summary>
     /// Accepted file types for attachments (e.g., ".jpg", ".png", ".mp4").
     /// </summary>
@@ -66,10 +76,12 @@ public class IntakeFormConfigEmbedded
     public int MaxFileSizeMb { get; set; } = 25;
 
     /// <summary>
-    /// Maximum number of attachments per service request. Range: 1–10.
+    /// Maximum number of attachments per service request — photos, videos and voice notes
+    /// together. Range: <see cref="MinAttachmentCap"/>–<see cref="MaxAttachmentCap"/>, enforced by
+    /// <c>IntakeConfigValidator</c> where the config is written and clamped by the API at upload.
     /// </summary>
     [JsonProperty("maxAttachments")]
-    public int MaxAttachments { get; set; } = 10;
+    public int MaxAttachments { get; set; } = MaxAttachmentCap;
 
     /// <summary>
     /// Optional context appended to the Azure OpenAI system prompt. Max 500 characters.

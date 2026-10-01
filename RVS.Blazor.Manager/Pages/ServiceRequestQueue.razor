@@ -4,7 +4,7 @@
 @inject NavigationManager Navigation
 @inject RVS.Blazor.Manager.State.ManagerAppState AppState
 
-<PageTitle>RVS Manager — Service Requests</PageTitle>
+<PageTitle>RV Intake Manager — Service Requests</PageTitle>
 
 <MudStack Spacing="4" Class="pa-2">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -40,6 +40,7 @@
                                    AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
                             <MudSelectItem T="string" Value="@("New")">New</MudSelectItem>
                             <MudSelectItem T="string" Value="@("InProgress")">In Progress</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("WaitingOnCustomer")">Waiting on Customer</MudSelectItem>
                             <MudSelectItem T="string" Value="@("WaitingOnParts")">Waiting on Parts</MudSelectItem>
                             <MudSelectItem T="string" Value="@("Completed")">Completed</MudSelectItem>
                             <MudSelectItem T="string" Value="@("Cancelled")">Cancelled</MudSelectItem>
@@ -76,15 +77,6 @@
                                       Variant="Variant.Outlined"
                                       Margin="Margin.Dense"
                                       Placeholder="Technician ID" />
-                    </MudStack>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Assigned bay</MudText>
-                        <MudTextField T="string" @bind-Value="_search.AssignedBayId"
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      Placeholder="Bay ID" />
                     </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
@@ -174,6 +166,13 @@
                 </MudTd>
                 <MudTd DataLabel="Status">
                     <StatusBadge Status="@context.Status" />
+                    @if (context.DispositionReasonCode is { } reasonCode)
+                    {
+                        @* Spec C-4: a disposition reads differently from a plain close. *@
+                        <MudText Typo="Typo.caption" Style="display: block; color: var(--mud-palette-text-secondary);">
+                            Closed without work · @DispositionReasons.GetLabel(reasonCode)
+                        </MudText>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Priority">
                     @if (!string.IsNullOrEmpty(context.Priority))
@@ -281,7 +280,6 @@
                 IssueCategory = _search.IssueCategory,
                 LocationId = _search.LocationId,
                 AssignedTechnicianId = _search.AssignedTechnicianId,
-                AssignedBayId = _search.AssignedBayId,
                 AssetId = _search.AssetId,
                 Priority = _search.Priority,
                 DateFrom = _dateFrom?.ToUniversalTime(),
@@ -365,7 +363,6 @@
         public string? IssueCategory { get; set; }
         public string? LocationId { get; set; }
         public string? AssignedTechnicianId { get; set; }
-        public string? AssignedBayId { get; set; }
         public string? AssetId { get; set; }
         public string? Priority { get; set; }
     }

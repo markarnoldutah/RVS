@@ -57,7 +57,7 @@ public class IntakeControllerTests
             MaxAttachments = 10,
             AllowAnonymousIntake = true
         };
-        _intakeServiceMock.Setup(s => s.GetIntakeConfigAsync("camping-world-slc", null, It.IsAny<CancellationToken>()))
+        _intakeServiceMock.Setup(s => s.GetIntakeConfigAsync("camping-world-slc", It.IsAny<CancellationToken>()))
             .ReturnsAsync(config);
 
         var result = await _sut.GetConfig("camping-world-slc");
@@ -68,30 +68,32 @@ public class IntakeControllerTests
         dto.DealershipName.Should().Be("Camping World");
     }
 
-    [Fact]
-    public async Task GetConfig_WithMagicLinkToken_ShouldPassTokenToService()
-    {
-        var config = new IntakeConfigResponseDto
-        {
-            LocationName = "Test",
-            LocationSlug = "test-slug",
-            DealershipName = "Test Dealer",
-            PrefillCustomer = new CustomerInfoDto
-            {
-                FirstName = "Jane",
-                LastName = "Doe",
-                Email = "jane@example.com"
-            }
-        };
-        _intakeServiceMock.Setup(s => s.GetIntakeConfigAsync("test-slug", "magic-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(config);
+    // ── Spec A-14: invite prefill ────────────────────────────────────────────
 
-        var result = await _sut.GetConfig("test-slug", "magic-token");
+    [Fact]
+    public async Task GetInvitePrefill_WhenInviteIsUsable_ShouldReturnOkWithPrefill()
+    {
+        var prefill = new IntakeInvitePrefillResponseDto { FirstName = "Jane", Phone = "+18015551234" };
+        _intakeServiceMock.Setup(s => s.GetInvitePrefillAsync("test-slug", "the-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(prefill);
+
+        var result = await _sut.GetInvitePrefill("test-slug", "the-token");
 
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var dto = okResult.Value.Should().BeOfType<IntakeConfigResponseDto>().Subject;
-        dto.PrefillCustomer.Should().NotBeNull();
-        dto.PrefillCustomer!.FirstName.Should().Be("Jane");
+        okResult.Value.Should().BeSameAs(prefill);
+    }
+
+    [Fact]
+    public async Task GetInvitePrefill_WhenInviteIsNotUsable_ShouldReturnNotFound()
+    {
+        // Expired, redeemed, unknown and failed lookups all come back as null, and all look the
+        // same to an anonymous caller.
+        _intakeServiceMock.Setup(s => s.GetInvitePrefillAsync("test-slug", "the-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IntakeInvitePrefillResponseDto?)null);
+
+        var result = await _sut.GetInvitePrefill("test-slug", "the-token");
+
+        result.Result.Should().BeOfType<NotFoundResult>();
     }
 
     [Fact]
@@ -133,11 +135,11 @@ public class IntakeControllerTests
     {
         var sr = BuildServiceRequest();
         _intakeServiceMock.Setup(s => s.ExecuteAsync("test-slug", It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((sr, "test-magic-token"));
+            .ReturnsAsync((sr, (IReadOnlyList<ServiceRequest>)[sr], "test-magic-token", new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc)));
 
         var request = new ServiceRequestCreateRequestDto
         {
-            Customer = new CustomerInfoDto { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
+            Customer = new CustomerInfoDto { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com", Phone = "8015551234" },
             Asset = new AssetInfoDto { AssetId = "1FTFW1ET5EKE12345" },
             IssueCategory = "Electrical",
             IssueDescription = "Battery not charging"
@@ -149,7 +151,155 @@ public class IntakeControllerTests
         var dto = createdResult.Value.Should().BeOfType<IntakeSubmissionResponseDto>().Subject;
         dto.ServiceRequest.Id.Should().Be(sr.Id);
         dto.MagicLinkToken.Should().Be("test-magic-token");
+        dto.MagicLinkExpiresAtUtc.Should().Be(new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc));
     }
+
+    [Theory]
+    [InlineData("Text", true, false)]
+    [InlineData("Email", false, true)]
+    public async Task SubmitServiceRequest_WhenPreferredContactIsOptedOut_ShouldReturn422AndNotSubmit(
+        string preferredContact, bool smsOptOut, bool emailOptOut)
+    {
+        var request = new ServiceRequestCreateRequestDto
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "Jane", LastName = "Doe", Email = "jane@example.com",
+                Phone = "8015551234", PreferredContact = preferredContact,
+            },
+            Asset = new AssetInfoDto { AssetId = "1FTFW1ET5EKE12345" },
+            IssueCategory = "Electrical",
+            IssueDescription = "Battery not charging",
+            SmsOptOut = smsOptOut,
+            EmailOptOut = emailOptOut,
+        };
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+        _intakeServiceMock.Verify(
+            s => s.ExecuteAsync(It.IsAny<string>(), It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    // ── Several issues per visit (Spec A-17, issue #806) ───────────────────
+
+    [Fact]
+    public async Task SubmitServiceRequest_WhenSeveralIssues_ShouldReturnEveryRequestIdInOrder()
+    {
+        var lead = BuildServiceRequest();
+        IReadOnlyList<ServiceRequest> all = [lead, new ServiceRequest { Id = "sr_test_2", TenantId = "ten_test", CreatedByUserId = "intake" }];
+        _intakeServiceMock.Setup(s => s.ExecuteAsync("test-slug", It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((lead, all, "test-magic-token", (DateTime?)null));
+        var request = BuildSubmitRequest() with
+        {
+            AdditionalIssues = [new IntakeIssueDto { IssueCategory = "Awning", IssueDescription = "Awning torn" }],
+        };
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        var dto = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject
+            .Value.Should().BeOfType<IntakeSubmissionResponseDto>().Subject;
+        dto.ServiceRequest.Id.Should().Be("sr_test_1");
+        dto.ServiceRequestIds.Should().Equal("sr_test_1", "sr_test_2");
+    }
+
+    [Fact]
+    public async Task SubmitServiceRequest_WhenMoreThanTenIssues_ShouldReturn422AndNotSubmit()
+    {
+        var request = BuildSubmitRequest() with
+        {
+            AdditionalIssues = [.. Enumerable.Range(0, 10)
+                .Select(i => new IntakeIssueDto { IssueCategory = "Other", IssueDescription = $"Issue {i + 2}" })],
+        };
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject
+            .Value.Should().BeOfType<SerializableError>()
+            .Which.Should().ContainKey(nameof(ServiceRequestCreateRequestDto.AdditionalIssues));
+        VerifyNotSubmitted();
+    }
+
+    [Fact]
+    public async Task SubmitServiceRequest_WhenAnAdditionalIssueHasNoDescription_ShouldReturn422AndNotSubmit()
+    {
+        var request = BuildSubmitRequest() with
+        {
+            AdditionalIssues = [new IntakeIssueDto { IssueCategory = "Other", IssueDescription = " " }],
+        };
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        result.Result.Should().BeOfType<UnprocessableEntityObjectResult>();
+        VerifyNotSubmitted();
+    }
+
+    // ── Contact checks (issue #679) ──────────────────────────────────────────
+    // The email is the customer's identity key and the phone is required by the form; a
+    // hand-built request is held to the same rules as the intake wizard.
+
+    [Theory]
+    [InlineData("not-an-email")]
+    [InlineData("jane@localhost")]
+    [InlineData("jane@@example.com")]
+    [InlineData("   ")]
+    public async Task SubmitServiceRequest_WhenEmailIsMalformed_ShouldReturn422AndNotSubmit(string email)
+    {
+        var request = BuildSubmitRequest(email: email);
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        var unprocessable = result.Result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        unprocessable.Value.Should().BeOfType<SerializableError>()
+            .Which.Should().ContainKey("Customer.Email");
+        VerifyNotSubmitted();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("555-1234")]
+    public async Task SubmitServiceRequest_WhenPhoneIsMissingOrTooShort_ShouldReturn422AndNotSubmit(string? phone)
+    {
+        var request = BuildSubmitRequest(phone: phone);
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        var unprocessable = result.Result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        unprocessable.Value.Should().BeOfType<SerializableError>()
+            .Which.Should().ContainKey("Customer.Phone");
+        VerifyNotSubmitted();
+    }
+
+    [Fact]
+    public async Task SubmitServiceRequest_WhenEmailAndPhoneAreBothInvalid_ShouldReportBoth()
+    {
+        var request = BuildSubmitRequest(email: "nope", phone: null);
+
+        var result = await _sut.SubmitServiceRequest("test-slug", request);
+
+        var unprocessable = result.Result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        unprocessable.Value.Should().BeOfType<SerializableError>()
+            .Which.Keys.Should().Contain(["Customer.Email", "Customer.Phone"]);
+    }
+
+    private static ServiceRequestCreateRequestDto BuildSubmitRequest(
+        string email = "jane@example.com", string? phone = "8015551234") => new()
+    {
+        Customer = new CustomerInfoDto
+        {
+            FirstName = "Jane", LastName = "Doe", Email = email, Phone = phone, PreferredContact = "Email",
+        },
+        Asset = new AssetInfoDto { AssetId = "1FTFW1ET5EKE12345" },
+        IssueCategory = "Electrical",
+        IssueDescription = "Battery not charging",
+    };
+
+    private void VerifyNotSubmitted() =>
+        _intakeServiceMock.Verify(
+            s => s.ExecuteAsync(It.IsAny<string>(), It.IsAny<ServiceRequestCreateRequestDto>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
     private static ServiceRequest BuildServiceRequest() => new()
     {
@@ -213,7 +363,7 @@ public class IntakeControllerTests
             BlobName = "ten_test/sr_1/guid_photo.jpg",
             ExpiresAtUtc = DateTime.UtcNow.AddMinutes(15)
         };
-        _attachmentServiceMock.Setup(s => s.GenerateUploadSasAsync("ten_test", "sr_1", "photo.jpg", "image/jpeg", 10, It.IsAny<CancellationToken>()))
+        _attachmentServiceMock.Setup(s => s.GenerateUploadSasAsync("ten_test", "sr_1", "photo.jpg", "image/jpeg", It.IsAny<CancellationToken>()))
             .ReturnsAsync(sasResponse);
 
         var result = await _sut.GetUploadSas("test-slug", "sr_1", "photo.jpg", "image/jpeg");
@@ -244,7 +394,7 @@ public class IntakeControllerTests
             ContentType = "image/jpeg",
             SizeBytes = 1024
         };
-        _attachmentServiceMock.Setup(s => s.ConfirmAttachmentAsync("ten_test", "sr_1", request, 10, It.IsAny<CancellationToken>()))
+        _attachmentServiceMock.Setup(s => s.ConfirmAttachmentAsync("ten_test", "sr_1", request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(attachmentDto);
 
         var result = await _sut.ConfirmUpload("test-slug", "sr_1", request);
@@ -274,6 +424,25 @@ public class IntakeControllerTests
         dto.Result!.Vin.Should().Be("1RGDE4428R1000001");
         dto.Confidence.Should().Be(0.95);
         dto.Provider.Should().Be("MockVinExtractionService");
+    }
+
+    [Fact]
+    public async Task ExtractVin_WhenPlateCarriesVehicleDetails_ShouldReturnThemForStep4Prefill()
+    {
+        var imageBytes = new byte[] { 0xFF, 0xD8, 0xFF };
+        var request = new VinExtractionRequestDto { ImageBase64 = Convert.ToBase64String(imageBytes), ContentType = "image/jpeg" };
+
+        _vinExtractionServiceMock.Setup(s => s.ExtractVinFromImageAsync(imageBytes, "image/jpeg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VinExtractionResult("152263", 0.9, "AzureOpenAiVinExtractionService", "Lance", "1121", 2003));
+
+        var result = await _sut.ExtractVin("test-slug", request);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = okResult.Value.Should().BeOfType<AiOperationResponseDto<VinExtractionResultDto>>().Subject;
+        dto.Result!.Vin.Should().Be("152263");
+        dto.Result.Manufacturer.Should().Be("Lance");
+        dto.Result.Model.Should().Be("1121");
+        dto.Result.Year.Should().Be(2003);
     }
 
     [Fact]

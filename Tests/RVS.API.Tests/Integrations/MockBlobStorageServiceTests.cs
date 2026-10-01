@@ -79,6 +79,42 @@ public class MockBlobStorageServiceTests
         result.Should().Contain("sig=fakesig");
     }
 
+    // ── GenerateReadSasUrlAsync (explicit lifetime) ─────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GenerateReadSasUrlAsync_WithLifetime_WhenContainerNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? containerName)
+    {
+        var act = () => _sut.GenerateReadSasUrlAsync(containerName!, "blob.jpg", TimeSpan.FromDays(7));
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GenerateReadSasUrlAsync_WithLifetime_WhenBlobNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? blobName)
+    {
+        var act = () => _sut.GenerateReadSasUrlAsync("attachments", blobName!, TimeSpan.FromDays(7));
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GenerateReadSasUrlAsync_WithLifetime_ShouldReturnFakeReadSasUrl()
+    {
+        var result = await _sut.GenerateReadSasUrlAsync(
+            "attachments", "ten_1/loc_1/sr_001/att_1_photo.jpg", TimeSpan.FromDays(7));
+
+        result.Should().StartWith("https://mockblob.blob.core.windows.net/attachments/");
+        result.Should().Contain("ten_1/loc_1/sr_001/att_1_photo.jpg");
+        result.Should().Contain("sp=r");
+        result.Should().Contain("sig=fakesig");
+    }
+
     // ── UploadAsync ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -108,5 +144,39 @@ public class MockBlobStorageServiceTests
         var result = await _sut.UploadAsync("attachments", "ten_1/loc_1/sr_001/att_1_photo.jpg", stream, "image/jpeg");
 
         result.Should().Be("https://mockblob.blob.core.windows.net/attachments/ten_1/loc_1/sr_001/att_1_photo.jpg");
+    }
+
+    // ── DownloadAsync ────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DownloadAsync_WhenContainerNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? containerName)
+    {
+        var act = () => _sut.DownloadAsync(containerName!, "blob.jpg");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task DownloadAsync_WhenBlobNameIsNullOrWhiteSpace_ShouldThrowArgumentException(string? blobName)
+    {
+        var act = () => _sut.DownloadAsync("attachments", blobName!);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task DownloadAsync_ShouldReturnNonEmptyPngBytes()
+    {
+        var result = await _sut.DownloadAsync("attachments", "ten_1/loc_1/sr_001/att_1_photo.jpg");
+
+        result.Should().NotBeNullOrEmpty();
+        // PNG magic number
+        result.Take(8).Should().Equal(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
     }
 }

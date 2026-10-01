@@ -47,10 +47,25 @@ public class ServiceRequest : EntityBase
     public AssetInfoEmbedded AssetInfo { get; set; } = new();
 
     /// <summary>
-    /// Customer-provided description of the issue.
+    /// The description the customer submitted — the AI-curated text when curation ran and the
+    /// customer accepted it, otherwise exactly what they typed. This is the text every
+    /// downstream consumer reads (paste block, asset ledger, categorization, assessment) and
+    /// the packet's "Issue" section. <see cref="IssueDescriptionVerbatim"/> keeps the words
+    /// curation started from.
     /// </summary>
     [JsonProperty("issueDescription")]
     public string IssueDescription { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The customer's words <em>before</em> AI curation (issue #601) — the raw speech-to-text
+    /// transcript for a dictated description, or the typed text for a typed one. Rendered in the
+    /// packet as "Complaint — word for word", so a service manager can always check the curated
+    /// text against what the customer actually said. <c>null</c> for service requests captured
+    /// before this was recorded; the packet then falls back to <see cref="IssueDescription"/>.
+    /// Never written to application logs (same rule as <see cref="IssueDescription"/>).
+    /// </summary>
+    [JsonProperty("issueDescriptionVerbatim")]
+    public string? IssueDescriptionVerbatim { get; set; }
 
     /// <summary>
     /// Category of the issue from a LookupSet.
@@ -65,17 +80,18 @@ public class ServiceRequest : EntityBase
     public string? TechnicianSummary { get; set; }
 
     /// <summary>
+    /// Structured preliminary assessment — probable cause, possible fixes, likely parts — shown
+    /// in the packet's Preliminary assessment section (issue #507). Generated once by the packet
+    /// pipeline and reused on regeneration. Null until the first packet generation.
+    /// </summary>
+    [JsonProperty("preliminaryAssessment")]
+    public PreliminaryAssessmentEmbedded? PreliminaryAssessment { get; set; }
+
+    /// <summary>
     /// File attachments uploaded during intake (photos, videos, voice notes).
     /// </summary>
     [JsonProperty("attachments")]
     public List<ServiceRequestAttachmentEmbedded> Attachments { get; set; } = [];
-
-    /// <summary>
-    /// Structured service event data per Section 10A.
-    /// Null until service work begins.
-    /// </summary>
-    [JsonProperty("serviceEvent")]
-    public ServiceEventEmbedded? ServiceEvent { get; set; }
 
     /// <summary>
     /// AI-generated diagnostic question responses from the intake wizard.
@@ -88,12 +104,6 @@ public class ServiceRequest : EntityBase
     /// </summary>
     [JsonProperty("scheduledDateUtc")]
     public DateTime? ScheduledDateUtc { get; set; }
-
-    /// <summary>
-    /// Assigned service bay identifier. Null until assigned.
-    /// </summary>
-    [JsonProperty("assignedBayId")]
-    public string? AssignedBayId { get; set; }
 
     /// <summary>
     /// Assigned technician identifier. Null until assigned.
@@ -138,6 +148,59 @@ public class ServiceRequest : EntityBase
     public string? ApproxPurchaseDate { get; set; }
 
     /// <summary>
+    /// Distribution channel the customer arrived through (<c>Spec A-13</c>, issue #599) — the
+    /// normalised <c>src</c> carried by the <c>go.rvintake.com</c> short link, defaulting to
+    /// <c>print</c> when the link carried none. This is the authoritative source-of-job record:
+    /// the raw redirect hit log says how many links were fetched, this says which channel
+    /// produced an actual request. Null only for requests created before the field existed.
+    /// </summary>
+    [JsonProperty("intakeSource")]
+    public string? IntakeSource { get; init; }
+
+    /// <summary>
+    /// The A-14 advisor invite this request redeemed (<c>Spec A-14</c>, issue #664): the invite's
+    /// id, which is the token hash. Set only when the submission carried an unexpired, unredeemed
+    /// invite for this location; <see cref="IntakeSource"/> is then <c>advisor</c>.
+    /// </summary>
+    [JsonProperty("intakeInviteId")]
+    public string? IntakeInviteId { get; init; }
+
+    /// <summary>
+    /// The advisor whose invite produced this request (<c>Spec A-14</c>, issue #664). Set
+    /// together with <see cref="IntakeInviteId"/>; <c>null</c> for every other channel.
+    /// </summary>
+    [JsonProperty("advisorUserId")]
+    public string? AdvisorUserId { get; init; }
+
+    /// <summary>
+    /// The intake submission this request came from, when the customer reported several issues
+    /// at once (<c>Spec A-17</c>, issue #806): the id of the submission's first request, which
+    /// every sibling shares. <c>null</c> for a single-issue submission and for requests created
+    /// before the field existed.
+    /// </summary>
+    [JsonProperty("submissionId")]
+    public string? SubmissionId { get; init; }
+
+    /// <summary>This request's 1-based position in its submission (<c>Spec A-17</c>): the "2" of "2 of 3".</summary>
+    [JsonProperty("submissionPosition")]
+    public int SubmissionPosition { get; init; }
+
+    /// <summary>How many issues its submission reported (<c>Spec A-17</c>): the "3" of "2 of 3".</summary>
+    [JsonProperty("submissionCount")]
+    public int SubmissionCount { get; init; }
+
+    /// <summary>Whether this request is one of several reported in one submission (<c>Spec A-17</c>).</summary>
+    [JsonIgnore]
+    public bool IsInMultiIssueSubmission => SubmissionId is not null && SubmissionCount > 1;
+
+    /// <summary>
+    /// Whether this is the first request of a multi-issue submission (<c>Spec A-17</c>). The
+    /// lead owns the submission's combined packet email (<c>Spec B-4</c>).
+    /// </summary>
+    [JsonIgnore]
+    public bool IsSubmissionLead => IsInMultiIssueSubmission && SubmissionPosition == 1;
+
+    /// <summary>
     /// Board display order within a status column. Lower values appear first.
     /// Defaults to 0; updated when cards are reordered on the Service Board.
     /// </summary>
@@ -153,11 +216,380 @@ public class ServiceRequest : EntityBase
     public AiEnrichmentMetadataEmbedded? AiEnrichment { get; set; }
 
     /// <summary>
-    /// Dealer-to-customer and customer-to-dealer messages linked to this service request.
-    /// Embedded in the SR document for single-read performance. Capped at 50 messages.
+    /// Tracks asynchronous service-packet generation for this request (<c>Spec B-1</c>, issue #434).
+    /// Generation is enqueued on intake submission and re-runnable on demand; a failure here never
+    /// rolls back the request. The manager app surfaces <see cref="PacketGenerationEmbedded.Status"/>
+    /// and a failure that has exhausted its retries.
     /// </summary>
-    [JsonProperty("messages")]
-    public List<MessageEmbedded> Messages { get; set; } = [];
+    [JsonProperty("packetGeneration")]
+    public PacketGenerationEmbedded PacketGeneration { get; set; } = new();
+
+    /// <summary>
+    /// Tracks delivery of the generated packet by email to the location's service department
+    /// (<c>Spec B-4</c>, issue #438). Delivery is idempotent per
+    /// <c>(serviceRequestId, packetVersion)</c> and retried with exponential backoff; after
+    /// <see cref="PacketEmailDeliveryEmbedded.MaxAttempts"/> failed attempts an alert is logged
+    /// once. A delivery failure never affects packet generation, which has already succeeded.
+    /// </summary>
+    [JsonProperty("packetEmailDelivery")]
+    public PacketEmailDeliveryEmbedded PacketEmailDelivery { get; set; } = new();
+
+    /// <summary>
+    /// The current manager-authored note shown to the customer on the status page
+    /// (<c>Spec C-9</c>). <c>null</c> when no note is set — the default, and the state after a
+    /// note is cleared. Exactly one note per request; editing overwrites it (no thread, no
+    /// customer-visible history). One-directional: the customer can never write here.
+    /// The text is never written to application logs (same rule as <see cref="IssueDescription"/>).
+    /// </summary>
+    [JsonProperty("customerStatusNote")]
+    public CustomerStatusNoteEmbedded? CustomerStatusNote { get; set; }
+
+    /// <summary>
+    /// Sets or clears the customer-facing status note (<c>Spec C-9</c>). A null, empty, or
+    /// whitespace-only <paramref name="note"/> clears it; otherwise the trimmed text is stored
+    /// with an audit stamp. Either way the entity is marked updated by <paramref name="userId"/>.
+    /// Callers are responsible for validating the note first
+    /// (<see cref="Validation.CustomerStatusNoteValidator"/>).
+    /// </summary>
+    /// <param name="note">The note text, or null/blank to clear.</param>
+    /// <param name="userId">The manager making the change (audit identity).</param>
+    public void SetCustomerStatusNote(string? note, string? userId)
+    {
+        var trimmed = note?.Trim();
+
+        CustomerStatusNote = string.IsNullOrEmpty(trimmed)
+            ? null
+            : new CustomerStatusNoteEmbedded
+            {
+                Text = trimmed,
+                UpdatedAtUtc = DateTime.UtcNow,
+                UpdatedByUserId = userId
+            };
+
+        MarkAsUpdated(userId);
+    }
+
+    /// <summary>
+    /// How the request was closed without work (<c>Spec C-4</c>), or <c>null</c> when it was not.
+    /// Set together with <see cref="Status"/> <c>Cancelled</c> by <see cref="CloseWithDisposition"/>,
+    /// and cleared by <see cref="ClearDispositionIfReopened"/> when the status later moves off
+    /// <c>Cancelled</c>. Internal to the dealership: never shown on the customer status page.
+    /// </summary>
+    [JsonProperty("disposition")]
+    public DispositionEmbedded? Disposition { get; set; }
+
+    /// <summary>
+    /// Closes the request without work (<c>Spec C-4</c>): sets <see cref="Status"/> to
+    /// <c>Cancelled</c> and records the reason with an audit stamp, overwriting any earlier
+    /// disposition. Allowed from any status — every status may already move to <c>Cancelled</c>.
+    /// Callers are responsible for validating the code first
+    /// (<see cref="Validation.DispositionReasons.IsValid"/>).
+    /// </summary>
+    /// <param name="reasonCode">One of <see cref="Validation.DispositionReasons.All"/>.</param>
+    /// <param name="userId">The manager making the change (audit identity).</param>
+    public void CloseWithDisposition(string reasonCode, string? userId)
+    {
+        Status = "Cancelled";
+        Disposition = new DispositionEmbedded
+        {
+            ReasonCode = reasonCode,
+            DisposedAtUtc = DateTime.UtcNow,
+            DisposedByUserId = userId
+        };
+
+        MarkAsUpdated(userId);
+    }
+
+    /// <summary>
+    /// Drops the <see cref="Disposition"/> once <see cref="Status"/> is no longer <c>Cancelled</c>,
+    /// so a reopened request does not carry a stale "closed as duplicate" reason. Call after any
+    /// status change that does not go through <see cref="CloseWithDisposition"/>.
+    /// </summary>
+    public void ClearDispositionIfReopened()
+    {
+        if (!string.Equals(Status, "Cancelled", StringComparison.Ordinal))
+        {
+            Disposition = null;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: DispositionEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// The reason a <see cref="ServiceRequest"/> was closed without work (<c>Spec C-4</c>).
+/// </summary>
+public class DispositionEmbedded
+{
+    /// <summary>One of <see cref="Validation.DispositionReasons.All"/>.</summary>
+    [JsonProperty("reasonCode")]
+    public string ReasonCode { get; set; } = string.Empty;
+
+    /// <summary>UTC time the request was dispositioned.</summary>
+    [JsonProperty("disposedAtUtc")]
+    public DateTime DisposedAtUtc { get; set; }
+
+    /// <summary>The manager who dispositioned it. Null only for legacy/system writes.</summary>
+    [JsonProperty("disposedByUserId")]
+    public string? DisposedByUserId { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: CustomerStatusNoteEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// The single manager-authored note that renders on the customer status page (<c>Spec C-9</c>),
+/// embedded on a <see cref="ServiceRequest"/>. One-directional (manager → customer); the customer
+/// has no path to write or reply. Overwritten on edit — there is no history. The text is never
+/// written to application logs.
+/// </summary>
+public class CustomerStatusNoteEmbedded
+{
+    /// <summary>The note text, trimmed and sanitised on write. Shown verbatim to the customer.</summary>
+    [JsonProperty("text")]
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>UTC time the note was last set or edited.</summary>
+    [JsonProperty("updatedAtUtc")]
+    public DateTime UpdatedAtUtc { get; set; }
+
+    /// <summary>The manager who last set or edited the note. Null only for legacy/system writes.</summary>
+    [JsonProperty("updatedByUserId")]
+    public string? UpdatedByUserId { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: PacketEmailDeliveryEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// State machine for idempotent, retried delivery of the generated service packet by email
+/// (<c>Spec B-4</c>, issue #438), embedded on a <see cref="ServiceRequest"/>.
+///
+/// The send runs from <c>PacketGenerationService</c> straight after a successful generation.
+/// This block records the current delivery run — whether it is pending, delivered, or failed;
+/// how many attempts it has made; the last error (never customer issue text, per <c>Spec X-7</c>);
+/// and the <see cref="DeliveredPacketVersion"/> that was last delivered. Delivery is skipped when
+/// <see cref="IsDeliveredFor"/> already reports the current packet version as delivered, so a
+/// repeat run never double-sends. After <see cref="MaxAttempts"/> failed attempts an alert is
+/// logged once (<see cref="AlertRaised"/>).
+/// </summary>
+public class PacketEmailDeliveryEmbedded
+{
+    /// <summary>Maximum delivery attempts before an alert is raised (<c>Spec B-4</c>).</summary>
+    public const int MaxAttempts = 3;
+
+    /// <summary>
+    /// Current delivery state: <c>Pending</c> (not yet attempted for the current run),
+    /// <c>Delivered</c>, or <c>Failed</c> (all attempts for the current run exhausted).
+    /// </summary>
+    [JsonProperty("status")]
+    public string Status { get; set; } = "Pending";
+
+    /// <summary>Number of send attempts made in the current run.</summary>
+    [JsonProperty("attemptCount")]
+    public int AttemptCount { get; set; }
+
+    /// <summary>UTC time the most recent attempt started. Null before the first attempt.</summary>
+    [JsonProperty("lastAttemptAtUtc")]
+    public DateTime? LastAttemptAtUtc { get; set; }
+
+    /// <summary>
+    /// The <see cref="PacketGenerationEmbedded.PacketVersion"/> that was last delivered
+    /// successfully. <c>0</c> until the first successful delivery. With the service request id
+    /// this is the idempotency key for delivery (<c>Spec B-4</c>).
+    /// </summary>
+    [JsonProperty("deliveredPacketVersion")]
+    public int DeliveredPacketVersion { get; set; }
+
+    /// <summary>UTC time of the most recent successful delivery. Null until the first success.</summary>
+    [JsonProperty("deliveredAtUtc")]
+    public DateTime? DeliveredAtUtc { get; set; }
+
+    /// <summary>
+    /// Short exception type and message from the most recent failed attempt, truncated. Never
+    /// contains customer issue text (<c>Spec X-7</c>). Null when the last run delivered.
+    /// </summary>
+    [JsonProperty("lastError")]
+    public string? LastError { get; set; }
+
+    /// <summary>
+    /// True once the exhausted-retries alert has been logged for the current failed run, so it is
+    /// logged only once. Cleared by <see cref="BeginRun"/>.
+    /// </summary>
+    [JsonProperty("alertRaised")]
+    public bool AlertRaised { get; set; }
+
+    /// <summary>
+    /// True when the current status is <c>Delivered</c> and the delivered version matches
+    /// <paramref name="packetVersion"/> — i.e. this exact packet has already been emailed and a
+    /// repeat send must be skipped.
+    /// </summary>
+    public bool IsDeliveredFor(int packetVersion) =>
+        Status == "Delivered" && DeliveredPacketVersion == packetVersion;
+
+    /// <summary>
+    /// Starts a fresh delivery run: clears the attempt counter, error, and alert flag and returns
+    /// the status to <c>Pending</c>. A prior <see cref="DeliveredPacketVersion"/> and
+    /// <see cref="DeliveredAtUtc"/> are retained.
+    /// </summary>
+    public void BeginRun()
+    {
+        Status = "Pending";
+        AttemptCount = 0;
+        LastError = null;
+        AlertRaised = false;
+    }
+
+    /// <summary>Begins a new attempt: increments the attempt count and stamps the time.</summary>
+    public void MarkAttempt()
+    {
+        AttemptCount++;
+        LastAttemptAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>Records a successful delivery: stores the delivered version and time, clears the error.</summary>
+    public void MarkDelivered(int packetVersion, DateTime deliveredAtUtc)
+    {
+        Status = "Delivered";
+        DeliveredPacketVersion = packetVersion;
+        DeliveredAtUtc = deliveredAtUtc;
+        LastError = null;
+    }
+
+    /// <summary>Records a failed run: marks <c>Failed</c> and stores the sanitized error.</summary>
+    public void MarkFailed(string error)
+    {
+        Status = "Failed";
+        LastError = error;
+    }
+
+    /// <summary>Marks that the exhausted-retries alert has been logged for this failed run.</summary>
+    public void MarkAlertRaised() => AlertRaised = true;
+}
+
+// ---------------------------------------------------------------------------
+// Embedded: PacketGenerationEmbedded
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// State machine for asynchronous service-packet generation, embedded on a
+/// <see cref="ServiceRequest"/> (<c>Spec B-1</c>, issue #434).
+///
+/// The packet is composed and rendered off the intake request thread. This block records
+/// where that work is: whether it is pending, in flight, done, or failed; how many attempts
+/// have been made; the last error (never customer issue text, per <c>Spec X-7</c>); and the
+/// blob path and version of the most recent successful PDF. After
+/// <see cref="MaxAttempts"/> failed attempts an alert is raised once
+/// (<see cref="AlertRaised"/>) and the state stays <c>Failed</c> for the manager app to show.
+/// </summary>
+public class PacketGenerationEmbedded
+{
+    /// <summary>Maximum generation attempts before an alert is raised (<c>Spec B-1</c>).</summary>
+    public const int MaxAttempts = 3;
+
+    /// <summary>
+    /// Current generation state: <c>Pending</c> (enqueued, not started), <c>Generating</c>
+    /// (an attempt is in flight), <c>Succeeded</c>, or <c>Failed</c>.
+    /// </summary>
+    [JsonProperty("status")]
+    public string Status { get; set; } = "Pending";
+
+    /// <summary>Number of generation attempts made so far.</summary>
+    [JsonProperty("attemptCount")]
+    public int AttemptCount { get; set; }
+
+    /// <summary>UTC time the most recent attempt started. Null before the first attempt.</summary>
+    [JsonProperty("lastAttemptAtUtc")]
+    public DateTime? LastAttemptAtUtc { get; set; }
+
+    /// <summary>
+    /// Short exception type and message from the most recent failure, truncated. Never contains
+    /// customer issue text (<c>Spec X-7</c>). Null when the last attempt succeeded.
+    /// </summary>
+    [JsonProperty("lastError")]
+    public string? LastError { get; set; }
+
+    /// <summary>UTC time of the most recent successful generation. Null until the first success.</summary>
+    [JsonProperty("generatedAtUtc")]
+    public DateTime? GeneratedAtUtc { get; set; }
+
+    /// <summary>
+    /// Monotonic version of the generated packet, incremented on each success. <c>0</c> until the
+    /// first successful generation. Used to key idempotent delivery (<c>Spec B-4</c>).
+    /// </summary>
+    [JsonProperty("packetVersion")]
+    public int PacketVersion { get; set; }
+
+    /// <summary>
+    /// Blob name (within the attachments container) of the most recent successful packet PDF.
+    /// Null until the first success.
+    /// </summary>
+    [JsonProperty("pdfBlobPath")]
+    public string? PdfBlobPath { get; set; }
+
+    /// <summary>
+    /// True once the exhausted-retries alert has been raised for the current failure run, so it
+    /// is raised only once. Cleared by <see cref="ResetForRegeneration"/>.
+    /// </summary>
+    [JsonProperty("alertRaised")]
+    public bool AlertRaised { get; set; }
+
+    /// <summary>
+    /// How many attachments the intake client said it was about to upload (issue #516).
+    /// The customer's photos are uploaded <b>after</b> the submission that creates this request,
+    /// so generation started the instant the job is enqueued would render a packet with no
+    /// photos. Generation holds off while <see cref="ServiceRequest.Attachments"/> is short of
+    /// this number and the upload window is still open, then renders whatever arrived.
+    /// <c>0</c> for requests with no attachments and for every non-intake origin — those
+    /// generate immediately.
+    /// </summary>
+    [JsonProperty("expectedAttachmentCount")]
+    public int ExpectedAttachmentCount { get; set; }
+
+    /// <summary>Begins a new attempt: marks <c>Generating</c>, increments the attempt count, stamps the time.</summary>
+    public void MarkGenerating()
+    {
+        Status = "Generating";
+        AttemptCount++;
+        LastAttemptAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>Records a successful generation: bumps <see cref="PacketVersion"/>, stores the PDF path, clears the error.</summary>
+    public void MarkSucceeded(string pdfBlobPath, DateTime generatedAtUtc)
+    {
+        Status = "Succeeded";
+        PacketVersion++;
+        PdfBlobPath = pdfBlobPath;
+        GeneratedAtUtc = generatedAtUtc;
+        LastError = null;
+    }
+
+    /// <summary>Records a failed attempt: marks <c>Failed</c> and stores the sanitized error.</summary>
+    public void MarkFailed(string error)
+    {
+        Status = "Failed";
+        LastError = error;
+    }
+
+    /// <summary>Marks that the exhausted-retries alert has been raised for this failure run.</summary>
+    public void MarkAlertRaised() => AlertRaised = true;
+
+    /// <summary>
+    /// Resets the attempt counter, error, and alert flag and returns the state to <c>Pending</c>
+    /// for an on-demand regeneration. The successful <see cref="PacketVersion"/> and
+    /// <see cref="PdfBlobPath"/> are retained until the next success replaces them.
+    /// </summary>
+    public void ResetForRegeneration()
+    {
+        Status = "Pending";
+        AttemptCount = 0;
+        LastError = null;
+        AlertRaised = false;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +612,15 @@ public class CustomerSnapshotEmbedded
 
     [JsonProperty("phone")]
     public string? Phone { get; set; }
+
+    /// <summary>
+    /// The customer's preferred contact method at the time of intake — one of
+    /// <c>Phone</c>, <c>Text</c>, or <c>Email</c>
+    /// (see <see cref="Validation.PreferredContactMethod"/>). <c>null</c> for service
+    /// requests created before this field was captured.
+    /// </summary>
+    [JsonProperty("preferredContact")]
+    public string? PreferredContact { get; set; }
 
     /// <summary>
     /// True if this customer had prior service requests at this dealership.
@@ -245,36 +686,6 @@ public class ServiceRequestAttachmentEmbedded
 
     [JsonProperty("createdAtUtc")]
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
-}
-
-// ---------------------------------------------------------------------------
-// Embedded: ServiceEventEmbedded (Section 10A)
-// ---------------------------------------------------------------------------
-
-/// <summary>
-/// Structured service event data per Section 10A.
-/// Fields populated progressively across phases.
-/// MVP captures issueCategory and componentType only.
-/// </summary>
-public class ServiceEventEmbedded
-{
-    [JsonProperty("componentType")]
-    public string? ComponentType { get; set; }
-
-    [JsonProperty("failureMode")]
-    public string? FailureMode { get; set; }
-
-    [JsonProperty("repairAction")]
-    public string? RepairAction { get; set; }
-
-    [JsonProperty("partsUsed")]
-    public List<string> PartsUsed { get; set; } = [];
-
-    [JsonProperty("laborHours")]
-    public decimal? LaborHours { get; set; }
-
-    [JsonProperty("serviceDateUtc")]
-    public DateTime? ServiceDateUtc { get; set; }
 }
 
 // ---------------------------------------------------------------------------
@@ -368,96 +779,122 @@ public class AiEnrichmentMetadataEmbedded
 }
 
 // ---------------------------------------------------------------------------
-// Embedded: MessageEmbedded
+// Embedded: PreliminaryAssessmentEmbedded
 // ---------------------------------------------------------------------------
 
 /// <summary>
-/// A single message in the dealer ↔ customer conversation thread,
-/// embedded within a <see cref="ServiceRequest"/> document.
+/// An advisory, pre-inspection assessment of the reported issue (issue #507). It is made before
+/// a technician has seen the unit, so fixes are <em>possible</em>, never recommended, and there
+/// may be several. When <see cref="Confidence"/> is <c>abstain</c> the other fields are empty and
+/// the packet shows nothing structured.
 /// </summary>
-public class MessageEmbedded
+public class PreliminaryAssessmentEmbedded
 {
-    /// <summary>
-    /// Unique identifier for this message.
-    /// </summary>
-    [JsonProperty("id")]
-    public string Id { get; init; } = Guid.NewGuid().ToString();
+    /// <summary>The most probable cause, or <c>null</c> when none is offered.</summary>
+    [JsonProperty("probableCause")]
+    public string? ProbableCause { get; set; }
+
+    /// <summary>Plausible fixes to verify on inspection, most plausible first. May be empty.</summary>
+    [JsonProperty("possibleFixes")]
+    public List<string> PossibleFixes { get; set; } = [];
+
+    /// <summary>Generic part names likely to be involved — never part numbers or prices.</summary>
+    [JsonProperty("likelyParts")]
+    public List<string> LikelyParts { get; set; } = [];
+
+    /// <summary>One of <see cref="Validation.AssessmentConfidence.AllowedValues"/>.</summary>
+    [JsonProperty("confidence")]
+    public string Confidence { get; set; } = Validation.AssessmentConfidence.Abstain;
+
+    /// <summary>The implementation that produced the assessment (AI or rule-based fallback).</summary>
+    [JsonProperty("provider")]
+    public string Provider { get; set; } = string.Empty;
+
+    /// <summary>UTC time the assessment was generated.</summary>
+    [JsonProperty("generatedAtUtc")]
+    public DateTime GeneratedAtUtc { get; set; }
 
     /// <summary>
-    /// Direction of the message: "outbound" (dealer → customer) or "inbound" (customer → dealer).
+    /// What the model read off the customer's photos (issue #772): data plates, fault codes and
+    /// visible observations, each cited to its attachment. Unlike the fields above it survives an
+    /// abstention — a data plate read cleanly is worth printing when the cause cannot be assessed.
+    /// <c>null</c> when no photo was assessed or nothing usable was found.
     /// </summary>
-    [JsonProperty("direction")]
-    public string Direction { get; set; } = string.Empty;
+    [JsonProperty("photoFindings")]
+    public PhotoFindingsEmbedded? PhotoFindings { get; set; }
+}
 
-    /// <summary>
-    /// Channel used to deliver the message: "sms" or "email".
-    /// </summary>
-    [JsonProperty("channel")]
-    public string Channel { get; set; } = string.Empty;
+/// <summary>
+/// Facts taken from the customer's photos by the preliminary assessment (issue #772). Every entry
+/// carries the <c>attachmentId</c> it came from so the packet can cite the photo. Cleaned by
+/// <see cref="Validation.PhotoFindingsCleaner"/> before it is stored: capped, trimmed, and never
+/// citing an attachment the request does not have.
+/// </summary>
+public class PhotoFindingsEmbedded
+{
+    /// <summary>Appliance / equipment data plates, transcribed.</summary>
+    [JsonProperty("dataPlates")]
+    public List<PhotoDataPlateEmbedded> DataPlates { get; set; } = [];
 
-    /// <summary>
-    /// Who sent the message: "dealer" or "customer".
-    /// </summary>
-    [JsonProperty("senderType")]
-    public string SenderType { get; set; } = string.Empty;
+    /// <summary>Fault or error codes shown on a display or panel.</summary>
+    [JsonProperty("faultCodes")]
+    public List<PhotoFaultCodeEmbedded> FaultCodes { get; set; } = [];
 
-    /// <summary>
-    /// User ID of the dealer staff member who sent the message. Null for customer-sent messages.
-    /// </summary>
-    [JsonProperty("senderUserId")]
-    public string? SenderUserId { get; set; }
+    /// <summary>Visible condition, one photo per observation.</summary>
+    [JsonProperty("observations")]
+    public List<PhotoObservationEmbedded> Observations { get; set; } = [];
+}
 
-    /// <summary>
-    /// Display name of the sender (e.g., "Sarah (Service Advisor)"). Null for customer-sent messages.
-    /// </summary>
-    [JsonProperty("senderDisplayName")]
-    public string? SenderDisplayName { get; set; }
+/// <summary>
+/// A data plate read off one photo. The model number is a fact transcribed from the plate, not a
+/// suggested part — the "never part numbers" rule for likely parts (<c>Spec B-2</c> item 5) is
+/// unaffected.
+/// </summary>
+public class PhotoDataPlateEmbedded
+{
+    /// <summary>The equipment the plate belongs to, e.g. <c>Refrigerator</c>.</summary>
+    [JsonProperty("component")]
+    public string Component { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Phone number of the sender for inbound SMS messages.
-    /// </summary>
-    [JsonProperty("senderPhone")]
-    public string? SenderPhone { get; set; }
+    [JsonProperty("manufacturer")]
+    public string? Manufacturer { get; set; }
 
-    /// <summary>
-    /// Phone number of the recipient for outbound SMS messages.
-    /// </summary>
-    [JsonProperty("recipientPhone")]
-    public string? RecipientPhone { get; set; }
+    [JsonProperty("modelNumber")]
+    public string? ModelNumber { get; set; }
 
-    /// <summary>
-    /// Email address of the recipient for outbound email messages.
-    /// </summary>
-    [JsonProperty("recipientEmail")]
-    public string? RecipientEmail { get; set; }
+    [JsonProperty("serialNumber")]
+    public string? SerialNumber { get; set; }
 
-    /// <summary>
-    /// Message body text.
-    /// </summary>
-    [JsonProperty("body")]
-    public string Body { get; set; } = string.Empty;
+    /// <summary>The attachment the plate was read from.</summary>
+    [JsonProperty("attachmentId")]
+    public string AttachmentId { get; set; } = string.Empty;
+}
 
-    /// <summary>
-    /// UTC timestamp when the message was sent (outbound messages).
-    /// </summary>
-    [JsonProperty("sentAtUtc")]
-    public DateTime? SentAtUtc { get; set; }
+/// <summary>A fault or error code shown in one photo.</summary>
+public class PhotoFaultCodeEmbedded
+{
+    /// <summary>The equipment showing the code, e.g. <c>Thermostat</c>.</summary>
+    [JsonProperty("component")]
+    public string Component { get; set; } = string.Empty;
 
-    /// <summary>
-    /// UTC timestamp when the message was received (inbound messages).
-    /// </summary>
-    [JsonProperty("receivedAtUtc")]
-    public DateTime? ReceivedAtUtc { get; set; }
+    /// <summary>The code exactly as displayed.</summary>
+    [JsonProperty("code")]
+    public string Code { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Delivery status for outbound messages (e.g., "queued", "sent", "delivered", "failed").
-    /// </summary>
-    [JsonProperty("deliveryStatus")]
-    public string? DeliveryStatus { get; set; }
+    /// <summary>What the code means, when the model knows it.</summary>
+    [JsonProperty("meaning")]
+    public string? Meaning { get; set; }
 
-    /// <summary>
-    /// UTC timestamp when the delivery status was last updated.
-    /// </summary>
-    [JsonProperty("deliveryStatusUpdatedAtUtc")]
-    public DateTime? DeliveryStatusUpdatedAtUtc { get; set; }
+    [JsonProperty("attachmentId")]
+    public string AttachmentId { get; set; } = string.Empty;
+}
+
+/// <summary>A visible condition in one photo — never hidden or internal condition.</summary>
+public class PhotoObservationEmbedded
+{
+    [JsonProperty("text")]
+    public string Text { get; set; } = string.Empty;
+
+    [JsonProperty("attachmentId")]
+    public string AttachmentId { get; set; } = string.Empty;
 }

@@ -1,4 +1,4 @@
-// RVS.Data.Cosmos.Seed — Creates 9 Cosmos containers with partition keys,
+// RVS.Data.Cosmos.Seed — Creates 11 Cosmos containers with partition keys,
 // unique key policies, and indexing policies, then seeds realistic test data.
 // Idempotent: safe to re-run (uses UpsertItemAsync and CreateContainerIfNotExistsAsync).
 //
@@ -15,6 +15,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using RVS.Domain.Entities;
 using RVS.Domain.Shared;
+using RVS.Domain.Validation;
 
 var switchMappings = new Dictionary<string, string>
 {
@@ -78,7 +79,10 @@ if (!string.Equals(environment, "Local", StringComparison.OrdinalIgnoreCase))
 
 Console.WriteLine("Starting Cosmos seed...\n");
 
-using var client = new CosmosClient(endpointUri, key);
+// Gateway mode is set explicitly (the .NET SDK default is Direct) to match the API's
+// CosmosClient configuration. See RVS.API/Program.cs for the rationale.
+var clientOptions = new CosmosClientOptions { ConnectionMode = ConnectionMode.Gateway };
+using var client = new CosmosClient(endpointUri, key, clientOptions);
 
 try
 {
@@ -121,6 +125,18 @@ try
     var assetLedgerEntries = BuildAssetLedgerEntries();
     var lookupSets = BuildLookupSets();
     var warrantyRules = BuildRvWarrantyRules();
+
+    // Profiles carry the phone as a customer would type it, and the E.164 form beside it.
+    // Derived rather than written out per profile so the two can never drift: the API does the
+    // same thing wherever it writes a profile (IntakeOrchestrationService). Without it, an
+    // inbound STOP from a seeded customer's number matches no record, because the opt-out
+    // lookup is by phoneE164 (issue #665).
+    foreach (var profile in customerProfiles)
+    {
+        profile.PhoneE164 = PhoneNumberNormalizer.Normalize(profile.Phone)
+            ?? throw new InvalidOperationException(
+                $"Seed profile '{profile.Id}' has a phone that is not a valid US/CA number: '{profile.Phone}'.");
+    }
 
     // ── 3. Seed each container (idempotent via upsert) ──────────────────
     await SeedItemsAsync(containers["dealerships"], dealerships, d => new PartitionKey(d.TenantId), "dealerships");
@@ -176,7 +192,7 @@ static async Task SeedItemsAsync<T>(Container container, List<T> items, Func<T, 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Container definitions — 9 containers
+// Container definitions — 11 containers
 // ═══════════════════════════════════════════════════════════════════════════
 
 static List<ContainerProperties> BuildContainerDefinitions()
@@ -243,6 +259,9 @@ static List<ContainerProperties> BuildContainerDefinitions()
                     new IncludedPath { Path = "/email/?" },
                     new IncludedPath { Path = "/globalCustomerAcctId/?" },
                     new IncludedPath { Path = "/type/?" },
+                    new IncludedPath { Path = "/smsOptOut/?" },
+                    // Cross-partition lookup for an inbound carrier keyword (issue #665).
+                    new IncludedPath { Path = "/phoneE164/?" },
                 },
                 ExcludedPaths =
                 {
@@ -462,6 +481,33 @@ static List<ContainerProperties> BuildContainerDefinitions()
                 },
             },
         },
+
+        // 11. intake-invites — PK=/tenantId, id = SHA-256 of the invite token (Spec A-14, issue #663).
+        // No TTL, on purpose: the consent record is opt-in evidence and outlives the invite.
+        new ContainerProperties
+        {
+            Id = "intake-invites",
+            PartitionKeyPath = "/tenantId",
+            IndexingPolicy = new IndexingPolicy
+            {
+                IndexingMode = IndexingMode.Consistent,
+                Automatic = true,
+                IncludedPaths =
+                {
+                    new IncludedPath { Path = "/tenantId/?" },
+                    new IncludedPath { Path = "/type/?" },
+                    new IncludedPath { Path = "/locationId/?" },
+                    new IncludedPath { Path = "/advisorUserId/?" },
+                    new IncludedPath { Path = "/createdAtUtc/?" },
+                    new IncludedPath { Path = "/acsMessageId/?" },
+                },
+                ExcludedPaths =
+                {
+                    new ExcludedPath { Path = "/*" },
+                    new ExcludedPath { Path = "/_etag/?" },
+                },
+            },
+        },
     ];
 }
 
@@ -533,7 +579,7 @@ static List<Tenant> BuildTenants() =>
     {
         Id = TenantBlueCompass,
         Name = "Blue Compass RV",
-        BillingEmail = "billing@bluecompassrv.com",
+        BillingEmail = "billing@blue-compass.example.com",
         Status = "Active",
         Plan = "Enterprise",
         CreatedByUserId = "seed",
@@ -542,7 +588,7 @@ static List<Tenant> BuildTenants() =>
     {
         Id = TenantHappyTrails,
         Name = "Happy Trails RV",
-        BillingEmail = "admin@happytrailsrv.com",
+        BillingEmail = "admin@happy-trails.example.com",
         Status = "Active",
         Plan = "Professional",
         CreatedByUserId = "seed",
@@ -609,13 +655,13 @@ static List<Dealership> BuildDealerships() =>
         TenantId = TenantBlueCompass,
         Name = "Blue Compass RV",
         Slug = "blue-compass-rv",
-        ServiceEmail = "service@bluecompassrv.com",
+        ServiceEmail = "service@blue-compass.example.com",
         Phone = "(801) 555-0100",
         CreatedByUserId = "seed",
         IntakeConfig = new IntakeFormConfigEmbedded
         {
             MaxFileSizeMb = 50,
-            MaxAttachments = 10,
+            MaxAttachments = 5,
             AiContext = "Large multi-location RV dealership chain in the Western US.",
         },
     },
@@ -625,7 +671,7 @@ static List<Dealership> BuildDealerships() =>
         TenantId = TenantHappyTrails,
         Name = "Happy Trails RV",
         Slug = "happy-trails-rv",
-        ServiceEmail = "service@happytrailsrv.com",
+        ServiceEmail = "service@happy-trails.example.com",
         Phone = "(208) 555-0200",
         CreatedByUserId = "seed",
         IntakeConfig = new IntakeFormConfigEmbedded
@@ -649,6 +695,7 @@ static List<Location> BuildLocations() =>
         Name = "Blue Compass RV — Salt Lake City",
         Slug = "blue-compass-slc",
         Phone = "(801) 555-0101",
+        TimeZoneId = "America/Denver",
         CreatedByUserId = "seed",
         EnabledCapabilities = ["electrical", "plumbing", "hvac", "generator", "warranty-service", "roof-repair", "slide-out-repair", "winterization", "tire-service"],
         Address = new AddressEmbedded
@@ -658,6 +705,10 @@ static List<Location> BuildLocations() =>
             State = "UT",
             PostalCode = "84107",
         },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@blue-compass-slc.example.com"],
+        },
     },
     new Location
     {
@@ -666,6 +717,7 @@ static List<Location> BuildLocations() =>
         Name = "Blue Compass RV — Denver",
         Slug = "blue-compass-den",
         Phone = "(303) 555-0102",
+        TimeZoneId = "America/Denver",
         CreatedByUserId = "seed",
         EnabledCapabilities = ["diesel-service", "electrical", "plumbing", "hvac", "generator", "warranty-service", "body-repair", "roof-repair", "slide-out-repair"],
         Address = new AddressEmbedded
@@ -675,6 +727,10 @@ static List<Location> BuildLocations() =>
             State = "CO",
             PostalCode = "80231",
         },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@blue-compass-den.example.com"],
+        },
     },
     new Location
     {
@@ -683,6 +739,7 @@ static List<Location> BuildLocations() =>
         Name = "Blue Compass RV — Las Vegas",
         Slug = "blue-compass-lv",
         Phone = "(702) 555-0103",
+        TimeZoneId = "America/Los_Angeles",
         CreatedByUserId = "seed",
         EnabledCapabilities = ["electrical", "hvac", "plumbing", "warranty-service", "rv-refrigerator", "safety-inspection"],
         Address = new AddressEmbedded
@@ -692,6 +749,10 @@ static List<Location> BuildLocations() =>
             State = "NV",
             PostalCode = "89121",
         },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@blue-compass-lv.example.com"],
+        },
     },
     new Location
     {
@@ -700,6 +761,7 @@ static List<Location> BuildLocations() =>
         Name = "Blue Compass RV — Phoenix",
         Slug = "blue-compass-phx",
         Phone = "(602) 555-0104",
+        TimeZoneId = "America/Phoenix",
         CreatedByUserId = "seed",
         EnabledCapabilities = ["diesel-service", "electrical", "hvac", "plumbing", "warranty-service", "body-repair", "tire-service", "mobile-service"],
         Address = new AddressEmbedded
@@ -708,6 +770,10 @@ static List<Location> BuildLocations() =>
             City = "Phoenix",
             State = "AZ",
             PostalCode = "85015",
+        },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@blue-compass-phx.example.com"],
         },
     },
 
@@ -719,6 +785,7 @@ static List<Location> BuildLocations() =>
         Name = "Happy Trails RV — Boise",
         Slug = "happy-trails-boise",
         Phone = "(208) 555-0201",
+        TimeZoneId = "America/Boise",
         CreatedByUserId = "seed",
         EnabledCapabilities = ["electrical", "plumbing", "hvac", "generator", "warranty-service", "roof-repair", "winterization"],
         Address = new AddressEmbedded
@@ -727,6 +794,10 @@ static List<Location> BuildLocations() =>
             City = "Boise",
             State = "ID",
             PostalCode = "83705",
+        },
+        PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["service@happy-trails-boise.example.com"],
         },
     },
 ];
@@ -801,7 +872,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_johnson_abc123def456",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId1],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -824,7 +894,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_smith_ghi789jkl012",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId2],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -847,7 +916,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_martinez_mno345pqr678",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId3],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -870,7 +938,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_williams_stu901vwx234",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId4],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -893,7 +960,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_thompson_yza567bcd890",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId5],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -916,7 +982,6 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
         CreatedByUserId = "seed",
         MagicLinkToken = "mlk_chen_efg123hij456",
         MagicLinkExpiresAtUtc = DateTime.UtcNow.AddDays(30),
-        AllKnownAssetIds = [AssetId6, AssetId7, AssetId8],
         LinkedProfiles =
         [
             new LinkedProfileEmbedded
@@ -931,7 +996,7 @@ static List<GlobalCustomerAcct> BuildGlobalCustomerAccounts() =>
     },
 ];
 
-// ── Customer Profiles (5) ───────────────────────────────────────────────
+// ── Customer Profiles (6) ───────────────────────────────────────────────
 
 static List<CustomerProfile> BuildCustomerProfiles() =>
 [
@@ -1145,6 +1210,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocSaltLake,
         CustomerProfileId = CpJohnsonBc,
         IssueDescription = "Water heater not igniting on LP gas. Pilot lights on electric but no flame on propane.",
+        IssueDescriptionVerbatim = "um so the water heater it uh isnt lighting up on the propane, like the pilot lights fine on electric but theres no flame at all when i switch it over to gas",
         IssueCategory = "Plumbing",
         Priority = "High",
         Name = "SR-001 Johnson Water Heater",
@@ -1167,6 +1233,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocSaltLake,
         CustomerProfileId = CpJohnsonBc,
         IssueDescription = "Slide-out not fully extending. Motor runs but stops halfway. Possible debris in track.",
+        IssueDescriptionVerbatim = "okay so the uh the slide out its not going all the way out, you can hear the motor running but it just kinda stops about halfway, i think maybe theres something in the track",
         IssueCategory = "Slides",
         Priority = "Medium",
         Name = "SR-002 Johnson Slide-Out",
@@ -1180,11 +1247,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Slide-Out Mechanism",
-            FailureMode = "Mechanical Obstruction",
-        },
     },
 
     // SR 3 — Completed (SLC)
@@ -1209,14 +1271,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = false, PriorRequestCount = 0,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId1, Manufacturer = "Winnebago", Model = "View 24D", Year = 2023 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Roof Assembly",
-            FailureMode = "Wear/Age",
-            RepairAction = "Sealant Reapplication",
-            LaborHours = 2.5m,
-            ServiceDateUtc = SeedDate(28),
-        },
     },
 
     // SR 4 — WaitingOnParts (Denver)
@@ -1228,6 +1282,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocDenver,
         CustomerProfileId = CpSmithBc,
         IssueDescription = "Furnace blowing cold air. Thermostat reads correctly but heat does not engage.",
+        IssueDescriptionVerbatim = "so the furnace is uh blowing cold air, the thermostat says the right temperature but the heat just never actually kicks on",
         IssueCategory = "HVAC",
         Priority = "High",
         Name = "SR-004 Smith Furnace",
@@ -1241,12 +1296,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId2, Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Furnace",
-            FailureMode = "Ignition Failure",
-            PartsUsed = ["Ignitor Assembly P/N 12345"],
-        },
     },
 
     // SR 5 — Cancelled (Denver)
@@ -1258,6 +1307,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocDenver,
         CustomerProfileId = CpSmithBc,
         IssueDescription = "Rear camera image flickering intermittently.",
+        IssueDescriptionVerbatim = "the uh the backup camera the picture keeps like flickering on and off, it comes and goes",
         IssueCategory = "Electrical",
         Priority = "Low",
         Name = "SR-005 Smith Camera",
@@ -1280,6 +1330,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocLasVegas,
         CustomerProfileId = CpMartinezBc,
         IssueDescription = "AC compressor making loud clicking noise. Reduced cooling capacity.",
+        IssueDescriptionVerbatim = "um the air conditioner is making this real loud clicking sound and its not uh not cooling near as good as it used to",
         IssueCategory = "HVAC",
         Priority = "High",
         Name = "SR-006 Martinez AC",
@@ -1293,11 +1344,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId3, Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "AC Compressor",
-            FailureMode = "Mechanical Noise",
-        },
     },
 
     // SR 7 — New (Phoenix)
@@ -1309,6 +1355,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocPhoenix,
         CustomerProfileId = CpMartinezBc,
         IssueDescription = "Awning fabric tearing along the seam. Approximately 12-inch rip near roller.",
+        IssueDescriptionVerbatim = "so the awning fabric is tearing right along the seam there, theres about a i dunno maybe a foot long rip up near the roller",
         IssueCategory = "Awning",
         Priority = "Medium",
         Name = "SR-007 Martinez Awning",
@@ -1344,15 +1391,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId4, Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Tank Sensor",
-            FailureMode = "Sensor Malfunction",
-            RepairAction = "Sensor Replacement",
-            PartsUsed = ["Tank Sensor Kit P/N TS-2021"],
-            LaborHours = 1.5m,
-            ServiceDateUtc = SeedDate(12),
-        },
     },
 
     // SR 9 — WaitingOnParts (Boise — Happy Trails)
@@ -1364,7 +1402,8 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocBoise,
         CustomerProfileId = CpWilliamsHt,
         IssueDescription = "Entry door latch mechanism broken. Door does not close securely.",
-        IssueCategory = "Doors/Locks",
+        IssueDescriptionVerbatim = "the uh the latch on the entry door is broke, the door wont close up secure anymore",
+        IssueCategory = "Exterior",
         Priority = "High",
         Name = "SR-009 Williams Door Latch",
         CreatedByUserId = "seed",
@@ -1376,11 +1415,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId4, Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Door Latch Assembly",
-            FailureMode = "Mechanical Breakage",
-        },
     },
 
     // SR 10 — New (Boise — Happy Trails)
@@ -1392,7 +1426,8 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocBoise,
         CustomerProfileId = CpThompsonHt,
         IssueDescription = "Generator not starting. Battery fully charged, fuel tank full, but no crank.",
-        IssueCategory = "Electrical",
+        IssueDescriptionVerbatim = "okay so the generator wont start at all, battery is charged up full, fuel tanks full, but it doesnt even crank over",
+        IssueCategory = "Generator",
         Priority = "High",
         Name = "SR-010 Thompson Generator",
         CreatedByUserId = "seed",
@@ -1414,6 +1449,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocPhoenix,
         CustomerProfileId = CpChenBc,
         IssueDescription = "Inverter/converter not switching to shore power. Runs on battery only even when plugged in.",
+        IssueDescriptionVerbatim = "um so the inverter converter thing its not switching over to shore power, it just keeps running off the battery even when im plugged in",
         IssueCategory = "Electrical",
         Priority = "High",
         Name = "SR-011 Chen Inverter",
@@ -1427,15 +1463,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = false, PriorRequestCount = 0,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId6, Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Inverter/Converter",
-            FailureMode = "Electrical Short",
-            RepairAction = "Component Replacement",
-            PartsUsed = ["Progressive Dynamics PD4655V Converter"],
-            LaborHours = 3.0m,
-            ServiceDateUtc = SeedDate(22),
-        },
     },
 
     // SR 12 — InProgress (Phoenix — Blue Compass) — Chen, Coachmen Catalina (currently active)
@@ -1447,6 +1474,7 @@ static List<ServiceRequest> BuildServiceRequests() =>
         LocationId = LocPhoenix,
         CustomerProfileId = CpChenBc,
         IssueDescription = "Slide-out room makes grinding noise when retracting. Extends fine but struggles on retract.",
+        IssueDescriptionVerbatim = "so the uh slide out room it makes this grinding noise when its coming back in, going out is fine but it really struggles on the way back",
         IssueCategory = "Slides",
         Priority = "Medium",
         Name = "SR-012 Chen Slide-Out",
@@ -1460,11 +1488,6 @@ static List<ServiceRequest> BuildServiceRequests() =>
             IsReturningCustomer = true, PriorRequestCount = 1,
         },
         AssetInfo = new AssetInfoEmbedded { AssetId = AssetId6, Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022 },
-        ServiceEvent = new ServiceEventEmbedded
-        {
-            ComponentType = "Slide-Out Mechanism",
-            FailureMode = "Mechanical Noise",
-        },
     },
 ];
 
@@ -1474,21 +1497,26 @@ static List<AssetLedgerEntry> BuildAssetLedgerEntries() =>
 [
     new AssetLedgerEntry { Id = "ale_001", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr01, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Plumbing", IssueDescription = "Water heater not igniting on LP gas.", Status = "New", SubmittedAtUtc = SeedDate(2) },
     new AssetLedgerEntry { Id = "ale_002", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr02, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Slides", IssueDescription = "Slide-out not fully extending.", Status = "InProgress", SubmittedAtUtc = SeedDate(15) },
-    new AssetLedgerEntry { Id = "ale_003", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr03, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Roof", IssueDescription = "Annual roof inspection and sealant check.", Status = "Completed", SubmittedAtUtc = SeedDate(35), Section10A = new Section10AEmbedded { ComponentType = "Roof Assembly", FailureMode = "Wear/Age", RepairAction = "Sealant Reapplication", LaborHours = 2.5m, ServiceDateUtc = SeedDate(28) } },
+    new AssetLedgerEntry { Id = "ale_003", AssetId = AssetId1, TenantId = TenantBlueCompass, ServiceRequestId = Sr03, GlobalCustomerAcctId = GcaJohnson, DealershipName = "Blue Compass RV", Manufacturer = "Winnebago", Model = "View 24D", Year = 2023, IssueCategory = "Roof", IssueDescription = "Annual roof inspection and sealant check.", Status = "Completed", SubmittedAtUtc = SeedDate(35) },
     new AssetLedgerEntry { Id = "ale_004", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = Sr04, GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "HVAC", IssueDescription = "Furnace blowing cold air.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(10) },
     new AssetLedgerEntry { Id = "ale_005", AssetId = AssetId2, TenantId = TenantBlueCompass, ServiceRequestId = Sr05, GlobalCustomerAcctId = GcaSmith, DealershipName = "Blue Compass RV", Manufacturer = "Airstream", Model = "Interstate 24GL", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Rear camera image flickering.", Status = "Cancelled", SubmittedAtUtc = SeedDate(25) },
     new AssetLedgerEntry { Id = "ale_006", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = Sr06, GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "HVAC", IssueDescription = "AC compressor making loud clicking noise.", Status = "InProgress", SubmittedAtUtc = SeedDate(5) },
     new AssetLedgerEntry { Id = "ale_007", AssetId = AssetId3, TenantId = TenantBlueCompass, ServiceRequestId = Sr07, GlobalCustomerAcctId = GcaMartinez, DealershipName = "Blue Compass RV", Manufacturer = "Thor Motor Coach", Model = "Chateau 22E", Year = 2024, IssueCategory = "Awning", IssueDescription = "Awning fabric tearing along the seam.", Status = "New", SubmittedAtUtc = SeedDate(3) },
-    new AssetLedgerEntry { Id = "ale_008", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = Sr08, GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Plumbing", IssueDescription = "Fresh water tank sensor reading incorrectly.", Status = "Completed", SubmittedAtUtc = SeedDate(18), Section10A = new Section10AEmbedded { ComponentType = "Tank Sensor", FailureMode = "Sensor Malfunction", RepairAction = "Sensor Replacement", PartsUsed = ["Tank Sensor Kit P/N TS-2021"], LaborHours = 1.5m, ServiceDateUtc = SeedDate(12) } },
-    new AssetLedgerEntry { Id = "ale_009", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = Sr09, GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Doors/Locks", IssueDescription = "Entry door latch mechanism broken.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(7) },
-    new AssetLedgerEntry { Id = "ale_010", AssetId = AssetId5, TenantId = TenantHappyTrails, ServiceRequestId = Sr10, GlobalCustomerAcctId = GcaThompson, DealershipName = "Happy Trails RV", Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023, IssueCategory = "Electrical", IssueDescription = "Generator not starting.", Status = "New", SubmittedAtUtc = SeedDate(1) },
-    new AssetLedgerEntry { Id = "ale_011", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = Sr11, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Inverter/converter not switching to shore power.", Status = "Completed", SubmittedAtUtc = SeedDate(30), Section10A = new Section10AEmbedded { ComponentType = "Inverter/Converter", FailureMode = "Electrical Short", RepairAction = "Component Replacement", PartsUsed = ["Progressive Dynamics PD4655V Converter"], LaborHours = 3.0m, ServiceDateUtc = SeedDate(22) } },
+    new AssetLedgerEntry { Id = "ale_008", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = Sr08, GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Plumbing", IssueDescription = "Fresh water tank sensor reading incorrectly.", Status = "Completed", SubmittedAtUtc = SeedDate(18) },
+    new AssetLedgerEntry { Id = "ale_009", AssetId = AssetId4, TenantId = TenantHappyTrails, ServiceRequestId = Sr09, GlobalCustomerAcctId = GcaWilliams, DealershipName = "Happy Trails RV", Manufacturer = "Jayco", Model = "Jay Flight 28BHS", Year = 2021, IssueCategory = "Exterior", IssueDescription = "Entry door latch mechanism broken.", Status = "WaitingOnParts", SubmittedAtUtc = SeedDate(7) },
+    new AssetLedgerEntry { Id = "ale_010", AssetId = AssetId5, TenantId = TenantHappyTrails, ServiceRequestId = Sr10, GlobalCustomerAcctId = GcaThompson, DealershipName = "Happy Trails RV", Manufacturer = "Forest River", Model = "Rockwood Ultra Lite 2608BS", Year = 2023, IssueCategory = "Generator", IssueDescription = "Generator not starting.", Status = "New", SubmittedAtUtc = SeedDate(1) },
+    new AssetLedgerEntry { Id = "ale_011", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = Sr11, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Electrical", IssueDescription = "Inverter/converter not switching to shore power.", Status = "Completed", SubmittedAtUtc = SeedDate(30) },
     new AssetLedgerEntry { Id = "ale_012", AssetId = AssetId6, TenantId = TenantBlueCompass, ServiceRequestId = Sr12, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Coachmen", Model = "Catalina Legacy 323BHDSCK", Year = 2022, IssueCategory = "Slides", IssueDescription = "Slide-out room makes grinding noise when retracting.", Status = "InProgress", SubmittedAtUtc = SeedDate(2) },
     new AssetLedgerEntry { Id = "ale_013", AssetId = AssetId7, TenantId = TenantBlueCompass, ServiceRequestId = Sr13, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Entegra Coach", Model = "Vision 29S", Year = 2025, IssueCategory = "HVAC", IssueDescription = "Roof AC unit leaking condensation inside coach.", Status = "New", SubmittedAtUtc = SeedDate(55) },
-    new AssetLedgerEntry { Id = "ale_014", AssetId = AssetId8, TenantId = TenantBlueCompass, ServiceRequestId = Sr14, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Newmar", Model = "Bay Star 3014", Year = 2023, IssueCategory = "Plumbing", IssueDescription = "Hot water tank pressure relief valve dripping.", Status = "Completed", SubmittedAtUtc = SeedDate(85), Section10A = new Section10AEmbedded { ComponentType = "Pressure Relief Valve", FailureMode = "Wear/Age", RepairAction = "Valve Replacement", PartsUsed = ["Suburban P/N 161135"], LaborHours = 1.0m, ServiceDateUtc = SeedDate(80) } },
+    new AssetLedgerEntry { Id = "ale_014", AssetId = AssetId8, TenantId = TenantBlueCompass, ServiceRequestId = Sr14, GlobalCustomerAcctId = GcaChen, DealershipName = "Blue Compass RV", Manufacturer = "Newmar", Model = "Bay Star 3014", Year = 2023, IssueCategory = "Plumbing", IssueDescription = "Hot water tank pressure relief valve dripping.", Status = "Completed", SubmittedAtUtc = SeedDate(85) },
 ];
 
-// ── Lookup Sets (4) ─────────────────────────────────────────────────────
+// ── Lookup Sets (1) ─────────────────────────────────────────────────────
+// Only issue-category is seeded and maintained (Spec A-5, issue #454). The
+// four technician-side vocabularies — component type, failure mode, repair
+// action, part number — were never populated at intake and are archived; see
+// "Controlled vocabulary" in Docs/ASOT/RVS_DataModel.md. The taxonomy design
+// is preserved in ARCHIVE/Marketing/RVS_data_moat.md.
 
 static List<LookupSet> BuildLookupSets() =>
 [
@@ -1498,95 +1526,17 @@ static List<LookupSet> BuildLookupSets() =>
         TenantId = "GLOBAL",
         Category = "IssueCategory",
         Name = "Issue Categories",
-        Description = "Standard issue categories for RV service requests",
+        Description = "Controlled issue-category vocabulary for RV service requests (Spec A-5)",
         OverrideMode = LookupOverrideMode.GlobalOnly,
         CreatedByUserId = "seed",
-        Items =
-        [
-            new LookupItem { Code = "HVAC", Name = "HVAC", Description = "Heating, ventilation, and air conditioning", SortOrder = 10 },
-            new LookupItem { Code = "Plumbing", Name = "Plumbing", Description = "Fresh, grey, black water systems and fixtures", SortOrder = 20 },
-            new LookupItem { Code = "Electrical", Name = "Electrical", Description = "12V/120V systems, wiring, batteries, solar", SortOrder = 30 },
-            new LookupItem { Code = "Slides", Name = "Slides", Description = "Slide-out mechanisms, motors, seals", SortOrder = 40 },
-            new LookupItem { Code = "Roof", Name = "Roof", Description = "Roof membrane, sealant, exterior panels", SortOrder = 50 },
-            new LookupItem { Code = "Awning", Name = "Awning", Description = "Awning fabric, arms, motors", SortOrder = 60 },
-            new LookupItem { Code = "Exterior", Name = "Exterior", Description = "Exterior body panels, trim, and surfaces", SortOrder = 65 },
-            new LookupItem { Code = "Doors/Locks", Name = "Doors/Locks", Description = "Entry doors, compartment locks, latches", SortOrder = 70 },
-            new LookupItem { Code = "Appliances", Name = "Appliances", Description = "Refrigerator, microwave, oven, washer/dryer", SortOrder = 80 },
-            new LookupItem { Code = "Chassis", Name = "Chassis", Description = "Chassis, brakes, suspension, frame", SortOrder = 90 },
-            new LookupItem { Code = "DriveTrain",  Name = "DriveTrain",   Description = "Engine, transmission, and drivetrain components", SortOrder = 95 },
-            new LookupItem { Code = "DieselMotor", Name = "Diesel Motor", Description = "Diesel engine issues requiring specialist service",  SortOrder = 96 },
-            new LookupItem { Code = "GasMotor",    Name = "Gas Motor",    Description = "Gas engine issues",                                   SortOrder = 97 },
-            new LookupItem { Code = "Other", Name = "Other", Description = "Issues not covered by other categories", SortOrder = 100 },
-        ],
-    },
-    new LookupSet
-    {
-        Id = "component-types",
-        TenantId = "GLOBAL",
-        Category = "ComponentType",
-        Name = "Component Types",
-        Description = "Section 10A component type codes for service events",
-        OverrideMode = LookupOverrideMode.GlobalOnly,
-        CreatedByUserId = "seed",
-        Items =
-        [
-            new LookupItem { Code = "AC Compressor", Name = "AC Compressor", SortOrder = 10 },
-            new LookupItem { Code = "Furnace", Name = "Furnace", SortOrder = 20 },
-            new LookupItem { Code = "Water Heater", Name = "Water Heater", SortOrder = 30 },
-            new LookupItem { Code = "Slide-Out Mechanism", Name = "Slide-Out Mechanism", SortOrder = 40 },
-            new LookupItem { Code = "Roof Assembly", Name = "Roof Assembly", SortOrder = 50 },
-            new LookupItem { Code = "Awning Assembly", Name = "Awning Assembly", SortOrder = 60 },
-            new LookupItem { Code = "Door Latch Assembly", Name = "Door Latch Assembly", SortOrder = 70 },
-            new LookupItem { Code = "Tank Sensor", Name = "Tank Sensor", SortOrder = 80 },
-            new LookupItem { Code = "Generator", Name = "Generator", SortOrder = 90 },
-            new LookupItem { Code = "Inverter/Converter", Name = "Inverter/Converter", SortOrder = 100 },
-        ],
-    },
-    new LookupSet
-    {
-        Id = "failure-modes",
-        TenantId = "GLOBAL",
-        Category = "FailureMode",
-        Name = "Failure Modes",
-        Description = "Section 10A failure mode codes for service events",
-        OverrideMode = LookupOverrideMode.GlobalOnly,
-        CreatedByUserId = "seed",
-        Items =
-        [
-            new LookupItem { Code = "Mechanical Obstruction", Name = "Mechanical Obstruction", SortOrder = 10 },
-            new LookupItem { Code = "Mechanical Breakage", Name = "Mechanical Breakage", SortOrder = 20 },
-            new LookupItem { Code = "Mechanical Noise", Name = "Mechanical Noise", SortOrder = 30 },
-            new LookupItem { Code = "Ignition Failure", Name = "Ignition Failure", SortOrder = 40 },
-            new LookupItem { Code = "Sensor Malfunction", Name = "Sensor Malfunction", SortOrder = 50 },
-            new LookupItem { Code = "Electrical Short", Name = "Electrical Short", SortOrder = 60 },
-            new LookupItem { Code = "Wear/Age", Name = "Wear/Age", Description = "Normal wear and aging of components", SortOrder = 70 },
-            new LookupItem { Code = "Water Damage", Name = "Water Damage", SortOrder = 80 },
-            new LookupItem { Code = "Corrosion", Name = "Corrosion", SortOrder = 90 },
-            new LookupItem { Code = "Unknown", Name = "Unknown", Description = "Root cause not yet determined", SortOrder = 100 },
-        ],
-    },
-    new LookupSet
-    {
-        Id = "repair-actions",
-        TenantId = "GLOBAL",
-        Category = "RepairAction",
-        Name = "Repair Actions",
-        Description = "Section 10A repair action codes for service events",
-        OverrideMode = LookupOverrideMode.GlobalOnly,
-        CreatedByUserId = "seed",
-        Items =
-        [
-            new LookupItem { Code = "Sealant Reapplication", Name = "Sealant Reapplication", SortOrder = 10 },
-            new LookupItem { Code = "Sensor Replacement", Name = "Sensor Replacement", SortOrder = 20 },
-            new LookupItem { Code = "Component Replacement", Name = "Component Replacement", SortOrder = 30 },
-            new LookupItem { Code = "Electrical Repair", Name = "Electrical Repair", SortOrder = 40 },
-            new LookupItem { Code = "Mechanical Adjustment", Name = "Mechanical Adjustment", SortOrder = 50 },
-            new LookupItem { Code = "Cleaning/Flush", Name = "Cleaning/Flush", SortOrder = 60 },
-            new LookupItem { Code = "Lubrication", Name = "Lubrication", SortOrder = 70 },
-            new LookupItem { Code = "Software Update", Name = "Software Update", SortOrder = 80 },
-            new LookupItem { Code = "Inspection Only", Name = "Inspection Only", Description = "No repair needed, inspection complete", SortOrder = 90 },
-            new LookupItem { Code = "Warranty Claim", Name = "Warranty Claim", Description = "Repair covered under manufacturer warranty", SortOrder = 100 },
-        ],
+        // Single source of truth: RVS.Domain.Validation.IssueCategoryVocabulary.
+        Items = [.. IssueCategoryVocabulary.All.Select(e => new LookupItem
+        {
+            Code = e.Code,
+            Name = e.Name,
+            Description = e.Description,
+            SortOrder = e.SortOrder,
+        })],
     },
 ];
 

@@ -1,5 +1,8 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
+using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Validation;
 
@@ -7,15 +10,23 @@ namespace RVS.API.Services;
 
 /// <summary>
 /// Service for managing <see cref="Location"/> entities with atomic slug management.
-/// Creates a <see cref="SlugLookup"/> entry before the location to guarantee slug uniqueness,
-/// and rolls back the slug entry if location creation fails.
+/// Reserves the slug with a create-only <see cref="SlugLookup"/> write before the location is
+/// created — a taken slug is a 409, even when two creates race — and rolls the reservation back
+/// if location creation fails.
 /// </summary>
 public sealed class LocationService : ILocationService
 {
+    /// <summary>Logged when one packet recipient is disabled after a hard bounce (<c>Spec B-4</c>, #439).</summary>
+    private static readonly EventId RecipientHardBounced = new(439_001, nameof(RecipientHardBounced));
+
+    /// <summary>Logged when a hard bounce leaves a location with no working packet recipients (<c>Spec B-4</c>, #439).</summary>
+    private static readonly EventId AllRecipientsBounced = new(439_002, nameof(AllRecipientsBounced));
+
     private readonly ILocationRepository _locationRepository;
     private readonly ISlugLookupRepository _slugLookupRepository;
     private readonly IDealershipRepository _dealershipRepository;
     private readonly IUserContextAccessor _userContext;
+    private readonly INotificationService _notificationService;
     private readonly ILogger<LocationService> _logger;
 
     /// <summary>
@@ -26,12 +37,14 @@ public sealed class LocationService : ILocationService
         ISlugLookupRepository slugLookupRepository,
         IDealershipRepository dealershipRepository,
         IUserContextAccessor userContext,
+        INotificationService notificationService,
         ILogger<LocationService> logger)
     {
         _locationRepository = locationRepository;
         _slugLookupRepository = slugLookupRepository;
         _dealershipRepository = dealershipRepository;
         _userContext = userContext;
+        _notificationService = notificationService;
         _logger = logger;
     }
 
@@ -59,36 +72,47 @@ public sealed class LocationService : ILocationService
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentNullException.ThrowIfNull(entity);
 
+        ValidatePacketConfig(entity);
+        ValidateIntakeConfig(entity);
+        ValidateTimeZone(entity);
+        ValidateBranding(entity);
+        ValidateDealerQuestions(entity);
+
+        var dealership = await GetDealershipAsync(tenantId, cancellationToken);
+        var alreadyReserved = false;
+
         // Auto-generate a unique slug from the dealership ("org") slug + location name when
         // the caller did not supply one. This keeps slugs uniform, human-readable, and unique
         // per tenant without requiring the UI to pick a slug.
         if (string.IsNullOrWhiteSpace(entity.Slug))
         {
-            entity.Slug = await GenerateUniqueSlugAsync(tenantId, entity.Name, cancellationToken);
+            entity.Slug = await GenerateUniqueSlugAsync(dealership?.Slug, entity.Name, cancellationToken);
         }
         else
         {
-            // Caller supplied a slug — make sure it is not already taken.
+            // Caller supplied a slug — make sure it is not already taken. A reservation that
+            // already points at this very location is left over from an earlier attempt whose
+            // location write failed (Spec P-6), so it is reused rather than rejected.
             var existing = await _slugLookupRepository.GetBySlugAsync(entity.Slug, cancellationToken);
             if (existing is not null)
             {
-                throw new ArgumentException($"Slug '{entity.Slug}' is already in use.", nameof(entity));
+                if (!IsReservationFor(existing, tenantId, entity.Id))
+                {
+                    throw new ConflictException($"Slug '{entity.Slug}' is already in use.");
+                }
+
+                alreadyReserved = true;
             }
         }
 
-        // Step 1: Create slug lookup entry first to reserve the slug
-        var slugLookup = new SlugLookup
+        // Step 1: Reserve the slug. Create-only, so a concurrent create of the same slug fails
+        // here with a ConflictException instead of silently overwriting the other reservation.
+        if (!alreadyReserved)
         {
-            Id = $"slug_{entity.Slug}",
-            TenantId = tenantId,
-            Slug = entity.Slug,
-            LocationId = entity.Id,
-            DealershipName = string.Empty,
-            LocationName = entity.Name,
-            CreatedByUserId = _userContext.UserId
-        };
-
-        await _slugLookupRepository.UpsertAsync(slugLookup, cancellationToken);
+            await _slugLookupRepository.CreateAsync(
+                BuildSlugLookup(tenantId, entity.Slug, entity.Id, dealership, entity.Name),
+                cancellationToken);
+        }
 
         try
         {
@@ -116,11 +140,8 @@ public sealed class LocationService : ILocationService
     /// store for collisions, appending <c>-2</c>, <c>-3</c>, … until a free slug is found.
     /// Falls back to just the location-name slug when the tenant has no dealership yet.
     /// </summary>
-    private async Task<string> GenerateUniqueSlugAsync(string tenantId, string locationName, CancellationToken cancellationToken)
+    private async Task<string> GenerateUniqueSlugAsync(string? orgSlug, string locationName, CancellationToken cancellationToken)
     {
-        var dealerships = await _dealershipRepository.ListByTenantAsync(tenantId, cancellationToken);
-        var orgSlug = dealerships.FirstOrDefault()?.Slug;
-
         var baseSlug = SlugGenerator.ForLocation(orgSlug, locationName);
         if (string.IsNullOrEmpty(baseSlug))
         {
@@ -153,27 +174,27 @@ public sealed class LocationService : ILocationService
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentNullException.ThrowIfNull(entity);
 
+        ValidatePacketConfig(entity);
+        ValidateIntakeConfig(entity);
+        ValidateTimeZone(entity);
+        ValidateBranding(entity);
+        ValidateDealerQuestions(entity);
+
         var existing = await _locationRepository.GetByIdAsync(tenantId, id, cancellationToken)
             ?? throw new KeyNotFoundException($"Location '{id}' not found.");
 
         var oldSlug = existing.Slug;
         var newSlug = entity.Slug;
 
-        // If slug changed, manage slug lookup entries atomically
+        // If slug changed, reserve the new one (create-only — a taken slug is a 409 and nothing
+        // else changes), then release the old one.
         if (!string.Equals(oldSlug, newSlug, StringComparison.Ordinal))
         {
-            var slugLookup = new SlugLookup
-            {
-                Id = $"slug_{newSlug}",
-                TenantId = tenantId,
-                Slug = newSlug,
-                LocationId = existing.Id,
-                DealershipName = string.Empty,
-                LocationName = entity.Name,
-                CreatedByUserId = _userContext.UserId
-            };
+            var dealership = await GetDealershipAsync(tenantId, cancellationToken);
 
-            await _slugLookupRepository.UpsertAsync(slugLookup, cancellationToken);
+            await _slugLookupRepository.CreateAsync(
+                BuildSlugLookup(tenantId, newSlug, existing.Id, dealership, entity.Name),
+                cancellationToken);
 
             // Delete old slug entry
             try
@@ -186,16 +207,233 @@ public sealed class LocationService : ILocationService
             }
         }
 
+        // The disabled-recipient list (Spec B-4, #439) is owned by the hard-bounce flow, not the
+        // settings payload — carry it across the update. But an address the caller has put back
+        // into the active recipient list is an explicit re-enable, so drop it from the disabled
+        // list rather than letting it sit in both.
+        var carriedDisabled = existing.PacketConfig.DisabledRecipients
+            .Where(d => !entity.PacketConfig.Recipients.Any(r =>
+                string.Equals(r?.Trim(), d.Email?.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
         existing.Name = entity.Name;
         existing.Slug = entity.Slug;
         existing.Phone = entity.Phone;
+        existing.TimeZoneId = entity.TimeZoneId;
         existing.Address = entity.Address;
         existing.IntakeConfig = entity.IntakeConfig;
         existing.EnabledCapabilities = entity.EnabledCapabilities;
+        existing.PacketConfig = entity.PacketConfig;
+        existing.PacketConfig.DisabledRecipients = carriedDisabled;
+        existing.Branding = entity.Branding;
+        existing.DealerQuestions = entity.DealerQuestions;
         existing.MarkAsUpdated(_userContext.UserId);
+
+        ValidatePacketConfig(existing);
+        ValidateTimeZone(existing);
 
         return await _locationRepository.UpdateAsync(existing, cancellationToken);
     }
+
+    /// <inheritdoc />
+    public async Task<Location> DisableRecipientForBounceAsync(
+        string tenantId, string id, string recipientEmail, string? reason, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(recipientEmail);
+
+        var location = await _locationRepository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Location '{id}' not found.");
+
+        var disabled = location.PacketConfig.DisableRecipient(recipientEmail, reason, DateTime.UtcNow);
+        if (!disabled)
+        {
+            _logger.LogInformation(
+                "Hard bounce for {Recipient} at location {LocationId} in tenant {TenantId}: not an active packet recipient, nothing to disable",
+                recipientEmail, id, tenantId);
+            return location;
+        }
+
+        location.MarkAsUpdated(_userContext.UserId);
+        var saved = await _locationRepository.UpdateAsync(location, cancellationToken);
+
+        var remaining = saved.PacketConfig.Recipients
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .ToList();
+
+        if (remaining.Count == 0)
+        {
+            _logger.LogCritical(
+                AllRecipientsBounced,
+                "Every packet recipient for location {LocationId} in tenant {TenantId} has now hard-bounced; no packets can be delivered for this location until an address is fixed in its settings",
+                id, tenantId);
+        }
+        else
+        {
+            _logger.LogWarning(
+                RecipientHardBounced,
+                "Packet recipient at location {LocationId} in tenant {TenantId} disabled after a hard bounce; notifying {RemainingCount} remaining recipient(s)",
+                id, tenantId, remaining.Count);
+
+            await NotifyRemainingRecipientsAsync(saved, recipientEmail, reason, remaining, cancellationToken);
+        }
+
+        return saved;
+    }
+
+    /// <inheritdoc />
+    public async Task<Location> ReEnableRecipientAsync(
+        string tenantId, string id, string recipientEmail, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(recipientEmail);
+
+        var location = await _locationRepository.GetByIdAsync(tenantId, id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Location '{id}' not found.");
+
+        if (!location.PacketConfig.ReEnableRecipient(recipientEmail))
+        {
+            _logger.LogInformation(
+                "Re-enable request for {Recipient} at location {LocationId} in tenant {TenantId}: not a disabled recipient, nothing to do",
+                recipientEmail, id, tenantId);
+            return location;
+        }
+
+        ValidatePacketConfig(location);
+        location.MarkAsUpdated(_userContext.UserId);
+        return await _locationRepository.UpdateAsync(location, cancellationToken);
+    }
+
+    /// <summary>
+    /// Tells the still-active recipients that one address was dropped from packet delivery after a
+    /// hard bounce (<c>Spec B-4</c>, issue #439). One send per recipient; a send that throws is
+    /// logged and skipped so a second bad address does not stop the rest. The body carries no
+    /// customer data (<c>Spec X-7</c>).
+    /// </summary>
+    private async Task NotifyRemainingRecipientsAsync(
+        Location location, string disabledEmail, string? reason, IReadOnlyList<string> remaining, CancellationToken cancellationToken)
+    {
+        var reasonSuffix = string.IsNullOrWhiteSpace(reason)
+            ? string.Empty
+            : $" ({WebUtility.HtmlEncode(reason.Trim())})";
+        var subject = "[RVS] A packet email recipient was disabled after a hard bounce";
+        var htmlBody =
+            $"<p>The address <strong>{WebUtility.HtmlEncode(disabledEmail)}</strong> was removed from the "
+            + $"service-packet recipients for <strong>{WebUtility.HtmlEncode(location.Name)}</strong> because "
+            + $"email to it hard-bounced{reasonSuffix}.</p>"
+            + "<p>Packets will keep going to the remaining recipients. Once the address is fixed, re-add it "
+            + "in the location's packet settings.</p>";
+
+        foreach (var recipient in remaining)
+        {
+            try
+            {
+                await _notificationService.SendEmailAsync(recipient, subject, htmlBody, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not notify remaining packet recipient at location {LocationId} that an address was disabled after a hard bounce",
+                    location.Id);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Rejects a location whose packet configuration breaks a <c>Spec B-6</c> rule — most notably
+    /// the 0–<see cref="PacketConfigEmbedded.MaxRecipients"/> recipient bound. Surfaces as a
+    /// <see cref="ArgumentException"/> (HTTP 400) via <c>ExceptionHandlingMiddleware</c>.
+    /// </summary>
+    private static void ValidatePacketConfig(Location entity)
+    {
+        var result = PacketConfigValidator.Validate(entity.PacketConfig);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(entity));
+        }
+    }
+
+    /// <summary>
+    /// Rejects a location whose intake configuration breaks a <c>Spec A-6</c> rule — the
+    /// 1–<see cref="IntakeFormConfigEmbedded.MaxAttachmentCap"/> attachment cap (issue #777).
+    /// Surfaces as an <see cref="ArgumentException"/> (HTTP 400) via <c>ExceptionHandlingMiddleware</c>.
+    /// </summary>
+    private static void ValidateIntakeConfig(Location entity)
+    {
+        var result = IntakeConfigValidator.Validate(entity.IntakeConfig);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(entity));
+        }
+    }
+
+    /// <summary>
+    /// Rejects a <see cref="Location.TimeZoneId"/> that is neither blank nor a recognised IANA
+    /// id (issue #506). Surfaces as an <see cref="ArgumentException"/> (HTTP 400) via
+    /// <c>ExceptionHandlingMiddleware</c>.
+    /// </summary>
+    private static void ValidateTimeZone(Location entity)
+    {
+        var result = TimeZoneValidator.Validate(entity.TimeZoneId);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(entity));
+        }
+    }
+
+    /// <summary>
+    /// Rejects a location whose branding breaks a <c>Spec A-16</c> rule — a logo URL that is not
+    /// absolute https, or a header colour that is not <c>#RRGGBB</c> (issue #470). Surfaces as an
+    /// <see cref="ArgumentException"/> (HTTP 400) via <c>ExceptionHandlingMiddleware</c>.
+    /// </summary>
+    private static void ValidateBranding(Location entity)
+    {
+        var result = LocationBrandingValidator.Validate(entity.Branding);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(entity));
+        }
+    }
+
+    /// <summary>
+    /// Rejects a location whose dealer questions break a <c>Spec A-18</c> rule — more than two, a
+    /// blank or over-long one, or two alike (issue #785). Surfaces as an <see cref="ArgumentException"/>
+    /// (HTTP 400) via <c>ExceptionHandlingMiddleware</c>.
+    /// </summary>
+    private static void ValidateDealerQuestions(Location entity)
+    {
+        var result = DealerQuestionsValidator.Validate(entity.DealerQuestions);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(entity));
+        }
+    }
+
+    /// <summary>The tenant's dealership, whose name and slug are denormalized into slug lookups.</summary>
+    private async Task<Dealership?> GetDealershipAsync(string tenantId, CancellationToken cancellationToken) =>
+        (await _dealershipRepository.ListByTenantAsync(tenantId, cancellationToken)).FirstOrDefault();
+
+    /// <summary>
+    /// The slug-lookup document for a location. <see cref="SlugLookup.DealershipName"/> must be
+    /// filled: intake renders it (<c>IntakeOrchestrationService</c>), and it used to be written empty.
+    /// </summary>
+    private SlugLookup BuildSlugLookup(string tenantId, string slug, string locationId, Dealership? dealership, string locationName) => new()
+    {
+        Id = $"slug_{slug}",
+        TenantId = tenantId,
+        Slug = slug,
+        LocationId = locationId,
+        DealershipName = dealership?.Name ?? string.Empty,
+        LocationName = locationName,
+        CreatedByUserId = _userContext.UserId
+    };
+
+    private static bool IsReservationFor(SlugLookup lookup, string tenantId, string locationId) =>
+        string.Equals(lookup.TenantId, tenantId, StringComparison.Ordinal)
+        && string.Equals(lookup.LocationId, locationId, StringComparison.Ordinal);
 
     /// <inheritdoc />
     public async Task DeleteAsync(string tenantId, string id, CancellationToken cancellationToken = default)

@@ -1,10 +1,9 @@
 // ──────────────────────────────────────────────────────────────
 // Module: Store Storage Account secrets in Key Vault
 // ──────────────────────────────────────────────────────────────
-// Stores the Blob Storage endpoint and the Azure Tables
-// connection string in Key Vault for the RVS API configuration
-// provider. The API uses Managed Identity for Blob access and
-// the connection string for Azure Tables.
+// Stores the Blob and Table Storage endpoints in Key Vault for the
+// RVS API configuration provider. The API uses Managed Identity for
+// both (no keys needed).
 // ──────────────────────────────────────────────────────────────
 targetScope = 'resourceGroup'
 
@@ -38,12 +37,12 @@ resource blobEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   }
 }
 
-@description('Azure Tables connection string — used by the API for audit logging and tenant access gate.')
-resource tablesConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
+@description('Table Storage endpoint — the go.rvintake.com redirect hit log (Spec A-13, #599). Same Managed Identity auth as Blob. When this secret is absent the API falls back to a no-op hit log: redirects still work and the channel still reaches the service request, only the conversion denominator is lost.')
+resource tableEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: keyVault
-  name: 'AzureTables--ConnectionString'
+  name: 'TableStorage--Endpoint'
   properties: {
-    value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+    value: storageAccount.properties.primaryEndpoints.table
     contentType: 'text/plain'
   }
 }

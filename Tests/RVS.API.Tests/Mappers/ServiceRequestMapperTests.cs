@@ -39,7 +39,6 @@ public class ServiceRequestMapperTests
             ApproxPurchaseDate = "March 2023",
             Priority = "High",
             AssignedTechnicianId = "tech_1",
-            AssignedBayId = "bay_2",
             ScheduledDateUtc = now,
             RequiredSkills = ["electrical"],
             BoardSequence = 7,
@@ -62,11 +61,52 @@ public class ServiceRequestMapperTests
         dto.ApproxPurchaseDate.Should().Be("March 2023");
         dto.Priority.Should().Be("High");
         dto.AssignedTechnicianId.Should().Be("tech_1");
-        dto.AssignedBayId.Should().Be("bay_2");
         dto.ScheduledDateUtc.Should().Be(now);
         dto.RequiredSkills.Should().ContainSingle().Which.Should().Be("electrical");
         dto.BoardSequence.Should().Be(7);
         dto.CreatedAtUtc.Should().Be(now);
+    }
+
+    [Fact]
+    public void ToDetailDto_ShouldMapAdvisorInviteAttribution()
+    {
+        var entity = new ServiceRequest
+        {
+            TenantId = "ten_1",
+            IntakeSource = "advisor",
+            IntakeInviteId = "inv_hash",
+            AdvisorUserId = "auth0|advisor",
+        };
+
+        var dto = entity.ToDetailDto();
+
+        dto.IntakeSource.Should().Be("advisor");
+        dto.IntakeInviteId.Should().Be("inv_hash");
+        dto.AdvisorUserId.Should().Be("auth0|advisor");
+    }
+
+    [Fact]
+    public void ToDetailDto_ShouldMapTheSubmissionLink()
+    {
+        var entity = new ServiceRequest { TenantId = "ten_1", SubmissionId = "sr_lead", SubmissionPosition = 2, SubmissionCount = 3 };
+
+        var dto = entity.ToDetailDto();
+
+        dto.SubmissionId.Should().Be("sr_lead");
+        dto.SubmissionPosition.Should().Be(2);
+        dto.SubmissionCount.Should().Be(3);
+    }
+
+    [Fact]
+    public void ToSummaryDto_ShouldMapTheSubmissionLink()
+    {
+        var entity = new ServiceRequest { TenantId = "ten_1", SubmissionId = "sr_lead", SubmissionPosition = 2, SubmissionCount = 3 };
+
+        var dto = entity.ToSummaryDto();
+
+        dto.SubmissionId.Should().Be("sr_lead");
+        dto.SubmissionPosition.Should().Be(2);
+        dto.SubmissionCount.Should().Be(3);
     }
 
     [Fact]
@@ -79,7 +119,8 @@ public class ServiceRequestMapperTests
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com",
-                Phone = "(801) 555-1234"
+                Phone = "(801) 555-1234",
+                PreferredContact = "Text"
             }
         };
 
@@ -89,6 +130,7 @@ public class ServiceRequestMapperTests
         dto.Customer.LastName.Should().Be("Doe");
         dto.Customer.Email.Should().Be("jane@example.com");
         dto.Customer.Phone.Should().Be("(801) 555-1234");
+        dto.Customer.PreferredContact.Should().Be("Text");
     }
 
     [Fact]
@@ -281,57 +323,378 @@ public class ServiceRequestMapperTests
         dto.AssetDisplay.Should().BeNull();
     }
 
+    // ── ToCustomerStatusItemDto (Spec X-1) ───────────────────────────────────
+
     [Fact]
-    public void ToSummaryDto_WhenServiceEventIsNull_HasOutcomeShouldBeFalse()
+    public void ToCustomerStatusItemDto_WhenEntityIsNull_ShouldThrowArgumentNullException()
     {
-        var entity = new ServiceRequest { ServiceEvent = null };
+        ServiceRequest? entity = null;
 
-        var dto = entity.ToSummaryDto();
+        var act = () => entity!.ToCustomerStatusItemDto(StatusLocation());
 
-        dto.HasOutcome.Should().BeFalse();
+        act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
-    public void ToSummaryDto_WhenServiceEventHasNoMeaningfulFields_HasOutcomeShouldBeFalse()
+    public void ToCustomerStatusItemDto_ShouldMapUnitSubmissionDateStatusAndLocationPhone()
     {
+        var submittedAt = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
         var entity = new ServiceRequest
         {
-            ServiceEvent = new ServiceEventEmbedded
-            {
-                FailureMode = null,
-                RepairAction = null
-            }
+            Status = "InProgress",
+            CreatedAtUtc = submittedAt,
+            AssetInfo = new AssetInfoEmbedded { Year = 2021, Manufacturer = "Forest River", Model = "XLR" }
         };
 
-        var dto = entity.ToSummaryDto();
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation(phone: "  555-0100  "));
 
-        dto.HasOutcome.Should().BeFalse();
+        dto.Unit.Should().Be("2021 Forest River XLR");
+        dto.SubmittedAtUtc.Should().Be(submittedAt);
+        dto.Status.Should().Be("InProgress");
+        dto.LocationPhone.Should().Be("555-0100");
     }
 
     [Fact]
-    public void ToSummaryDto_WhenServiceEventHasFailureMode_HasOutcomeShouldBeTrue()
+    public void ToCustomerStatusItemDto_WhenAssetInfoIsEmpty_UnitShouldBeNull()
     {
         var entity = new ServiceRequest
         {
-            ServiceEvent = new ServiceEventEmbedded { FailureMode = "Corrosion" }
+            AssetInfo = new AssetInfoEmbedded { AssetId = "1HGBH41JXMN109186" }
         };
 
-        var dto = entity.ToSummaryDto();
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
 
-        dto.HasOutcome.Should().BeTrue();
+        dto.Unit.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToCustomerStatusItemDto_WhenLocationPhoneMissing_ShouldBeNull(string? phone)
+    {
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation(phone: phone));
+
+        dto.LocationPhone.Should().BeNull();
     }
 
     [Fact]
-    public void ToSummaryDto_WhenServiceEventHasRepairAction_HasOutcomeShouldBeTrue()
+    public void ToCustomerStatusItemDto_ShouldNotCarryFreeTextIssueDescription()
     {
+        const string secret = "customer typed sensitive free text here";
         var entity = new ServiceRequest
         {
-            ServiceEvent = new ServiceEventEmbedded { RepairAction = "Replaced pipe" }
+            Status = "New",
+            IssueCategory = "Electrical",
+            IssueDescription = secret,
+            TechnicianSummary = secret,
+            CustomerSnapshot = new CustomerSnapshotEmbedded { FirstName = "Jane", LastName = "Doe" }
         };
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
+
+        var serialized = System.Text.Json.JsonSerializer.Serialize(dto);
+        serialized.Should().NotContain(secret);
+        serialized.Should().NotContain("Jane");
+    }
+
+    [Theory]
+    [InlineData("Plumbing", "Plumbing & Water")]
+    [InlineData("Electrical", "Electrical")]
+    [InlineData("Structural", "Other")]
+    public void ToCustomerStatusItemDto_ShouldCarryIssueCategoryDisplayName(string code, string expected)
+    {
+        // Issue #741: the category is a controlled-vocabulary label, not customer free text.
+        var entity = new ServiceRequest { Status = "New", IssueCategory = code };
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
+
+        dto.IssueCategory.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToCustomerStatusItemDto_WhenIssueCategoryMissing_ShouldBeNull(string? code)
+    {
+        var entity = new ServiceRequest { Status = "New", IssueCategory = code };
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
+
+        dto.IssueCategory.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenStatusNoteSet_ShouldCarryNoteText()
+    {
+        var entity = new ServiceRequest { Status = "WaitingOnParts" };
+        entity.SetCustomerStatusNote("Slide motor on back order, ETA Friday.", "usr_mgr");
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
+
+        dto.StatusNote.Should().Be("Slide motor on back order, ETA Friday.");
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenNoStatusNote_ShouldBeNull()
+    {
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
+
+        dto.StatusNote.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_ShouldCarryTheLocationsLogoAndName()
+    {
+        // Issue #793: each card shows its dealer's logo, so requests at different dealers are
+        // told apart at a glance.
+        var entity = new ServiceRequest { Status = "New" };
+        var location = StatusLocation(name: "  Salt Lake Service Center  ", logoUrl: "https://cdn.example.com/acme.png");
+
+        var dto = entity.ToCustomerStatusItemDto(location);
+
+        dto.LocationName.Should().Be("Salt Lake Service Center");
+        dto.LocationLogoUrl.Should().Be("https://cdn.example.com/acme.png");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("http://cdn.example.com/acme.png")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("/brand/logo.png")]
+    public void ToCustomerStatusItemDto_WhenLogoIsNotAnHttpsUrl_ShouldBeNull(string? logoUrl)
+    {
+        // The status page is served over https, so anything else would be blocked or unsafe.
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation(logoUrl: logoUrl));
+
+        dto.LocationLogoUrl.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToCustomerStatusItemDto_WhenLocationNameBlank_ShouldBeNull(string name)
+    {
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation(name: name));
+
+        dto.LocationName.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenLocationUnknown_ShouldLeaveLocationFieldsNull()
+    {
+        var entity = new ServiceRequest { Status = "New" };
+
+        var dto = entity.ToCustomerStatusItemDto(location: null);
+
+        dto.LocationPhone.Should().BeNull();
+        dto.LocationName.Should().BeNull();
+        dto.LocationLogoUrl.Should().BeNull();
+        dto.Status.Should().Be("New");
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenStatusNoteSet_ShouldMapTextAndTimestamp()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.SetCustomerStatusNote("Parts arrived — tech starts Monday.", "usr_mgr");
+
+        var dto = entity.ToDetailDto();
+
+        dto.CustomerStatusNote.Should().NotBeNull();
+        dto.CustomerStatusNote!.Text.Should().Be("Parts arrived — tech starts Monday.");
+        dto.CustomerStatusNote.UpdatedAtUtc.Should().Be(entity.CustomerStatusNote!.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenNoStatusNote_ShouldReturnNullCustomerStatusNote()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+
+        var dto = entity.ToDetailDto();
+
+        dto.CustomerStatusNote.Should().BeNull();
+    }
+
+    // ── Disposition (Spec C-4) ───────────────────────────────────────────────
+
+    [Fact]
+    public void ToDetailDto_WhenDisposed_ShouldMapReasonCodeLabelAndTimestamp()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.CloseWithDisposition("WrongLocation", "usr_mgr");
+
+        var dto = entity.ToDetailDto();
+
+        dto.Disposition.Should().NotBeNull();
+        dto.Disposition!.ReasonCode.Should().Be("WrongLocation");
+        dto.Disposition.ReasonLabel.Should().Be("Wrong location");
+        dto.Disposition.DisposedAtUtc.Should().Be(entity.Disposition!.DisposedAtUtc);
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenNotDisposed_ShouldReturnNullDisposition()
+    {
+        var dto = new ServiceRequest { Priority = "Medium" }.ToDetailDto();
+
+        dto.Disposition.Should().BeNull();
+    }
+
+    // ── Packet generation (Spec B-1 / C-2, issue #443) ──────────────────────
+
+    [Fact]
+    public void ToDetailDto_WhenPacketNeverGenerated_ShouldMapPendingState()
+    {
+        var dto = new ServiceRequest { Priority = "Medium" }.ToDetailDto();
+
+        dto.PacketGeneration.Should().NotBeNull();
+        dto.PacketGeneration.Status.Should().Be("Pending");
+        dto.PacketGeneration.AttemptCount.Should().Be(0);
+        dto.PacketGeneration.MaxAttempts.Should().Be(PacketGenerationEmbedded.MaxAttempts);
+        dto.PacketGeneration.PacketVersion.Should().Be(0);
+        dto.PacketGeneration.GeneratedAtUtc.Should().BeNull();
+        dto.PacketGeneration.RetriesExhausted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenPacketSucceeded_ShouldMapVersionAndTimestamps()
+    {
+        var generatedAt = new DateTime(2026, 9, 20, 14, 30, 0, DateTimeKind.Utc);
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.PacketGeneration.MarkGenerating();
+        entity.PacketGeneration.MarkSucceeded("packets/sr_1/v1.pdf", generatedAt);
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketGeneration.Status.Should().Be("Succeeded");
+        dto.PacketGeneration.AttemptCount.Should().Be(1);
+        dto.PacketGeneration.PacketVersion.Should().Be(1);
+        dto.PacketGeneration.GeneratedAtUtc.Should().Be(generatedAt);
+        dto.PacketGeneration.LastAttemptAtUtc.Should().Be(entity.PacketGeneration.LastAttemptAtUtc);
+        dto.PacketGeneration.RetriesExhausted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenPacketFailedWithRetriesLeft_ShouldNotReportExhausted()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.PacketGeneration.MarkGenerating();
+        entity.PacketGeneration.MarkFailed("TimeoutException: render timed out");
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketGeneration.Status.Should().Be("Failed");
+        dto.PacketGeneration.AttemptCount.Should().Be(1);
+        dto.PacketGeneration.RetriesExhausted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToDetailDto_WhenPacketFailedAfterMaxAttempts_ShouldReportExhausted()
+    {
+        var entity = new ServiceRequest { Priority = "Medium" };
+        for (var i = 0; i < PacketGenerationEmbedded.MaxAttempts; i++)
+        {
+            entity.PacketGeneration.MarkGenerating();
+            entity.PacketGeneration.MarkFailed("TimeoutException: render timed out");
+        }
+
+        var dto = entity.ToDetailDto();
+
+        dto.PacketGeneration.Status.Should().Be("Failed");
+        dto.PacketGeneration.AttemptCount.Should().Be(PacketGenerationEmbedded.MaxAttempts);
+        dto.PacketGeneration.RetriesExhausted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ToDetailDto_ShouldNotExposePacketErrorTextOrBlobPath()
+    {
+        // The error is an exception type + message and the blob path is storage layout —
+        // both internal. The manager app gets the state, not the internals.
+        var entity = new ServiceRequest { Priority = "Medium" };
+        entity.PacketGeneration.MarkGenerating();
+        entity.PacketGeneration.MarkSucceeded("packets/sr_secret/v1.pdf", DateTime.UtcNow);
+        entity.PacketGeneration.MarkGenerating();
+        entity.PacketGeneration.MarkFailed("CosmosException: https://internal-host/failure");
+
+        var json = System.Text.Json.JsonSerializer.Serialize(entity.ToDetailDto());
+
+        json.Should().NotContain("internal-host").And.NotContain("sr_secret");
+    }
+
+    [Fact]
+    public void ToSummaryDto_WhenDisposed_ShouldCarryReasonCode()
+    {
+        var entity = new ServiceRequest();
+        entity.CloseWithDisposition("Spam", "usr_mgr");
 
         var dto = entity.ToSummaryDto();
 
-        dto.HasOutcome.Should().BeTrue();
+        dto.Status.Should().Be("Cancelled");
+        dto.DispositionReasonCode.Should().Be("Spam");
+    }
+
+    [Fact]
+    public void ToSummaryDto_WhenNotDisposed_ShouldHaveNullReasonCode()
+    {
+        var dto = new ServiceRequest { Status = "Cancelled" }.ToSummaryDto();
+
+        dto.DispositionReasonCode.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToCustomerStatusItemDto_WhenDisposed_ShouldNotCarryTheReason()
+    {
+        // The customer sees "Cancelled" only — a reason such as "Spam" is internal.
+        var entity = new ServiceRequest();
+        entity.CloseWithDisposition("Spam", "usr_mgr");
+
+        var dto = entity.ToCustomerStatusItemDto(StatusLocation());
+
+        dto.Status.Should().Be("Cancelled");
+        System.Text.Json.JsonSerializer.Serialize(dto).Should().NotContain("Spam");
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenStatusMovesOffCancelled_ShouldClearDisposition()
+    {
+        var entity = new ServiceRequest();
+        entity.CloseWithDisposition("Duplicate", "usr_mgr");
+
+        entity.ApplyUpdate(new ServiceRequestUpdateRequestDto
+        {
+            Status = "New",
+            IssueDescription = "desc",
+            Priority = "Medium"
+        }, "usr_mgr");
+
+        entity.Disposition.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyUpdate_WhenStatusStaysCancelled_ShouldKeepDisposition()
+    {
+        var entity = new ServiceRequest();
+        entity.CloseWithDisposition("Duplicate", "usr_mgr");
+
+        entity.ApplyUpdate(new ServiceRequestUpdateRequestDto
+        {
+            Status = "Cancelled",
+            IssueDescription = "desc",
+            Priority = "Medium"
+        }, "usr_mgr");
+
+        entity.Disposition!.ReasonCode.Should().Be("Duplicate");
     }
 
     // ── ToEntity (create) ────────────────────────────────────────────────────
@@ -397,6 +760,64 @@ public class ServiceRequestMapperTests
         entity.CustomerSnapshot.LastName.Should().Be("Doe");
         entity.CustomerSnapshot.Email.Should().Be("jane@example.com");
         entity.CustomerSnapshot.Phone.Should().Be("(801) 555-1234");
+        entity.CustomerSnapshot.PreferredContact.Should().Be("Phone");
+    }
+
+    [Fact]
+    public void ToEntity_ShouldNormalizePreferredContactCasing()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com",
+                PreferredContact = "  email  "
+            }
+        };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.CustomerSnapshot.PreferredContact.Should().Be("Email");
+    }
+
+    [Fact]
+    public void ToEntity_WhenPreferredContactBlank_ShouldMapNull()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com",
+                PreferredContact = null
+            }
+        };
+
+        var entity = dto.ToEntity("ten_1", "usr_1");
+
+        entity.CustomerSnapshot.PreferredContact.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToEntity_WhenPreferredContactUnknown_ShouldThrowArgumentException()
+    {
+        var dto = BuildValidCreateRequest() with
+        {
+            Customer = new CustomerInfoDto
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com",
+                PreferredContact = "Smoke signal"
+            }
+        };
+
+        var act = () => dto.ToEntity("ten_1", "usr_1");
+
+        act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
@@ -546,6 +967,21 @@ public class ServiceRequestMapperTests
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private static Location StatusLocation(
+        string? phone = "555-0100",
+        string name = "Salt Lake Service Center",
+        string? logoUrl = null) =>
+        new()
+        {
+            Id = "loc_1",
+            TenantId = "ten_1",
+            Name = name,
+            Slug = "salt-lake-service-center",
+            CreatedByUserId = "system",
+            Phone = phone,
+            Branding = new LocationBrandingEmbedded { LogoUrl = logoUrl }
+        };
+
     private static ServiceRequestCreateRequestDto BuildValidCreateRequest() =>
         new()
         {
@@ -554,7 +990,8 @@ public class ServiceRequestMapperTests
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com",
-                Phone = "(801) 555-1234"
+                Phone = "(801) 555-1234",
+                PreferredContact = "Phone"
             },
             Asset = new AssetInfoDto
             {

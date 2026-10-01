@@ -23,6 +23,11 @@
                                    Style="text-transform: none;">
                             @(_isRecording ? "Stop Recording" : "Tap to Speak")
                         </MudButton>
+                        <VoiceRecordingIndicator IsRecording="_isRecording"
+                                                  ElapsedSeconds="_recordingElapsedSeconds"
+                                                  MaxSeconds="MaxRecordingSeconds"
+                                                  WarningSeconds="RecordingCapWarningSeconds"
+                                                  Announcement="_recordingAnnouncement" />
                         @if (_isTranscribing)
                         {
                             <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
@@ -31,18 +36,19 @@
                         else if (_isRefining)
                         {
                             <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
-                            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Cleaning up transcript...</MudText>
+                            <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">Cleaning up description...</MudText>
                         }
                     </MudStack>
 
                     @if (!string.IsNullOrWhiteSpace(_transcriptionError))
                     {
-                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true" Class="mb-2">
                             @_transcriptionError You can still type your description below.
                         </MudAlert>
                     }
 
-                    <MudTextField @bind-Value="State.IssueDescription"
+                    <MudTextField Value="State.IssueDescription"
+                                  ValueChanged="OnDescriptionChanged"
                                   T="string"
                                   Validation="@(new Func<string?, string?>(ValidateDescription))"
                                   Lines="5"
@@ -79,7 +85,7 @@
                                AnchorOrigin="Origin.BottomCenter"
                                TransformOrigin="Origin.TopCenter"
                                RelativeWidth="DropdownWidth.Adaptive">
-                        @foreach (var category in _categories)
+                        @foreach (var category in State.SelectableIssueCategories)
                         {
                             <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
                         }
@@ -151,6 +157,7 @@
                        Color="Color.Primary"
                        FullWidth="true"
                        OnClick="HandleNext"
+                       Disabled="@(_isRecording || _isTranscribing || _isRefining)"
                        Style="text-transform: none;"
                        Class="mt-6">
                 Continue
@@ -159,15 +166,20 @@
     </MudForm>
 </MudPaper>
 
+@implements IDisposable
 @code {
     [Parameter, EditorRequired] public IntakeWizardState State { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnNext { get; set; }
     [Inject] private IntakeApiClient IntakeApi { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
+    // Spec A-9: voice is optional and advisory — this cap exists only so a forgotten
+    // recording doesn't produce a huge upload, not to gate the wizard.
+    private const int MaxRecordingSeconds = 120;
+    private const int RecordingCapWarningSeconds = 15;
+
     private MudForm _form = default!;
     private bool _submitted;
-    private List<LookupItemDto> _categories = [];
     private bool _isRecording;
     private bool _isTranscribing;
     private bool _isRefining;
@@ -176,110 +188,151 @@
     private string? _transcriptionError;
     private CancellationTokenSource? _suggestCategoryCts;
     private CancellationTokenSource? _suggestInsightsCts;
-
-    protected override void OnInitialized()
-    {
-        if (State.Config?.IssueCategories is { Count: > 0 } categories)
-        {
-            _categories = categories.Where(c => c.IsSelectable).ToList();
-        }
-    }
+    private RecordingTimer? _recordingTimer;
+    private int _recordingElapsedSeconds;
+    private string _recordingAnnouncement = string.Empty;
 
     private async Task ToggleRecording()
     {
         if (_isRecording)
         {
-            _isRecording = false;
-            _isTranscribing = true;
-            _transcriptionError = null;
-            StateHasChanged();
-
-            try
-            {
-                var recording = await JS.InvokeAsync<AudioRecordingResult?>("rvs_stopRecording");
-                if (recording is null || string.IsNullOrWhiteSpace(recording.Audio))
-                {
-                    _transcriptionError = "No audio was captured.";
-                    return;
-                }
-
-                var request = new IssueTranscriptionRequestDto
-                {
-                    AudioBase64 = recording.Audio,
-                    ContentType = recording.MimeType
-                };
-
-                var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
-                if (result?.Result is not null)
-                {
-                    // Start with the Whisper result as a baseline
-                    var rawTranscript = result.Result.RawTranscript ?? string.Empty;
-                    State.IssueDescription = result.Result.CleanedDescription
-                        ?? rawTranscript;
-
-                    // Fire insights extraction from the raw transcript immediately —
-                    // the refine prompt strips lifestyle/urgency context we need.
-                    _isTranscribing = false;
-                    _isRefining = true;
-                    StateHasChanged();
-
-                    var insightsTask = RequestInsightsSuggestion(rawTranscript);
-
-                    try
-                    {
-                        var refinementRequest = new IssueTextRefinementRequestDto
-                        {
-                            RawTranscript = rawTranscript,
-                            IssueCategory = State.IssueCategory
-                        };
-
-                        var refined = await IntakeApi.RefineIssueTextAsync(State.Slug, refinementRequest);
-                        if (!string.IsNullOrWhiteSpace(refined?.Result?.CleanedDescription))
-                        {
-                            State.IssueDescription = refined.Result.CleanedDescription;
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // Refinement is best-effort; the Whisper result is already set
-                    }
-                    finally
-                    {
-                        _isRefining = false;
-                    }
-
-                    StateHasChanged();
-                    // Category uses the cleaned description; insights already in-flight from raw transcript
-                    await Task.WhenAll(insightsTask, RequestCategorySuggestion());
-                }
-                else
-                {
-                    _transcriptionError = "Could not transcribe the audio.";
-                }
-            }
-            catch (Exception)
-            {
-                _transcriptionError = "Transcription failed.";
-            }
-            finally
-            {
-                _isTranscribing = false;
-                StateHasChanged();
-            }
+            await StopRecordingAsync();
         }
         else
         {
-            _transcriptionError = null;
-            try
+            await StartRecordingAsync();
+        }
+    }
+
+    private async Task StartRecordingAsync()
+    {
+        _transcriptionError = null;
+        try
+        {
+            await JS.InvokeVoidAsync("rvs_startRecording");
+            _isRecording = true;
+            _recordingElapsedSeconds = 0;
+            _recordingAnnouncement = "Recording started";
+            StartRecordingTimer();
+        }
+        catch (Exception)
+        {
+            _transcriptionError = "Microphone access was denied or is unavailable.";
+        }
+    }
+
+    private async Task StopRecordingAsync()
+    {
+        StopRecordingTimer();
+        _isRecording = false;
+        _recordingAnnouncement = "Recording stopped";
+        _isTranscribing = true;
+        _transcriptionError = null;
+        StateHasChanged();
+
+        try
+        {
+            var recording = await JS.InvokeAsync<AudioRecordingResult?>("rvs_stopRecording");
+            if (recording is null || string.IsNullOrWhiteSpace(recording.Audio))
             {
-                await JS.InvokeVoidAsync("rvs_startRecording");
-                _isRecording = true;
+                _transcriptionError = "No audio was captured.";
+                return;
             }
-            catch (Exception)
+
+            var request = new IssueTranscriptionRequestDto
             {
-                _transcriptionError = "Microphone access was denied or is unavailable.";
+                AudioBase64 = recording.Audio,
+                ContentType = recording.MimeType
+            };
+
+            var result = await IntakeApi.TranscribeIssueAsync(State.Slug, request);
+            if (result?.Result is not null)
+            {
+                // Start with the Whisper result as a baseline
+                var rawTranscript = result.Result.RawTranscript ?? string.Empty;
+                State.IssueDescription = result.Result.CleanedDescription
+                    ?? rawTranscript;
+
+                // Keep what the customer actually said: the packet renders it as
+                // "Complaint — word for word" beneath the curated text (issue #601).
+                State.IssueDescriptionVerbatim = string.IsNullOrWhiteSpace(rawTranscript)
+                    ? null
+                    : rawTranscript;
+
+                // Fire insights extraction from the raw transcript immediately —
+                // the refine prompt strips lifestyle/urgency context we need.
+                _isTranscribing = false;
+                _isRefining = true;
+                StateHasChanged();
+
+                var insightsTask = RequestInsightsSuggestion(rawTranscript);
+
+                try
+                {
+                    var refinementRequest = new IssueTextRefinementRequestDto
+                    {
+                        RawTranscript = rawTranscript,
+                        IssueCategory = State.IssueCategory
+                    };
+
+                    var refined = await IntakeApi.RefineIssueTextAsync(State.Slug, refinementRequest);
+                    if (!string.IsNullOrWhiteSpace(refined?.Result?.CleanedDescription))
+                    {
+                        State.IssueDescription = refined.Result.CleanedDescription;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Refinement is best-effort; the Whisper result is already set
+                }
+                finally
+                {
+                    _isRefining = false;
+                }
+
+                StateHasChanged();
+                // Category uses the cleaned description; insights already in-flight from raw transcript
+                await Task.WhenAll(insightsTask, RequestCategorySuggestion());
+            }
+            else
+            {
+                _transcriptionError = "Could not transcribe the audio.";
             }
         }
+        catch (Exception)
+        {
+            _transcriptionError = "Transcription failed.";
+        }
+        finally
+        {
+            _isTranscribing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void StartRecordingTimer()
+    {
+        _recordingTimer?.Dispose();
+        _recordingTimer = new RecordingTimer(
+            MaxRecordingSeconds,
+            onTick: () =>
+            {
+                _recordingElapsedSeconds = _recordingTimer!.ElapsedSeconds;
+                StateHasChanged();
+            },
+            onAutoStop: StopRecordingAsync);
+        _recordingTimer.Start();
+    }
+
+    private void StopRecordingTimer()
+    {
+        _recordingTimer?.Dispose();
+        _recordingTimer = null;
+    }
+
+    public void Dispose()
+    {
+        _recordingTimer?.Dispose();
     }
 
     private async Task RequestCategorySuggestion()
@@ -318,6 +371,17 @@
             _isSuggestingCategory = false;
             StateHasChanged();
         }
+    }
+
+    /// <summary>
+    /// A manual edit replaces whatever curation last produced, so any stored pre-curation text
+    /// is now stale — it belongs to words the customer has since changed. Clearing it lets
+    /// Continue curate the edited text afresh (issue #601).
+    /// </summary>
+    private void OnDescriptionChanged(string? value)
+    {
+        State.IssueDescription = value ?? string.Empty;
+        State.IssueDescriptionVerbatim = null;
     }
 
     private void OnCategoryChanged(string? value)
@@ -369,7 +433,10 @@
                     State.IsUrgencySuggestedByAi = true;
                 }
 
-                if (result.Result.RvUsage is not null)
+                // RV usage is asked once per visit (Spec A-17): a later issue's description
+                // must not overwrite what the first one settled.
+                if (result.Result.RvUsage is not null
+                    && (State.ActiveIssueIndex == 0 || string.IsNullOrWhiteSpace(State.RvUsage)))
                 {
                     State.RvUsage = result.Result.RvUsage;
                     State.IsRvUsageSuggestedByAi = true;
@@ -403,6 +470,10 @@
         await _form.Validate();
         if (!_form.IsValid) return;
 
+        // Curate a typed description before anything downstream reads it, so the capability
+        // assessment and the packet both work from the cleaned text (issue #601).
+        await CurateTypedDescriptionAsync();
+
         // Capability assessment for the boundary of Step 5 → Step 6.
         // Best-effort: any failure leaves CapabilityAssessment unchanged so the wizard
         // continues without a fallback alert.
@@ -425,6 +496,56 @@
 
         await State.NotifyAndPersistAsync();
         await OnNext.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Curates a typed description on Continue, the same way the mic path curates a transcript
+    /// (issue #601): the cleaned text becomes the submitted description and the words the
+    /// customer typed are kept for the packet's verbatim complaint. Skipped when the mic path
+    /// already recorded pre-curation words. Best-effort — if the call fails or changes nothing,
+    /// the typed text stands as both the description and the complaint.
+    /// </summary>
+    private async Task CurateTypedDescriptionAsync()
+    {
+        if (State.IssueDescriptionVerbatim is not null)
+        {
+            return;
+        }
+
+        var typed = State.IssueDescription?.Trim();
+        if (string.IsNullOrEmpty(typed))
+        {
+            return;
+        }
+
+        _isRefining = true;
+        StateHasChanged();
+
+        try
+        {
+            var refined = await IntakeApi.RefineIssueTextAsync(
+                State.Slug,
+                new IssueTextRefinementRequestDto
+                {
+                    RawTranscript = typed,
+                    IssueCategory = string.IsNullOrWhiteSpace(State.IssueCategory) ? null : State.IssueCategory
+                });
+
+            var cleaned = refined?.Result?.CleanedDescription?.Trim();
+            if (!string.IsNullOrWhiteSpace(cleaned) && cleaned != typed)
+            {
+                State.IssueDescriptionVerbatim = typed;
+                State.IssueDescription = cleaned;
+            }
+        }
+        catch (Exception)
+        {
+            // Curation is advisory — never block the wizard on it.
+        }
+        finally
+        {
+            _isRefining = false;
+        }
     }
 
     /// <summary>

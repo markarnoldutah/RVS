@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 using RVS.Domain.Entities;
+using RVS.Domain.Exceptions;
 using RVS.Domain.Interfaces;
 using System.Net;
 
@@ -53,6 +54,28 @@ public sealed class CosmosSlugLookupRepository : CosmosRepositoryBase, ISlugLook
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<SlugLookup> CreateAsync(SlugLookup entity, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentException.ThrowIfNullOrWhiteSpace(entity.Id, nameof(entity.Id));
+
+        try
+        {
+            var response = await _container.CreateItemAsync(
+                entity,
+                new PartitionKey(entity.Slug),
+                cancellationToken: cancellationToken);
+
+            _logger.LogDebug("CreateAsync [{Id}] — RequestCharge: {Charge} RU", entity.Id, response.RequestCharge);
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ConflictException($"Slug '{entity.Slug}' is already in use.", ex);
         }
     }
 
