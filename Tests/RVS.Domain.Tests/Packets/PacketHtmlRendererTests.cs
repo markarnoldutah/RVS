@@ -1228,7 +1228,9 @@ public class PacketHtmlRendererTests
         html.Should().NotContain("Some images can only be shown in the manager app");
     }
 
-    // ── Manager-app status deep links (Spec C-7, issue #498) ──────────────
+    // ── Manager-app link (Spec C-7, issues #498, #743) ────────────────────
+
+    private const string RequestUrl = "https://manager.example/sr/sr_1";
 
     private static ServicePacket PacketWithManagerLinks() =>
         FullPacket() with { ManagerLinks = ManagerDeepLinks.Build("https://manager.example", "sr_1") };
@@ -1242,64 +1244,65 @@ public class PacketHtmlRendererTests
     }
 
     [Fact]
-    public void Render_WhenManagerLinksPresent_ShouldLinkEachStatusActionAndTheRequest()
+    public void Render_WhenManagerLinksPresent_ShouldOfferOpenManagerTwice_TopAndBottom()
     {
         var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
 
-        html.Should().Contain("<!-- section:manager-actions -->");
-        html.Should().Contain("href=\"https://manager.example/sr/sr_1?action=in-progress\"");
-        html.Should().Contain("href=\"https://manager.example/sr/sr_1?action=waiting-on-parts\"");
-        html.Should().Contain("href=\"https://manager.example/sr/sr_1?action=completed\"");
-        html.Should().Contain("href=\"https://manager.example/sr/sr_1\"");
-        html.Should().Contain(">In Progress<");
-        html.Should().Contain(">Waiting on Parts<");
-        html.Should().Contain(">Completed<");
+        Regex.Matches(html, "<!-- section:manager-actions -->").Count.Should().Be(2);
+        Regex.Matches(html, $@"<a href=""{Regex.Escape(RequestUrl)}"" style=""[^""]*"">Open Manager</a>").Count.Should().Be(2);
     }
 
     [Fact]
-    public void Render_WhenManagerLinksPresent_ShouldStyleEachStatusActionAsABrandButton_Inline()
+    public void Render_WhenManagerLinksPresent_ShouldOfferNoStatusActions()
     {
+        // Every status is one tap away on the /sr page, so the email no longer carries them (#743).
         var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
 
-        // Filled text-safe Rust (RvsBrand.Accent) with white label, carried inline so the
-        // buttons survive a stripped <style> block (issue #735).
-        foreach (var action in new[] { "in-progress", "waiting-on-parts", "completed" })
-        {
-            var style = AnchorStyle(html, $"https://manager.example/sr/sr_1?action={action}");
-            style.Should().Contain("background-color:#A8431F;")
-                .And.Contain("color:#ffffff;")
-                .And.Contain("border-radius:");
-        }
+        html.Should().NotContain("?action=");
+        html.Should().NotContain("Set status");
+        html.Should().NotContain(">In Progress<").And.NotContain(">Waiting on Parts<").And.NotContain(">Completed<");
     }
 
     [Fact]
-    public void Render_WhenManagerLinksPresent_ShouldRenderOpenManagerAsAButtonBelowTheStatusButtons()
+    public void Render_WhenManagerLinksPresent_ShouldStyleOpenManagerAsAPrimaryBrandButton_Inline()
     {
         var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
 
-        html.Should().NotContain("Open in manager app");
-        html.Should().MatchRegex(@"<a href=""https://manager\.example/sr/sr_1"" style=""[^""]*"">Open Manager</a>");
-        AnchorStyle(html, "https://manager.example/sr/sr_1").Should()
-            .Contain("border:1px solid #A8431F;").And.Contain("border-radius:");
-        Order(html, ">Open Manager<").Should().BeGreaterThan(Order(html, ">Completed<"));
-        // On its own line, not in the status-button row.
-        html[Order(html, ">Completed<")..Order(html, ">Open Manager<")].Should().Contain("<p");
+        // Filled text-safe Rust (RvsBrand.Accent) with a white label, carried inline so the
+        // button survives a stripped <style> block (issue #735).
+        AnchorStyle(html, RequestUrl).Should()
+            .Contain("background-color:#A8431F;")
+            .And.Contain("color:#ffffff;")
+            .And.Contain("border-radius:");
     }
 
     [Fact]
-    public void Render_WhenManagerLinksPresent_ShouldPlaceThemAboveTheMasthead()
+    public void Render_WhenManagerLinksPresent_ShouldPutTheTopButtonBetweenTheMastheadAndTheIssue()
     {
         var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
 
-        Order(html, "<!-- section:manager-actions -->").Should().BeLessThan(Order(html, "<!-- section:unit -->"));
+        var top = Order(html, "<!-- section:manager-actions -->");
+        top.Should().BeGreaterThan(Order(html, "<!-- section:origin -->"));
+        top.Should().BeLessThan(Order(html, "<!-- section:category -->"));
     }
 
     [Fact]
-    public void Render_WhenManagerLinksPresent_ShouldUseAPresentationalTableNotFlexOrGrid()
+    public void Render_WhenManagerLinksPresent_ShouldPutTheBottomButtonRightAfterThePasteBlock()
     {
         var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
 
-        html.Should().Contain("<table role=\"presentation\" class=\"manager-actions\"");
+        var bottom = html.LastIndexOf("<!-- section:manager-actions -->", StringComparison.Ordinal);
+        bottom.Should().BeGreaterThan(Order(html, "<!-- section:paste-block -->"));
+        bottom.Should().BeLessThan(Order(html, "<!-- section:status-link -->"));
+    }
+
+    [Fact]
+    public void Render_WhenManagerLinksPresent_ShouldDrawNoFrameAroundTheButton()
+    {
+        var html = PacketHtmlRenderer.Render(PacketWithManagerLinks());
+
+        html.Should().NotContain("<table role=\"presentation\" class=\"manager-actions\"");
+        html.Should().Contain("<p class=\"manager-actions\"");
         html.Should().NotContain("display:flex").And.NotContain("display:grid");
     }
 
@@ -1325,11 +1328,7 @@ public class PacketHtmlRendererTests
     {
         var packet = FullPacket() with
         {
-            ManagerLinks = new PacketManagerLinks
-            {
-                RequestUrl = "javascript:alert(1)",
-                Actions = [new PacketManagerActionLink { Label = "In Progress", Status = "InProgress", Url = "javascript:alert(2)" }],
-            },
+            ManagerLinks = new PacketManagerLinks { RequestUrl = "javascript:alert(1)" },
         };
 
         var html = PacketHtmlRenderer.Render(packet);

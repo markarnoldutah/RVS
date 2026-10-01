@@ -30,19 +30,7 @@ public class PacketHtmlRendererCombinedTests
         Photos = withPhoto ? [new PacketPhoto { Url = "https://blob/p.jpg", FileName = "p.jpg", ContentType = "image/jpeg" }] : [],
         PasteBlock = $"PASTE {reference}",
         StatusLink = new PacketStatusLink { Url = "https://rvintake.com/status/tok" },
-        ManagerLinks = new PacketManagerLinks
-        {
-            RequestUrl = $"https://manager.rvintake.com/sr/{reference}",
-            Actions =
-            [
-                new PacketManagerActionLink
-                {
-                    Label = "In progress",
-                    Status = "InProgress",
-                    Url = $"https://manager.rvintake.com/sr/{reference}?status=InProgress",
-                },
-            ],
-        },
+        ManagerLinks = new PacketManagerLinks { RequestUrl = $"https://manager.rvintake.com/sr/{reference}" },
     };
 
     private static IReadOnlyList<ServicePacket> ThreePackets() =>
@@ -124,22 +112,25 @@ public class PacketHtmlRendererCombinedTests
     }
 
     [Fact]
-    public void RenderCombined_WithSeveralPackets_ShouldGiveEachIssueItsOwnActionButtons()
+    public void RenderCombined_WithSeveralPackets_ShouldGiveEachIssueItsOwnOpenManagerButtons()
     {
         var html = PacketHtmlRenderer.RenderCombined(ThreePackets());
 
-        Count(html, "<!-- section:manager-actions -->").Should().Be(3);
+        // Each issue is its own request, so each gets its own pair: under its heading and after
+        // its paste block (#743).
+        Count(html, "<!-- section:manager-actions -->").Should().Be(6);
         foreach (var reference in new[] { "AAAA1111", "BBBB2222", "CCCC3333" })
         {
-            html.Should().Contain($"https://manager.rvintake.com/sr/{reference}?status=InProgress");
+            Count(html, $"<a href=\"https://manager.rvintake.com/sr/{reference}\" style=\"[^\"]*\">Open Manager</a>").Should().Be(2);
         }
 
-        // Each issue's buttons sit under its own heading, not in a block above the masthead.
+        // Nothing above the masthead; the first button sits under issue 1's heading.
         html.IndexOf("<!-- section:manager-actions -->", StringComparison.Ordinal)
             .Should().BeGreaterThan(html.IndexOf("Issue 1 of 3", StringComparison.Ordinal));
-        var secondButton = html.IndexOf("https://manager.rvintake.com/sr/BBBB2222?status=InProgress", StringComparison.Ordinal);
-        secondButton.Should().BeGreaterThan(html.IndexOf("Issue 2 of 3", StringComparison.Ordinal));
-        secondButton.Should().BeLessThan(html.IndexOf("Issue 3 of 3", StringComparison.Ordinal));
+        var second = html.IndexOf("https://manager.rvintake.com/sr/BBBB2222\" style", StringComparison.Ordinal);
+        second.Should().BeGreaterThan(html.IndexOf("Issue 2 of 3", StringComparison.Ordinal));
+        html.LastIndexOf("https://manager.rvintake.com/sr/BBBB2222\" style", StringComparison.Ordinal)
+            .Should().BeLessThan(html.IndexOf("Issue 3 of 3", StringComparison.Ordinal));
     }
 
     [Fact]

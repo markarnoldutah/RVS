@@ -318,27 +318,11 @@ public sealed record PacketStatusLink
 }
 
 /// <summary>
-/// Deep links into the authenticated manager app for one request (<c>Spec C-7</c>, issue #498).
-/// Built by <see cref="ManagerDeepLinks.Build"/>.
+/// The link into the authenticated manager app for one request (<c>Spec C-7</c>, issues #498,
+/// #743). Built by <see cref="ManagerDeepLinks.Build"/>.
 /// </summary>
 public sealed record PacketManagerLinks
 {
     /// <summary>Opens the request in the manager app: <c>{base}/sr/{id}</c>.</summary>
     public required string RequestUrl { get; init; }
-
-    /// <summary>One-tap status actions, in display order.</summary>
-    public required IReadOnlyList<PacketManagerActionLink> Actions { get; init; }
-}
-
-/// <summary>One status action link: <c>{base}/sr/{id}?action={slug}</c>.</summary>
-public sealed record PacketManagerActionLink
-{
-    /// <summary>Display label, e.g. <c>In Progress</c>.</summary>
-    public required string Label { get; init; }
-
-    /// <summary>The C-3 status the action sets, e.g. <c>InProgress</c>.</summary>
-    public required string Status { get; init; }
-
-    /// <summary>The deep-link URL.</summary>
-    public required string Url { get; init; }
 }

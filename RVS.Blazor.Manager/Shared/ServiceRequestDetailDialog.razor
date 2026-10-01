@@ -1478,22 +1478,8 @@
     @* The API's ApplyUpdate is a full overwrite, not a merge: every field absent from the
        request is written back as null. Activity-log writes only mean to change the summary,
        so they start from the request the loaded SR already implies and override from there. *@
-    private ServiceRequestUpdateRequestDto BuildUpdateRequest(string? technicianSummary) => new()
-    {
-        Status = _sr!.Status,
-        IssueDescription = _sr.IssueDescription,
-        IssueCategory = _sr.IssueCategory,
-        TechnicianSummary = technicianSummary,
-        Priority = _sr.Priority ?? "Medium",
-        Urgency = _sr.Urgency,
-        RvUsage = _sr.RvUsage,
-        HasExtendedWarranty = _sr.HasExtendedWarranty,
-        ApproxPurchaseDate = _sr.ApproxPurchaseDate,
-        AssignedTechnicianId = _sr.AssignedTechnicianId,
-        ScheduledDateUtc = _sr.ScheduledDateUtc,
-        RequiredSkills = _sr.RequiredSkills,
-        BoardSequence = _sr.BoardSequence
-    };
+    private ServiceRequestUpdateRequestDto BuildUpdateRequest(string? technicianSummary) =>
+        ServiceRequestMobileView.BuildUpdateRequest(_sr!, technicianSummary);
 
     private async Task OnStatusChangeAsync(string newStatus)
     {
@@ -2209,7 +2195,7 @@
     private static string ShortId(string id) =>
         string.IsNullOrEmpty(id) || id.Length <= 8 ? id : id[^8..];
 
-    private static string ResolveDisplayName(System.Security.Claims.ClaimsPrincipal user)
+    public static string ResolveDisplayName(System.Security.Claims.ClaimsPrincipal user)
     {
         var name = user.Identity?.Name;
         if (!string.IsNullOrWhiteSpace(name)) return name;

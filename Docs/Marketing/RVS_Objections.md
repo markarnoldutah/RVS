@@ -77,7 +77,7 @@ Answer these straight. The scope is deliberate and saying so builds more credibi
 | *"Can I see reports on my service department?"* | "No. It's a form and an email. If you want dashboards, this isn't that — and honestly you said you didn't want another dashboard." |
 | *"Does it schedule the appointment?"* | "No. No calendar, no bays." |
 | *"Will it write the repair order?"* | "No. It gives your advisor a paste-ready block so they don't retype the complaint." |
-| *"Do I have to log in every day?"* | "No, and that's the design goal. The write-up comes by email, and the status buttons are links in that email. There's a web app for settings and history; you shouldn't need it daily." |
+| *"Do I have to log in every day?"* | "No, and that's the design goal. The write-up comes by email, with an Open Manager button that lands you on the request, already signed in, one tap from any status. There's a web app for settings and history; you shouldn't need it daily." |
 | *"What if the AI gets the category wrong?"* | "The customer can override it, and the category is advisory. The part that matters is their own description, verbatim, plus the follow-up answers — those aren't AI-generated content, they're the customer's answers." |
 | *"Who else is using it?"* | Honest, in months one to six: "Nobody yet — you'd be the first, which is why your first sixty days are free and why I'll change whatever doesn't fit." Do not invent references. |
 | *"Can you do better on price?"* | "Not on the monthly — it's the same for everyone, and it's already priced so you don't need to ask anyone's permission. What I can do is the first sixty days free and lock your rate." Discount time, never the number. |
