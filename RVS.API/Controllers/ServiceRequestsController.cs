@@ -66,6 +66,25 @@ public class ServiceRequestsController : ControllerBase
     }
 
     /// <summary>
+    /// Gets every request reported on the same intake visit as this one (<c>Spec A-17</c>),
+    /// in submission order and including this request.
+    /// </summary>
+    /// <param name="dealershipId">Dealership identifier (route segment).</param>
+    /// <param name="srId">Service request identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpGet("{srId}/submission")]
+    [Authorize(Policy = "CanReadServiceRequests")]
+    public async Task<ActionResult<IReadOnlyList<ServiceRequestSummaryResponseDto>>> GetSubmission(
+        string dealershipId, string srId, CancellationToken ct)
+    {
+        var tenantId = _claimsService.GetTenantIdOrThrow();
+
+        var members = await _service.GetSubmissionMembersAsync(tenantId, srId, ct);
+
+        return Ok(members.Select(m => m.ToSummaryDto()).ToList());
+    }
+
+    /// <summary>
     /// Searches service requests using filter criteria in the request body.
     /// </summary>
     /// <param name="dealershipId">Dealership identifier (route segment).</param>

@@ -20,6 +20,17 @@ public interface IServiceRequestService
     Task<ServiceRequest> GetByIdAsync(string tenantId, string id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets every request reported on the same intake visit as the given one (<c>Spec A-17</c>),
+    /// ordered by submission position and including the request itself. A request reported on
+    /// its own returns just itself.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
+    /// <param name="id">Service request identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="KeyNotFoundException">Thrown when the service request is not found.</exception>
+    Task<IReadOnlyList<ServiceRequest>> GetSubmissionMembersAsync(string tenantId, string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Searches service requests using up to 10 filter parameters with continuation-token pagination.
     /// </summary>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>

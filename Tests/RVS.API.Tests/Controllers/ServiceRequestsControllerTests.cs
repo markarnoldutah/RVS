@@ -40,6 +40,21 @@ public class ServiceRequestsControllerTests
     }
 
     [Fact]
+    public async Task GetSubmission_ShouldReturnOkWithSummaryDtoPerMember()
+    {
+        var first = BuildServiceRequest();
+        var second = BuildServiceRequest();
+        _serviceMock.Setup(s => s.GetSubmissionMembersAsync(TenantId, second.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([first, second]);
+
+        var result = await _sut.GetSubmission("dlr_1", second.Id, CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var dtos = okResult.Value.Should().BeAssignableTo<IReadOnlyList<ServiceRequestSummaryResponseDto>>().Subject;
+        dtos.Select(d => d.Id).Should().Equal(first.Id, second.Id);
+    }
+
+    [Fact]
     public async Task Search_ShouldReturnOkWithPagedResult()
     {
         var pagedResult = new PagedResult<ServiceRequest>
