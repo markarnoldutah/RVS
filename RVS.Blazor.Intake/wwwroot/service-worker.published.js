@@ -5,7 +5,10 @@ self.importScripts('./service-worker-assets.js');
 const cacheNamePrefix = 'offline-cache-';
 const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;
 const offlineAssetsInclude = [/\.dll$/, /\.pdb$/, /\.wasm/, /\.html/, /\.js$/, /\.css$/, /\.woff2?$/, /\.png$/, /\.svg$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.blat$/, /\.dat$/];
-const offlineAssetsExclude = [/^service-worker\.js$/, /^staticwebapp\.config\.json$/, /^appsettings.*\.json$/];
+// compliance/ holds the toll-free verification evidence (#659): public images for a carrier
+// reviewer, never part of the app, so they are neither precached nor answered with index.html.
+const offlineAssetsExclude = [/^service-worker\.js$/, /^staticwebapp\.config\.json$/, /^appsettings.*\.json$/, /^compliance\//];
+const bypassPaths = [/^\/compliance\//];
 
 // Skip waiting so the new service worker activates immediately after install,
 // ensuring updated WASM files are served on the next navigation.
@@ -81,5 +84,9 @@ async function onFetch(event) {
 
 self.addEventListener('install', event => event.waitUntil(onInstall(event)));
 self.addEventListener('activate', event => event.waitUntil(onActivate(event)));
-self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
+self.addEventListener('fetch', event => {
+    // Leaving respondWith() uncalled hands the request straight to the network.
+    if (bypassPaths.some(pattern => pattern.test(new URL(event.request.url).pathname))) return;
+    event.respondWith(onFetch(event));
+});
 

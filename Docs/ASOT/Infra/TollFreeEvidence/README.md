@@ -4,7 +4,7 @@ Two applications with the same content. Microsoft's guide says the **Associated 
 
 | | Prod | Staging |
 |---|---|---|
-| ACS resource | prod ACS resource | `acs-rvs-notify-staging-wus3-s01-001` |
+| ACS resource | `acs-rvs-notify-prod-wus3-s01-001` | `acs-rvs-notify-staging-wus3-s01-001` |
 | Number | **+1 833 239 8230** | **+1 866 231 9618** |
 | Volume | 1,000 / month | 50 / month |
 
@@ -38,7 +38,7 @@ dotnet run --project RVS.Blazor.Manager -lp https
 
 Send to **your own mobile only**. The record is written before the send is attempted, so E5 exists even though ACS refuses the send from the unverified number. Delivery will show *failed*. Crop it out of E4/E6, or take E4 before you tap Send.
 
-**Hosting.** Commit the PNGs to `main` in this folder (the repo is public) and use `raw.githubusercontent.com/markarnoldutah/RVS/main/Docs/ASOT/Infra/TollFreeEvidence/<file>` URLs. Combine everything into **one tall PNG** as well (Preview or Keynote is fine): `optin-evidence.png`, with verbal (E4, E5) on top, then web (E1, E2, E3). If the form takes a single opt-in URL, use that. **Open every URL in a private window before submitting.** Don't move or rename them until both numbers are verified; the reviewer may come back to them weeks later.
+**Hosting.** The images are served from the Intake app at `https://rvintake.com/compliance/<file>`, the same domain as the website named on the application. They live in `RVS.Blazor.Intake/wwwroot/compliance/` and ship with every Intake deploy. The published service worker leaves `compliance/` alone (it neither precaches it nor answers it with `index.html`), and so does the SPA fallback in `staticwebapp.config.json`. `optin-evidence.png` is all the shots in one tall image: verbal (E4, E5) on top, then web (E1, E2, E3). If the form takes a single opt-in URL, use that one. **Open every URL in a private window before submitting.** Don't move, rename or delete these files until both numbers are verified; the reviewer may come back to them weeks later.
 
 ---
 
@@ -95,7 +95,7 @@ Select **Verbal** and **Website** if the form allows several. If it allows one, 
 
 ### Opt-in URL / image
 
-`https://raw.githubusercontent.com/markarnoldutah/RVS/main/Docs/ASOT/Infra/TollFreeEvidence/optin-evidence.png` (from section 0). If the form has a separate terms or privacy URL field: `https://rvintake.com/sms-terms` and `https://rvintake.com/privacy`.
+`https://rvintake.com/compliance/optin-evidence.png` (from section 0). If the form has a separate terms or privacy URL field: `https://rvintake.com/sms-terms` and `https://rvintake.com/privacy`.
 
 ### Opt-out / HELP (if asked separately)
 
@@ -135,7 +135,7 @@ Links use our own domains (`go.rvintake.com`, `rvintake.com`), never a public UR
 
 ## Before you click Submit
 
-- [ ] Every evidence URL opens in a private window. Check the raw image URLs, `/sms-terms` and `/privacy`.
+- [ ] Every evidence URL opens in a private window. Check `https://rvintake.com/compliance/optin-evidence.png`, `/sms-terms` and `/privacy`.
 - [ ] E1 shows no preferred-contact radio selected.
 - [ ] Contact email is one you read daily.
 - [ ] Prod and staging applications are both submitted. Note both submission dates on #659.
