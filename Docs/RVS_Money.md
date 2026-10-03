@@ -17,27 +17,27 @@ Per service request, from intake through delivered packet:
 |---|---|
 | Azure OpenAI gpt-4o — five calls (A-4 follow-ups, A-5 category, A-11 insights, packet summary, A-10 VIN vision) | $0.023 |
 | Whisper transcription (A-9), ~1 minute of dictation | $0.006 |
-| ACS email + attachments, capped at ~9.5 MB per send (B-4) | $0.002 |
+| SendGrid email + attachments, capped at ~9.5 MB per send (B-4) | $0 marginal (inside the plan, §2) |
 | Blob storage and egress, ~15 MB | $0.002 |
 | Cosmos RU — intake write, ledger append (X-2), reads | <$0.001 |
 | **Total** | **~$0.03** |
 
 The two size figures differ on purpose. Blob keeps every original upload — `A-6` allows ten
-25 MB files — while one email is budgeted at 9.5 MB under ACS's 10 MB request ceiling, base64
+25 MB files — while one email is budgeted at 9.5 MB under the 10 MB request ceiling, base64
 included (`Spec B-4`). Storage cost tracks what the customer uploaded; email cost tracks what
 actually ships. Neither number moves the total, which rounds to $0.03 either way.
 
 SMS is not in the total. It is off in every environment until the sending number clears toll-free verification. Once on, each text costs about **$0.01 per segment, carrier surcharge included**. A confirmation text is one or two segments, so it adds at most $0.02 to a request that is sent one, and the per-location figures below move by at most $2 per 100 requests.
 
-A location submitting 100 requests a month costs **$3.21** to serve against $79 of revenue. Gross margin 96%.
+A location submitting 100 requests a month costs **$3.01** to serve against $79 of revenue. Gross margin 96%. (It was $3.21 while email went through ACS at ~$0.002 a send; SendGrid's plan moved that cost to §2's fixed side, Oct 2 2026.)
 
 | Requests/location/month | Cost | Gross margin on $79 |
 |---|---|---|
-| 100 | $3.21 | 96% |
-| 300 *(current fair-use cap)* | $9.64 | 88% |
-| 600 | $19.28 | 76% |
-| 1,000 | $32.13 | 59% |
-| 2,460 | $79.00 | **0% — break-even** |
+| 100 | $3.01 | 96% |
+| 300 *(current fair-use cap)* | $9.03 | 89% |
+| 600 | $18.06 | 77% |
+| 1,000 | $30.10 | 62% |
+| 2,625 | $79.00 | **0% — break-even** |
 
 **The 300-request fair-use cap has roughly 8× headroom before it protects any margin.** It is an abuse guard, not an economic one, and it should never be the reason a dealer group hesitates. Raising it to 1,000 costs nothing. Treat that as a sales lever held in reserve rather than a number to defend.
 
@@ -54,9 +54,10 @@ A location submitting 100 requests a month costs **$3.21** to serve against $79 
 | Log Analytics + Application Insights, two environments | $25 |
 | Cosmos DB serverless, low volume | $15 |
 | Blob Storage, Standard LRS Hot | $10 |
-| Key Vault × 2, DNS zones × 2, ACS base | $5 |
-| ACS toll-free SMS numbers × 2 (staging + prod), $2 each (A-14) | $4 |
-| **Azure total** | **~$121** |
+| Key Vault × 2, DNS zones × 2 | $5 |
+| Twilio toll-free SMS numbers × 2 (staging + prod), ~$2.15 each (A-14) — not Azure | $4 |
+| SendGrid Essentials, one account for both environments (B-4) — not Azure, ~50K emails/month | $20 |
+| **Platform total** (Azure $117 + SendGrid/Twilio $24) | **~$141** |
 
 Azure OpenAI S0 carries no standing charge — both accounts are pay-per-token, so all AI cost is variable and sits in §1.
 
@@ -76,7 +77,7 @@ Azure OpenAI S0 carries no standing charge — both accounts are pay-per-token, 
 
 ## 3. Break-even
 
-**Hard costs — $117 Azure plus ~$250 other — are covered by five shop locations.**
+**Hard costs — ~$141 platform (Azure plus SendGrid and Twilio) plus ~$250 other — are covered by six shop locations.**
 
 That is the most important number in this document. The business pays for itself almost immediately, which means the question is never survival of the product; it is only ever whether it pays a person.
 
@@ -171,7 +172,7 @@ Change a number here and the scenarios move. Nothing else in this document is lo
 |---|---|---|
 | Cost per service request | $0.03 | Medium — derived from listed model pricing and estimated token counts, never measured |
 | Requests per location per month | 60 | **Low — pure guess.** The first three shops settle this |
-| Fixed Azure, both environments | $117/mo | Medium — from declared SKUs, not a billing export |
+| Fixed platform, both environments | $141/mo ($117 Azure + $24 SendGrid/Twilio) | Medium — from declared SKUs and list prices, not a billing export |
 | Non-Azure fixed cost | $250/mo | Low-medium |
 | Blended revenue per location | $65 | High — arithmetic on decided prices |
 | Founder close rate | 2–4 locations/month | Low — no closes yet |

@@ -31,8 +31,8 @@
 #         4b. Cross-env DNS Zone Contributor (zone-scoped, least privilege)
 #         4c. Developer blob-access group (sg-rvs-dev-blob)
 #         4d. Key Vault manual secrets
-#         4e. ACS Email send grant (now in Bicep) + post-deploy checks — Issue #489;
-#             custom sending domain verification / quota / warming — Issue #532
+#         4e. Messaging — SendGrid + Twilio secrets and console setup, and the
+#             one-time ACS teardown (Oct 2 2026)
 #   5.  Post-deploy verification
 #   6.  SWA deployment tokens → GitHub secrets
 #   7.  Misc one-offs
@@ -97,7 +97,6 @@ DEV_BLOB_GROUP_OBJECT_ID="e7c21157-3e7a-4a31-9408-c4ccef22670e"
 #   Log Analytics       law-rvs-obs-staging-wus3            law-rvs-obs-prod-wus3
 #   OpenAI (GPT-4o)     oai-rvs-ai-staging-wus3-s01-001     oai-rvs-ai-prod-wus3-s01-001
 #   OpenAI (Whisper)    oai-rvs-whisper-staging-ncus-s01-001  oai-rvs-whisper-prod-ncus-s01-001
-#   Comm. Services      acs-rvs-notify-staging-wus3-s01-001 acs-rvs-notify-prod-wus3-s01-001
 #   SWA (Intake)        stapp-rvs-intake-staging            stapp-rvs-intake-prod
 #   SWA (Manager)       stapp-rvs-manager-staging           stapp-rvs-manager-prod
 #
@@ -363,171 +362,135 @@ az ad group member remove --group "$DEV_BLOB_GROUP" --member-id <user-object-id>
 az ad group member list   --group "$DEV_BLOB_GROUP" --query '[].{name:displayName, upn:userPrincipalName}' -o table
 
 # ── 4d. Key Vault manual secrets ────────────────────────────────────────────
-# OpenAI / ACS / App Insights / Cosmos secrets are written by Bicep. Stripe is
-# the only one added by hand, per environment.
+# OpenAI / App Insights / Cosmos secrets are written by Bicep. Stripe is added
+# by hand, per environment; so are the SendGrid and Twilio keys (4e).
 az keyvault secret set --vault-name kv-rvs-staging-wus3 \
   --name "Stripe--WebhookSecret" --value "<YOUR_STRIPE_WEBHOOK_SECRET>"
 az keyvault secret set --vault-name kv-rvs-prod-wus3 \
   --name "Stripe--WebhookSecret" --value "<YOUR_STRIPE_WEBHOOK_SECRET>"
 
-# ── 4e. ACS Email send grant + enablement checks — Issue #489 ───────────────
+# ── 4e. Messaging — SendGrid (email) + Twilio (SMS), and the ACS teardown ────
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │ The RBAC grant and the sender-address config are now BICEP (shipped with   │
-# │ #489):                                                                     │
-# │   - modules/communication-services.bicep grants the API managed identity   │
-# │     (and the S1 staging-slot identity) Contributor ON THE ACS RESOURCE,    │
-# │     wired from main.bicep like the Key Vault / Storage grants.             │
-# │   - modules/app-service-config.bicep sets the app setting                  │
-# │     AzureCommunicationServices__Email__FromAddress =                       │
-# │     DoNotReply@<communicationServices.outputs.azureManagedMailFrom>,       │
-# │     so the hardcoded DoNotReply@<guid>.azurecomm.net is gone from          │
-# │     RVS.API/appsettings.json.                                              │
-# │ So a plain Section 1 redeploy applies both. The commands below are the     │
-# │ manual fallback (grant not yet propagated, or applying to an env whose     │
-# │ Bicep pre-dates #489) plus the post-deploy checks that CANNOT be Bicep.    │
+# │ ACS was removed before go-live on Oct 2 2026 (Microsoft retires it Sep 30  │
+# │ 2028). Neither replacement is an Azure resource, so Bicep owns only:       │
+# │   - the app settings (Email__FromAddress, Sms__*, Twilio__MessagingService │
+# │     Sid, Twilio__WebhookBaseUrl) — modules/app-service-config.bicep        │
+# │   - the SendGrid CNAMEs + _dmarc record for the sending subdomain          │
+# │     (sendGridDnsRecords / mailSendingDomain in each .bicepparam)           │
+# │ Everything below is console or vault work Bicep cannot do.                 │
 # └────────────────────────────────────────────────────────────────────────────┘
-#
-# Why the grant is needed: AcsEmailNotificationService authenticates to ACS with
-# the API's system-assigned managed identity (DefaultAzureCredential). Before
-# #489 that identity held roles for Key Vault + Storage only — none on the ACS
-# resource — so EmailClient.SendAsync returned 403. ACS has no granular "email
-# sender" data-plane role as of writing; the documented minimum is Contributor
-# scoped to the ACS resource. Re-check the current ACS "authenticate with managed
-# identity" docs periodically in case a narrower role appears.
 
-# ── (0) Redeploy — applies the Bicep grant + sender-address app setting ──────
-# STAGING: Section 1a.  PROD: Section 1b.
+# ── (1) Key Vault secrets — set by hand, once per environment ────────────────
+# Read at startup by the Key Vault configuration provider ("--" maps to ":").
+# With no SendGrid key the API registers the no-op email sender; with any Twilio
+# send credential missing it registers the no-op SMS sender. The auth token is
+# separate from the API key: Twilio signs webhooks with the auth token only.
+KV=kv-rvs-staging-wus3        # PROD: kv-rvs-prod-wus3
+az keyvault secret set --vault-name "$KV" --name "SendGrid--ApiKey"       --value "<SG.restricted-mail-send-key>"
+az keyvault secret set --vault-name "$KV" --name "Twilio--AccountSid"     --value "<AC… subaccount SID>"
+az keyvault secret set --vault-name "$KV" --name "Twilio--ApiKeySid"      --value "<SK… API key SID>"
+az keyvault secret set --vault-name "$KV" --name "Twilio--ApiKeySecret"   --value "<API key secret>"
+az keyvault secret set --vault-name "$KV" --name "Twilio--AuthToken"      --value "<subaccount auth token>"
+# Then restart the API so it reloads configuration:
+az webapp restart --name app-rvs-api-staging-wus3 --resource-group rg-rvs-staging-westus3
 
-# ── (1) MANUAL FALLBACK — grant Contributor on the ACS resource by hand ─────
-# Only if the Bicep grant has not propagated or the target env's Bicep is older.
-# Run the Section 0 setup block first ($ROLE_CONTRIBUTOR etc.).
-
-# STAGING (API on B1 — primary identity only):
-ACS_ID=$(az communication show \
-  --name acs-rvs-notify-staging-wus3-s01-001 \
-  --resource-group rg-rvs-staging-westus3 --query id -o tsv)
-API_MI=$(az webapp show \
-  --name app-rvs-api-staging-wus3 \
-  --resource-group rg-rvs-staging-westus3 --query identity.principalId -o tsv)
-az role assignment create \
-  --assignee "$API_MI" --role "$ROLE_CONTRIBUTOR" --scope "$ACS_ID"
-
-# PROD (API on S1 — also grant the deployment-slot identity):
-ACS_ID=$(az communication show \
-  --name acs-rvs-notify-prod-wus3-s01-001 \
-  --resource-group rg-rvs-prod-westus3 --query id -o tsv)
-API_MI=$(az webapp show \
-  --name app-rvs-api-prod-wus3 \
-  --resource-group rg-rvs-prod-westus3 --query identity.principalId -o tsv)
-SLOT_MI=$(az webapp identity show \
-  --name app-rvs-api-prod-wus3 --slot staging \
-  --resource-group rg-rvs-prod-westus3 --query principalId -o tsv)
-az role assignment create --assignee "$API_MI"  --role "$ROLE_CONTRIBUTOR" --scope "$ACS_ID"
-az role assignment create --assignee "$SLOT_MI" --role "$ROLE_CONTRIBUTOR" --scope "$ACS_ID"
-
-# Verify the grant (expect Contributor for the API MI, + the slot MI in prod):
-az role assignment list --scope "$ACS_ID" \
-  --query '[].{principal:principalId, role:roleDefinitionName}' -o table
-
-# ── (2) POST-DEPLOY CHECKS — not expressible in Bicep ───────────────────────
-
-# (a) Managed domain provisioned + verified (AzureManaged verification can lag a
-#     few minutes; sends fail with DomainNotLinked until it is Succeeded):
-az communication email domain show \
-  --domain-name AzureManagedDomain \
-  --email-service-name acs-rvs-notify-staging-wus3-s01-001-email \
-  --resource-group rg-rvs-staging-westus3 \
-  --query '{state:provisioningState, verification:verificationStates}' -o json
-
-# (b) Read back the real sender domain and confirm the deployed app setting
-#     matches DoNotReply@<domain>. Staging and prod send From their custom domain
-#     (#532); use --domain-name AzureManagedDomain for an env without one:
-az communication email domain show \
-  --domain-name mail-staging.rvintake.com \
-  --email-service-name acs-rvs-notify-staging-wus3-s01-001-email \
-  --resource-group rg-rvs-staging-westus3 \
-  --query 'properties.fromSenderDomain' -o tsv
+# ── (2) SendGrid sending domain ──────────────────────────────────────────────
+#   STAGING → mail-staging.rvintake.com     PROD → mail.rvintake.com
+#   1. SendGrid → Settings → Sender Authentication → Authenticate Your Domain,
+#      DNS host "Other", domain rvintake.com, advanced: custom return path off,
+#      "Use automated security" ON, subdomain mail (prod) / mail-staging (staging).
+#   2. Copy the three CNAMEs into sendGridDnsRecords in that env's .bicepparam,
+#      names relative to rvintake.com (em1234.mail, s1._domainkey.mail,
+#      s2._domainkey.mail), and redeploy (Section 1a / 1b).
+#   3. Back in SendGrid press Verify. Then confirm:
+#        dig +short CNAME s1._domainkey.mail.rvintake.com
+#        dig +short TXT _dmarc.mail.rvintake.com
+#        # → v=DMARC1; p=none; rua=mailto:support@arnolddigitalsolutions.com; adkim=r; aspf=r
+#   4. SendGrid → Settings → Tracking: turn Click, Open and Subscription tracking
+#      OFF account-wide. The API also turns them off per message; this covers
+#      anything sent from the console.
+#   5. Confirm the app setting the API reads:
 az webapp config appsettings list \
   --name app-rvs-api-staging-wus3 --resource-group rg-rvs-staging-westus3 \
-  --query "[?name=='AzureCommunicationServices__Email__FromAddress'].value" -o tsv
+  --query "[?starts_with(name,'Email__') || starts_with(name,'Sms__') || starts_with(name,'Twilio__')].{n:name,v:value}" -o table
 
-# (c) ACS email send quota + custom sending domains — issue #532.
-#     Both environments set acsCustomEmailDomain, each on its OWN ACS resource:
-#       STAGING → mail-staging.rvintake.com     PROD → mail.rvintake.com
-#     Bicep provisions a CustomerManaged domain and writes its SPF (-all) / DKIM /
-#     DKIM2 / domain-ownership records + a DMARC p=none record into the rvintake.com
-#     zone. The Azure-managed domain stays linked as a fallback only (5 emails/min,
-#     10/hour — NOT raisable). The steps below (prod names) are the data-plane work
-#     Bicep cannot do — the `acsCustomDomainAction` deployment output repeats the
-#     summary.
-#
-#     STAGING runs steps 1–3 only — no warming — with the domain
-#     mail-staging.rvintake.com, DMARC host
-#     _dmarc.mail-staging.rvintake.com, and:
-#       ACS_EMAIL_SVC=acs-rvs-notify-staging-wus3-s01-001-email
-#       ACS_RG=rg-rvs-staging-westus3
-#     The rvintake.com zone lives in rg-rvs-prod-westus3 in both cases — use that RG
-#     for the `az network dns record-set list` in step 1.
-#
-#     ACS_EMAIL_SVC=acs-rvs-notify-prod-wus3-s01-001-email   # <acs>-email
-#     ACS_RG=rg-rvs-prod-westus3
-#
-#     1. Confirm the zone records match what ACS expects (they should — Bicep wrote
-#        them from this same source):
-#          az communication email domain show \
-#            --domain-name mail.rvintake.com --email-service-name "$ACS_EMAIL_SVC" \
-#            -g "$ACS_RG" --query 'verificationRecords' -o jsonc
-#          az network dns record-set list -g "$ACS_RG" -z rvintake.com \
-#            --query "[?contains(name,'mail') || contains(name,'_dmarc')].{n:name,t:type}" -o table
-#
-#     2. Initiate verification for each record type, then poll verificationStates:
-#          for t in Domain SPF DKIM DKIM2; do
-#            az communication email domain initiate-verification \
-#              --domain-name mail.rvintake.com --email-service-name "$ACS_EMAIL_SVC" \
-#              -g "$ACS_RG" --verification-type $t
-#          done
-#          az communication email domain show \
-#            --domain-name mail.rvintake.com --email-service-name "$ACS_EMAIL_SVC" \
-#            -g "$ACS_RG" --query 'verificationStates' -o jsonc
-#        Every entry must read "Verified". Sends From mail.rvintake.com fail until
-#        then; the Azure-managed domain stays linked as a fallback.
-#        A brand-new domain's first deploy runs with acsCustomDomainVerified=false;
-#        once verified, set it to true in the .bicepparam and redeploy to link the
-#        domain. Never set it back to false — that unlinks the domain. Confirm:
-#          az communication show -n acs-rvs-notify-prod-wus3-s01-001 -g "$ACS_RG" \
-#            --query linkedDomains -o json
-#
-#     3. Confirm DMARC resolves and reports are authorized (#608):
-#          dig +short TXT _dmarc.mail.rvintake.com
-#          # → v=DMARC1; p=none; rua=mailto:support@arnolddigitalsolutions.com; adkim=r; aspf=r
-#          dig +short TXT mail.rvintake.com._report._dmarc.arnolddigitalsolutions.com
-#          # → "v=DMARC1". Added by hand at the registrar, not in Azure. The deploy's
-#          #   dmarcReportAuthorizationAction output lists every name needed;
-#          #   README "DMARC aggregate reports".
-#
-#     4. Send quota: NO request at bring-up. A verified domain gets 30/min, 100/hour
-#        automatically, which covers the pilot. File the increase when the #603 volume
-#        alert fires — Portal → ACS → Email → Domains → mail.rvintake.com → quota
-#        request. Approval takes up to 72 HOURS and needs a sustained bounce rate
-#        under 1%, so file on the alert, not at the hard cap.
-#
-#     5. Warm the domain: let Jay Lyons's real intake traffic (P1, #525) send through
-#        mail.rvintake.com for 2–3 WEEKS before any other shop's mailbox gets a packet.
-#        Ramp gradually; watch ACS delivery/bounce metrics and the DMARC rua reports.
-#        Sustained ACS failures above ~1% risk throttling.
-#
-#     6. In-room deliverability check (second pilot onward — FS-7 in RVS_Plan.md):
-#        send a test packet with the service manager present, confirm inbox not Junk,
-#        have them mark the sender safe on the spot. Not needed for the first pilot.
+# ── (3) Twilio — per environment, in that environment's subaccount ───────────
+#   1. Buy one toll-free number. Create a Messaging Service, add the number to its
+#      sender pool, and put its SID (MG…) and the number in the .bicepparam
+#      (twilioMessagingServiceSid, smsFromPhoneNumber).
+#   2. Messaging Service → Integration: incoming messages →
+#        https://api-staging.rvserviceflow.com/api/events/twilio-sms/inbound
+#      (prod: https://api.rvserviceflow.com/…). Status callback →
+#        …/api/events/twilio-sms/status
+#      The API also sets StatusCallback on every send; this is the fallback.
+#   3. Messaging Service → Opt-Out Management (Advanced Opt-Out): ON. Set the HELP
+#      reply to the exact string in RVS.API/Integrations/InboundSmsReplyContent.cs.
+#      RVS no longer sends a HELP reply itself.
+#   4. File toll-free verification for the number — the package is
+#      Docs/ASOT/Infra/TollFreeEvidence/README.md (#659). smsEnabled stays false
+#      until Twilio shows it approved (G-4 in Docs/RVS_GoLive_Activities.md).
+#   5. Signature check from outside — must answer 403, not 200:
+#        curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+#          -H 'X-Twilio-Signature: forged' -d 'From=%2B18015551234&Body=STOP&MessageSid=SMx' \
+#          https://api-staging.rvserviceflow.com/api/events/twilio-sms/inbound
 
-# (d) Point at least one staging Location's packetConfig.recipients at a REAL
+# ── (4) ACS teardown — ONE TIME, per environment, after the Bicep redeploy ────
+# Removing a module from Bicep never deletes the resource (incremental mode), so
+# these are explicit. The phone numbers were already released in the portal on
+# Oct 2 2026 — that had to come first, or deleting the resource leaves them
+# billing as orphans. Confirm none remain before step c:
+#   Portal → acs-rvs-notify-<env>-wus3-s01-001 → Phone numbers → (empty)
+#
+# Order matters: an email domain cannot be deleted while linked to the ACS
+# resource, and role assignments outlive the scope they were made on.
+ENV=staging                    # then repeat with ENV=prod
+RG=rg-rvs-$ENV-westus3
+ACS=acs-rvs-notify-$ENV-wus3-s01-001
+ACS_ID=$(az communication show --name "$ACS" --resource-group "$RG" --query id -o tsv)
+
+#   a. Event Grid system topic (deleting it deletes the acs-sms-to-api subscription):
+az eventgrid system-topic delete --name "evgt-rvs-acs-$ENV" --resource-group "$RG" --yes
+
+#   b. The API (and slot) managed identities' Contributor grants on the resource:
+az role assignment list --scope "$ACS_ID" --query '[].{id:id, principal:principalId, role:roleDefinitionName}' -o table
+az role assignment delete --scope "$ACS_ID" --yes
+
+#   c. The ACS resource (this unlinks its email domains):
+az communication delete --name "$ACS" --resource-group "$RG" --yes
+
+#   d. The Email Communication Service, with its domains and sender usernames:
+az communication email delete --name "$ACS-email" --resource-group "$RG" --yes
+
+#   e. The Key Vault secrets ACS used (soft-deleted; purge is optional):
+az keyvault secret delete --vault-name "kv-rvs-$ENV-wus3" --name "AzureCommunicationServices--Endpoint"
+az keyvault secret delete --vault-name "kv-rvs-$ENV-wus3" --name "AzureCommunicationServices--ConnectionString"
+az keyvault secret delete --vault-name "kv-rvs-$ENV-wus3" --name "EventGrid--Inbound--Key"
+
+#   f. The ACS DNS records in rvintake.com (the zone is in the PROD RG for both
+#      environments). Bicep stopped declaring them but never deletes a record.
+#      List first — keep _dmarc.<sub> and the SendGrid em*/s1/s2 CNAMEs:
+SUB=mail-staging               # PROD: mail
+az network dns record-set list -g rg-rvs-prod-westus3 -z rvintake.com \
+  --query "[?contains(name,'$SUB')].{n:name,t:type}" -o table
+#      Then delete the ACS ones — the domain-ownership + SPF TXT at the bare label,
+#      and the two azurecomm DKIM selectors:
+az network dns record-set txt   delete -g rg-rvs-prod-westus3 -z rvintake.com -n "$SUB" --yes
+az network dns record-set cname delete -g rg-rvs-prod-westus3 -z rvintake.com -n "selector1-azurecomm-prod-net._domainkey.$SUB" --yes
+az network dns record-set cname delete -g rg-rvs-prod-westus3 -z rvintake.com -n "selector2-azurecomm-prod-net._domainkey.$SUB" --yes
+
+#   g. Confirm nothing ACS is left in the subscription:
+az resource list --query "[?starts_with(type,'Microsoft.Communication') || type=='Microsoft.EventGrid/systemTopics'].{n:name,t:type,rg:resourceGroup}" -o table
+
+# ── (5) End-to-end checks ────────────────────────────────────────────────────
+
+# (a) Point at least one staging Location's packetConfig.recipients at a REAL
 #     mailbox you control (seed data uses RFC 2606 .example.com addresses that
 #     hard-bounce). packetConfig.enabled already defaults to true.
 #       PUT /api/dealers/{dealerId}/locations/{locationId}   (body: packetConfig.recipients)
 #     or edit the locations container directly in Cosmos.
 
-# (e) End-to-end: complete a staging intake, then in App Insights expect
-#     "ACS packet email send initiated ..." (info) from AcsEmailNotificationService.
+# (b) End-to-end: complete a staging intake, then in App Insights expect
+#     "SendGrid accepted packet email ..." (info) from SendGridEmailNotificationService.
 #     A failure logs "Packet email dispatch failed ..." (error) from
 #     PacketGenerationService and is otherwise swallowed (retry/idempotency = #438).
 #     Confirm the mail arrives with the PDF + photo attachments, subject
@@ -622,7 +585,7 @@ az cosmosdb show --name cosmos-rvs-data-staging-wus3 --resource-group rg-rvs-sta
 az keyvault show --name kv-rvs-staging-wus3 --resource-group rg-rvs-staging-westus3 \
   --query '{name:name, vaultUri:properties.vaultUri, rbac:properties.enableRbacAuthorization}' -o json
 
-# Key Vault — secrets present (OpenAi--*, AzureCommunicationServices--*, etc.)
+# Key Vault — secrets present (OpenAi--*, SendGrid--ApiKey, Twilio--*, etc.)
 az keyvault secret list --vault-name kv-rvs-staging-wus3 --query '[].name' -o tsv
 
 # Storage — rvs-attachments container exists
@@ -662,10 +625,6 @@ az cognitiveservices account deployment list --name oai-rvs-ai-staging-wus3-s01-
 # Whisper is a separate account in northcentralus:
 az cognitiveservices account deployment list --name oai-rvs-whisper-staging-ncus-s01-001 \
   --resource-group rg-rvs-staging-ncus --query '[].{name:name, model:properties.model.name}' -o table
-
-# Communication Services — host name
-az communication show --name acs-rvs-notify-staging-wus3-s01-001 \
-  --resource-group rg-rvs-staging-westus3 --query '{name:name, hostName:hostName}' -o json
 
 # DNS — zone name servers (delegation check; zones are in the PROD RG)
 az network dns zone show --name rvserviceflow.com --resource-group rg-rvs-prod-westus3 \
@@ -723,7 +682,7 @@ az webapp config set --resource-group rg-rvs-staging-westus3 \
   --name app-rvs-api-staging-wus3 --dotnet-version "v10.0"
 
 # Register the resource providers main.bicep needs (once per subscription)
-for NS in Microsoft.CognitiveServices Microsoft.Communication Microsoft.DocumentDB \
+for NS in Microsoft.CognitiveServices Microsoft.DocumentDB \
           Microsoft.Web Microsoft.KeyVault Microsoft.OperationalInsights Microsoft.Insights; do
   az provider register --namespace "$NS"
 done

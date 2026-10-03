@@ -33,7 +33,7 @@ public sealed class TenantAccessGateApiFactory : WebApplicationFactory<Program>
         // ConfigureAppConfiguration / in-memory sources land too late. Environment variables
         // are picked up by WebApplicationBuilder's default config and override appsettings.
         // Force the rule-based / mock / no-op integration fallbacks so the host builds with no
-        // Azure OpenAI / ACS / Cosmos configuration.
+        // Azure OpenAI / SendGrid / Twilio / Cosmos configuration.
         Environment.SetEnvironmentVariable("Integrations__UseMocks", "true");
         Environment.SetEnvironmentVariable("CosmosDb__Endpoint", "https://localhost:8081");
         // Cosmos emulator well-known key — valid base64 so the (unused) CosmosClient singleton

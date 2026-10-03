@@ -188,7 +188,7 @@ public static class PacketEmailComposer
     ///
     /// Public so a caller can measure the body before composing: the email size budget
     /// (<see cref="PacketEmailSizeFitter"/>, issue #521) has to charge the real bodies against
-    /// the ACS request ceiling, and re-deriving them here keeps that measurement and the
+    /// the transport request ceiling, and re-deriving them here keeps that measurement and the
     /// composed message from drifting apart.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="packet"/> is null.</exception>

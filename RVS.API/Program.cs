@@ -398,15 +398,10 @@ builder.Services.AddOptions<RVS.API.Options.IntakeInviteOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddSingleton<IIntakeInviteRateLimiter, InMemoryIntakeInviteRateLimiter>();
-// Inbound ACS SMS events over Event Grid (issue #665): carrier keywords and delivery reports.
-// The webhook is anonymous, so the subscription's URL carries a shared secret; with no secret
-// configured the endpoint refuses everything rather than accepting unauthenticated writes.
-builder.Services.AddSingleton<IInboundSmsDeduplicator, InMemoryInboundSmsDeduplicator>();
+// Inbound Twilio messaging webhooks (issue #665): carrier keywords and status callbacks. The
+// webhook is anonymous, so every request must carry a valid X-Twilio-Signature; with no auth
+// token configured the endpoint refuses everything rather than accepting unauthenticated writes.
 builder.Services.AddScoped<IInboundSmsEventService, InboundSmsEventService>();
-builder.Services.AddOptions<RVS.API.Options.EventGridInboundOptions>()
-    .Bind(builder.Configuration.GetSection(RVS.API.Options.EventGridInboundOptions.SectionName))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
 
 builder.Services.AddScoped<IPacketPhotoUrlResolver, PacketPhotoUrlResolver>();
 
@@ -425,7 +420,7 @@ builder.Services.AddSingleton<IPacketGenerationQueue, ChannelPacketGenerationQue
 builder.Services.AddScoped<IPacketGenerationService, PacketGenerationService>();
 builder.Services.AddHostedService<PacketGenerationWorker>();
 
-// Packet-email delivery tuning (Spec B-4, issues #438, #521): retry backoff and the ACS size
+// Packet-email delivery tuning (Spec B-4, issues #438, #521): retry backoff and the email size
 // budget. Defaults work unset; an out-of-range MaxRequestBytes stops the app at startup.
 builder.Services.AddOptions<RVS.API.Options.PacketEmailOptions>()
     .Bind(builder.Configuration.GetSection("PacketEmail"))
@@ -709,31 +704,38 @@ else
     builder.Services.AddSingleton<IPreliminaryAssessmentService>(sp => sp.GetRequiredService<RuleBasedPreliminaryAssessmentService>());
 }
 
-// Notifications (Email via ACS, SMS via ACS, Orchestrator)
-// Development sends through staging's ACS resource as the az-login identity. Use
-// AzureCliCredential directly, as Blob does, to skip DefaultAzureCredential's
-// ManagedIdentityCredential probe timeout.
-TokenCredential CreateAcsCredential() => builder.Environment.IsDevelopment()
-    ? new AzureCliCredential()
-    : new DefaultAzureCredential();
+// Notifications (Email via SendGrid, SMS via Twilio, Orchestrator)
+builder.Services.AddOptions<RVS.API.Options.EmailOptions>()
+    .Bind(builder.Configuration.GetSection(RVS.API.Options.EmailOptions.SectionName));
 
-var acsEndpoint = builder.Configuration["AzureCommunicationServices:Endpoint"];
-if (!useMockIntegrations && !string.IsNullOrWhiteSpace(acsEndpoint))
+var sendGridApiKey = builder.Configuration[$"{RVS.API.Options.SendGridOptions.SectionName}:ApiKey"];
+if (!useMockIntegrations && !string.IsNullOrWhiteSpace(sendGridApiKey))
 {
-    builder.Services.AddSingleton(new Azure.Communication.Email.EmailClient(new Uri(acsEndpoint), CreateAcsCredential()));
-    builder.Services.AddScoped<INotificationService, AcsEmailNotificationService>();
+    builder.Services.AddHttpClient<INotificationService, SendGridEmailNotificationService>(client =>
+    {
+        client.BaseAddress = new Uri("https://api.sendgrid.com/");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sendGridApiKey);
+    })
+    .AddStandardResilienceHandler(options =>
+    {
+        // A packet email carries up to ~9.5 MB, so the attempt gets longer than an API call.
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(60);
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(60);
+        // Never retry here: a send that timed out may still have been accepted, and a retry would
+        // deliver it twice. PacketGenerationService owns packet retries (Spec B-4, issue #438).
+        options.Retry.ShouldHandle = _ => ValueTask.FromResult(false);
+    });
 }
 else
 {
     builder.Services.AddSingleton<INotificationService, NoOpNotificationService>();
 }
 
-// SMS (issue #661): off unless AzureCommunicationServices:Sms:Enabled is true, checked before
-// the endpoint — the endpoint is in every vault for email.
-builder.Services.AddSmsNotifications(
-    builder.Configuration,
-    useMockIntegrations,
-    acsUri => new Azure.Communication.Sms.SmsClient(acsUri, CreateAcsCredential()));
+// SMS (issue #661): off unless Sms:Enabled is true, checked before the Twilio credentials —
+// they are in the vault from the day the subaccount exists, before the number is verified.
+builder.Services.AddSmsNotifications(builder.Configuration, useMockIntegrations);
 builder.Services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
 
 // Blob Storage

@@ -52,7 +52,7 @@ public static class PacketHtmlRenderer
     /// <param name="packet">The composed packet.</param>
     /// <param name="managerAppServiceRequestUrl">
     /// When non-blank, a deep link into the Manager app for this service request, shown as a
-    /// note under the photo list: some photos could not be attached to the email (the ACS size
+    /// note under the photo list: some photos could not be attached to the email (the email size
     /// budget, <c>PacketEmailSizeFitter</c>, issue <c>#521</c>) and are visible only there.
     /// <c>null</c> — the default — omits the note; pass it only when the caller has already
     /// determined that at least one photo attachment was dropped (issue <c>#580</c>).
@@ -535,7 +535,7 @@ public static class PacketHtmlRenderer
                 .Append(" — <a href=\"").Append(Attr(video.Url)).Append("\">view video</a></p>\n");
         }
 
-        // One or more photo attachments did not fit the ACS size budget (PacketEmailSizeFitter,
+        // One or more photo attachments did not fit the email size budget (PacketEmailSizeFitter,
         // issue #521) and were left off this email — point the reader at the Manager app instead
         // of silently dropping them (issue #580).
         if (hasDroppedImageNote)

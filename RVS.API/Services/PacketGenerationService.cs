@@ -40,7 +40,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
     private static readonly EventId PacketEmailDeliveryExhausted = new(438_001, nameof(PacketEmailDeliveryExhausted));
 
     /// <summary>
-    /// Event id for a packet email that could not carry its PDF within the ACS size budget
+    /// Event id for a packet email that could not carry its PDF within the email size budget
     /// (<c>Spec B-4</c>, issue #521). The email still goes out; the PDF does not.
     /// </summary>
     private static readonly EventId PacketEmailOversized = new(521_001, nameof(PacketEmailOversized));
@@ -568,7 +568,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
             }
         }
 
-        // Trim the attachment set to what ACS will accept (Spec B-4, #521). Spec A-6 allows ten
+        // Trim the attachment set to the email size budget (Spec B-4, #521). Spec A-6 allows ten
         // 25 MB uploads, so a photo-heavy submission's original photos can exceed the 10 MB
         // request ceiling on their own; before this it failed every attempt and left the shop a
         // request with no packet. The PDF is not the problem (QuestPDF resamples embedded images,
@@ -579,7 +579,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
         if (fit.AnythingDropped)
         {
             _logger.LogWarning(
-                "Packet email for SR {ServiceRequestId} v{PacketVersion} exceeded the {BudgetBytes}-byte ACS budget: attaching {KeptCount} of {CandidateCount} file(s) at ~{EstimatedBytes} bytes, dropping {DroppedFiles}",
+                "Packet email for SR {ServiceRequestId} v{PacketVersion} exceeded the {BudgetBytes}-byte email budget: attaching {KeptCount} of {CandidateCount} file(s) at ~{EstimatedBytes} bytes, dropping {DroppedFiles}",
                 request.Id, packetVersion, _packetEmailOptions.MaxRequestBytes,
                 fit.Attachments.Count, attachments.Count, fit.EstimatedRequestBytes,
                 string.Join(", ", fit.Dropped.Select(d => d.FileName)));
@@ -610,7 +610,7 @@ public sealed class PacketGenerationService : IPacketGenerationService
             // and the packet is stored and downloadable from the manager app.
             _logger.LogCritical(
                 PacketEmailOversized,
-                "Packet email for SR {ServiceRequestId} v{PacketVersion} in tenant {TenantId} went out with no PDF: it did not fit the {BudgetBytes}-byte ACS budget on its own",
+                "Packet email for SR {ServiceRequestId} v{PacketVersion} in tenant {TenantId} went out with no PDF: it did not fit the {BudgetBytes}-byte email budget on its own",
                 request.Id, packetVersion, request.TenantId, _packetEmailOptions.MaxRequestBytes);
         }
 

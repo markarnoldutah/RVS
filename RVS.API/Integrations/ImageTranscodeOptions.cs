@@ -20,7 +20,7 @@ public sealed class ImageTranscodeOptions
     /// a phone or printed inside a 210 × 279 mm greyscale page, and 1600 px is more than
     /// either can show. It cuts a native 12 MP phone photo's pixel count about sixfold, which
     /// is what the emailed attachment set carries. Measured on real photos against the default
-    /// 9.5 MB ACS budget: 2048 px attached six photos with ~0.5 MB to spare and five of ten;
+    /// 9.5 MB email budget: 2048 px attached six photos with ~0.5 MB to spare and five of ten;
     /// 1600 px attaches six at ~6.4 MB and eight of ten. Raise it per environment if a location
     /// needs more zoom-in detail (a serial plate, a wiring run) at the cost of attachments.
     /// </summary>

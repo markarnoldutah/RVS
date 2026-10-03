@@ -9,8 +9,8 @@ namespace RVS.Domain.Tests.Validation;
 /// packet-email size budget (<c>Spec B-4</c>, issue #521).
 ///
 /// Contract under test: a budget must be large enough that the packet PDF always fits, and must
-/// not exceed ACS's request ceiling — above it the original #521 failure (every send rejected,
-/// no packet delivered) quietly returns. Both bounds are inclusive.
+/// not exceed the transport request ceiling — above it the original #521 failure (no packet
+/// delivered) quietly returns. Both bounds are inclusive.
 /// </summary>
 public class PacketEmailBudgetValidatorTests
 {
@@ -36,7 +36,7 @@ public class PacketEmailBudgetValidatorTests
     [Fact]
     public void Validate_ExactlyTheAcsCeiling_ReturnsSuccess()
     {
-        var result = PacketEmailBudgetValidator.Validate(PacketEmailSizeFitter.AcsMaxRequestBytes);
+        var result = PacketEmailBudgetValidator.Validate(PacketEmailSizeFitter.TransportMaxRequestBytes);
 
         result.IsValid.Should().BeTrue();
     }

@@ -353,7 +353,7 @@ public class CustomerProfileTests
     [Fact]
     public void ApplySmsKeyword_WhenEventIsOlderThanTheLastKeyword_ShouldBeIgnored()
     {
-        // Event Grid is unordered: a STOP then START pair can arrive reversed.
+        // Webhooks are unordered: a STOP then START pair can arrive reversed.
         var profile = ProfileForKeywords();
         var newer = new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc);
         profile.ApplySmsKeyword(SmsKeyword.OptIn, newer);
@@ -368,7 +368,7 @@ public class CustomerProfileTests
     [Fact]
     public void ApplySmsKeyword_WhenTheSameEventArrivesTwice_ShouldBeANoOpTheSecondTime()
     {
-        // Event Grid delivers at least once, so a duplicate must not count as a change.
+        // Webhooks can repeat, so a duplicate must not count as a change.
         var profile = ProfileForKeywords();
         var at = new DateTime(2026, 9, 19, 10, 0, 0, DateTimeKind.Utc);
         profile.ApplySmsKeyword(SmsKeyword.OptOut, at);

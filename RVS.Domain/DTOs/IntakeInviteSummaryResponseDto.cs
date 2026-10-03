@@ -33,7 +33,7 @@ public record IntakeInviteSummaryResponseDto
     /// <summary>When the invite was created.</summary>
     public DateTime CreatedAtUtc { get; init; }
 
-    /// <summary>When the text or email was handed to ACS, or <c>null</c> if it never was.</summary>
+    /// <summary>When the text or email was handed to the provider, or <c>null</c> if it never was.</summary>
     public DateTime? SentAtUtc { get; init; }
 
     /// <summary>When the link stops working.</summary>

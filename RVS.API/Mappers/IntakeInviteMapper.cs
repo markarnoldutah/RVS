@@ -6,7 +6,7 @@ namespace RVS.API.Mappers;
 
 /// <summary>
 /// Maps <see cref="IntakeInvite"/> entities to their DTOs at the API boundary
-/// (<c>Spec A-14</c>, issue #663). Neither DTO carries the advisor id, the ACS message id or
+/// (<c>Spec A-14</c>, issue #663). Neither DTO carries the advisor id, the provider message id or
 /// the consent timestamp: the dialog does not need them, and they stay server-side evidence.
 /// </summary>
 public static class IntakeInviteMapper

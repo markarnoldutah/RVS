@@ -68,7 +68,7 @@ github-actions-production  repo:markarnoldutah/RVS:environment:production
 ```bash
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 
-# Primary RG (API, Cosmos, KV, Storage, ACS, OpenAI, App Insights)
+# Primary RG (API, Cosmos, KV, Storage, OpenAI, App Insights)
 az role assignment create \
   --assignee "$APP_ID" \
   --role "Contributor" \
@@ -231,6 +231,6 @@ The DNS module is invoked from both staging and prod deploys against the
 **prod** RG (`rg-rvs-prod-westus3`), because apex zones are global and we
 intentionally co-locate them. Granting the staging deployer RG-wide
 Contributor on the prod RG would let it touch prod App Service, Cosmos,
-Key Vault, Storage, ACS, OpenAI — far more than the CNAME write it actually
+Key Vault, Storage, OpenAI — far more than the CNAME write it actually
 needs. Zone-scoped DNS Zone Contributor caps the blast radius to the two
 record sets the staging deploy actually upserts.

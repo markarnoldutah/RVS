@@ -322,12 +322,12 @@ public class IntakeInviteServiceTests
     {
         var result = await CreateService().CreateAsync(TenantId, LocationId, TextRequest());
 
-        result.Invite.AcsMessageId.Should().Be(MessageId);
+        result.Invite.ProviderMessageId.Should().Be(MessageId);
         result.Invite.DeliveryStatus.Should().Be(IntakeInviteDeliveryStatus.Queued);
         result.Invite.SentAtUtc.Should().Be(Now.UtcDateTime);
         result.IntakeUrl.Should().BeNull("a texted invite's link went to the caller, not back to the advisor");
         _inviteRepoMock.Verify(r => r.UpdateAsync(
-            It.Is<IntakeInvite>(i => i.AcsMessageId == MessageId && i.DeliveryStatus == IntakeInviteDeliveryStatus.Queued),
+            It.Is<IntakeInvite>(i => i.ProviderMessageId == MessageId && i.DeliveryStatus == IntakeInviteDeliveryStatus.Queued),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -353,7 +353,7 @@ public class IntakeInviteServiceTests
 
         var result = await CreateService().CreateAsync(TenantId, LocationId, TextRequest());
 
-        result.Invite.AcsMessageId.Should().Be(MessageId);
+        result.Invite.ProviderMessageId.Should().Be(MessageId);
     }
 
     // ── Self-entry ───────────────────────────────────────────────────────
@@ -578,7 +578,7 @@ public class IntakeInviteServiceTests
     {
         var result = await CreateService().CreateAsync(TenantId, LocationId, EmailRequest());
 
-        result.Invite.AcsMessageId.Should().Be(EmailOperationId);
+        result.Invite.ProviderMessageId.Should().Be(EmailOperationId);
         result.Invite.DeliveryStatus.Should().Be(IntakeInviteDeliveryStatus.Queued);
         result.Invite.SentAtUtc.Should().Be(Now.UtcDateTime);
         result.IntakeUrl.Should().BeNull("an emailed invite's link went to the caller, not back to the advisor");

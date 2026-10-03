@@ -82,7 +82,7 @@ The filenames match the Blazor WASM PWA template's defaults, so these files repl
 `og-image-1200x630.png` is for `og:image` and `twitter:image` on marketing pages.
 
 ## `email/`
-Transparent PNGs for ACS transactional email headers. Use the `@2x` file with `width="300"` set on the `<img>`. Email clients don't reliably support `srcset`. `logo-horizontal-reversed@2x.png` is for dark header bands.
+Transparent PNGs for transactional email headers. Use the `@2x` file with `width="300"` set on the `<img>`. Email clients don't reliably support `srcset`. `logo-horizontal-reversed@2x.png` is for dark header bands.
 
 ## `print/`
 High-resolution transparent PNGs for the service-packet letterhead (`PacketPdfRenderer` / `PacketHtmlRenderer`). If the renderer accepts SVG, use `svg/logo-horizontal.svg` instead; it stays sharp at any size.

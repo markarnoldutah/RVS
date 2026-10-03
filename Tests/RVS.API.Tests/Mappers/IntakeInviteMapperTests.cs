@@ -28,7 +28,7 @@ public class IntakeInviteMapperTests
         SentAtUtc = Created.AddSeconds(1),
         ExpiresAtUtc = Created.AddHours(72),
         RedeemedAtUtc = Created.AddHours(1),
-        AcsMessageId = "Outgoing_abc",
+        ProviderMessageId = "Outgoing_abc",
         DeliveryStatus = IntakeInviteDeliveryStatus.Delivered,
     };
 

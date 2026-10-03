@@ -96,7 +96,7 @@ var criticalEvents = [
     slug: 'email-oversized'
     eventId: '521001'
     idColumn: 'ServiceRequestId'
-    description: 'EventId 521001 PacketEmailOversized — the packet email went out without its PDF because the PDF no longer fits the ACS size budget. Since #566 validates the budget at startup, this means the PDF grew unexpectedly: a renderer regression, an oversized embedded asset (e.g. a per-location logo), or a pathological HTML body. Treat any occurrence as a bug to chase.'
+    description: 'EventId 521001 PacketEmailOversized — the packet email went out without its PDF because the PDF no longer fits the email size budget. Since #566 validates the budget at startup, this means the PDF grew unexpectedly: a renderer regression, an oversized embedded asset (e.g. a per-location logo), or a pathological HTML body. Treat any occurrence as a bug to chase.'
   }
 ]
 

@@ -499,7 +499,7 @@ static List<ContainerProperties> BuildContainerDefinitions()
                     new IncludedPath { Path = "/locationId/?" },
                     new IncludedPath { Path = "/advisorUserId/?" },
                     new IncludedPath { Path = "/createdAtUtc/?" },
-                    new IncludedPath { Path = "/acsMessageId/?" },
+                    new IncludedPath { Path = "/providerMessageId/?" },
                 },
                 ExcludedPaths =
                 {

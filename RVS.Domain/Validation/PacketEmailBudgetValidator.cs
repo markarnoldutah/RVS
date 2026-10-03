@@ -15,11 +15,11 @@ namespace RVS.Domain.Validation;
 /// <c>Spec A-6</c> allows, which is about 3.8 MB once base64 encoded. A budget below
 /// <see cref="MinimumMaxRequestBytes"/> could not reliably hold it.</para>
 ///
-/// <para><b>Upper bound.</b> ACS rejects any request over
-/// <see cref="PacketEmailSizeFitter.AcsMaxRequestBytes"/>. A budget above that would let the
-/// fitter pass a set ACS then refuses, bringing back the original #521 failure: every attempt
-/// rejected, no packet delivered. If ACS approves a larger limit, change that constant
-/// deliberately rather than raising this setting past it.</para>
+/// <para><b>Upper bound.</b> No request may exceed
+/// <see cref="PacketEmailSizeFitter.TransportMaxRequestBytes"/>. A budget above that would let the
+/// fitter pass a set that recipient mailboxes then refuse, bringing back the original #521
+/// failure in a quieter form: a packet that never arrives. Change that constant deliberately
+/// rather than raising this setting past it.</para>
 /// </summary>
 public static class PacketEmailBudgetValidator
 {
@@ -47,11 +47,11 @@ public static class PacketEmailBudgetValidator
                 $"{SettingName} is {maxRequestBytes:N0} bytes; it must be at least {MinimumMaxRequestBytes:N0} so the packet PDF always fits."));
         }
 
-        if (maxRequestBytes > PacketEmailSizeFitter.AcsMaxRequestBytes)
+        if (maxRequestBytes > PacketEmailSizeFitter.TransportMaxRequestBytes)
         {
             return ValidationResult.Failure(string.Create(
                 CultureInfo.InvariantCulture,
-                $"{SettingName} is {maxRequestBytes:N0} bytes; it must not exceed ACS's {PacketEmailSizeFitter.AcsMaxRequestBytes:N0}-byte request ceiling, above which every packet email is rejected."));
+                $"{SettingName} is {maxRequestBytes:N0} bytes; it must not exceed the {PacketEmailSizeFitter.TransportMaxRequestBytes:N0}-byte request ceiling, above which packet emails risk being refused."));
         }
 
         return ValidationResult.Success;

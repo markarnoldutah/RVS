@@ -20,7 +20,7 @@ namespace RVS.API.Services;
 /// A sent invite passes its refusals in order (consent, a valid address for its channel, that
 /// channel enabled, the address not opted out of it, rate limits) before anything is written.
 /// It is then persisted <b>before</b> the message is sent, so the consent record exists even if
-/// the send fails, and updated with the ACS message id afterwards. Both channels draw on one rate
+/// the send fails, and updated with the provider message id afterwards. Both channels draw on one rate
 /// budget.
 /// </summary>
 public sealed class IntakeInviteService : IIntakeInviteService
@@ -280,14 +280,14 @@ public sealed class IntakeInviteService : IIntakeInviteService
     }
 
     /// <summary>
-    /// Records the ACS id and the resulting delivery status. A failed write is logged, not
+    /// Records the provider message id and the resulting delivery status. A failed write is logged, not
     /// thrown: the message is already out and the token works regardless of this field, so
     /// failing the request would only prompt a resend, and a second message to the caller.
     /// </summary>
     private async Task RecordSendAsync(
         IntakeInvite invite, string advisorUserId, string? messageId, CancellationToken cancellationToken)
     {
-        invite.AcsMessageId = messageId;
+        invite.ProviderMessageId = messageId;
         invite.SentAtUtc = messageId is null ? null : _timeProvider.GetUtcNow().UtcDateTime;
         invite.DeliveryStatus = messageId is null ? IntakeInviteDeliveryStatus.Failed : IntakeInviteDeliveryStatus.Queued;
         invite.MarkAsUpdated(advisorUserId);

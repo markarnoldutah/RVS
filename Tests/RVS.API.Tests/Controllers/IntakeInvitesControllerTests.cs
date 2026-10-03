@@ -139,7 +139,7 @@ public class IntakeInvitesControllerTests
         ConsentCapturedAtUtc = DateTime.UtcNow,
         SentAtUtc = DateTime.UtcNow,
         ExpiresAtUtc = DateTime.UtcNow.AddHours(72),
-        AcsMessageId = "Outgoing_abc",
+        ProviderMessageId = "Outgoing_abc",
         DeliveryStatus = IntakeInviteDeliveryStatus.Queued,
     };
 

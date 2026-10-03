@@ -98,23 +98,25 @@ param opsAlertEmailReceivers = [
   }
 ]
 
-// Communication Services (Email + SMS)
-param deployAcs = true
+// Messaging: email through SendGrid, SMS through Twilio (Oct 2 2026 — ACS removed
+// before go-live; it retires Sep 30 2028). Neither is an Azure resource. Keys
+// live in Key Vault (SendGrid--ApiKey, Twilio--AccountSid / --ApiKeySid /
+// --ApiKeySecret / --AuthToken), set by hand; README "Email — SendGrid" and
+// "SMS — Twilio".
 
-// Custom sending subdomain for staging (#532) — on staging's own ACS resource,
-// never prod's. ACS tracks failures, the suppression list and send quota per
-// resource and domain, and staging fails many sends (seeded recipients are
-// .example.com), so sharing prod's would spend prod's bounce budget while it
-// warms. A sibling of mail.rvintake.com, not a child of it — literally so since
-// #634 renamed it from mail.staging.rvintake.com: both are now direct labels
-// under rvintake.com, which also makes the derived DNS sub-label a single label
-// in every environment, the shape the rest of main.bicep already assumes.
-// Replaces the
-// Azure-managed *.azurecomm.net domain (10/hour, not raisable, lands in Junk).
-// Manual follow-up is verification only — no quota request, no warming:
-// README "Communication Services — Email". Keep staging recipients to
-// mailboxes we control; that is what keeps rvintake.com's reputation clean.
-param acsCustomEmailDomain = 'mail-staging.rvintake.com'
+// Sending subdomain for all staging email, authenticated in SendGrid.
+// A sibling of mail.rvintake.com with its own SendGrid domain authentication,
+// so staging's failed sends (seeded recipients are .example.com) never touch
+// prod's sender reputation. Keep staging recipients to mailboxes we control.
+param mailSendingDomain = 'mail-staging.rvintake.com'
+// The three CNAMEs SendGrid domain authentication (automated security) shows for
+// mail-staging.rvintake.com, with names relative to rvintake.com, e.g.
+//   { name: 'em1234.mail-staging', target: 'u1234.wl.sendgrid.net' }
+//   { name: 's1._domainkey.mail-staging', target: 's1.domainkey.u1234.wl.sendgrid.net' }
+//   { name: 's2._domainkey.mail-staging', target: 's2.domainkey.u1234.wl.sendgrid.net' }
+// Empty until the domain is added in SendGrid; the mailSendingDomainAction
+// output says what is left to do.
+param sendGridDnsRecords = []
 // DMARC aggregate-report destination (#608): a monitored mailbox on the filing
 // entity's own domain, the same address the Intake footer shows (SiteIdentity.cs).
 //
@@ -130,33 +132,16 @@ param acsCustomEmailDomain = 'mail-staging.rvintake.com'
 // placeholder, until 2026-09-17. Then dmarc-reports@rvintake.com, which bounced
 // because rvintake.com has no MX. It now has a null MX (prod apex, #608).
 param dmarcReportingAddress = 'support@arnolddigitalsolutions.com'
-// Verified and linked. Must stay true: false unlinks the domain on redeploy.
-//
-// The #634 rename ran the full three-phase sequence on 2026-09-17: deploy with
-// false (creating the domain and its records under the new `mail-staging` label),
-// verify out of band, then this flip to link it. Domain, SPF, DKIM and DKIM2 all
-// read Verified before it was flipped — ACS rejects linking an unverified domain,
-// so a fresh domain always starts at false. DMARC stays NotStarted by design:
-// Bicep authors that record itself rather than taking it from ACS, so it is not
-// part of ACS's verification set.
-param acsCustomDomainVerified = true
-// SMS (#661). Staging's ACS resource owns toll-free +18662319618 (bought
-// 2026-04-12). Off until that number clears toll-free verification (#659);
-// flip acsSmsEnabled to true and redeploy once the portal shows it verified.
-param acsSmsFromPhoneNumber = '+18662319618'
-param acsSmsEnabled = false
 
-// Inbound Event Grid webhook (#665, #678). The value lives only in Key Vault as
-// EventGrid--Inbound--Key; this line makes ARM read it at deploy time, so it is
-// never typed, never on a command line and never in this file. Every deploy
-// picks up the current value. If the secret cannot be read (missing, vault not
-// enabledForTemplateDeployment, deployer lacks
-// Microsoft.KeyVault/vaults/deploy/action) the deploy FAILS before creating or
-// removing anything, rather than quietly deploying no subscription.
-// The subscription id is the one this environment deploys into; getSecret needs
-// it as a literal. Rotation and first bring-up of a brand-new environment: see
-// the runbook in RVS_Infrastructure.md.
-param eventGridWebhookKey = az.getSecret('4d1d5e99-e872-496d-98be-e8a0a4232aec', 'rg-rvs-staging-westus3', 'kv-rvs-staging-wus3', 'EventGrid--Inbound--Key')
+// SMS (#661). The staging Twilio subaccount's toll-free number and the Messaging
+// Service that holds it. Both empty until they are bought and created in the
+// Twilio console. Leave smsEnabled false until Twilio shows the number's
+// toll-free verification approved (#659), then flip it and redeploy (G-4).
+// The ACS numbers (+18662319618 staging, +18332398230 prod) were released on
+// Oct 2 2026 and are gone.
+param smsFromPhoneNumber = ''
+param twilioMessagingServiceSid = ''
+param smsEnabled = false
 
 // Static Web Apps — Free tier. Staging stays on Free permanently; it needs no SLA,
 // and Free's two custom domains per app cover the one each app binds.

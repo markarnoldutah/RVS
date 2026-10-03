@@ -53,7 +53,7 @@ public class IntakeInviteStatusFormattingTests
     [Fact]
     public void Describe_WhenQueued_ShouldReadAsSent()
     {
-        // "queued" is ACS's word. The advisor's word is "sent" — the carrier hasn't confirmed yet.
+        // "queued" is the provider's word. The advisor's word is "sent" — the carrier hasn't confirmed yet.
         var display = IntakeInviteStatusFormatting.Describe(Invite("queued"), Now);
 
         display.Label.Should().Be("Sent");

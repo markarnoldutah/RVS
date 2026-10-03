@@ -22,7 +22,7 @@ Version 1.0 was written against the build of September 10. Since then:
 ## How to run this plan
 
 - **Environment.** Run against staging (`staging.rvintake.com`, `manager-staging.rvintake.com`, `go-staging.rvintake.com`) unless a test says otherwise. Hostnames below are written for production. Substitute the staging names.
-- **Record the environment's texting state before starting.** Texting is off until the toll-free number is verified (`AzureCommunicationServices:Sms:Enabled`, go-live item G-4). With it off, every test marked **[SMS]** is skipped and noted as skipped, and the email-fallback tests run instead.
+- **Record the environment's texting state before starting.** Texting is off until the toll-free number is verified (`Sms:Enabled`, go-live item G-4). With it off, every test marked **[SMS]** is skipped and noted as skipped, and the email-fallback tests run instead.
 - **Accounts you need:**
   - a manager-app user whose role has `intake-invites:send` (e.g. `dealer:owner`)
   - a second user in the same tenant whose role does not have it (e.g. `dealer:readonly`)
@@ -376,7 +376,7 @@ Skip this whole part, and record it as skipped, while texting is off in the envi
 - [ ] From the customer's phone, reply **STOP** to the RV Intake number. The carrier replies, RVS does not send a second reply, and the customer's record now has the SMS opt-out set.
 - [ ] After STOP, submit an intake from that number with preference **Text**. The confirmation goes by email.
 - [ ] Reply **START** (or **UNSTOP**). The SMS opt-out is cleared, and the next Text-preference intake confirms by text.
-- [ ] Reply **HELP**. Exactly one fixed reply comes back, naming RV Intake, pointing at the dealership for help and repeating STOP.
+- [ ] Reply **HELP**. Exactly one fixed reply comes back (Twilio sends it; RVS must not send a second), naming RV Intake, pointing at the dealership for help and repeating STOP. It matches `InboundSmsReplyContent.Help` word for word.
 - [ ] Send any other text ("hi, is my RV ready?"). Nothing is answered or stored.
 - [ ] An invite texted to a number that cannot receive it shows as *Not delivered* in **Sent this shift**.
 

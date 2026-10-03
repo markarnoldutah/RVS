@@ -1,14 +1,14 @@
 namespace RVS.Domain.Integrations;
 
 /// <summary>
-/// Sends transactional email notifications via Azure Communication Services in production,
-/// with a no-op implementation for local development.
+/// Sends transactional email notifications via SendGrid, with a no-op implementation wherever
+/// no SendGrid API key is configured.
 /// </summary>
 public interface INotificationService
 {
     /// <summary>
     /// Whether this service actually sends. <c>false</c> for the no-op implementation, which is
-    /// registered wherever no ACS endpoint is configured. The advisor invite dialog reads it to
+    /// registered wherever no SendGrid API key is configured. The advisor invite dialog reads it to
     /// decide whether to offer email (<c>Spec A-14</c>, issue #693).
     /// </summary>
     bool IsEnabled { get; }
@@ -23,7 +23,7 @@ public interface INotificationService
     Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sends one email and reports whether ACS took it, for a caller that records the outcome:
+    /// Sends one email and reports whether SendGrid took it, for a caller that records the outcome:
     /// today the emailed advisor intake invite (<c>Spec A-14</c>, issue #693). Unlike
     /// <see cref="SendEmailAsync"/> it awaits the submit call; unlike
     /// <see cref="SendPacketEmailAsync"/> it never throws for a failed send.
@@ -34,8 +34,8 @@ public interface INotificationService
     /// <param name="plainTextBody">Plain-text alternative body.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// The ACS operation id when ACS accepted the message; <c>null</c> when nothing was sent or
-    /// ACS rejected it.
+    /// The SendGrid message id when SendGrid accepted the message; <c>null</c> when nothing was
+    /// sent or SendGrid rejected it.
     /// </returns>
     /// <exception cref="System.ArgumentException">An argument is null, empty or whitespace.</exception>
     Task<string?> SendTransactionalEmailAsync(

@@ -1,3 +1,5 @@
+> **Status, Oct 2 2026: not sent, and addressed to the wrong provider now.** It was written for Microsoft before Azure Communication Services was removed; the ACS numbers are released. The filing-model question itself (#676 — an ISV sending for many dealers from one number) still stands for Twilio. If Twilio's toll-free form and its ISV guidance don't settle it, re-address this to Twilio support, replacing the quoted guideline wording (Microsoft's) with Twilio's and the resource details with the two subaccounts.
+
 Subject: Toll-free verification for an ISV sending on behalf of many customer businesses — filing model question before we submit
 
 Hello,

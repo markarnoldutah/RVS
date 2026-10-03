@@ -68,7 +68,7 @@ The central document. Field groups:
 
 Per-tenant customer record. Contact fields, email/SMS opt-out flags, `assetsOwned[]`, `serviceRequestIds[]`, aggregate counts.
 
-`phone` keeps what the customer typed; `phoneE164` is the same number normalised, or null when it does not normalise, and it is the only form a lookup can match (#665). It is indexed in both `cosmos-db.bicep` and the seeder. `smsKeywordAtUtc` records when the last inbound keyword RVS acted on was *sent*, and an event at or before it is ignored — Event Grid delivers at least once and in no fixed order, so without it a stale `STOP` could undo a later `START`.
+`phone` keeps what the customer typed; `phoneE164` is the same number normalised, or null when it does not normalise, and it is the only form a lookup can match (#665). It is indexed in both `cosmos-db.bicep` and the seeder. `smsKeywordAtUtc` records when the last inbound keyword RVS acted on was *sent*, and an event at or before it is ignored — webhooks can repeat and arrive in no fixed order, so without it a stale `STOP` could undo a later `START`. Twilio's inbound webhook carries no timestamp, so the value is the time RVS received it.
 
 ### GlobalCustomerAcct — `global-customer-accounts`
 
@@ -112,17 +112,17 @@ An advisor-initiated intake invite (`Spec A-14`, issue #663). `id` is `InviteTok
 | `channel` | `sms` or `email` (`IntakeInviteChannel`, #693). Absent on invites written before #693, which read as `sms`; meaningless for self-entry |
 | `isSelfEntry` | *Fill it in myself*: minted for the advisor, never sent |
 | `consentCapturedAtUtc` | When the advisor confirmed the caller's verbal consent to the text or email. Separate from `sentAtUtc` and from delivery, never cleared; `null` only for self-entry |
-| `sentAtUtc` | When ACS accepted the text or email; `null` for self-entry or a send that never reached ACS |
+| `sentAtUtc` | When Twilio or SendGrid accepted the text or email; `null` for self-entry or a send that never reached the provider |
 | `expiresAtUtc` | `createdAtUtc` + `IntakeInvites:ExpiryHours` (72) |
 | `redeemedAtUtc`, `serviceRequestId` | Set on intake **submission**, not on open (#664): link previews fetch the URL, and redeeming on open would spend the invite before the customer tapped it. Written after the service request is created; a failed write is logged and the submission stands. `IntakeInvite.IsRedeemableAt` (unredeemed and `expiresAtUtc` in the future) gates both prefill and attribution |
-| `acsMessageId` | The ACS SMS message id, which delivery reports are matched back by (#665), or the ACS email operation id for an emailed invite, which nothing reads yet |
+| `providerMessageId` | The Twilio Message SID, which status callbacks are matched back by (#665), or the SendGrid message id for an emailed invite, which nothing reads yet. Was `acsMessageId` until Oct 2 2026; no data was migrated (prod held test tenants only) |
 | `deliveryStatus` | `pending` → `queued` / `failed`; then `delivered` / `failed` from SMS delivery reports. An emailed invite stops at `queued` or `failed`. `notSent` for self-entry |
 
 **No TTL, and never deleted.** The consent fields are the opt-in evidence for toll-free verification and for any complaint, so the document outlives the invite. `expiresAtUtc` retires the token, not the record.
 
 The opt-out check before a text reads `customer-profiles` in the tenant's partition for `smsOptOut = true` and compares each stored phone after E.164 normalisation, because stored phones are as the customer typed them. Before an email it reads the tenant's profile for that address with `GetByEmailAsync` (stored lower-cased, so one lookup) and refuses on `emailOptOut`. It does not read `global-customer-accounts` (partitioned by email, so that would be cross-partition).
 
-**Inbound keywords write across tenants (#665).** `STOP` and its synonyms set `smsOptOut`; `START` and `UNSTOP` clear it, and a keyword is the only thing that clears it, since intake sets an opt-out but never clears one (#673). The keyword arrives with a phone number and no tenant, and the toll-free sending number is shared, so `ListByPhoneE164AcrossTenantsAsync` matches `phoneE164` in **every** tenant's partition and each matching profile is updated. Scoping it to one tenant would leave the other dealers texting into a carrier block. Keyword traffic is rare and the result is bounded by how many dealers know one customer. A number matching no profile is a no-op: the carrier still enforces its own block. `HELP` writes nothing at all — it is answered with a fixed reply and is neither consent nor a revocation, so it needs no profile and does not move `smsKeywordAtUtc`. Delivery reports match an invite through `GetByAcsMessageIdAcrossTenantsAsync` on the already-indexed `acsMessageId`, for the same reason — a report carries no tenant.
+**Inbound keywords write across tenants (#665).** `STOP` and its synonyms set `smsOptOut`; `START` and `UNSTOP` clear it, and a keyword is the only thing that clears it, since intake sets an opt-out but never clears one (#673). The keyword arrives with a phone number and no tenant, and the toll-free sending number is shared, so `ListByPhoneE164AcrossTenantsAsync` matches `phoneE164` in **every** tenant's partition and each matching profile is updated. Scoping it to one tenant would leave the other dealers texting into a carrier block. Keyword traffic is rare and the result is bounded by how many dealers know one customer. A number matching no profile is a no-op: the carrier still enforces its own block. `HELP` writes nothing at all — Twilio answers it with a fixed reply and it is neither consent nor a revocation, so it needs no profile and does not move `smsKeywordAtUtc`. Status callbacks match an invite through `GetByProviderMessageIdAcrossTenantsAsync` on the indexed `providerMessageId`, for the same reason — a callback carries no tenant.
 
 ### AssetLedgerEntry — `asset-ledger`
 

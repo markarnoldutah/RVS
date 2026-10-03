@@ -25,14 +25,20 @@ param environmentName string
 @description('Key Vault URI for configuration provider. Leave empty to skip.')
 param keyVaultUri string = ''
 
-@description('Packet-email sender address, sourced from the deployed ACS domain — the custom verified subdomain when one is configured (DoNotReply@mail.rvintake.com, #532), otherwise the Azure-managed domain (DoNotReply@<guid>.azurecomm.net). Leave empty to skip — the API then falls back to its built-in default.')
-param acsEmailFromAddress string = ''
+@description('Email sender address on the SendGrid-authenticated sending subdomain (DoNotReply@mail.rvintake.com in prod). Leave empty to skip — the API then refuses to build the email sender, which is the point: there is no safe default.')
+param emailFromAddress string = ''
 
 @description('Outbound SMS switch (#661). Always written, so the environment\'s state is explicit in its app settings rather than inherited from appsettings.json.')
-param acsSmsEnabled bool = false
+param smsEnabled bool = false
 
-@description('E.164 number the environment\'s ACS resource owns (#661). Leave empty to skip.')
-param acsSmsFromPhoneNumber string = ''
+@description('E.164 toll-free number in the environment\'s Twilio Messaging Service (#661). Leave empty to skip.')
+param smsFromPhoneNumber string = ''
+
+@description('Twilio Messaging Service SID (MG…). Not a secret. Leave empty to skip.')
+param twilioMessagingServiceSid string = ''
+
+@description('Public origin of the API (https://api.rvserviceflow.com). Twilio signs each webhook over the exact URL it called, and App Service terminates TLS in front of the app, so the API cannot rebuild that URL from the request. Leave empty to skip — the webhook then refuses every request.')
+param twilioWebhookBaseUrl string = ''
 
 @description('When true, also applies settings to the staging deployment slot with ASPNETCORE_ENVIRONMENT=Staging.')
 param configureStagingSlot bool = false
@@ -40,6 +46,34 @@ param configureStagingSlot bool = false
 // ── Variables ──────────────────────────────────────────────────
 
 var aspNetCoreEnvironment = environmentName == 'prod' ? 'Production' : 'Staging'
+
+// Email (SendGrid) and SMS (Twilio). The secrets — SendGrid--ApiKey and Twilio--* —
+// come from Key Vault through the configuration provider, not from here.
+var messagingSettings = union(
+  !empty(emailFromAddress)
+    ? {
+        Email__FromAddress: emailFromAddress
+      }
+    : {},
+  {
+    Sms__Enabled: string(smsEnabled)
+  },
+  !empty(smsFromPhoneNumber)
+    ? {
+        Sms__FromPhoneNumber: smsFromPhoneNumber
+      }
+    : {},
+  !empty(twilioMessagingServiceSid)
+    ? {
+        Twilio__MessagingServiceSid: twilioMessagingServiceSid
+      }
+    : {},
+  !empty(twilioWebhookBaseUrl)
+    ? {
+        Twilio__WebhookBaseUrl: twilioWebhookBaseUrl
+      }
+    : {}
+)
 
 // ── Resources ─────────────────────────────────────────────────
 
@@ -64,19 +98,7 @@ resource appSettings 'Microsoft.Web/sites/config@2024-11-01' = {
           KeyVault__VaultUri: keyVaultUri
         }
       : {},
-    !empty(acsEmailFromAddress)
-      ? {
-          AzureCommunicationServices__Email__FromAddress: acsEmailFromAddress
-        }
-      : {},
-    {
-      AzureCommunicationServices__Sms__Enabled: string(acsSmsEnabled)
-    },
-    !empty(acsSmsFromPhoneNumber)
-      ? {
-          AzureCommunicationServices__Sms__FromPhoneNumber: acsSmsFromPhoneNumber
-        }
-      : {}
+    messagingSettings
   )
 }
 
@@ -104,18 +126,6 @@ resource stagingSlotAppSettings 'Microsoft.Web/sites/slots/config@2024-11-01' = 
           KeyVault__VaultUri: keyVaultUri
         }
       : {},
-    !empty(acsEmailFromAddress)
-      ? {
-          AzureCommunicationServices__Email__FromAddress: acsEmailFromAddress
-        }
-      : {},
-    {
-      AzureCommunicationServices__Sms__Enabled: string(acsSmsEnabled)
-    },
-    !empty(acsSmsFromPhoneNumber)
-      ? {
-          AzureCommunicationServices__Sms__FromPhoneNumber: acsSmsFromPhoneNumber
-        }
-      : {}
+    messagingSettings
   )
 }
