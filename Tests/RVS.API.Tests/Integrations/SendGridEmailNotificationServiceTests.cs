@@ -172,13 +172,14 @@ public class SendGridEmailNotificationServiceTests
     // ---- SendEmailAsync -----------------------------------------------------------------------
 
     [Theory]
-    [InlineData(null, "s", "h")]
-    [InlineData("kim@example.com", "", "h")]
-    [InlineData("kim@example.com", "s", "  ")]
+    [InlineData(null, "s", "h", "t")]
+    [InlineData("kim@example.com", "", "h", "t")]
+    [InlineData("kim@example.com", "s", "  ", "t")]
+    [InlineData("kim@example.com", "s", "h", "")]
     public async Task SendEmailAsync_WhenAnArgumentIsBlank_ShouldThrowArgumentException(
-        string? to, string? subject, string? html)
+        string? to, string? subject, string? html, string? text)
     {
-        var act = () => CreateService().SendEmailAsync(to!, subject!, html!);
+        var act = () => CreateService().SendEmailAsync(to!, subject!, html!, text!);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -189,9 +190,23 @@ public class SendGridEmailNotificationServiceTests
         // Fire-and-forget: the caller never learns about a failure, and must never see one.
         _handler.Respond(HttpStatusCode.InternalServerError);
 
-        var act = () => CreateService().SendEmailAsync("kim@example.com", "Hello", "<p>Hi</p>");
+        var act = () => CreateService().SendEmailAsync("kim@example.com", "Hello", "<p>Hi</p>", "Hi");
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SendEmailAsync_ShouldSendPlainTextBeforeHtml()
+    {
+        // Issue #829: the confirmation used to go out HTML-only.
+        _handler.Respond(HttpStatusCode.Accepted, messageId: "msg-1");
+
+        await CreateService().SendEmailAsync("kim@example.com", "Hello", "<p>Hi</p>", "Hi");
+        await _handler.WaitForRequestsAsync(1);
+
+        var content = _handler.Requests[0].Json.GetProperty("content").EnumerateArray().ToList();
+        content.Select(c => c.GetProperty("type").GetString()).Should().Equal("text/plain", "text/html");
+        content[0].GetProperty("value").GetString().Should().Be("Hi");
     }
 
     // ---- SendPacketEmailAsync -----------------------------------------------------------------
@@ -292,7 +307,18 @@ public class SendGridEmailNotificationServiceTests
     {
         private Func<HttpResponseMessage> _respond = () => new HttpResponseMessage(HttpStatusCode.Accepted);
 
+        private readonly SemaphoreSlim _seen = new(0);
+
         public List<RecordedRequest> Requests { get; } = [];
+
+        /// <summary>Waits for a fire-and-forget send to reach the handler.</summary>
+        public async Task WaitForRequestsAsync(int count)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                (await _seen.WaitAsync(TimeSpan.FromSeconds(5))).Should().BeTrue("the send should reach the handler");
+            }
+        }
 
         public void Respond(HttpStatusCode status, string? messageId = null) => _respond = () =>
         {
@@ -313,6 +339,7 @@ public class SendGridEmailNotificationServiceTests
         {
             var body = request.Content is null ? "{}" : await request.Content.ReadAsStringAsync(cancellationToken);
             Requests.Add(new RecordedRequest(request.Method, request.RequestUri!.AbsolutePath, JsonDocument.Parse(body).RootElement.Clone()));
+            _seen.Release();
             return _respond();
         }
     }

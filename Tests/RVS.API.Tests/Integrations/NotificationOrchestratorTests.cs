@@ -98,6 +98,7 @@ public class NotificationOrchestratorTests
                 Email,
                 It.Is<string>(s => s.Contains("Blue Compass RV")),
                 It.Is<string>(b => b.Contains(StatusUrl) && b.Contains(DealerPhone)),
+                It.Is<string>(t => t.Contains(StatusUrl) && t.Contains(DealerPhone) && !t.Contains('<')),
                 It.IsAny<CancellationToken>()),
             Times.Once);
         VerifyNoSms();
@@ -208,6 +209,7 @@ public class NotificationOrchestratorTests
                 Email,
                 It.IsAny<string>(),
                 It.Is<string>(b => b.Contains(StatusUrl) && !b.Contains(DealerPhone)),
+                It.IsAny<string>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
         _smsMock.Verify(
@@ -228,6 +230,7 @@ public class NotificationOrchestratorTests
                 Email,
                 It.IsAny<string>(),
                 It.Is<string>(b => b.Contains("Hi Jane,") && b.Contains("This link expires in 90 days.")),
+                It.Is<string>(t => t.StartsWith("Hi Jane,") && t.Contains("This link expires in 90 days.")),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -305,12 +308,12 @@ public class NotificationOrchestratorTests
 
     private void VerifyEmailSentTo(string toEmail) =>
         _emailMock.Verify(
-            e => e.SendEmailAsync(toEmail, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            e => e.SendEmailAsync(toEmail, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
     private void VerifyNoEmail() =>
         _emailMock.Verify(
-            e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
     private void VerifyNoSms() =>

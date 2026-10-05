@@ -14,13 +14,18 @@ public interface INotificationService
     bool IsEnabled { get; }
 
     /// <summary>
-    /// Sends a generic email message.
+    /// Sends a generic email message, fire-and-forget: a failure is logged, never thrown.
+    /// Every message carries a plain-text alternative (issue #829), which some spam filters
+    /// expect and which plain-text clients show instead of the HTML.
     /// </summary>
     /// <param name="toEmail">Recipient email address.</param>
     /// <param name="subject">Email subject line.</param>
     /// <param name="htmlBody">HTML-formatted email body.</param>
+    /// <param name="plainTextBody">The same message as plain text.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default);
+    Task SendEmailAsync(
+        string toEmail, string subject, string htmlBody, string plainTextBody,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sends one email and reports whether SendGrid took it, for a caller that records the outcome:

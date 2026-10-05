@@ -133,6 +133,48 @@ public class ServiceRequestConfirmationContentTests
             .And.NotContain("<b>Jane</b>");
     }
 
+    // ---- Plain-text alternative (issue #829) ---------------------------------------------------
+
+    [Fact]
+    public void BuildEmailPlainTextBody_ShouldSayWhatTheHtmlSaysWithTheBareStatusLink()
+    {
+        var text = BuildEmailPlainTextBody();
+
+        text.Should().StartWith($"Hi {FirstName},")
+            .And.Contain($"Thank you for submitting a service request for your RV to {DealershipName}.")
+            .And.Contain($"\n{StatusUrl}\n", "a plain-text client shows the link on its own line, unwrapped")
+            .And.Contain($"You're receiving this email from RV Intake on behalf of {DealershipName} because you submitted a service request. This link expires in 90 days.")
+            .And.EndWith($"If you have questions, please contact {DealershipName} directly at {DealerPhone}.");
+    }
+
+    [Fact]
+    public void BuildEmailPlainTextBody_ShouldCarryNoMarkupOrEntities()
+    {
+        var text = ServiceRequestConfirmationContent.BuildEmailPlainTextBody(
+            "Tom & Jerry's RV", "Jane", StatusUrl, 90, DealerPhone);
+
+        text.Should().Contain("Tom & Jerry's RV")
+            .And.NotContain("&amp;")
+            .And.NotContain("<");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public void BuildEmailPlainTextBody_WhenFirstNameIsMissing_ShouldGreetWithoutAName(string? firstName)
+    {
+        BuildEmailPlainTextBody(firstName: firstName).Should().StartWith("Hi,");
+    }
+
+    [Fact]
+    public void BuildEmailPlainTextBody_WhenExpiryAndPhoneAreUnknown_ShouldOmitBoth()
+    {
+        var text = BuildEmailPlainTextBody(expiresInDays: null, dealerPhone: null);
+
+        text.Should().NotContain("expires")
+            .And.EndWith($"If you have questions, please contact {DealershipName} directly.");
+    }
+
     [Fact]
     public void BuildSmsBody_ShouldContainStatusLink()
     {
@@ -215,4 +257,8 @@ public class ServiceRequestConfirmationContentTests
     private static string BuildEmailHtmlBody(
         string? firstName = FirstName, int? expiresInDays = 90, string? dealerPhone = DealerPhone) =>
         ServiceRequestConfirmationContent.BuildEmailHtmlBody(DealershipName, firstName, StatusUrl, expiresInDays, dealerPhone);
+
+    private static string BuildEmailPlainTextBody(
+        string? firstName = FirstName, int? expiresInDays = 90, string? dealerPhone = DealerPhone) =>
+        ServiceRequestConfirmationContent.BuildEmailPlainTextBody(DealershipName, firstName, StatusUrl, expiresInDays, dealerPhone);
 }

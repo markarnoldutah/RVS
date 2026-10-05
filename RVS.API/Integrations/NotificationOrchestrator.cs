@@ -71,7 +71,9 @@ public sealed class NotificationOrchestrator : INotificationOrchestrator
             var subject = ServiceRequestConfirmationContent.BuildEmailSubject(dealershipName);
             var htmlBody = ServiceRequestConfirmationContent.BuildEmailHtmlBody(
                 dealershipName, customerFirstName, statusUrl, statusLinkExpiresInDays, dealerPhone);
-            await _emailService.SendEmailAsync(toEmail!, subject, htmlBody, cancellationToken);
+            var plainTextBody = ServiceRequestConfirmationContent.BuildEmailPlainTextBody(
+                dealershipName, customerFirstName, statusUrl, statusLinkExpiresInDays, dealerPhone);
+            await _emailService.SendEmailAsync(toEmail!, subject, htmlBody, plainTextBody, cancellationToken);
             return;
         }
 

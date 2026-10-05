@@ -879,9 +879,34 @@ public class LocationServiceTests
 
         await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "Bounced");
 
-        _notificationMock.Verify(n => n.SendEmailAsync("a@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        _notificationMock.Verify(n => n.SendEmailAsync("b@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        _notificationMock.Verify(n => n.SendEmailAsync("dead@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notificationMock.Verify(n => n.SendEmailAsync("a@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notificationMock.Verify(n => n.SendEmailAsync("b@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notificationMock.Verify(n => n.SendEmailAsync("dead@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DisableRecipientForBounceAsync_ShouldSendThePlainTextNoticeWithoutMarkup()
+    {
+        // Issue #829: every email carries a plain-text alternative.
+        var location = BuildLocation();
+        location.PacketConfig = new PacketConfigEmbedded
+        {
+            Recipients = ["a@dealer.com", "dead@dealer.com"],
+        };
+
+        _locationRepoMock.Setup(r => r.GetByIdAsync("ten_1", location.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(location);
+        _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Location e, CancellationToken _) => e);
+
+        await _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "Bounced");
+
+        _notificationMock.Verify(n => n.SendEmailAsync(
+            "a@dealer.com",
+            It.IsAny<string>(),
+            It.Is<string>(html => html.Contains("<strong>dead@dealer.com</strong>")),
+            It.Is<string>(text => text.Contains("dead@dealer.com") && text.Contains("(Bounced)") && !text.Contains('<')),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -900,7 +925,7 @@ public class LocationServiceTests
         result.PacketConfig.Recipients.Should().BeEmpty();
         result.PacketConfig.DisabledRecipients.Should().ContainSingle();
         _notificationMock.Verify(
-            n => n.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            n => n.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -919,7 +944,7 @@ public class LocationServiceTests
         result.PacketConfig.DisabledRecipients.Should().BeEmpty();
         _locationRepoMock.Verify(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Never);
         _notificationMock.Verify(
-            n => n.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            n => n.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -937,13 +962,13 @@ public class LocationServiceTests
         _locationRepoMock.Setup(r => r.UpdateAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Location e, CancellationToken _) => e);
         _notificationMock
-            .Setup(n => n.SendEmailAsync("bad@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(n => n.SendEmailAsync("bad@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("transport down"));
 
         var act = () => _sut.DisableRecipientForBounceAsync("ten_1", location.Id, "dead@dealer.com", "Bounced");
 
         await act.Should().NotThrowAsync();
-        _notificationMock.Verify(n => n.SendEmailAsync("good@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notificationMock.Verify(n => n.SendEmailAsync("good@dealer.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── ReEnableRecipientAsync (Spec B-4, issue #439) ────────────────────────

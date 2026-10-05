@@ -315,22 +315,25 @@ public sealed class LocationService : ILocationService
     private async Task NotifyRemainingRecipientsAsync(
         Location location, string disabledEmail, string? reason, IReadOnlyList<string> remaining, CancellationToken cancellationToken)
     {
-        var reasonSuffix = string.IsNullOrWhiteSpace(reason)
-            ? string.Empty
-            : $" ({WebUtility.HtmlEncode(reason.Trim())})";
+        var reasonSuffix = string.IsNullOrWhiteSpace(reason) ? string.Empty : $" ({reason.Trim()})";
         var subject = "[RVS] A packet email recipient was disabled after a hard bounce";
+        const string FollowUp =
+            "Packets will keep going to the remaining recipients. Once the address is fixed, re-add it "
+            + "in the location's packet settings.";
         var htmlBody =
             $"<p>The address <strong>{WebUtility.HtmlEncode(disabledEmail)}</strong> was removed from the "
             + $"service-packet recipients for <strong>{WebUtility.HtmlEncode(location.Name)}</strong> because "
-            + $"email to it hard-bounced{reasonSuffix}.</p>"
-            + "<p>Packets will keep going to the remaining recipients. Once the address is fixed, re-add it "
-            + "in the location's packet settings.</p>";
+            + $"email to it hard-bounced{WebUtility.HtmlEncode(reasonSuffix)}.</p>"
+            + $"<p>{WebUtility.HtmlEncode(FollowUp)}</p>";
+        var plainTextBody =
+            $"The address {disabledEmail} was removed from the service-packet recipients for {location.Name} "
+            + $"because email to it hard-bounced{reasonSuffix}.\n\n{FollowUp}";
 
         foreach (var recipient in remaining)
         {
             try
             {
-                await _notificationService.SendEmailAsync(recipient, subject, htmlBody, cancellationToken);
+                await _notificationService.SendEmailAsync(recipient, subject, htmlBody, plainTextBody, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

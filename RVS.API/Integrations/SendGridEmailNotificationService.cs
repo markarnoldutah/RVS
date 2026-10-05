@@ -92,13 +92,16 @@ public sealed class SendGridEmailNotificationService : INotificationService
     }
 
     /// <inheritdoc />
-    public Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
+    public Task SendEmailAsync(
+        string toEmail, string subject, string htmlBody, string plainTextBody,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(toEmail);
         ArgumentException.ThrowIfNullOrWhiteSpace(subject);
         ArgumentException.ThrowIfNullOrWhiteSpace(htmlBody);
+        ArgumentException.ThrowIfNullOrWhiteSpace(plainTextBody);
 
-        _ = FireAndForgetAsync(toEmail, subject, htmlBody);
+        _ = FireAndForgetAsync(toEmail, subject, htmlBody, plainTextBody);
         return Task.CompletedTask;
     }
 
@@ -142,12 +145,12 @@ public sealed class SendGridEmailNotificationService : INotificationService
             MessageIdOf(response), recipients.Count, attachments.Count);
     }
 
-    private async Task FireAndForgetAsync(string toEmail, string subject, string htmlBody)
+    private async Task FireAndForgetAsync(string toEmail, string subject, string htmlBody, string plainTextBody)
     {
         try
         {
             using var response = await PostAsync(
-                BuildRequest([toEmail], subject, htmlBody, plainTextBody: null, attachments: null),
+                BuildRequest([toEmail], subject, htmlBody, plainTextBody, attachments: null),
                 CancellationToken.None);
 
             if (!response.IsSuccessStatusCode)
@@ -171,16 +174,15 @@ public sealed class SendGridEmailNotificationService : INotificationService
         IReadOnlyList<string> recipients,
         string subject,
         string htmlBody,
-        string? plainTextBody,
+        string plainTextBody,
         IReadOnlyList<SendGridAttachment>? attachments)
     {
-        // SendGrid requires text/plain, when present, to come before text/html.
-        var content = new List<SendGridContent>(2);
-        if (plainTextBody is not null)
-        {
-            content.Add(new SendGridContent("text/plain", plainTextBody));
-        }
-        content.Add(new SendGridContent("text/html", htmlBody));
+        // SendGrid requires text/plain to come before text/html.
+        IReadOnlyList<SendGridContent> content =
+        [
+            new SendGridContent("text/plain", plainTextBody),
+            new SendGridContent("text/html", htmlBody),
+        ];
 
         return new SendGridMailRequest(
             Personalizations: [new SendGridPersonalization(recipients.Select(r => new SendGridAddress(r, null)).ToList())],
