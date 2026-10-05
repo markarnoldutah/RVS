@@ -17,6 +17,9 @@ public sealed class EmailOptions
     /// </summary>
     public string FromAddress { get; set; } = string.Empty;
 
-    /// <summary>The display name on the From line, which the service advisor reads.</summary>
+    /// <summary>
+    /// The display name on the From line, which the service advisor reads. Staging overrides it to
+    /// <c>RV Intake [Staging]</c> through Bicep (#828); prod keeps this default.
+    /// </summary>
     public string SenderDisplayName { get; set; } = "RV Intake";
 }

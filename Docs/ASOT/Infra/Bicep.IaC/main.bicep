@@ -99,6 +99,9 @@ param devBlobAccessPrincipalId string = ''
 @description('Sending subdomain for all RVS email (e.g. mail.rvintake.com), authenticated in SendGrid. Set in staging (mail-staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a single-label subdomain of intakeZoneName so Bicep can write its records. Empty = no From address; the API then refuses to build the email sender.')
 param mailSendingDomain string = ''
 
+@description('Display name on the email From line, injected as Email__SenderDisplayName. Empty = the API default, "RV Intake" (prod). Staging sets "RV Intake [Staging]" so its mail is distinguishable in an inbox (#828).')
+param emailSenderDisplayName string = ''
+
 @description('CNAME records SendGrid domain authentication asks for, copied from the SendGrid console (Settings → Sender Authentication): [{ name: \'em1234.mail\', target: \'u1234.wl.sendgrid.net\' }, { name: \'s1._domainkey.mail\', ... }, { name: \'s2._domainkey.mail\', ... }]. Names are zone-relative to intakeZoneName. Empty until the domain has been added in SendGrid — see the mailSendingDomainAction output.')
 param sendGridDnsRecords array = []
 
@@ -448,6 +451,7 @@ module appServiceConfig 'modules/app-service-config.bicep' = if (deployAppServic
     #disable-next-line BCP318
     keyVaultUri: (deployAppService && deployKeyVault) ? keyVault.outputs.vaultUri : ''
     emailFromAddress: emailFromAddress
+    emailSenderDisplayName: emailSenderDisplayName
     smsEnabled: smsEnabled
     smsFromPhoneNumber: smsFromPhoneNumber
     twilioMessagingServiceSid: twilioMessagingServiceSid

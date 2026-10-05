@@ -117,7 +117,11 @@ param mailSendingDomain = 'mail.rvintake.com'
 //   { name: 's2._domainkey.mail', target: 's2.domainkey.u1234.wl.sendgrid.net' }
 // Empty until the domain is added in SendGrid; the mailSendingDomainAction
 // output says what is left to do.
-param sendGridDnsRecords = []
+param sendGridDnsRecords = [
+  { name: 'em5357.mail', target: 'u116141940.wl191.sendgrid.net' }
+  { name: 's1._domainkey.mail', target: 's1.domainkey.u116141940.wl191.sendgrid.net' }
+  { name: 's2._domainkey.mail', target: 's2.domainkey.u116141940.wl191.sendgrid.net' }
+]
 // DMARC aggregate-report destination (#608): a monitored mailbox on the filing
 // entity's own domain, the same address the Intake footer shows (SiteIdentity.cs).
 //

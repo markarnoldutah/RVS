@@ -109,6 +109,8 @@ param opsAlertEmailReceivers = [
 // so staging's failed sends (seeded recipients are .example.com) never touch
 // prod's sender reputation. Keep staging recipients to mailboxes we control.
 param mailSendingDomain = 'mail-staging.rvintake.com'
+// Marks staging mail in an inbox (#828). Prod leaves this unset and keeps "RV Intake".
+param emailSenderDisplayName = 'RV Intake [Staging]'
 // The three CNAMEs SendGrid domain authentication (automated security) shows for
 // mail-staging.rvintake.com, with names relative to rvintake.com, e.g.
 //   { name: 'em1234.mail-staging', target: 'u1234.wl.sendgrid.net' }
@@ -116,7 +118,11 @@ param mailSendingDomain = 'mail-staging.rvintake.com'
 //   { name: 's2._domainkey.mail-staging', target: 's2.domainkey.u1234.wl.sendgrid.net' }
 // Empty until the domain is added in SendGrid; the mailSendingDomainAction
 // output says what is left to do.
-param sendGridDnsRecords = []
+param sendGridDnsRecords = [
+  { name: 'em4251.mail-staging', target: 'u116141940.wl191.sendgrid.net' }
+  { name: 's1._domainkey.mail-staging', target: 's1.domainkey.u116141940.wl191.sendgrid.net' }
+  { name: 's2._domainkey.mail-staging', target: 's2.domainkey.u116141940.wl191.sendgrid.net' }
+]
 // DMARC aggregate-report destination (#608): a monitored mailbox on the filing
 // entity's own domain, the same address the Intake footer shows (SiteIdentity.cs).
 //

@@ -385,7 +385,6 @@ az keyvault secret set --vault-name kv-rvs-prod-wus3 \
 # With no SendGrid key the API registers the no-op email sender; with any Twilio
 # send credential missing it registers the no-op SMS sender. The auth token is
 # separate from the API key: Twilio signs webhooks with the auth token only.
-KV=kv-rvs-staging-wus3        # PROD: kv-rvs-prod-wus3
 az keyvault secret set --vault-name "$KV" --name "SendGrid--ApiKey"       --value "<SG.restricted-mail-send-key>"
 az keyvault secret set --vault-name "$KV" --name "Twilio--AccountSid"     --value "<AC… subaccount SID>"
 az keyvault secret set --vault-name "$KV" --name "Twilio--ApiKeySid"      --value "<SK… API key SID>"
@@ -397,8 +396,10 @@ az webapp restart --name app-rvs-api-staging-wus3 --resource-group rg-rvs-stagin
 # ── (2) SendGrid sending domain ──────────────────────────────────────────────
 #   STAGING → mail-staging.rvintake.com     PROD → mail.rvintake.com
 #   1. SendGrid → Settings → Sender Authentication → Authenticate Your Domain,
-#      DNS host "Other", domain rvintake.com, advanced: custom return path off,
-#      "Use automated security" ON, subdomain mail (prod) / mail-staging (staging).
+#      DNS host "Other", link branding No. Domain = the full sending subdomain,
+#      mail.rvintake.com (prod) / mail-staging.rvintake.com (staging) — not the
+#      apex, so DKIM signs d=<sub> and aligns with the From address. Advanced
+#      settings: "Use automated security" ON, everything else off.
 #   2. Copy the three CNAMEs into sendGridDnsRecords in that env's .bicepparam,
 #      names relative to rvintake.com (em1234.mail, s1._domainkey.mail,
 #      s2._domainkey.mail), and redeploy (Section 1a / 1b).
