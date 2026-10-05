@@ -128,16 +128,16 @@ public sealed class CosmosIntakeInviteRepository : CosmosRepositoryBase, IIntake
     }
 
     /// <inheritdoc />
-    public async Task<IntakeInvite?> GetByAcsMessageIdAcrossTenantsAsync(
-        string acsMessageId, CancellationToken cancellationToken = default)
+    public async Task<IntakeInvite?> GetByProviderMessageIdAcrossTenantsAsync(
+        string providerMessageId, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(acsMessageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerMessageId);
 
-        // Cross-partition on purpose (issue #665): a delivery report carries the ACS message id
+        // Cross-partition on purpose (issue #665): a status callback carries the Twilio Message SID
         // and no tenant. One message id belongs to one invite, so this reads at most one page.
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.acsMessageId = @acsMessageId OFFSET 0 LIMIT 1")
-            .WithParameter("@acsMessageId", acsMessageId);
+            "SELECT * FROM c WHERE c.providerMessageId = @providerMessageId OFFSET 0 LIMIT 1")
+            .WithParameter("@providerMessageId", providerMessageId);
 
         var iterator = _container.GetItemQueryIterator<IntakeInvite>(query);
 
@@ -145,8 +145,8 @@ public sealed class CosmosIntakeInviteRepository : CosmosRepositoryBase, IIntake
         {
             var page = await iterator.ReadNextAsync(cancellationToken);
             _logger.LogDebug(
-                "GetByAcsMessageIdAcrossTenantsAsync [messageId={MessageId}] — RequestCharge: {Charge} RU",
-                acsMessageId, page.RequestCharge);
+                "GetByProviderMessageIdAcrossTenantsAsync [messageId={MessageId}] — RequestCharge: {Charge} RU",
+                providerMessageId, page.RequestCharge);
 
             var invite = page.FirstOrDefault();
             if (invite is not null)

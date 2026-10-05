@@ -1,19 +1,17 @@
-using RVS.API.Integrations;
 using RVS.Domain.Entities;
-using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 using RVS.Domain.Validation;
 
 namespace RVS.API.Services;
 
 /// <summary>
-/// Handles the inbound ACS events delivered by Event Grid (issue #665): carrier keywords texted
-/// to the sending number, and delivery reports for texts RVS sent.
+/// Handles the inbound events Twilio's messaging webhooks deliver (issue #665): carrier keywords
+/// texted to the sending number, and status callbacks for texts RVS sent.
 ///
-/// A keyword handler, not a conversation. On a toll-free number the carrier enforces STOP itself
-/// and sends its own reply; this mirrors the customer's latest keyword into RVS's records so a
-/// send is refused up front instead of failing at the carrier, and so the opt-out survives a
-/// location moving to its own number later.
+/// A keyword handler, not a conversation. Twilio's Advanced Opt-Out enforces STOP and answers
+/// STOP, START and HELP itself; this mirrors the customer's latest STOP or START into RVS's
+/// records so a send is refused up front instead of failing at Twilio, and so the opt-out
+/// survives a location moving to its own number later. RVS sends no reply of its own.
 /// </summary>
 public sealed class InboundSmsEventService : IInboundSmsEventService
 {
@@ -22,8 +20,6 @@ public sealed class InboundSmsEventService : IInboundSmsEventService
 
     private readonly ICustomerProfileRepository _customerProfiles;
     private readonly IIntakeInviteRepository _invites;
-    private readonly ISmsNotificationService _sms;
-    private readonly IInboundSmsDeduplicator _deduplicator;
     private readonly ILogger<InboundSmsEventService> _logger;
 
     /// <summary>
@@ -32,20 +28,14 @@ public sealed class InboundSmsEventService : IInboundSmsEventService
     public InboundSmsEventService(
         ICustomerProfileRepository customerProfiles,
         IIntakeInviteRepository invites,
-        ISmsNotificationService sms,
-        IInboundSmsDeduplicator deduplicator,
         ILogger<InboundSmsEventService> logger)
     {
         ArgumentNullException.ThrowIfNull(customerProfiles);
         ArgumentNullException.ThrowIfNull(invites);
-        ArgumentNullException.ThrowIfNull(sms);
-        ArgumentNullException.ThrowIfNull(deduplicator);
         ArgumentNullException.ThrowIfNull(logger);
 
         _customerProfiles = customerProfiles;
         _invites = invites;
-        _sms = sms;
-        _deduplicator = deduplicator;
         _logger = logger;
     }
 
@@ -78,7 +68,8 @@ public sealed class InboundSmsEventService : IInboundSmsEventService
 
         if (keyword == SmsKeyword.Help)
         {
-            await ReplyToHelpAsync(phoneE164, inboundMessageId, cancellationToken);
+            // Twilio's Advanced Opt-Out has already sent the fixed HELP reply configured on the
+            // Messaging Service. HELP changes no state, so there is nothing left to do.
             return 0;
         }
 
@@ -123,59 +114,29 @@ public sealed class InboundSmsEventService : IInboundSmsEventService
         return changed;
     }
 
-    /// <summary>
-    /// Sends the one fixed HELP reply. It changes no state and needs no customer record, so a
-    /// number RVS has never seen still gets an answer.
-    ///
-    /// Guarded by the deduplicator, because Event Grid delivers at least once and a second reply
-    /// to one HELP is exactly the kind of noise the carriers police. A failed send is logged and
-    /// swallowed: throwing would 500 the webhook and have Event Grid retry the whole event.
-    /// </summary>
-    private async Task ReplyToHelpAsync(string phoneE164, string inboundMessageId, CancellationToken cancellationToken)
-    {
-        if (!_deduplicator.TryBeginHandling(inboundMessageId))
-        {
-            _logger.LogInformation("Inbound HELP {MessageId} already answered; not replying again", inboundMessageId);
-            return;
-        }
-
-        try
-        {
-            // Returns null rather than throwing when SMS is disabled for the environment.
-            var sentMessageId = await _sms.SendSystemSmsAsync(phoneE164, InboundSmsReplyContent.Help, cancellationToken);
-            _logger.LogInformation(
-                "Inbound HELP {MessageId} answered (reply message id {ReplyMessageId})",
-                inboundMessageId, sentMessageId ?? "none — SMS is disabled or the send failed");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to answer inbound HELP {MessageId}", inboundMessageId);
-        }
-    }
-
     /// <inheritdoc />
     public async Task<bool> HandleDeliveryReportAsync(
-        string acsMessageId,
+        string providerMessageId,
         string? deliveryStatus,
         DateTime receivedAtUtc,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(acsMessageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerMessageId);
 
         var status = MapDeliveryStatus(deliveryStatus);
         if (status is null)
         {
             _logger.LogDebug(
                 "Delivery report for {MessageId} carried status {Status}, which is not terminal; ignored",
-                acsMessageId, deliveryStatus);
+                providerMessageId, deliveryStatus);
             return false;
         }
 
-        var invite = await _invites.GetByAcsMessageIdAcrossTenantsAsync(acsMessageId, cancellationToken);
+        var invite = await _invites.GetByProviderMessageIdAcrossTenantsAsync(providerMessageId, cancellationToken);
         if (invite is null)
         {
-            // Confirmations (Spec A-2) go out on the same number and raise reports too.
-            _logger.LogDebug("Delivery report for {MessageId} matched no invite", acsMessageId);
+            // Confirmations (Spec A-2) go out on the same number and raise callbacks too.
+            _logger.LogDebug("Delivery report for {MessageId} matched no invite", providerMessageId);
             return false;
         }
 
@@ -191,15 +152,15 @@ public sealed class InboundSmsEventService : IInboundSmsEventService
     }
 
     /// <summary>
-    /// Maps an ACS delivery status to an <see cref="IntakeInviteDeliveryStatus"/>, or
-    /// <c>null</c> when the report says nothing terminal and the invite should be left alone.
-    /// <c>Failed</c> covers the carrier having already honoured a STOP for the number, which ACS
-    /// reports as "Sender blocked for given recipient".
+    /// Maps a Twilio message status to an <see cref="IntakeInviteDeliveryStatus"/>, or
+    /// <c>null</c> when the callback says nothing terminal (<c>queued</c>, <c>accepted</c>,
+    /// <c>sending</c>, <c>sent</c>) and the invite should be left alone. <c>undelivered</c> is
+    /// the carrier refusing the message; <c>failed</c> is Twilio never sending it.
     /// </summary>
-    private static string? MapDeliveryStatus(string? acsStatus) => acsStatus?.Trim().ToLowerInvariant() switch
+    private static string? MapDeliveryStatus(string? twilioStatus) => twilioStatus?.Trim().ToLowerInvariant() switch
     {
         "delivered" => IntakeInviteDeliveryStatus.Delivered,
-        "failed" or "expired" => IntakeInviteDeliveryStatus.Failed,
+        "undelivered" or "failed" => IntakeInviteDeliveryStatus.Failed,
         _ => null,
     };
 }

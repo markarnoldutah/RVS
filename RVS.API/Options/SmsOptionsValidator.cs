@@ -30,13 +30,13 @@ public sealed class SmsOptionsValidator : IValidateOptions<SmsOptions>
         {
             return ValidateOptionsResult.Fail(
                 $"{SmsOptions.SectionName}:FromPhoneNumber is required when SMS is enabled. In Azure it is "
-                + "injected by Bicep (app-service-config.bicep) as AzureCommunicationServices__Sms__FromPhoneNumber.");
+                + "injected by Bicep (app-service-config.bicep) as Sms__FromPhoneNumber.");
         }
 
         if (PhoneNumberNormalizer.Normalize(options.FromPhoneNumber) != options.FromPhoneNumber)
         {
             return ValidateOptionsResult.Fail(
-                $"{SmsOptions.SectionName}:FromPhoneNumber must be a US/CA number in E.164 form, e.g. +18662319618.");
+                $"{SmsOptions.SectionName}:FromPhoneNumber must be a US/CA number in E.164 form, e.g. +18885550100.");
         }
 
         return ValidateOptionsResult.Success;

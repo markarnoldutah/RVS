@@ -1,13 +1,15 @@
 namespace RVS.API.Integrations;
 
 /// <summary>
-/// The one reply RVS sends to an inbound text (issue #665). Only <c>HELP</c> gets one: carriers
-/// answer <c>STOP</c>, <c>START</c> and <c>UNSTOP</c> themselves on a toll-free number, but not
-/// this, and every message RVS sends promises <i>Reply … HELP for help</i>.
+/// The reply to an inbound <c>HELP</c> (issue #665). Every message RVS sends promises
+/// <i>Reply … HELP for help</i>, and this is the answer.
 ///
-/// One hardcoded string, no lookup. The handler has no tenant and no location — an inbound text
-/// carries a phone number and nothing else — so it cannot name the dealership, and points at it
-/// instead. It names RV Intake, says who RVS sends on behalf of (the third-party disclosure the
+/// <b>RVS does not send it.</b> Twilio's Advanced Opt-Out answers HELP itself, so this string is
+/// the source of truth that is pasted into each environment's Messaging Service as its HELP
+/// reply. Change it here, in the test that pins it, and in both Messaging Services together.
+///
+/// One fixed string, no lookup. An inbound text carries a phone number and nothing else, so the
+/// reply cannot name the dealership, and points at it instead. It names RV Intake, says who RVS sends on behalf of (the third-party disclosure the
 /// CTIA guidelines ask for), carries the rates line and repeats STOP.
 ///
 /// **This string is submitted verbatim as a sample message on the toll-free verification

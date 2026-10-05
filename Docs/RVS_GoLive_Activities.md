@@ -25,11 +25,11 @@ App Service stays on B1 through go-live; it was considered for F1 and rejected, 
 
 ## Messaging
 
-Unlike the infrastructure items above, these apply to **staging as well as prod**: each environment's outbound SMS stays dark until its own toll-free number is verified. Verification is per number, and the official turnaround is 5–8 weeks (#659).
+Unlike the infrastructure items above, these apply to **staging as well as prod**: each environment's outbound SMS stays dark until its own toll-free number is verified. Verification is per number and is filed with Twilio (#659; the ACS numbers were released and their verification abandoned on Oct 2 2026).
 
 | # | Action | Setting | Why it is parked until go-live |
 |---|---|---|---|
-| G-4 | Turn outbound SMS on for an environment once its toll-free number is verified | `acsSmsEnabled = true` in that environment's `.bicepparam`, alongside a real `acsSmsFromPhoneNumber` | Carriers block an unverified toll-free number's traffic, so sending before verification just fails, and the API refuses to start with SMS enabled and no number. While it is off, a `Text` customer's confirmation falls back to email and the A-14 send action refuses with a clear message (`Spec A-2`, `A-14`). Staging today has `+18662319618` with its status unrecorded; prod owns no number at all (#659). Flip each environment on its own, not both together. |
+| G-4 | Turn outbound SMS on for an environment once its toll-free number is verified | `smsEnabled = true` in that environment's `.bicepparam`, alongside its Twilio `smsFromPhoneNumber` and `twilioMessagingServiceSid`, with the `Twilio--*` secrets in Key Vault | Unverified toll-free traffic is blocked, so sending before verification just fails, and the API refuses to start with SMS enabled and no number. While it is off, a `Text` customer's confirmation falls back to email and the A-14 send action refuses with a clear message (`Spec A-2`, `A-14`). Neither environment has its Twilio number yet. Before flipping, confirm the Messaging Service has Advanced Opt-Out on with the HELP text from `InboundSmsReplyContent`, and its webhooks point at that environment's `api.` host. Flip each environment on its own, not both together. |
 
 ---
 

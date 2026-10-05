@@ -117,7 +117,7 @@ Two domains, split by audience rather than by app. **Every hostname a human read
 | `rvintake.com` / `staging.rvintake.com` | Intake SWA (prod is the apex) |
 | `manager.rvintake.com` / `manager-staging.rvintake.com` | Manager SWA |
 | `go.rvintake.com` / `go-staging.rvintake.com` | API redirect endpoint (Spec A-13) |
-| `mail.rvintake.com` / `mail-staging.rvintake.com` | ACS sending domain |
+| `mail.rvintake.com` / `mail-staging.rvintake.com` | Email sending domain (SendGrid) |
 | `api.rvserviceflow.com` / `api-staging.rvserviceflow.com` | API origin — XHR only, never typed |
 
 The `RVS` acronym is unaffected: resource names, project names and document names all keep it.
@@ -167,8 +167,9 @@ All integrations have a `Mock*`/`NoOp*` fallback behind the same interface, nomi
 - Speech-to-Text → Azure OpenAI Whisper (**northcentralus** — Whisper 001 Standard not in westus3)
 - Issue text refinement + categorization → Azure OpenAI (fallback: `RuleBasedIssueTextRefinementService` / `RuleBasedCategorizationService`)
 - Packet preliminary assessment (probable cause / possible fixes / likely parts) → Azure OpenAI, called from `PacketGenerationService` once per request (fallback: `RuleBasedPreliminaryAssessmentService`)
-- Email → Azure Communication Services (fallback: NoOp). Today it only sends a customer confirmation; **nothing emails a service manager yet** — that is Spec section B, the current work
-- SMS → Azure Communication Services (fallback: NoOp). Outbound-only, in scope as a customer-notification channel (A-14, #600). **Off unless `AzureCommunicationServices:Sms:Enabled` is true** — checked before the endpoint, so the vault's ACS endpoint alone never turns it on. The from-number is Bicep-injected per environment and resolved per location (`ISmsSenderNumberResolver`); recipients go through `PhoneNumberNormalizer` (E.164) and a per-tenant hourly cap. Two-way SMS stays archived
+- Email → SendGrid v3 API (`SendGridEmailNotificationService`, typed `HttpClient`; fallback: NoOp when `SendGrid:ApiKey` is unset). Sends the packet email (Spec B), the A-2 confirmation and the emailed A-14 invite, From `Email:FromAddress`. Retries are off in the resilience handler — a timed-out send may have been accepted; `PacketGenerationService` owns packet retries
+- SMS → Twilio Programmable Messaging (`TwilioSmsNotificationService`, typed `HttpClient`; fallback: NoOp). Outbound-only, in scope as a customer-notification channel (A-14, #600). **Off unless `Sms:Enabled` is true** — checked before the Twilio credentials, so the vault's keys alone never turn it on. Sends go through the environment's Messaging Service, whose Advanced Opt-Out answers STOP/START/HELP; RVS sends no keyword reply. The from-number is Bicep-injected per environment and resolved per location (`ISmsSenderNumberResolver`); recipients go through `PhoneNumberNormalizer` (E.164) and a per-tenant hourly cap. Inbound keywords and status callbacks arrive at `TwilioSmsWebhookController` (`api/events/twilio-sms/inbound|status`, anonymous, `X-Twilio-Signature` checked against `Twilio:WebhookBaseUrl`). Two-way SMS stays archived
+- **Azure Communication Services is gone** (removed Oct 2 2026 ahead of its Sep 2028 retirement). Don't reintroduce it
 
 ### Secrets Model
 

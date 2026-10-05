@@ -75,8 +75,9 @@ public class IntakeInvite : EntityBase
     public DateTime? ConsentCapturedAtUtc { get; init; }
 
     /// <summary>
-    /// When the invite was handed to ACS. <c>null</c> for a self-entry invite, and for a texted
-    /// invite whose send never reached ACS (see <see cref="DeliveryStatus"/>).
+    /// When the invite was handed to the provider (Twilio or SendGrid). <c>null</c> for a
+    /// self-entry invite, and for a texted invite whose send never reached the provider (see
+    /// <see cref="DeliveryStatus"/>).
     /// </summary>
     [JsonProperty("sentAtUtc")]
     public DateTime? SentAtUtc { get; set; }
@@ -94,11 +95,12 @@ public class IntakeInvite : EntityBase
     public string? ServiceRequestId { get; set; }
 
     /// <summary>
-    /// The ACS message id of the texted link, or the ACS operation id of the emailed one. SMS
-    /// delivery reports are matched back to the invite by it; nothing reports email delivery yet.
+    /// The provider's id for the send: the Twilio Message SID of the texted link, or the SendGrid
+    /// message id of the emailed one. SMS status callbacks are matched back to the invite by it;
+    /// nothing reports email delivery yet.
     /// </summary>
-    [JsonProperty("acsMessageId")]
-    public string? AcsMessageId { get; set; }
+    [JsonProperty("providerMessageId")]
+    public string? ProviderMessageId { get; set; }
 
     /// <summary>One of the <see cref="IntakeInviteDeliveryStatus"/> values.</summary>
     [JsonProperty("deliveryStatus")]
@@ -136,21 +138,21 @@ public class IntakeInvite : EntityBase
 }
 
 /// <summary>
-/// Delivery states of an <see cref="IntakeInvite"/> (<c>Spec A-14</c>). ACS delivery reports
+/// Delivery states of an <see cref="IntakeInvite"/> (<c>Spec A-14</c>). Twilio status callbacks
 /// move a texted invite from <see cref="Queued"/> to <see cref="Delivered"/> or <see cref="Failed"/>.
 /// </summary>
 public static class IntakeInviteDeliveryStatus
 {
-    /// <summary>Persisted, not yet handed to ACS.</summary>
+    /// <summary>Persisted, not yet handed to the provider.</summary>
     public const string Pending = "pending";
 
-    /// <summary>Accepted by ACS; no delivery report yet.</summary>
+    /// <summary>Accepted by the provider; no delivery report yet.</summary>
     public const string Queued = "queued";
 
     /// <summary>The carrier reported delivery.</summary>
     public const string Delivered = "delivered";
 
-    /// <summary>ACS rejected the send, or the carrier reported a failure.</summary>
+    /// <summary>The provider rejected the send, or the carrier reported a failure.</summary>
     public const string Failed = "failed";
 
     /// <summary>A self-entry invite: nothing is ever sent.</summary>
@@ -165,7 +167,7 @@ public static class IntakeInviteChannel
     /// <summary>A text from the shared toll-free number.</summary>
     public const string Sms = "sms";
 
-    /// <summary>An email from the environment's ACS sending domain.</summary>
+    /// <summary>An email from the environment's sending domain.</summary>
     public const string Email = "email";
 
     /// <summary>Whether <paramref name="channel"/> is one of the known values, compared exactly.</summary>

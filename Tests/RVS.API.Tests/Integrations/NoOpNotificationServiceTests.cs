@@ -13,7 +13,7 @@ public class NoOpNotificationServiceTests
     [Fact]
     public async Task SendEmailAsync_ShouldCompleteWithoutThrowing()
     {
-        var act = () => _sut.SendEmailAsync("user@example.com", "Test Subject", "<p>Body</p>");
+        var act = () => _sut.SendEmailAsync("user@example.com", "Test Subject", "<p>Body</p>", "Body");
 
         await act.Should().NotThrowAsync();
     }

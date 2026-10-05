@@ -53,8 +53,8 @@ public interface IIntakeInviteService
 
     /// <summary>
     /// What the send dialog can offer right now. Texting is an environment-level switch
-    /// (<c>AzureCommunicationServices:Sms:Enabled</c>) and email depends on the environment's ACS
-    /// endpoint, neither a tenant setting, so this takes no identifiers and reads the same for
+    /// (<c>Sms:Enabled</c>) and email depends on the environment's SendGrid
+    /// key, neither a tenant setting, so this takes no identifiers and reads the same for
     /// everyone in the environment.
     /// </summary>
     IntakeInviteCapability GetCapability();
@@ -64,8 +64,8 @@ public interface IIntakeInviteService
 /// Whether the API can text or email an invite right now (<c>Spec A-14</c>, issues #666, #693).
 /// While both are <c>false</c> the dialog offers only <i>Fill it in myself</i>.
 /// </summary>
-/// <param name="SmsEnabled">Whether a texted invite will actually be handed to ACS.</param>
-/// <param name="EmailEnabled">Whether an emailed invite will actually be handed to ACS.</param>
+/// <param name="SmsEnabled">Whether a texted invite will actually be handed to Twilio.</param>
+/// <param name="EmailEnabled">Whether an emailed invite will actually be handed to SendGrid.</param>
 public sealed record IntakeInviteCapability(bool SmsEnabled, bool EmailEnabled);
 
 /// <summary>

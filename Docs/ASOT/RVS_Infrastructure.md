@@ -1,9 +1,9 @@
 # RVS — Infrastructure
 
-**Version:** 1.3 · September 12, 2026
+**Version:** 1.4 · October 2, 2026
 **Scope:** Azure resources and CI/CD as declared. The Bicep in `Infra/Bicep.IaC/` is the source of truth; this document explains it. Where they disagree, the Bicep is right.
 
-`main.bicep` targets subscription scope. Primary region **westus3**, Whisper **northcentralus**, Static Web Apps **westus2**, ACS global.
+`main.bicep` targets subscription scope. Primary region **westus3**, Whisper **northcentralus**, Static Web Apps **westus2**. Email (SendGrid) and SMS (Twilio) are outside Azure.
 
 ---
 
@@ -31,7 +31,6 @@
 | Key Vault + role assignments | `key-vault.bicep` | `deployKeyVault` |
 | Cosmos account, database, 11 containers | `cosmos-db.bicep` | `deployCosmosDb` |
 | Storage account, CORS, `rvs-attachments`, `intakeRedirectHits` table, 7 role assignments | `storage-account.bicep` | `deployStorageAccount` |
-| ACS + Email Service + managed domain + 2 role assignments (+ a `CustomerManaged` sending domain when `acsCustomEmailDomain` is set) | `communication-services.bicep` | `deployAcs`; role assignments only when an App Service principal is supplied; custom domain in staging and prod (`#532`) |
 | Two Static Web Apps + custom domains | `static-web-app.bicep` | `deploySwa` |
 | DNS zones + record sets | `dns.bicep` | `deploySwa && deployDns` |
 | DNS Zone Contributor grants | `dns-zone-contributor.bicep` | `deploySwa && deployDns && env=='prod' && principals supplied` |
@@ -41,7 +40,7 @@
 
 ## Environments
 
-Both parameter files set every deploy flag to `true`, `cosmosCapacityMode='Serverless'`, `storageAllowSharedKeyAccess=false`, `swaSkuName='Standard'`, `swaLocation='westus2'`, `acsCustomDomainVerified=true`. The differences are small:
+Both parameter files set every deploy flag to `true`, `cosmosCapacityMode='Serverless'`, `storageAllowSharedKeyAccess=false`, `swaSkuName='Standard'`, `swaLocation='westus2'`. The differences are small:
 
 | | `staging` | `prod` |
 |---|---|---|
@@ -51,7 +50,7 @@ Both parameter files set every deploy flag to `true`, `cosmosCapacityMode='Serve
 | Whisper capacity | 1 | 2 |
 | Storage CORS origins | set | set |
 | DNS RBAC principals | — | set |
-| ACS custom sending domain | `mail-staging.rvintake.com` | `mail.rvintake.com` |
+| Email sending domain (SendGrid) | `mail-staging.rvintake.com` | `mail.rvintake.com` |
 | Intake host | `staging.rvintake.com` | `rvintake.com` (apex) |
 | Manager host | `manager-staging.rvintake.com` | `manager.rvintake.com` |
 | Redirect host | `go-staging.rvintake.com` | `go.rvintake.com` |
@@ -59,7 +58,7 @@ Both parameter files set every deploy flag to `true`, `cosmosCapacityMode='Serve
 
 Moving prod to `S1` (Always On, staging slot) is a one-value change — README "SKU Upgrade Paths".
 
-Every file is deployable as committed. Prod is a single file with no phases; the things it leaves to a human are the one-time registration of the `rvintake.com` apex with the Intake SWA (a token Azure mints at registration time), the hostname binding and managed certificate for the `go` and `api` hosts (`#599`, `#633`), and the data-plane verification + warming of the `mail.rvintake.com` sending domain (`#532`) — both sequences are in `Infra/Bicep.IaC/README.md` "Deploy Production" (steps 2 and 4). Redeploys never touch either. The ACS send-quota increase is not part of bring-up: the default 30/min, 100/hour applies once the domain verifies, and the increase is filed when volume warrants it (`#603`). Staging's `mail-staging.rvintake.com` needs the same verification, but no warming.
+Every file is deployable as committed. Prod is a single file with no phases; the things it leaves to a human are the one-time registration of the `rvintake.com` apex with the Intake SWA (a token Azure mints at registration time), the hostname binding and managed certificate for the `go` and `api` hosts (`#599`, `#633`), and the SendGrid domain authentication + warming of the `mail.rvintake.com` sending domain — both sequences are in `Infra/Bicep.IaC/README.md` "Deploy Production" (steps 2 and 4). Redeploys never touch either. Staging's `mail-staging.rvintake.com` needs the same authentication, but no warming. The SendGrid and Twilio keys are set in Key Vault by hand (`deployment-cmds.azcli` §4e).
 
 Two things to know before using these:
 
@@ -82,82 +81,30 @@ Two things to know before using these:
 
 **Step-6 questions on the same deployment (`#783`).** `questionsUseAssessmentDeployment` (default `false`; `true` in both parameter files) writes the assessment deployment's name to the `AzureOpenAi--QuestionsDeploymentName` Key Vault secret, and `questionsReasoningEffort` (`minimal` or `low`) to `AzureOpenAi--QuestionsReasoningEffort`. When the name is set, only diagnostic question generation moves to `gpt-5`, with the reasoning-model shape (`max_completion_tokens` 3000, ~4K reserved per call) on its own HTTP client: 12 s per attempt, one retry, 15 s total, after which the customer gets the question bank. Category suggestion stays on `gpt-4o`. Set it back to `false` and redeploy to revert, no code change.
 
-**ACS** — location `global`, data location United States, engagement tracking disabled. Email Service with an Azure-managed domain in every environment; staging and prod each also link a `CustomerManaged` sending subdomain — `mail-staging.rvintake.com` and `mail.rvintake.com` (`acsCustomEmailDomain`, `#532`) — and send the packet email From it.
+**Messaging — SendGrid (email) and Twilio (SMS), not Azure.** Azure Communication Services carried both until Oct 2 2026. It was removed before go-live because Microsoft retires it on Sep 30 2028, with email and SMS both on the retirement list. Neither replacement is an Azure resource, so Bicep owns only the sending domain's DNS and the app settings; accounts, numbers and keys are console and vault work (`Infra/Bicep.IaC/deployment-cmds.azcli` §4e). The one-time ACS teardown is §4e (4) there.
 
-**ACS Email quotas and the managed-domain ceiling (`#521`, `#532`).** An Azure-managed domain is a trial tier, not a small custom one — Microsoft's published limits:
-
-| | Azure-managed domain (fallback only) | Verified custom domain (staging, prod) |
-|---|---|---|
-| Send rate | **5 emails/min, 10 emails/hour** | 30/min, 100/hour out of the box |
-| Raisable via support? | **No** | Yes, up to 1–2 M/hour |
-| Request size incl. attachments | 10 MB (≈7.5 MB raw, base64 inflates ~33%) | 10 MB, up to 30 MB on request |
-
-Two consequences worth stating plainly:
-
-- **On the managed domain, ten packets an hour is the hard ceiling and no support ticket lifts it.** Higher quotas are available only for verified custom domains. Neither deployed environment sends from the managed domain; it stays linked only as a fallback.
-- **Prod deploys the custom sending subdomain via Bicep (`#532`).** `communication-services.bicep` provisions the `CustomerManaged` domain and emits the records it needs; `main.bicep` writes **SPF** (`… -all`), **DKIM** + **DKIM2** (CNAME), a domain-ownership TXT, and a **DMARC** `p=none` record whose `rua` reports go to `support@arnolddigitalsolutions.com` (`#608`). That address is on another domain, so it needs RFC 7489 §7.1 authorization TXT records in the `arnolddigitalsolutions.com` zone. The zone is at its registrar, not in Azure, so these are the one mail-auth record not declared in Bicep. The deploy's `dmarcReportAuthorizationAction` output names them, and README "DMARC aggregate reports" lists them. Verification (`initiate-verification`), the follow-up deploy with `acsCustomDomainVerified = true` that links the verified domain, and 2–3 weeks of domain warming on Jay Lyons's real traffic (`#525`) before any other shop's mailbox sees a packet are the manual follow-up; the send-quota increase is filed later, when volume warrants it (`#603`) — README "Deploy Production" step 4, surfaced by the `acsCustomDomainAction` output. The in-room deliverability check for later pilots is `FS-7` in `RVS_Plan.md`.
-
-Prod's warmed custom domain is what carries the local cluster (`#527`).
-
-**Each environment keeps its own ACS resource and sending subdomain (`#532`).** Staging sends From `mail-staging.rvintake.com` on `acs-rvs-notify-staging-wus3-s01-001`, and local development borrows that resource too. One prod resource shared by every environment was considered and rejected, for three reasons:
-
-- **Bounce budget.** ACS tracks failures, the suppression list and send quota per resource and domain. Staging fails many sends, because every seeded packet recipient is an undeliverable `.example.com` address. On a shared resource those failures would count against `mail.rvintake.com` while it warms and while the quota request, which needs bounces under 1 %, is pending.
-- **Access to prod.** ACS has no narrower send role, so a shared resource would give staging's app identity, and every developer, Contributor on prod's ACS.
-- **No saving.** A second ACS resource has no standing charge.
+**Email: one SendGrid account, one sending subdomain per environment.** Staging sends From `DoNotReply@mail-staging.rvintake.com`, prod From `DoNotReply@mail.rvintake.com` (`mailSendingDomain`). Each subdomain is authenticated in SendGrid separately (automated security), so staging's failed sends — every seeded packet recipient is an undeliverable `.example.com` address — never count against prod's sender reputation. `main.bicep` writes the three CNAMEs SendGrid mints for each (`sendGridDnsRecords`: return path `em1234.<sub>`, DKIM `s1`/`s2._domainkey.<sub>`) and a **DMARC** `p=none` record whose `rua` reports go to `support@arnolddigitalsolutions.com` (`#608`). That address is on another domain, so it needs RFC 7489 §7.1 authorization TXT records in the `arnolddigitalsolutions.com` zone, at its registrar; the deploy's `dmarcReportAuthorizationAction` output names them. One restricted API key per environment (Mail Send only) sits in Key Vault as `SendGrid--ApiKey`. Click, open and subscription tracking are off per message and account-wide: click tracking would rewrite the packet's photo SAS links. A packet email is held to 10 MB including base64 attachments (budget 9.5 MB); SendGrid accepts 30 MB, but recipient mailboxes are the binding limit. Two to three weeks of warming on Jay Lyons's real traffic (`#525`) before any other shop's mailbox sees a packet is still the plan; the in-room deliverability check for later pilots is `FS-7` in `RVS_Plan.md`.
 
 `mail-staging` is a sibling of `mail`, not a child of it. Mailbox providers still weigh a subdomain's behaviour partly against its parent `rvintake.com`, so staging stays harmless by behaviour: staging mail that reaches a real inbox goes only to mailboxes the team controls.
 
-**Outbound SMS sending number — toll-free (issue #600).** The advisor-initiated intake invite (A-14) sends by SMS. The decision is to use toll free: one shared toll-free number per environment, each ~$2/mo. The number resolves per location through `ISmsSenderNumberResolver` rather than being hardcoded; every location resolves to the environment's one number today.
+**SMS: one Twilio subaccount per environment, each with one toll-free number in one Messaging Service (issue #600).** The number resolves per location through `ISmsSenderNumberResolver` rather than being hardcoded; every location resolves to the environment's one number today. Sends go through the Messaging Service, which applies **Advanced Opt-Out**: Twilio refuses a send to a number that texted STOP (error 21610) and answers STOP, START and HELP itself, with the HELP text from `RVS.API/Integrations/InboundSmsReplyContent.cs`. RVS sends no keyword reply of its own.
 
-| Environment | Number | Verification | `acsSmsEnabled` |
+| Environment | Number | Verification | `smsEnabled` |
 | --- | --- | --- | --- |
-| Staging | `+18662319618`, toll-free, bought 2026-04-12 | Status not yet checked (#659) | `false` |
-| Prod | `+18332398230`, toll-free, bought 2026-09-19 | Not submitted (#659) | `false` |
+| Staging | not yet bought | not submitted (#659) | `false` |
+| Prod | not yet bought | not submitted (#659) | `false` |
 
-**Verification is per number**, not per resource or account: each toll-free number needs its own approved verification application before carriers deliver its traffic. Official turnaround is 5–8 weeks; reports run to about 4 months. No API exposes the status; check it in the portal.
+The ACS numbers (`+18662319618` staging, `+18332398230` prod) were released on Oct 2 2026; their ACS verification was never completed and is abandoned.
 
-**Filing entity (#680).** The verification application is filed by **Arnold Digital Solutions**, the entity that signs dealer agreements and owns the Azure billing. Its contact email is `support@arnolddigitalsolutions.com`, on the entity's own domain rather than free webmail. `rvintake.com` corroborates both: every Intake page's footer names the entity and shows that address, and links the privacy policy (`/privacy`), terms (`/terms`) and texting terms (`/sms-terms`). They come from `RVS.Blazor.Intake/SiteIdentity.cs`; if the application's company name or contact email changes, change that file to match (Spec A-15).
+**Verification is per number**, and unverified toll-free traffic is blocked outright. The package — company details, program description, opt-in evidence hosted at `rvintake.com/compliance/`, samples — is `Infra/TollFreeEvidence/README.md`; it carries over from the ACS application unchanged apart from the provider-specific fields.
 
-**Both numbers go on one application (#659, planned).** The wizard takes several numbers for one program and asks why, and Microsoft's guidelines name multiple environments as an accepted reason. Staging is the non-production environment for the same campaign, so one application covers both and starts both clocks together. Unverified: whether the wizard lists numbers held by a *second* ACS resource — each environment keeps its own (above). If it does not, staging needs its own application, and prod's goes first.
+**Filing entity (#680).** The verification application is filed by **Arnold Digital Solutions**, the entity that signs dealer agreements and owns the billing. Its contact email is `support@arnolddigitalsolutions.com`, on the entity's own domain rather than free webmail. `rvintake.com` corroborates both: every Intake page's footer names the entity and shows that address, and links the privacy policy (`/privacy`), terms (`/terms`) and texting terms (`/sms-terms`). They come from `RVS.Blazor.Intake/SiteIdentity.cs`; if the application's company name or contact email changes, change that file to match (Spec A-15).
 
-**How the number reaches the API (#661).** The number is bought in the portal, so Bicep cannot derive it. Each `.bicepparam` carries it as `acsSmsFromPhoneNumber`, and `app-service-config.bicep` injects it as `AzureCommunicationServices__Sms__FromPhoneNumber`, beside email's `FromAddress`. `acsSmsEnabled` is injected as `AzureCommunicationServices__Sms__Enabled` in every environment, including when it is `false`. Until #661, `appsettings.json` hardcoded `+18662331894`, a number neither resource owns. Both vaults hold the ACS endpoint, so every confirmation text failed silently. Flip `acsSmsEnabled` only after that environment's number shows verified. The API refuses to start with SMS enabled and no valid E.164 number.
+**How the number reaches the API (#661).** It is bought in the Twilio console, so Bicep cannot derive it. Each `.bicepparam` carries `smsFromPhoneNumber` and `twilioMessagingServiceSid`, and `app-service-config.bicep` injects them as `Sms__FromPhoneNumber` and `Twilio__MessagingServiceSid`. `smsEnabled` is injected as `Sms__Enabled` in every environment, including when it is `false`, and is checked before the Twilio credentials, so a vault that already holds them sends nothing. Flip it only after that environment's number shows verified (G-4). The API refuses to start with SMS enabled and no valid E.164 number.
 
-**Inbound ACS events reach the API through Event Grid (#665).** `modules/eventgrid-acs-sms.bicep` creates a system topic on the ACS resource (global, like ACS itself) and one subscription for `Microsoft.Communication.SMSReceived` and `Microsoft.Communication.SMSDeliveryReportReceived`, delivering to `POST https://{api host}/api/events/acs-sms`. Event Grid cannot present a bearer token to an anonymous endpoint, so the subscription URL carries `?key=`. **Key Vault is the only source of truth for that key (#678).** The secret `EventGrid--Inbound--Key` is created by hand, once. The API's Key Vault configuration provider binds it to `EventGrid:Inbound:Key`. Each `.bicepparam` reads the same secret back at deploy time with `az.getSecret(...)` and passes it to the required `eventGridWebhookKey` parameter. Nothing in Bicep writes the secret, and nobody passes it on a command line. Generate one with `openssl rand -base64 48 | tr -d /+= | cut -c1-48`.
+**Inbound texts and status callbacks reach the API as Twilio webhooks (#665).** The Messaging Service posts incoming messages to `POST https://{api host}/api/events/twilio-sms/inbound` and status updates to `…/status`; each send also names the status URL. Both endpoints are anonymous, so every request must carry a valid `X-Twilio-Signature` (HMAC-SHA1 with the subaccount's auth token, Key Vault `Twilio--AuthToken`). The API checks it against `Twilio__WebhookBaseUrl` — the public `api.` origin Bicep injects — rather than the request URL, because App Service terminates TLS in front of the app and Twilio signs the exact URL it called. With no auth token or base URL the endpoints answer 503; a bad signature, 403. Inbound STOP / START / UNSTOP are mirrored into every tenant's `CustomerProfile` for that number; Twilio's `OptOutType` parameter is preferred over the raw body because it is what Twilio actually enforced.
 
-**The HELP reply is an outbound send, so it obeys `acsSmsEnabled`.** While an environment's number is unverified the handler still runs and still ignores non-keywords; the reply is simply silent. That is the same gate every other send passes, and it means HELP costs nothing until the number is live.
-
-**A deploy that cannot read the key fails; it never skips the subscription.** `eventGridWebhookKey` has no default and a 32-character minimum, and the module is conditioned only on `deployAcs && deployAppService`. If ARM cannot resolve the reference (the secret is missing, the vault lacks `enabledForTemplateDeployment`, or the deployer lacks `deploy/action`), the deployment is rejected at parameter evaluation, before anything is created or removed.
-
-**What the deploy needs from the vault.**
-
-- `enabledForTemplateDeployment: true` on the vault. `modules/key-vault.bicep` sets it, but a deploy evaluates its `getSecret` references *before* it can update the vault, so each vault that existed before #678 needs it turned on once by hand: `az keyvault update --name kv-rvs-{env}-wus3 --enabled-for-template-deployment true`.
-- The deployer needs `Microsoft.KeyVault/vaults/deploy/action` on the vault's resource group. **Contributor and Owner both include it.** The prod deployer SP already has Contributor on `rg-rvs-prod-westus3` (`PROD_DEPLOYER_SP_SETUP.md` §A.2 / §B.3), and whoever deploys staging by hand has at least Contributor on `rg-rvs-staging-westus3`. No Key Vault data-plane role is required for this: ARM resolves the reference itself. If a deployer is ever narrowed below Contributor, grant `deploy/action` explicitly.
-- The subscription id in each `az.getSecret(...)` call is a literal. It must be the subscription that environment deploys into.
-
-**Existing environment, first deploy after #678 (staging and prod).** Both already hold `EventGrid--Inbound--Key` (Bicep wrote it before #678, and removing that resource from the template does not delete the secret: deploys are incremental).
-
-1. `az keyvault secret show --vault-name kv-rvs-{env}-wus3 --name EventGrid--Inbound--Key --query id`: confirm the secret exists.
-2. `az keyvault update --name kv-rvs-{env}-wus3 --enabled-for-template-deployment true`.
-3. `what-if` with the plain Section 1 command in `deployment-cmds.azcli` and no `eventGridWebhookKey` override. Expect nothing deleted and the system topic and subscription unchanged. **`what-if` proves nothing about the key:** it does not dereference Key Vault parameter references (a deliberately wrong secret name still produces a clean `what-if`), and the subscription's endpoint URL is write-only, so it reads `NoChange` whatever key is supplied.
-4. Deploy, then check the endpoint: `POST https://{api host}/api/events/acs-sms?key=<vault value>` answers 200, a wrong key 401, and `az eventgrid system-topic event-subscription show ... --query provisioningState` reads `Succeeded`. This is the only proof that the reference resolved and matches what the API loaded.
-
-**Brand-new environment.** The vault does not exist yet, so `getSecret` cannot resolve. This is the only time the key goes on a command line:
-
-1. Generate a key: `openssl rand -base64 48 | tr -d /+= | cut -c1-48`.
-2. Deploy `main.bicep` with the environment's `.bicepparam` **plus** `--parameters eventGridWebhookKey="$KEY"`. The trailing override replaces the Key Vault reference for this run. Everything deploys except the Event Grid subscription, which fails its validation handshake because the API is not yet running with the key. That failure is expected.
-3. `az keyvault secret set --vault-name kv-rvs-{env}-wus3 --name EventGrid--Inbound--Key --value "$KEY"`.
-4. Ship the API (merge to `main` / promote), then `az webapp restart -n app-rvs-api-{env}-wus3 -g rg-rvs-{env}-westus3`. The API reads Key Vault at startup only. Before the restart the endpoint answers 503, after it 401 to a request with no key.
-5. Deploy again with the plain `.bicepparam` and no override. The subscription is created and validates.
-
-**Rotation always ends with an API restart, and happens in this order.** The API holds the key in memory from its last start, so the vault, the API and the subscription must move in this sequence:
-
-1. `az keyvault secret set ... --name EventGrid--Inbound--Key --value "$NEW_KEY"`
-2. `az webapp restart ...` (the API now expects the new key; the subscription still presents the old one, so deliveries 401 and Event Grid retries them)
-3. Redeploy `main.bicep` with the plain `.bicepparam` (the subscription picks up the new key; the retries succeed)
-
-Do steps 2 and 3 back to back. Retries run for 24 hours (10 attempts). There is no dead-letter destination, so anything still failing after that is dropped. A carrier keyword that exhausts its retries is still enforced by the carrier: the next send fails rather than reaching an opted-out customer.
-
-**Leaving the key out would not remove anything.** ARM deploys here are incremental (nothing passes `--mode`, and module deployments are always incremental). A module whose condition is false is left out of the template, and whatever it created stays in place. Before #678 the risk of omitting the key was silent drift, not deletion: `what-if` gave no sign the subscription existed. Reading the key from the vault removes that failure mode.
+**Rotation.** Set the new value in Key Vault, then `az webapp restart`: the API reads Key Vault at startup only. Rotating the auth token in Twilio invalidates webhook signatures until the API restarts with the new one, so do the two back to back. Auth0's identity mail uses its own SendGrid key (Auth0 checklist §8), so rotating the API's key cannot break password-reset mail.
 
 **Key Vault** — standard SKU, RBAC authorization, enabled for template deployment (so `.bicepparam` files can read secrets with `az.getSecret`, #678), 90-day soft delete, purge protection on, public access enabled.
 
@@ -177,22 +124,21 @@ Role assignments:
 
 - **Key Vault Secrets User** → app + slot, at vault scope
 - **Storage Blob Data Contributor** and **Storage Blob Delegator** → app + slot, at account scope
-- **Contributor** → app + slot, at ACS resource scope (ACS has no granular email-send data-plane role; the API sends the packet email via managed identity)
 - **DNS Zone Contributor** → supplied principals, at zone scope
 
 There is no RBAC grant to Cosmos or OpenAI. Both are consumed by key, read from Key Vault.
 
-Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint, key, vision/text/whisper deployment names, Whisper endpoint and key), `CosmosDb--Endpoint/Key/DatabaseId`, `BlobStorage--Endpoint`, `TableStorage--Endpoint` (`#599`), `AzureCommunicationServices--Endpoint/ConnectionString`, `ApplicationInsights--ConnectionString`, `Auth0--*`.
+Secrets written by the `*-keyvault-secrets` modules: `AzureOpenAi--*` (endpoint, key, vision/text/whisper deployment names, Whisper endpoint and key), `CosmosDb--Endpoint/Key/DatabaseId`, `BlobStorage--Endpoint`, `TableStorage--Endpoint` (`#599`), `ApplicationInsights--ConnectionString`, `Auth0--*`. Set by hand: `SendGrid--ApiKey` and `Twilio--AccountSid/ApiKeySid/ApiKeySecret/AuthToken`.
 
-`app-service-config.bicep` sets four app settings — `ASPNETCORE_ENVIRONMENT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `KeyVault__VaultUri`, and (when `deployAcs`) `AzureCommunicationServices__Email__FromAddress` = `DoNotReply@<ACS sender domain>`, so the packet-email sender tracks the deployed ACS resource instead of a hardcoded value. The sender domain is `mail.rvintake.com` when `acsCustomEmailDomain` is set (prod, `#532`) and the Azure-managed domain otherwise; `main.bicep` chooses between `communicationServices.outputs.customFromSenderDomain` and `.azureManagedMailFrom`. Everything else is pulled by the Key Vault configuration provider at startup using the managed identity. Locally, development uses `appsettings.Development.json` plus `dotnet user-secrets`, and Blob and ACS use `AzureCliCredential` directly to avoid the managed-identity probe timeout. The local API borrows staging's storage account and staging's ACS resource, sending From `DoNotReply@mail-staging.rvintake.com`, and never touches prod's.
+`app-service-config.bicep` sets `ASPNETCORE_ENVIRONMENT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `KeyVault__VaultUri`, and the messaging settings: `Email__FromAddress` = `DoNotReply@<mailSendingDomain>`, `Email__SenderDisplayName` (staging only, `RV Intake [Staging]`, #828; prod keeps the `RV Intake` default), `Sms__Enabled`, `Sms__FromPhoneNumber`, `Twilio__MessagingServiceSid` and `Twilio__WebhookBaseUrl`. Everything else is pulled by the Key Vault configuration provider at startup using the managed identity. Locally, development uses `appsettings.Development.json` plus `dotnet user-secrets`, and Blob uses `AzureCliCredential` directly to avoid the managed-identity probe timeout. The local API borrows staging's storage account; it sends email only if staging's SendGrid key is in user-secrets, From `DoNotReply@mail-staging.rvintake.com`, and never touches prod's.
 
 ---
 
 ## Networking and DNS
 
-Two public DNS zones — `rvintake.com` and `rvserviceflow.com` — both living in `rg-rvs-prod-westus3`. Since `#634` the split is by audience, not by app: **`rvintake.com` carries every hostname a human reads** — the Intake apex, the Manager app, the `go` redirect and the ACS sending domain — while **`rvserviceflow.com` is corporate-only**, holding the API origin (`#633`), which nobody types, and a no-mail posture (null MX, SPF `-all`, DMARC `p=reject`). `manager.rvserviceflow.com` and `manager-staging.rvserviceflow.com` were retired on September 17 2026 and no longer resolve. Subdomains bind to the Static Web Apps by CNAME delegation, with the binding (`swa-custom-domain.bicep`) ordered after the record it validates against. The production apex is an ALIAS A record that tracks the Intake SWA resource — no IP is pinned — plus a one-time out-of-band TXT-token registration. Bicep re-writes that token afterwards from `intakeApexValidationToken`, because the token shares the apex TXT record-set with the apex SPF string. The apex publishes `v=spf1 -all`, a null MX (`#608`) and `_dmarc` `p=reject; sp=reject` with a `rua` (`#652`, `#608`), so a new sending subdomain under `rvintake.com` needs its own `_dmarc` record or all of its mail is rejected. See README "Intake apex mail posture". The `rvintake.com` zone also carries the ACS custom-sending-domain records for `mail.rvintake.com` (prod) and `mail-staging.rvintake.com` (staging) (`#532`) — SPF, DKIM + DKIM2, a domain-ownership TXT, and a DMARC `p=none` record — written by the `dnsIntake` module from `communicationServices` outputs, plus the `go` redirect host's CNAME and `asuid` TXT (`#599`, below). `dns-zone-contributor.bicep` grants the staging deployer zone-scoped rights so it can write records into prod-owned zones.
+Two public DNS zones — `rvintake.com` and `rvserviceflow.com` — both living in `rg-rvs-prod-westus3`. Since `#634` the split is by audience, not by app: **`rvintake.com` carries every hostname a human reads** — the Intake apex, the Manager app, the `go` redirect and the email sending domain — while **`rvserviceflow.com` is corporate-only**, holding the API origin (`#633`), which nobody types, and a no-mail posture (null MX, SPF `-all`, DMARC `p=reject`). `manager.rvserviceflow.com` and `manager-staging.rvserviceflow.com` were retired on September 17 2026 and no longer resolve. Subdomains bind to the Static Web Apps by CNAME delegation, with the binding (`swa-custom-domain.bicep`) ordered after the record it validates against. The production apex is an ALIAS A record that tracks the Intake SWA resource — no IP is pinned — plus a one-time out-of-band TXT-token registration. Bicep re-writes that token afterwards from `intakeApexValidationToken`, because the token shares the apex TXT record-set with the apex SPF string. The apex publishes `v=spf1 -all`, a null MX (`#608`) and `_dmarc` `p=reject; sp=reject` with a `rua` (`#652`, `#608`), so a new sending subdomain under `rvintake.com` needs its own `_dmarc` record or all of its mail is rejected. See README "Intake apex mail posture". The `rvintake.com` zone also carries the sending-domain records for `mail.rvintake.com` (prod) and `mail-staging.rvintake.com` (staging) — SendGrid's three domain-authentication CNAMEs (from `sendGridDnsRecords`) and a DMARC `p=none` record — written by the `dnsIntake` module, plus the `go` redirect host's CNAME and `asuid` TXT (`#599`, below). `dns-zone-contributor.bicep` grants the staging deployer zone-scoped rights so it can write records into prod-owned zones.
 
-The zone also carries `login.rvintake.com`, the Auth0 Universal Login host (`#627`, `#634`) — live since September 18 2026, serving an Auth0-managed certificate, and the `iss` of every token. `main.bicep`'s `auth0CnameRecords` writes it from `auth0CustomDomainCnameTarget`, a value Auth0 mints once when the custom domain is added in its dashboard — the same out-of-band pattern as the ACS domain above, and the reason the parameter is a hand-entered string rather than something the template derives. It is also the one record here with no `-staging` sibling: the Auth0 Free plan includes exactly one custom domain and all three environments share one tenant (`#610`), so both parameter files write the same name and value. Steps are in `Docs/ASOT/Auth0/Auth0-Portal-Configuration-Checklist.md` §6.
+The zone also carries `login.rvintake.com`, the Auth0 Universal Login host (`#627`, `#634`) — live since September 18 2026, serving an Auth0-managed certificate, and the `iss` of every token. `main.bicep`'s `auth0CnameRecords` writes it from `auth0CustomDomainCnameTarget`, a value Auth0 mints once when the custom domain is added in its dashboard — the same out-of-band pattern as the SendGrid CNAMEs above, and the reason the parameter is a hand-entered string rather than something the template derives. It is also the one record here with no `-staging` sibling: the Auth0 Free plan includes exactly one custom domain and all three environments share one tenant (`#610`), so both parameter files write the same name and value. Steps are in `Docs/ASOT/Auth0/Auth0-Portal-Configuration-Checklist.md` §6.
 
 **`go.rvintake.com` — the channel-tagging redirect (`Spec A-13`, `#599`).** A sibling label in the Intake zone, `go` in prod and `go-staging` in staging, pointed at the **API** App Service rather than the Intake SWA — the redirect has to write to the hit log, and a static host could serve a redirect but could not count it. Bicep writes both records it can know: the CNAME to the Web App's default hostname, and the `asuid.<label>` ownership TXT, whose value the site itself supplies (`customDomainVerificationId`).
 
@@ -228,7 +174,7 @@ Auth: the API uses Azure OIDC federated credentials, no long-lived secrets. Stat
 | Defect | Detail |
 |---|---|
 | `deployment-cmds.azcli` | References a `parameters/dev.bicepparam` that does not exist. It also carries a manual `Stripe--WebhookSecret` vault write — harmless, but premature: billing is build item 7 and nothing reads that secret yet |
-| ACS send quota on the managed domain caps delivery at 10 packets/hour (`#521`) | An Azure-managed Email domain is limited to 5 emails/min and 10/hour **with no support path to raise it**. Neither environment sends from it any more: staging deploys its own verified `mail-staging.rvintake.com` (verification only, no quota request). Prod sends from `mail.rvintake.com` (`#532`, in Bicep; verified and linked 2026-09-12). Its default 30/min, 100/hour covers the pilot; an increase can be requested when volume warrants it (`#603`). Not a code defect; `#521`'s size handling is built. Still gates the local-cluster launch (`#527`) until the prod domain has had its 2–3 weeks of warming |
+| ACS still deployed until the one-time teardown runs | Removing the ACS modules from Bicep does not delete the resources (incremental deploys). Until `deployment-cmds.azcli` §4e (4) has run in both environments, the ACS resources, Event Grid topics, role assignments, Key Vault secrets and `azurecomm` DNS records still exist. They cost nothing without numbers, but they are clutter that reads as live |
 
 ---
 
@@ -238,7 +184,7 @@ Conservative — flagged, not assumed.
 
 **Deferred, not archived:** the Stripe pieces. Billing is build item 7, so leave the `Stripe--WebhookSecret` guidance in place — just don't run it yet.
 
-**Keep, despite the descope:** ACS. SMS and email ride the same resource and email is now the core delivery mechanism. Dropping two-way SMS removes code paths, not infrastructure. Also keep the Manager Static Web App and the Auth0 secrets — a thin manager app is still in scope.
+**Keep, despite the descope:** the Manager Static Web App and the Auth0 secrets — a thin manager app is still in scope.
 
 **Flag before the next infra deploy (issue #467):** the Whisper account and the `rg-rvs-{env}-ncus` resource group are **unconditional** — they deploy in every environment with no flag. Voice capture is in scope (issue #429, closes Q8), so the account stays, but it belongs behind a `deployWhisper` flag — defaulted on — rather than left unconditional, so the per-environment spend is a deliberate choice and the decision stays reversible. The same treatment applies to the gpt-4o account, which is also unflagged and is needed for VIN vision extraction and issue refinement.
 

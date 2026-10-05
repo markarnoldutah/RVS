@@ -4,18 +4,17 @@ using RVS.Domain.Integrations;
 namespace RVS.Domain.Packets;
 
 /// <summary>
-/// Trims a packet email's attachment set to what Azure Communication Services will actually
-/// accept, so an oversized submission delivers a smaller packet instead of no packet
-/// (<c>Spec B-4</c>, issue #521).
+/// Trims a packet email's attachment set to what will actually be delivered, so an oversized
+/// submission delivers a smaller packet instead of no packet (<c>Spec B-4</c>, issue #521).
 ///
-/// <para><b>Why this exists.</b> ACS caps the <i>whole</i> send request — bodies, headers and
-/// attachments together — at <see cref="AcsMaxRequestBytes"/>, and attachments travel base64
-/// encoded, which inflates them by about a third. Microsoft's own guidance puts the realistic
-/// payload of raw attachment bytes at roughly 7.5 MB. <c>Spec A-6</c> lets a customer upload
+/// <para><b>Why this exists.</b> The <i>whole</i> send request — bodies, headers and
+/// attachments together — is held to <see cref="TransportMaxRequestBytes"/>, and attachments
+/// travel base64 encoded, which inflates them by about a third, so the realistic payload of raw
+/// attachment bytes is roughly 7.5 MB. <c>Spec A-6</c> lets a customer upload
 /// five 25 MB files (ten before issue #777), and even five full-resolution phone photos attached
 /// as originals exceed the cap on their own — six real 12 MP photos measured about 14.9 MB before
-/// base64, roughly 2.5 MB each. Before this, ACS
-/// rejected the send, all three delivery attempts failed the same way, and the shop got a service
+/// base64, roughly 2.5 MB each. Before this, the transport (then Azure
+/// Communication Services) rejected the send, all three delivery attempts failed the same way, and the shop got a service
 /// request with no packet. The packet PDF is not the problem: QuestPDF resamples embedded images
 /// to their placed size, so the PDF is roughly 1.5–3 MB for six to ten detailed photos regardless
 /// of source resolution (measured with real photos: 1.60 MB for six, 2.83 MB for ten).</para>
@@ -43,15 +42,19 @@ namespace RVS.Domain.Packets;
 public static class PacketEmailSizeFitter
 {
     /// <summary>
-    /// ACS's hard cap on one email request including base64-encoded attachments: 10 MB.
-    /// Exceeding it fails the send outright, which is what issue #521 observed.
+    /// The ceiling one email request is held to, base64-encoded attachments included: 10 MB.
+    /// SendGrid itself accepts 30 MB, but recipient mailboxes are the binding limit — Outlook and
+    /// Exchange Online refuse a message of roughly 20–25 MB once encoded, and a refusal there is a
+    /// bounce, not a send error the retry loop can see. 10 MB is what the budget and the photo
+    /// transcode tuning were sized against under ACS (issue #521); raising it is a deliberate
+    /// change, not a setting.
     /// </summary>
-    public const long AcsMaxRequestBytes = 10_000_000;
+    public const long TransportMaxRequestBytes = 10_000_000;
 
     /// <summary>
-    /// Default ceiling this fitter aims at — <see cref="AcsMaxRequestBytes"/> less a 500 KB
+    /// Default ceiling this fitter aims at — <see cref="TransportMaxRequestBytes"/> less a 500 KB
     /// margin. The margin absorbs what cannot be measured exactly here: JSON escaping of the
-    /// HTML body, MIME headers, and the request envelope ACS adds around our content. Override
+    /// HTML body, MIME headers, and the request envelope the provider adds around our content. Override
     /// it per environment through the <c>PacketEmail</c> configuration section.
     /// </summary>
     public const long DefaultMaxRequestBytes = 9_500_000;

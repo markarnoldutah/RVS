@@ -46,12 +46,12 @@ public interface IIntakeInviteRepository
     Task<IntakeInvite> UpdateAsync(IntakeInvite entity, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Finds the invite sent with this ACS message id, across tenants, so a delivery report can
+    /// Finds the invite sent with this provider message id, across tenants, so a delivery report can
     /// be matched back to it (issue #665). Reports arrive with no tenant context. Returns
     /// <c>null</c> for a message that is not an invite — an A-2 confirmation, for instance.
     /// </summary>
-    /// <param name="acsMessageId">The ACS message id recorded at send time.</param>
+    /// <param name="providerMessageId">The provider message id recorded at send time.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<IntakeInvite?> GetByAcsMessageIdAcrossTenantsAsync(
-        string acsMessageId, CancellationToken cancellationToken = default);
+    Task<IntakeInvite?> GetByProviderMessageIdAcrossTenantsAsync(
+        string providerMessageId, CancellationToken cancellationToken = default);
 }

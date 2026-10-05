@@ -987,7 +987,7 @@ public class PacketGenerationServiceTests
         _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(LocationWithRecipients());
         _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("ACS rejected the message"));
+            .ThrowsAsync(new InvalidOperationException("SendGrid rejected the message"));
 
         var outcome = await _sut.GenerateAsync(TenantId, SrId);
 
@@ -1041,7 +1041,7 @@ public class PacketGenerationServiceTests
         _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(LocationWithRecipients());
         _notificationMock.SetupSequence(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("ACS 503"))
+            .ThrowsAsync(new InvalidOperationException("SendGrid 503"))
             .Returns(Task.CompletedTask);
 
         var outcome = await _sut.GenerateAsync(TenantId, SrId);
@@ -1061,7 +1061,7 @@ public class PacketGenerationServiceTests
         _locationRepoMock.Setup(r => r.GetByIdAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(LocationWithRecipients());
         _notificationMock.Setup(n => n.SendPacketEmailAsync(It.IsAny<PacketEmailMessage>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("ACS rejected the message"));
+            .ThrowsAsync(new InvalidOperationException("SendGrid rejected the message"));
 
         var outcome = await _sut.GenerateAsync(TenantId, SrId);
 
@@ -1260,7 +1260,7 @@ public class PacketGenerationServiceTests
 
     // ── Email size budget (Spec B-4, issue #521) ───────────────────────────
     //
-    // ACS rejects a send whose whole request exceeds 10 MB with attachments base64 encoded.
+    // No send may exceed the 10 MB request ceiling with attachments base64 encoded.
     // Spec A-6 allows ten 25 MB uploads, so a photo-heavy submission used to fail all three
     // delivery attempts and leave the shop a service request with no packet. Delivery now
     // trims the attachment set to fit and sends anyway.
@@ -1489,7 +1489,7 @@ public class PacketGenerationServiceTests
     public async Task GenerateAsync_WhenTheBudgetIsUnset_ShouldUseTheDocumentedAcsDefault()
     {
         // The option has a working default, so a deployment that configures nothing is still
-        // protected against the ACS ceiling.
+        // protected against the transport ceiling.
         new PacketEmailOptions().MaxRequestBytes
             .Should().Be(PacketEmailSizeFitter.DefaultMaxRequestBytes);
 

@@ -4,7 +4,7 @@ namespace RVS.Domain.Integrations;
 /// A fully-composed service-packet email, ready for a transport to send (<c>Spec B-4</c>,
 /// issue #437). Render-agnostic and transport-agnostic: it carries the finished subject,
 /// the inline HTML body, a plain-text alternative for text-only clients, the resolved
-/// recipient list, and the file attachments — nothing about ACS, MIME, or headers.
+/// recipient list, and the file attachments — nothing about the provider, MIME, or headers.
 ///
 /// Built by <see cref="Packets.PacketEmailComposer"/> from a
 /// <see cref="Packets.ServicePacket"/>; consumed by

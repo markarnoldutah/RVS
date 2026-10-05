@@ -1,45 +1,33 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
-using RVS.API.Integrations;
 using RVS.API.Services;
 using RVS.Domain.Entities;
-using RVS.Domain.Integrations;
 using RVS.Domain.Interfaces;
 
 namespace RVS.API.Tests.Services;
 
 /// <summary>
 /// Tests for <see cref="InboundSmsEventService"/> — inbound carrier keywords and delivery
-/// reports from ACS via Event Grid (issue #665).
+/// reports from Twilio's messaging webhooks (issue #665).
 /// </summary>
 public class InboundSmsEventServiceTests
 {
     private const string Phone = "+18015551234";
-    private const string MessageId = "Outgoing_abc";
+    private const string MessageId = "SM0123456789abcdef0123456789abcdef";
 
     private static readonly DateTime EventAt = new(2026, 9, 19, 16, 0, 0, DateTimeKind.Utc);
 
-    private const string InboundMessageId = "Incoming_1";
+    private const string InboundMessageId = "SMfedcba9876543210fedcba9876543210";
 
     private readonly Mock<ICustomerProfileRepository> _profiles = new(MockBehavior.Strict);
     private readonly Mock<IIntakeInviteRepository> _invites = new(MockBehavior.Strict);
-    private readonly Mock<ISmsNotificationService> _sms = new();
-    private readonly Mock<IInboundSmsDeduplicator> _deduplicator = new();
-
-    public InboundSmsEventServiceTests()
-    {
-        // Default: every inbound message is new. A test that wants a redelivery overrides this.
-        _deduplicator.Setup(d => d.TryBeginHandling(It.IsAny<string>())).Returns(true);
-    }
 
     private InboundSmsEventService CreateService()
     {
         return new InboundSmsEventService(
             _profiles.Object,
             _invites.Object,
-            _sms.Object,
-            _deduplicator.Object,
             Mock.Of<ILogger<InboundSmsEventService>>());
     }
 
@@ -60,7 +48,7 @@ public class InboundSmsEventServiceTests
         AdvisorUserId = "auth0|advisor-1",
         FirstName = "Kim",
         Phone = Phone,
-        AcsMessageId = MessageId,
+        ProviderMessageId = MessageId,
         DeliveryStatus = IntakeInviteDeliveryStatus.Queued,
     };
 
@@ -130,7 +118,7 @@ public class InboundSmsEventServiceTests
     [Fact]
     public async Task HandleInboundMessageAsync_WhenEventIsOlderThanTheLastKeyword_ShouldNotPersist()
     {
-        // Event Grid is unordered: a stale STOP must not undo a later START.
+        // Webhooks are not guaranteed to arrive in order: a stale STOP must not undo a later START.
         var profile = Profile("ten_acme_rv", "cp-1");
         profile.SmsKeywordAtUtc = EventAt;
         _profiles.Setup(r => r.ListByPhoneE164AcrossTenantsAsync(Phone, It.IsAny<CancellationToken>()))
@@ -192,114 +180,59 @@ public class InboundSmsEventServiceTests
     }
 
 
-    // ---- HELP (issue #665) ------------------------------------------------------------------
+    // ---- HELP -------------------------------------------------------------------------------
 
     [Fact]
-    public async Task HandleInboundMessageAsync_WhenHelp_ShouldSendTheFixedReplyAndTouchNoRecords()
+    public async Task HandleInboundMessageAsync_WhenHelp_ShouldTouchNoRecords()
     {
-        // Strict repository mocks: HELP needs no CustomerProfile and changes no state.
+        // Twilio's Advanced Opt-Out answers HELP with the fixed reply configured on the Messaging
+        // Service, so RVS sends nothing; a second reply would text the customer twice. HELP
+        // changes no state either. Strict repository mocks: any call here fails the test.
         var changed = await CreateService().HandleInboundMessageAsync(Phone, InboundMessageId, "HELP", EventAt);
 
         changed.Should().Be(0);
-        _sms.Verify(
-            s => s.SendSystemSmsAsync(Phone, InboundSmsReplyContent.Help, It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task HandleInboundMessageAsync_WhenHelpIsRedelivered_ShouldNotTextTwice()
-    {
-        // Event Grid delivers at least once; a second reply to one HELP is a real annoyance.
-        _deduplicator.Setup(d => d.TryBeginHandling(InboundMessageId)).Returns(false);
-
-        await CreateService().HandleInboundMessageAsync(Phone, InboundMessageId, "HELP", EventAt);
-
-        _sms.Verify(
-            s => s.SendSystemSmsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task HandleInboundMessageAsync_WhenHelpAndSmsIsDisabled_ShouldStillNotThrow()
-    {
-        // Sms:Enabled is checked inside the send, which returns null rather than throwing.
-        _sms.Setup(s => s.SendSystemSmsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null);
-
-        var changed = await CreateService().HandleInboundMessageAsync(Phone, InboundMessageId, "help", EventAt);
-
-        changed.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task HandleInboundMessageAsync_WhenHelpSendThrows_ShouldNotBubbleUp()
-    {
-        // A failed reply must not make the webhook 500 and have Event Grid retry the whole event.
-        _sms.Setup(s => s.SendSystemSmsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("acs down"));
-
-        var act = () => CreateService().HandleInboundMessageAsync(Phone, InboundMessageId, "HELP", EventAt);
-
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
-    public async Task HandleInboundMessageAsync_WhenStop_ShouldNotSendAnyReply()
-    {
-        // The carrier already replied to STOP; a second message would be noise.
-        var profile = Profile("ten_acme_rv", "cp-1");
-        _profiles.Setup(r => r.ListByPhoneE164AcrossTenantsAsync(Phone, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([profile]);
-        _profiles.Setup(r => r.UpdateAsync(profile, It.IsAny<CancellationToken>())).ReturnsAsync(profile);
-
-        await CreateService().HandleInboundMessageAsync(Phone, InboundMessageId, "STOP", EventAt);
-
-        _sms.Verify(
-            s => s.SendSystemSmsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     // ---- Delivery reports -------------------------------------------------------------------
 
     [Theory]
-    [InlineData("Delivered", IntakeInviteDeliveryStatus.Delivered)]
     [InlineData("delivered", IntakeInviteDeliveryStatus.Delivered)]
-    [InlineData("Failed", IntakeInviteDeliveryStatus.Failed)]
-    [InlineData("Expired", IntakeInviteDeliveryStatus.Failed)]
+    [InlineData("Delivered", IntakeInviteDeliveryStatus.Delivered)]
+    [InlineData("undelivered", IntakeInviteDeliveryStatus.Failed)]
+    [InlineData("failed", IntakeInviteDeliveryStatus.Failed)]
     public async Task HandleDeliveryReportAsync_WhenInviteIsKnown_ShouldRecordTheStatus(
-        string acsStatus, string expected)
+        string twilioStatus, string expected)
     {
         var invite = Invite();
-        _invites.Setup(r => r.GetByAcsMessageIdAcrossTenantsAsync(MessageId, It.IsAny<CancellationToken>()))
+        _invites.Setup(r => r.GetByProviderMessageIdAcrossTenantsAsync(MessageId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(invite);
         _invites.Setup(r => r.UpdateAsync(invite, It.IsAny<CancellationToken>())).ReturnsAsync(invite);
 
-        var updated = await CreateService().HandleDeliveryReportAsync(MessageId, acsStatus, EventAt);
+        var updated = await CreateService().HandleDeliveryReportAsync(MessageId, twilioStatus, EventAt);
 
         updated.Should().BeTrue();
         invite.DeliveryStatus.Should().Be(expected);
     }
 
-    [Fact]
-    public async Task HandleDeliveryReportAsync_WhenSenderBlocked_ShouldRecordFailed()
+    [Theory]
+    [InlineData("queued")]
+    [InlineData("accepted")]
+    [InlineData("sending")]
+    [InlineData("sent")]
+    public async Task HandleDeliveryReportAsync_WhenStatusIsNotTerminal_ShouldNotLookUpTheInvite(string twilioStatus)
     {
-        // What ACS reports when the carrier has already honoured a STOP for this number.
-        var invite = Invite();
-        _invites.Setup(r => r.GetByAcsMessageIdAcrossTenantsAsync(MessageId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(invite);
-        _invites.Setup(r => r.UpdateAsync(invite, It.IsAny<CancellationToken>())).ReturnsAsync(invite);
+        // Twilio calls back at every step; only delivered/undelivered/failed say anything final.
+        // Strict mocks: a lookup here fails the test.
+        var updated = await CreateService().HandleDeliveryReportAsync(MessageId, twilioStatus, EventAt);
 
-        var updated = await CreateService().HandleDeliveryReportAsync(MessageId, "Failed", EventAt);
-
-        updated.Should().BeTrue();
-        invite.DeliveryStatus.Should().Be(IntakeInviteDeliveryStatus.Failed);
+        updated.Should().BeFalse();
     }
 
     [Fact]
     public async Task HandleDeliveryReportAsync_WhenStatusIsUnrecognised_ShouldLeaveTheInviteAlone()
     {
         var invite = Invite();
-        _invites.Setup(r => r.GetByAcsMessageIdAcrossTenantsAsync(MessageId, It.IsAny<CancellationToken>()))
+        _invites.Setup(r => r.GetByProviderMessageIdAcrossTenantsAsync(MessageId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(invite);
 
         var updated = await CreateService().HandleDeliveryReportAsync(MessageId, "Unknown", EventAt);
@@ -312,7 +245,7 @@ public class InboundSmsEventServiceTests
     public async Task HandleDeliveryReportAsync_WhenMessageIsNotAnInvite_ShouldBeANoOp()
     {
         // A-2 confirmations go through the same number and raise reports too.
-        _invites.Setup(r => r.GetByAcsMessageIdAcrossTenantsAsync(MessageId, It.IsAny<CancellationToken>()))
+        _invites.Setup(r => r.GetByProviderMessageIdAcrossTenantsAsync(MessageId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((IntakeInvite?)null);
 
         var updated = await CreateService().HandleDeliveryReportAsync(MessageId, "Delivered", EventAt);

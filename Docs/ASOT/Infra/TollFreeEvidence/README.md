@@ -1,14 +1,16 @@
 # Toll-free verification: application package (#659)
 
-Two applications with the same content. Microsoft's guide says the **Associated phone numbers** list shows only the numbers in the ACS resource you are filing from. Staging and prod each have their own resource, so each number needs its own application.
+Filed with **Twilio**, one application per number. Azure Communication Services was removed on Oct 2 2026 ahead of its 2028 retirement; its two numbers (+1 866 231 9618, +1 833 239 8230) were released and their ACS applications abandoned. Everything below except the Twilio-specific fields carries over unchanged from the ACS package.
 
 | | Prod | Staging |
 |---|---|---|
-| ACS resource | `acs-rvs-notify-prod-wus3-s01-001` | `acs-rvs-notify-staging-wus3-s01-001` |
-| Number | **+1 833 239 8230** | **+1 866 231 9618** |
-| Volume | 1,000 / month | 50 / month |
+| Twilio subaccount | `rvs-prod` | `rvs-staging` |
+| Number | *to buy* | *to buy* |
+| Volume | 1,000 / month | 100 / month (Twilio's lowest bucket above 10) |
 
-**Portal path:** ACS resource → **Phone numbers** → **Submit Application** (older UI: **Regulatory Documents → Add**).
+**Console path:** in the subaccount, **Phone Numbers → Regulatory Compliance → Toll-Free Verifications → Create**, or the **Submit verification** link on the number itself. Fill in the subaccount's **Trust Hub Business Profile** (Arnold Digital Solutions, EIN) first; the form pulls the company details from it.
+
+**Before you file:** the number must be in the subaccount's Messaging Service with **Advanced Opt-Out** on and the HELP reply set to sample 3 below, word for word. The reviewer may text HELP.
 
 Every block marked *paste* is written for the aggregator's reviewer. Message text is copied from the code (`IntakeInviteContent`, `ServiceRequestConfirmationContent`, `InboundSmsReplyContent`), and tests pin those strings. Do not reword the samples.
 
@@ -30,13 +32,16 @@ The application is rejected outright if the opt-in URL is missing or unreachable
 **E4/E5 can't be taken from prod or staging.** The consent box only renders when `Sms:Enabled` is true, and both environments are off. Unverified toll-free numbers are blocked anyway, so turning an environment on proves nothing. Run the API locally with SMS on instead:
 
 ```bash
-AzureCommunicationServices__Sms__Enabled=true \
-AzureCommunicationServices__Sms__FromPhoneNumber=+18662319618 \
+# Staging subaccount credentials in user-secrets first (Twilio:AccountSid, Twilio:ApiKeySid,
+# Twilio:ApiKeySecret). Without them the API registers the no-op sender and the box never shows.
+Sms__Enabled=true \
+Sms__FromPhoneNumber=<staging Twilio number, E.164> \
+Twilio__MessagingServiceSid=<staging MG… SID> \
 dotnet run --project RVS.API -lp https
 dotnet run --project RVS.Blazor.Manager -lp https
 ```
 
-Send to **your own mobile only**. The record is written before the send is attempted, so E5 exists even though ACS refuses the send from the unverified number. Delivery will show *failed*. Crop it out of E4/E6, or take E4 before you tap Send.
+Send to **your own mobile only**. The record is written before the send is attempted, so E5 exists even though Twilio blocks the send from the unverified number. Delivery will show *failed*. Crop it out of E4/E6, or take E4 before you tap Send.
 
 **Hosting.** The images are served from the Intake app at `https://rvintake.com/compliance/<file>`, the same domain as the website named on the application. They live in `RVS.Blazor.Intake/wwwroot/compliance/` and ship with every Intake deploy. The published service worker leaves `compliance/` alone (it neither precaches it nor answers it with `index.html`), and so does the SPA fallback in `staticwebapp.config.json`. `optin-evidence.png` is all the shots in one tall image: verbal (E4, E5) on top, then web (E1, E2, E3). If the form takes a single opt-in URL, use that one. **Open every URL in a private window before submitting.** Don't move, rename or delete these files until both numbers are verified; the reviewer may come back to them weeks later.
 
@@ -46,11 +51,11 @@ Send to **your own mobile only**. The record is written before the send is attem
 
 **Country or region:** United States, plus Canada if offered. Recipients are US/CA mobile numbers, and `PhoneNumberNormalizer` accepts only NANP.
 
-**Associated phone numbers:** the one number in this resource.
+**Phone number:** the one number in this subaccount.
 
 **Are you using more than one sending phone number?** Yes. *Paste:*
 
-> This program uses two toll-free numbers, one per environment, for the same use case. +1 833 239 8230 is production. +1 866 231 9618 is our staging (QA) environment. It sends only to RV Intake staff and test phones, and its traffic is a small fraction of production's. Each number lives in a separate Azure Communication Services resource, so each is filed in its own application with identical program details.
+> This program uses two toll-free numbers, one per environment, for the same use case. <prod number> is production. <staging number> is our staging (QA) environment. It sends only to RV Intake staff and test phones, and its traffic is a small fraction of production's. Each number lives in a separate Twilio subaccount, so each is filed in its own application with identical program details.
 
 ---
 
@@ -99,7 +104,7 @@ Select **Verbal** and **Website** if the form allows several. If it allows one, 
 
 ### Opt-out / HELP (if asked separately)
 
-> Opt-out: reply STOP (also honored: UNSTOP/START to resubscribe), handled by the carrier. RV Intake receives the keyword, marks the number opted out and refuses later sends to it. Customers can also tick "Do not send text messages" on the form.
+> Opt-out: reply STOP (also honored: UNSTOP/START to resubscribe), handled by Twilio Advanced Opt-Out on our Messaging Service. RV Intake receives the keyword, marks the number opted out and refuses later sends to it. Customers can also tick "Do not send text messages" on the form.
 >
 > HELP reply: "RV Intake: We send service-request links and confirmations for your RV dealership. For help with your request, contact the dealership directly. Msg & data rates may apply. Reply STOP to opt out."
 
@@ -132,6 +137,24 @@ Use realistic values, not `{placeholders}`. Every message is under two GSM-7 seg
 Links use our own domains (`go.rvintake.com`, `rvintake.com`), never a public URL shortener.
 
 ---
+
+## 6. Where each section goes on Twilio's form
+
+Twilio's field names drift; match by meaning.
+
+| Twilio field | Use |
+|---|---|
+| Business information | From the Trust Hub profile — §2 |
+| Website | `https://rvintake.com` |
+| Use case categories | Customer Care (or Account Notifications) — §3 |
+| Use case summary | §3 *Program description* |
+| Production message sample | §5 sample 1; add 2 and 3 under *Additional information* if there is one sample field |
+| Opt-in type | Verbal **and** Web Form |
+| Opt-in workflow description | §3 *Opt-in description* |
+| Opt-in image URLs | `https://rvintake.com/compliance/optin-evidence.png`, then each of `evidence-e1.png` … `evidence-e6.png` |
+| Privacy policy / Terms URLs | `https://rvintake.com/privacy`, `https://rvintake.com/sms-terms` |
+| Estimated monthly volume | §4 |
+| Additional information | §1 *more than one sending number* paste, plus the HELP text |
 
 ## Before you click Submit
 

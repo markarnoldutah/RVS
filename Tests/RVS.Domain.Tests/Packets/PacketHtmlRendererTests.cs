@@ -1207,7 +1207,7 @@ public class PacketHtmlRendererTests
         html.Should().NotContain("image walkaround.mp4 attached");
     }
 
-    // ── Manager-app note for a photo dropped by the ACS size budget (issue #580) ──
+    // ── Manager-app note for a photo dropped by the email size budget (issue #580) ──
 
     [Fact]
     public void Render_WhenAManagerAppUrlIsGiven_ShouldAddANoteWithADeepLink()

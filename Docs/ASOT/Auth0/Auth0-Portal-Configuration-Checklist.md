@@ -120,7 +120,7 @@ Without the provisioner secrets the tool still opens, but every create reports t
 Moves the login URL from `dev-2jhzz8xmjggh26pm.us.auth0.com` to `login.rvintake.com`. A raw `.auth0.com` address in the browser bar is the biggest "this looks sketchy" tell for a service advisor signing in.
 
 `rvintake.com`, not `rvserviceflow.com` (#634): every hostname a human types, clicks or reads is on the intake brand, and the corporate domain keeps the API origin and the JWT claim namespace. Sign-in is the most visible surface there is.
-It also means login, the Manager app and the ACS sending domain all agree, so §8 has no brand mismatch to paper over — an earlier draft proposed a second ACS sending domain for exactly that, and moving login here deleted the problem instead of funding it.
+It also means login, the Manager app and the email sending domain all agree, so §8 has no brand mismatch to paper over — an earlier draft proposed a second sending domain for exactly that, and moving login here deleted the problem instead of funding it.
 
 **Status: nothing in §6–§8 has been applied.** As of 2026-09-17 both apps authenticate against `dev-2jhzz8xmjggh26pm.us.auth0.com`, no Auth0 custom domain exists, and `auth0CustomDomainCnameTarget` in `main.bicep` is empty. §6.1–§6.4 and §7.1 can be done in daylight and change nothing for users; §6.5, §7.2 and §8 are the ones with consequences.
 
@@ -183,7 +183,7 @@ dig +short CNAME login.rvintake.com     # must return the Auth0 target before yo
 
 Don't pass `opsAlertEmailReceivers` on the command line. Older runbook snippets do; since #639 both parameter files carry it, and the Action Groups resource provider does a full-replace PUT — so a partial CLI override is a way to silently drop receivers, not a way to set them.
 
-This mirrors how the ACS email domain is verified (#532): Azure mints the token, so the value cannot be pre-written in source and lands by hand once.
+This mirrors how the email sending domain is authenticated: the provider mints the records, so the value cannot be pre-written in source and lands by hand once.
 
 ### 6.4 Verify and enable
 
@@ -201,7 +201,7 @@ Left on the canonical domain, the first URL a customer ever receives from RVS po
 
 **Shared-tenant consequence, stated plainly:** the other products in this tenant get `login.rvintake.com` in their notification links too. Narrower than it sounds — interactive login stays per-application, as the top of §6 explains — but it is a real RVS-brand leak, and each of those products can override per request with the `auth0-custom-domain` header if it ever matters.
 
-Decide it together with §8 rather than on its own. Once Auth0's email provider points at the RVS ACS resource, those same products' identity mail arrives *from* `DoNotReply@mail.rvintake.com`; a From address is a larger leak than a link. If the §8 footprint is acceptable, this is strictly smaller.
+Decide it together with §8 rather than on its own. Once Auth0's email provider points at RVS's SendGrid sending domain, those same products' identity mail arrives *from* `DoNotReply@mail.rvintake.com`; a From address is a larger leak than a link. If the §8 footprint is acceptable, this is strictly smaller.
 If it is not, the answer is to split the tenant (#610), not to leave reset links on a raw `.auth0.com` host.
 
 **Verify both empirically, not by inspection.** The toggle and the default interact, and neither shows an error when wrong. Trigger a real password reset and read the link; then, separately, provision a user through `/admin` and read *that* link.
@@ -411,61 +411,39 @@ This is the one that matters more than the watermark. Auth0's built-in sender se
 
 Unlike the watermark, this is **not** gated by the Auth0 plan — it's gated by plugging in your own provider. Tenant-wide, so §7's caveat applies: the other products in this tenant start sending their password-reset mail from an RVS address too.
 
-### 8.1 Use Auth0's native Azure Communication Services integration
+### 8.1 Use Auth0's native SendGrid integration
 
-**An earlier draft of this section proposed generic SMTP against the ACS relay and flagged that it could not be confirmed. Skip that.** Auth0 ships a first-class **Azure Communication Services** email provider that authenticates with an ACS connection string over HTTPS — no SMTP, no Entra app registration, no role assignment, no SMTP-username resource.
-Auth0 now recommends it over SMTP for Azure, partly because Exchange Online's SMTP basic auth retires in April 2026.
+RVS sends all its own email through SendGrid from `mail.rvintake.com` (Oct 2 2026; Azure Communication Services, which an earlier draft of this section used, was removed before go-live because it retires in 2028). Auth0 ships SendGrid as a first-class email provider that takes an API key over HTTPS — no SMTP, no relay credentials.
 
-RVS already has everything it needs: a verified custom sending domain and a `DoNotReply` sender on both ACS resources (#532, #643).
-
-**Decide which ACS resource, once.** The email provider is tenant-wide and takes one connection string, and dev/staging/prod share this tenant — so one ACS resource sends identity mail for all three. **Use production.** Staging's domain is throttled and internal, and a real dealer resetting a real password must not receive mail from a `-staging` host.
+**Use production's sending domain, with a key of its own.** The email provider is tenant-wide and dev/staging/prod share this tenant, so one domain sends identity mail for all three. A real dealer resetting a real password must not receive mail from a `-staging` host.
 
 | | Value |
 | --- | --- |
-| ACS resource | `acs-rvs-notify-prod-wus3-s01-001` (`rg-rvs-prod-westus3`) |
-| Sending domain | `mail.rvintake.com` — linked and verified |
-| From address | `DoNotReply@mail.rvintake.com` — the `donotreply` sender username exists on that domain |
+| Sending domain | `mail.rvintake.com` — authenticated in SendGrid |
+| From address | `DoNotReply@mail.rvintake.com` |
+| API key | A **separate** restricted SendGrid key, **Mail Send** only, named `auth0-identity-mail` — not the API's `SendGrid--ApiKey` |
 
-Consequence to accept deliberately: a developer resetting a password locally gets mail from the production sending domain. That is the right trade — the alternative sends production dealers staging mail — but it means identity mail does not appear in staging's ACS metrics at all. Look for it in prod.
+Consequence to accept deliberately: a developer resetting a password locally gets mail from the production sending domain. That is the right trade — the alternative sends production dealers staging mail.
 
 **Steps.**
 
-1. Get the connection string. It is already in the prod vault, so there is no need to open the ACS Keys blade:
+1. In SendGrid, **Settings → API Keys → Create API Key**, restricted access, **Mail Send** only. Copy it once; SendGrid never shows it again.
+2. **Branding → Email Provider.** Enable **Use my own email provider**, select **SendGrid**, paste the key, and set **From** to `DoNotReply@mail.rvintake.com`.
+3. **Save**, then **Send Test Email**. If nothing arrives within a few minutes, read the Auth0 tenant logs first, then SendGrid's **Activity** feed — a rejected key shows in Auth0, a blocked or bounced message in SendGrid.
 
-   ```bash
-   az keyvault secret show --vault-name kv-rvs-prod-wus3 \
-     --name AzureCommunicationServices--ConnectionString --query value -o tsv
-   ```
-
-   Shaped `endpoint=https://…;accesskey=…`.
-
-2. **Branding → Email Provider.** Enable **Use my own email provider**, select **Azure Communication Services**, paste the connection string, and set **From** to `DoNotReply@mail.rvintake.com`.
-
-   Auth0's documentation is explicit that ACS "only supports a raw email address" in that field: `DoNotReply@mail.rvintake.com`, not `RV Intake <DoNotReply@mail.rvintake.com>`. Don't assume a display name is harmlessly ignored — the friendly name belongs in the template instead (§8.3).
-
-3. **Save**, then **Send Test Email**. If nothing arrives within a few minutes, read the Auth0 tenant logs before touching Azure — a rejected connection string shows up there, not in ACS.
-
-**Two things worth knowing before you paste it.**
-
-- **That connection string is a production ACS access key, and you are copying it into the Auth0 tenant.** It is a shared secret held by a third party from then on, alongside whatever other products use this tenant. Nothing else in RVS does that — every other Azure credential stays in Key Vault behind Managed Identity.
-  It is the accepted cost of the integration, but it belongs in the risk register, not in a footnote.
-- **Rotating the ACS key silently breaks identity mail.** A rotation updates Key Vault and the API picks it up on restart; Auth0 holds its own copy and does not. The failure is password-reset emails quietly not arriving — the worst failure mode to discover by accident. Whoever owns key rotation needs to know Auth0 is now a second consumer of that key.
-
-One prerequisite in Auth0's docs can be ignored: "allow inbound connections from Auth0 IP addresses" is aimed at self-hosted SMTP. ACS is a public HTTPS endpoint with no inbound network ACL in this deployment, so there is nothing to allowlist — don't go looking for the setting.
+**Why a separate key.** It is a shared secret held by a third party from then on, alongside whatever other products use this tenant. Its own key means it can be revoked without touching the API's sends, and rotating the API's key cannot silently break password-reset mail. Whoever rotates keys needs to know this second one exists; it lives only in Auth0 and SendGrid.
 
 ### 8.2 Fallbacks, if 8.1 does not take
 
-**Generic SMTP against the ACS relay.** The relay is real — host `smtp.azurecomm.net`, port 587, STARTTLS.
-Getting to it needs three things §8.1 does not: an Entra app registration; the **Communication and Email Service Owner** role on the ACS resource (or a custom role with `Microsoft.Communication/CommunicationServices` read+write plus `Microsoft.Communication/EmailServices` write); and an `smtpUsernames` child resource linking the app to a username.
-The login string is then `<smtp username>.<Entra app id>.<Entra tenant id>` with the app's client secret as the password — roughly 110 characters, which has tripped username-length limits in other clients. All of that work buys you nothing over §8.1. It is here only so nobody re-derives it.
+**SendGrid over SMTP.** Auth0's generic SMTP provider against `smtp.sendgrid.net`, port 587, user name `apikey`, password the same restricted key. It buys nothing over §8.1 and is here only so nobody re-derives it.
 
-**A dedicated vendor.** SendGrid, Amazon SES, Mailgun and Postmark are first-class integrations in **Branding → Email Provider**. Well-trodden, at the cost of another vendor and another sending domain to warm up, monitor and keep out of spam folders — and RVS already did that work for `mail.rvintake.com`.
+**Another vendor.** Amazon SES, Mailgun and Postmark are first-class integrations in **Branding → Email Provider**, at the cost of another vendor and another sending domain to warm up, monitor and keep out of spam folders.
 
 ### 8.3 After a provider is configured
 
-- **Branding → Email Templates** unlocks. Custom templates and a custom From are only editable once a provider exists. At minimum, set the templates' From and put the brand name in the body, since §8.1's raw-address constraint means the envelope alone shows no friendly name.
+- **Branding → Email Templates** unlocks. Custom templates and a custom From are only editable once a provider exists. At minimum, set the templates' From and put the brand name in the body, so the brand reads the same whatever the envelope shows.
 - Re-check §6.4's notification toggle. Without it the link inside the reset email points at the canonical tenant domain, which undoes most of §6 at the one moment the user is most likely to look at the address bar.
-- Send one real password reset to an external mailbox (not a company one) and read the headers: SPF and DKIM should pass on `mail.rvintake.com`, the same records #532 and #643 set up for the packet email. Identity mail and packet mail share a sending reputation from here on — a deliverability problem in one is a problem in both.
+- Send one real password reset to an external mailbox (not a company one) and read the headers: SPF and DKIM should pass on `mail.rvintake.com`, the same SendGrid domain authentication the packet email uses. Identity mail and packet mail share a sending reputation from here on — a deliverability problem in one is a problem in both.
 
 ---
 

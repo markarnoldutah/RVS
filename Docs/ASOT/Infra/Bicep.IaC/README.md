@@ -24,7 +24,7 @@ Infrastructure as Code for the RVS Azure platform. Supports **independent deploy
 | Monitor alerts + ops action group | `monitor-alerts.bicep` | Packet-pipeline alerts | Packet-pipeline alerts |
 | OpenAI (GPT-4o) | `openai.bicep` | 10 K TPM | 30 K TPM |
 | OpenAI (Whisper) | `openai-whisper.bicep` | 1 K TPM | 1 K TPM |
-| Communication Services | `communication-services.bicep` | Email + SMS | Email + SMS |
+| Email (SendGrid) + SMS (Twilio) | not Azure — DNS + app settings only | `mail-staging.rvintake.com` | `mail.rvintake.com` |
 | Static Web App (Intake) | `static-web-app.bicep` | Standard | Standard |
 | Static Web App (Manager) | `static-web-app.bicep` | Standard | Standard |
 | DNS (corporate + intake zones) | `dns.bicep` (×2) | Shared zones | Shared zones |
@@ -44,7 +44,6 @@ Register resource providers if needed:
 
 ```bash
 az provider register --namespace Microsoft.CognitiveServices
-az provider register --namespace Microsoft.Communication
 az provider register --namespace Microsoft.DocumentDB
 az provider register --namespace Microsoft.Web
 az provider register --namespace Microsoft.KeyVault
@@ -73,8 +72,6 @@ Docs/ASOT/Infra/Bicep.IaC/
 │   ├── openai.bicep                        # Azure OpenAI + GPT-4o deployment
 │   ├── openai-whisper.bicep                # Azure OpenAI + Whisper STT deployment
 │   ├── openai-keyvault-secrets.bicep       # Stores OpenAI secrets in Key Vault
-│   ├── communication-services.bicep        # Azure Communication Services (Email + SMS)
-│   ├── acs-keyvault-secrets.bicep          # Stores ACS secrets in Key Vault
 │   ├── storage-account.bicep               # Storage account + rvs-attachments container
 │   ├── static-web-app.bicep                # Azure Static Web App (resource only — no bindings)
 │   ├── swa-custom-domain.bicep             # SWA custom-domain binding, ordered after its DNS record
@@ -259,32 +256,18 @@ apps; that workflow needs the two deployment tokens from this deployment's
 outputs stored as GitHub secrets — see *SWA deployment tokens* in
 `deployment-cmds.azcli` §6.
 
-**Step 4 — verify and warm the custom sending domain (`#532`).** Bicep has
-already provisioned the `CustomerManaged` ACS domain `mail.rvintake.com` and
-written its SPF / DKIM / DMARC records into the `rvintake.com` zone. What is
-left is the data-plane verification, linking the verified domain, and the
-warming window — none expressible in Bicep. The `acsCustomDomainAction` deployment output
-repeats this. Commands are in `deployment-cmds.azcli` §4e (2)(c).
+**Step 4 — authenticate and warm the sending domain in SendGrid.** Email goes
+out through SendGrid From `DoNotReply@mail.rvintake.com`. Bicep writes the
+domain's `_dmarc` record, and its SendGrid CNAMEs once they are in
+`sendGridDnsRecords`; adding the domain in SendGrid, pressing Verify and the
+warming window stay manual. The `mailSendingDomainAction` deployment output
+repeats this, and the commands are in `deployment-cmds.azcli` §4e (2).
 
-1. **Confirm the zone records match ACS.** `az communication email domain show --domain-name mail.rvintake.com --email-service-name <acs>-email -g rg-rvs-prod-westus3 --query verificationRecords`, and spot-check each against the `rvintake.com` zone. They should already agree — Bicep wrote them from the same source.
-
-   **Query `verificationRecords`, not `properties.verificationRecords`.** This command flattens `properties.*` to the top level, so the longer path matches nothing and prints an *empty result rather than an error* — it reads as "the domain has no records" when in fact the query is wrong. `verificationStates` flattens the same way. Same trap as `az webapp config hostname list` further below. Hit for real, 2026-09-17.
-2. **Initiate verification** for each record type (`Domain`, `SPF`, `DKIM`, `DKIM2`):
-   ```bash
-   for t in Domain SPF DKIM DKIM2; do
-     az communication email domain initiate-verification \
-       --domain-name mail.rvintake.com \
-       --email-service-name <acs>-email -g rg-rvs-prod-westus3 \
-       --verification-type $t
-   done
-   ```
-   Then poll until every entry in `verificationStates` is `Verified` (minutes, since the zone is on Azure DNS). Sends From `mail.rvintake.com` fail until then; the Azure-managed domain stays linked as a fallback.
-
-   **Link the verified domain.** ACS rejects linking an unverified domain, so a brand-new custom domain's first deploy runs with `acsCustomDomainVerified = false` — that deploy only creates the domain and writes its DNS records. Once Domain, SPF, DKIM and DKIM2 all read `Verified`, set `acsCustomDomainVerified = true` in the parameter file and redeploy (step 1). `prod.bicepparam` and `staging.bicepparam` already carry `true` for their linked domains; **never set it back to `false`** — the next deploy would unlink the domain. Confirm with `az communication show -n <acs> -g rg-rvs-prod-westus3 --query linkedDomains` (the domain's own `linkedAccount` field reads `null` even when linked).
-3. **Check DMARC resolves and reports are authorized:** `dig +short TXT _dmarc.mail.rvintake.com` → `v=DMARC1; p=none; rua=mailto:support@arnolddigitalsolutions.com; adkim=r; aspf=r`. The reporting address is on another domain, so the authorization records at the registrar must exist too, or receivers drop the reports. Follow the `dmarcReportAuthorizationAction` output and see [DMARC aggregate reports](#dmarc-aggregate-reports-608) below.
-4. **Send quota — no request at bring-up.** Once the domain verifies, ACS applies 30 emails/min, 100/hour automatically, which covers the pilot. Request an increase only when sustained volume approaches that ceiling (`#603` tracks the alert): Portal → ACS → **Email** → **Domains** → `mail.rvintake.com` → quota request. Approval takes **up to 72 hours** and requires a sustained bounce rate **under 1 %**, so file when the alert fires, not at the hard cap.
-5. **Warm the domain.** Let Jay Lyons's real intake traffic (P1, `#525`) send through `mail.rvintake.com` for **2–3 weeks** before any *other* shop's mailbox receives a packet. Ramp volume gradually; watch the ACS delivery / bounce metrics and the DMARC `rua` reports. Sustained ACS failures above ~1 % risk throttling.
-6. **In-room deliverability check (second pilot onward — `FS-7` in `RVS_Plan.md`).** When onboarding a shop after Jay: send a test packet while you are with the service manager, confirm it lands in the inbox and not Junk, and have them mark the sender safe on the spot. Not needed for the first pilot.
+1. **Authenticate the domain in SendGrid** (Settings → Sender Authentication) with the domain entered as `mail.rvintake.com` itself, not the apex, automated security on. Copy its three CNAMEs into `sendGridDnsRecords` in `prod.bicepparam` with names relative to `rvintake.com` (`em1234.mail`, `s1._domainkey.mail`, `s2._domainkey.mail`), redeploy (step 1), then press **Verify** in SendGrid. Every email is refused until SendGrid shows the domain Verified.
+2. **Check DMARC resolves and reports are authorized:** `dig +short TXT _dmarc.mail.rvintake.com` → `v=DMARC1; p=none; rua=mailto:support@arnolddigitalsolutions.com; adkim=r; aspf=r`. The reporting address is on another domain, so the authorization records at the registrar must exist too, or receivers drop the reports. Follow the `dmarcReportAuthorizationAction` output and see [DMARC aggregate reports](#dmarc-aggregate-reports-608) below.
+3. **Turn tracking off account-wide** (Settings → Tracking: click, open, subscription). The API turns all three off on every message anyway; click tracking would rewrite the packet's photo links through `sendgrid.net`.
+4. **Warm the domain.** Let Jay Lyons's real intake traffic (P1, `#525`) send through `mail.rvintake.com` for **2–3 weeks** before any *other* shop's mailbox receives a packet. Ramp volume gradually; watch SendGrid's bounce and block stats and the DMARC `rua` reports.
+5. **In-room deliverability check (second pilot onward — `FS-7` in `RVS_Plan.md`).** When onboarding a shop after Jay: send a test packet while you are with the service manager, confirm it lands in the inbox and not Junk, and have them mark the sender safe on the spot. Not needed for the first pilot.
 
 **Step 5 — bind the `go.<zone>` redirect host (`#599`, once per environment, ~10 minutes).**
 See the standalone section below; it applies to staging too, where the label is
@@ -306,9 +289,9 @@ posture* below.
 incremental mode leaves the apex binding alone (the template does not declare
 it) and re-asserts the apex TXT set, token included, from
 `intakeApexValidationToken`. It leaves the `go` hostname binding and its managed
-certificate alone for the same reason, and re-asserts the ACS domain, its link
-and its SPF/DKIM/DMARC records as no-ops while
-`acsCustomDomainVerified = true` — redeploys never re-trigger verification.
+certificate alone for the same reason, and re-asserts the SendGrid CNAMEs and
+the sending domain's `_dmarc` record as no-ops — redeploys never touch SendGrid's
+verification.
 
 ### Bind the `go.<zone>` redirect host (`#599`)
 
@@ -409,7 +392,7 @@ The apex sends no mail. The packet email goes out From `mail.rvintake.com` (prod
 | `TXT _dmarc` | `v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; rua=mailto:<dmarcReportingAddress>` | act on failures, at the apex and on every subdomain without its own record; report forgery attempts (`#608`) |
 | `MX @` | `0 .` | RFC 7505 null MX: `rvintake.com` accepts no mail (`#608`) |
 
-**Before adding a sending subdomain, read this.** DMARC falls back to the organizational domain's policy for any subdomain that has no record of its own, and `sp=reject` means a new sender (a second ACS domain, a transactional or marketing provider) with no `_dmarc` record has all of its mail rejected from the first message. The sending side sees no useful error, and nobody changed a record. Give it its own `_dmarc` record in the same change that starts it sending. `sp=reject` was chosen over `sp=none` because `mail.rvintake.com` is expected to stay the only sender, and `sp=none` would leave every subdomain spoofable. The reasoning is also in `main.bicep`, next to the record.
+**Before adding a sending subdomain, read this.** DMARC falls back to the organizational domain's policy for any subdomain that has no record of its own, and `sp=reject` means a new sender (a second SendGrid domain, a marketing provider) with no `_dmarc` record has all of its mail rejected from the first message. The sending side sees no useful error, and nobody changed a record. Give it its own `_dmarc` record in the same change that starts it sending. `sp=reject` was chosen over `sp=none` because `mail.rvintake.com` is expected to stay the only sender, and `sp=none` would leave every subdomain spoofable. The reasoning is also in `main.bicep`, next to the record.
 
 **The token has to be in the parameter file.** `intakeApexValidationToken` in `prod.bicepparam` carries the token Azure minted when the apex was registered (Deploy Production, step 2). If it is blank, the deploy does not declare the apex TXT set at all. That means no SPF, but it also means the deploy never deletes a token it cannot re-write. If the apex is re-registered, update the parameter before the next deploy. Staging never writes `@` or `_dmarc`.
 
@@ -718,7 +701,8 @@ The Key Vault module uses **RBAC authorization** (not access policies). The API 
 | Secret Name | Source | Purpose |
 |---|---|---|
 | `OpenAi--ApiKey` | Azure Portal → OpenAI resource → Keys | Stored automatically when Key Vault is deployed |
-| `AzureCommunicationServices--ConnectionString` | ACS resource → Keys | Stored automatically when ACS + Key Vault are deployed |
+| `SendGrid--ApiKey` | SendGrid → Settings → API Keys (Mail Send only) | **Manual** — `deployment-cmds.azcli` §4e (1) |
+| `Twilio--AccountSid`, `Twilio--ApiKeySid`, `Twilio--ApiKeySecret`, `Twilio--AuthToken` | Twilio console, the environment's subaccount | **Manual** — `deployment-cmds.azcli` §4e (1) |
 | `Stripe--WebhookSecret` | Stripe Dashboard → Webhooks | **Manual** — add after Stripe configuration |
 
 ### Add Stripe webhook secret
@@ -1011,90 +995,71 @@ it says otherwise.
 
 ---
 
-## Communication Services — Email
+## Email — SendGrid
 
-`communication-services.bicep` provisions the ACS account, an Email Service, and
-an **Azure-managed email domain** (`<guid>.azurecomm.net`). In **staging and prod**
-it also provisions a **CustomerManaged sending subdomain** — `mail-staging.rvintake.com`
-and `mail.rvintake.com` respectively (`acsCustomEmailDomain`, issue `#532`) — and
-links both domains to that environment's account.
-`AcsEmailNotificationService` sends the service-department packet email (`#437`)
-and authenticates with the API **managed identity** (`DefaultAzureCredential`),
-so two things must line up with the deployed resource — both now handled by Bicep:
+RVS sends all email — the service-department packet (`#437`), the A-2 customer
+confirmation and the emailed A-14 invite — through the **SendGrid v3 API**
+(`SendGridEmailNotificationService`, a typed `HttpClient`). Azure Communication
+Services did this until Oct 2 2026; it was removed before go-live because
+Microsoft retires it on Sep 30 2028. SendGrid is not an Azure resource, so Bicep
+owns only its DNS and the app settings:
 
-| Concern | How Bicep handles it |
+| Concern | Where it lives |
 |---|---|
-| **Send permission** | `communication-services.bicep` grants the API managed identity (and the S1 staging-slot identity) **Contributor scoped to the ACS resource** — ACS has no granular data-plane "email sender" role yet. Wired from `main.bicep` (`apiPrincipalId` / `stagingSlotPrincipalId`) exactly like the Key Vault / Storage grants. |
-| **Sender address** | `app-service-config.bicep` sets the app setting `AzureCommunicationServices__Email__FromAddress` to `DoNotReply@<sender domain>` — the custom verified subdomain (`mail.rvintake.com`) when `acsCustomEmailDomain` is set, otherwise the Azure-managed domain. `main.bicep` picks between `communicationServices.outputs.customFromSenderDomain` and `.azureManagedMailFrom`. The hardcoded `DoNotReply@<guid>.azurecomm.net` was removed from `RVS.API/appsettings.json` so a stale value cannot shadow it. |
+| **API key** | Key Vault secret `SendGrid--ApiKey`, set by hand (`deployment-cmds.azcli` §4e (1)). A restricted key with **Mail Send** only, one per environment. With no key the API registers the no-op sender. |
+| **Sender address** | `app-service-config.bicep` sets `Email__FromAddress` to `DoNotReply@<mailSendingDomain>`. The API refuses to build the sender without it. Staging also sets `Email__SenderDisplayName` to `RV Intake [Staging]` (`emailSenderDisplayName`, #828); prod keeps the `RV Intake` default. |
+| **Domain authentication** | SendGrid's three CNAMEs (return path `em1234.<sub>` for SPF, DKIM `s1`/`s2._domainkey.<sub>`) come from the console into `sendGridDnsRecords`; `main.bicep` writes them into `rvintake.com`. Nothing is needed at the subdomain label itself. |
+| **DMARC** | `_dmarc.mail` (prod) / `_dmarc.mail-staging` (staging) — `v=DMARC1; p=none; rua=mailto:<dmarcReportingAddress>; adkim=r; aspf=r` — authored in `main.bicep`. Relaxed alignment is what lets SendGrid's DKIM `d=` and its `em1234.` envelope both align with the From domain. The reports only arrive if the registrar-side authorization records exist; see [DMARC aggregate reports](#dmarc-aggregate-reports-608). |
+| **Tracking** | Off per message in code and account-wide in the console: click tracking would rewrite the packet's photo SAS links. |
 
-A plain [idempotent redeploy](#quick-start-deployment) applies both. RBAC
-propagation can take a few minutes.
+**Staging has its own sending subdomain**, `mail-staging.rvintake.com`,
+authenticated separately in SendGrid, so its failed sends (seeded recipients are
+`.example.com`) never touch prod's sender reputation. Mailbox providers still
+weigh any subdomain partly against `rvintake.com`, so staging mail that reaches a
+real inbox goes only to mailboxes we control.
 
-**Local development** sends through **staging's** ACS resource, never prod's.
-`RVS.API/appsettings.Development.json` sets the staging endpoint and the From
-address `DoNotReply@mail-staging.rvintake.com`, and the API authenticates with
-`AzureCliCredential` (the same shortcut Blob uses). Your `az login` identity
-therefore needs **Contributor** on `acs-rvs-notify-staging-wus3-s01-001`;
-subscription Owner already covers it. Local intake runs send real email.
+**Local development** sends through staging's SendGrid key if you put it in
+`dotnet user-secrets` (`SendGrid:ApiKey`); `appsettings.Development.json` sets the
+From address `DoNotReply@mail-staging.rvintake.com`. Without the key, local runs
+log instead of sending.
 
-### Custom sending domains — `mail.rvintake.com`, `mail-staging.rvintake.com` (`#532`)
-
-The Azure-managed `*.azurecomm.net` domain caps at **5 emails/min, 10/hour with
-no support path to raise it** (`#521`) and carries no sender reputation — a spam
-quarantine at a pilot shop is the one failure the "no IT involvement" pitch
-cannot survive. Prod therefore sends from a dedicated verified subdomain.
-
-Staging sends from its own verified subdomain on its **own ACS resource**, never
-prod's. ACS tracks failures, the suppression list and send quota per resource and
-domain, and staging fails many sends (seeded recipients are `.example.com`), so
-sharing prod's resource would spend prod's bounce budget while it warms.
-`mail-staging` is a sibling of `mail`, not a child of it. Mailbox providers still
-weigh any subdomain partly against `rvintake.com`, so the staging subdomain is
-kept harmless by behaviour: staging mail that reaches a real inbox goes only to
-mailboxes we control.
-
-**What Bicep does** (any env whose params set `acsCustomEmailDomain` — staging and prod):
-
-- Provisions a `CustomerManaged` `Microsoft.Communication/emailServices/domains`
-  named after `acsCustomEmailDomain`, and adds it to the account's `linkedDomains`
-  only when `acsCustomDomainVerified = true` (ACS rejects linking an unverified domain).
-- Writes the records ACS requires into the `rvintake.com` zone via `dnsIntake`:
-  **domain-ownership** TXT, **SPF** TXT (`v=spf1 include:… -all` — ACS fails
-  verification on `~all`), and **DKIM** + **DKIM2** CNAMEs. Values come from
-  `communicationServices.outputs.customDomainVerificationRecords`; `main.bicep`
-  builds the record-set names from the subdomain label (`mail` / `mail-staging`),
-  because ACS returns DKIM names as a bare selector and Domain/SPF names as the
-  full FQDN — neither is zone-relative. There is nothing to transcribe.
-- Publishes **DMARC** at `_dmarc.mail` (prod) / `_dmarc.mail-staging` (staging) — `v=DMARC1; p=none; rua=mailto:<dmarcReportingAddress>`
-  — authored in `main.bicep` (not taken from ACS) so the policy stays `p=none`
-  and the reporting mailbox is ours. `p=none` makes alignment failures visible
-  in the aggregate reports without dropping mail while the domain is cold. The
-  reports only arrive if the registrar-side authorization records exist; see
-  [DMARC aggregate reports](#dmarc-aggregate-reports-608).
-
-**What stays manual** (surfaced by the `acsCustomDomainAction` output — see
-"Deploy Production" step 4): `az communication email domain initiate-verification`
-for each record type, the follow-up deploy with `acsCustomDomainVerified = true`
-that links the verified domain, and **domain warming** (prod only). The send-quota
-increase is not part of bring-up — the default 30/min, 100/hour covers the pilot,
-and the request is filed when volume warrants it (`#603`).
+**Size.** A packet email is held to 10 MB including base64 attachments
+(`PacketEmailSizeFitter.TransportMaxRequestBytes`, budget 9.5 MB). SendGrid
+accepts 30 MB; recipient mailboxes are the binding limit.
 
 ### Manual steps after the deploy (not expressible in Bicep)
 
-Commands for each are in `deployment-cmds.azcli` §4e. Summary:
+Commands are in `deployment-cmds.azcli` §4e. Summary:
 
-1. **Verify the sending domain.** Staging and prod send from a custom domain: run "Deploy Production" step 4 (1)–(3) against that environment's domain, ACS resource and resource group — sends From it fail until every record shows `Verified`. The Azure-managed fallback domain verifies automatically but can lag (`az communication email domain show` → `provisioningState = Succeeded`); sends from it fail with `DomainNotLinked` until it completes.
-2. **Read back the real sender domain** (`properties.fromSenderDomain`) and confirm the deployed `AzureCommunicationServices__Email__FromAddress` app setting is `DoNotReply@<that domain>`.
-3. **Confirm the RBAC grant landed** (`az role assignment list --scope <acs-resource-id>`). If not (older Bicep, or propagation), assign **Contributor** on the ACS resource by hand — §4e (1).
-4. **Check the ACS email send quota.** A verified custom domain starts at 30/min, 100/hour — enough for staging and for the prod pilot, so there is no request to file at bring-up. Prod raises it against `mail.rvintake.com` when the `#603` volume alert fires — "Deploy Production" step 4. An environment left on the Azure-managed domain is capped at 10/hour, and no request lifts that.
-5. **Set a real recipient on a staging Location.** Seed data uses RFC 2606 `.example.com` addresses that hard-bounce. Point at least one location's `packetConfig.recipients` at a mailbox you control — `PUT /api/dealers/{dealerId}/locations/{locationId}` or directly in Cosmos. `packetConfig.enabled` defaults to `true`. Only ever use mailboxes you control in staging: it is the rule that keeps `mail-staging.rvintake.com` from affecting `rvintake.com`'s reputation.
-6. **Bind the custom hostnames on the API Web App.** `go.<intake zone>` (`#599`) and `api.<corporate zone>` (`#633`). Bicep writes both sets of DNS records but can declare neither binding — see "Bind the `go.<zone>` redirect host" and "Bind the `api.<zone>` host" above. The `apiHostBindingAction` deployment output repeats this. Until the `api.` host answers, leave the Blazor apps' `ApiBaseUrl` on the `*.azurewebsites.net` name.
-7. **Run the end-to-end check.** Complete a staging intake; App Insights should show `ACS packet email send initiated …` from `AcsEmailNotificationService`. A failure logs `Packet email dispatch failed …` from `PacketGenerationService` and is otherwise swallowed (packet generation still reports `Succeeded`; retry/idempotency is `#438`). Confirm the mail arrives with the PDF + photo attachments, subject `New SR: {customer last name}: {year} {make} {model} - {category}`.
+1. **Set the Key Vault secrets** — §4e (1) — and restart the API.
+2. **Authenticate the sending domain** in SendGrid, put its CNAMEs in the `.bicepparam`, redeploy, press Verify — "Deploy Production" step 4.
+3. **Set a real recipient on a staging Location.** Seed data uses RFC 2606 `.example.com` addresses that hard-bounce. Point at least one location's `packetConfig.recipients` at a mailbox you control — `PUT /api/dealers/{dealerId}/locations/{locationId}` or directly in Cosmos. `packetConfig.enabled` defaults to `true`.
+4. **Bind the custom hostnames on the API Web App.** `go.<intake zone>` (`#599`) and `api.<corporate zone>` (`#633`). Bicep writes both sets of DNS records but can declare neither binding — see "Bind the `go.<zone>` redirect host" and "Bind the `api.<zone>` host" above. The `apiHostBindingAction` deployment output repeats this. Twilio's webhooks also need the `api.` host, because the API checks their signatures against it.
+5. **Run the end-to-end check.** Complete a staging intake; App Insights should show `SendGrid accepted packet email …` from `SendGridEmailNotificationService`. A failure logs `Packet email dispatch failed …` from `PacketGenerationService` after its retries (`#438`). Confirm the mail arrives with the PDF + photo attachments, subject `New SR: {customer last name}: {year} {make} {model} - {category}`, and that "Show original" reads SPF, DKIM and DMARC **pass**.
 
-> **Prod sends from `mail.rvintake.com` and staging from `mail-staging.rvintake.com`,
-> not the managed domain** — provisioned by Bicep (`acsCustomEmailDomain`), verified
-> by hand, and warmed in prod only. See "Custom sending domains" above and "Deploy
-> Production" step 4.
+---
+
+## SMS — Twilio
+
+Outbound texts (A-2 confirmations, A-14 advisor invites) go through **Twilio
+Programmable Messaging** (`TwilioSmsNotificationService`). Each environment is its
+own Twilio **subaccount** with one toll-free number in one **Messaging Service**.
+Sending through the Messaging Service applies **Advanced Opt-Out**: Twilio
+refuses a send to a number that texted STOP, and answers STOP, START and HELP
+itself. The HELP text configured there must match
+`RVS.API/Integrations/InboundSmsReplyContent.cs`; RVS sends no reply of its own.
+
+| Concern | Where it lives |
+|---|---|
+| **Credentials** | Key Vault `Twilio--AccountSid`, `Twilio--ApiKeySid`, `Twilio--ApiKeySecret` (sending) and `Twilio--AuthToken` (webhook signatures only), set by hand. |
+| **Number and service** | `smsFromPhoneNumber` and `twilioMessagingServiceSid` in each `.bicepparam`, injected as `Sms__FromPhoneNumber` and `Twilio__MessagingServiceSid`. |
+| **Switch** | `smsEnabled` → `Sms__Enabled`. Stays `false` until the number clears toll-free verification (G-4 in `Docs/RVS_GoLive_Activities.md`, `#659`). Checked before the credentials, so a vault that already holds them sends nothing. |
+| **Webhooks** | Set on the Messaging Service: incoming → `https://<api host>/api/events/twilio-sms/inbound`, status → `…/api/events/twilio-sms/status`. Anonymous; every request must carry a valid `X-Twilio-Signature`, which the API checks against `Twilio__WebhookBaseUrl` (the public `api.` origin Bicep injects), not the request URL — App Service terminates TLS in front of the app. |
+
+The ACS toll-free numbers (`+18662319618` staging, `+18332398230` prod) were
+released on Oct 2 2026 and their ACS verification abandoned; the Twilio numbers
+are verified from scratch with the same evidence package
+(`Docs/ASOT/Infra/TollFreeEvidence/README.md`).
 
 ---
 

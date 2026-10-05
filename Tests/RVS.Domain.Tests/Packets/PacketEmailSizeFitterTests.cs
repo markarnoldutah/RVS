@@ -6,7 +6,7 @@ namespace RVS.Domain.Tests.Packets;
 
 /// <summary>
 /// Tests for <see cref="PacketEmailSizeFitter"/> — the pure transform that trims a packet
-/// email's attachment set to what Azure Communication Services will actually accept
+/// email's attachment set to what will actually be delivered
 /// (<c>Spec B-4</c>, issue #521).
 ///
 /// Contract under test: the PDF outranks every photo; photos survive as a contiguous prefix
@@ -291,13 +291,13 @@ public class PacketEmailSizeFitterTests
         candidates.Should().HaveCount(4);
     }
 
-    // ── The default budget matches the documented ACS ceiling ──────────────
+    // ── The default budget sits under the transport ceiling ────────────────
 
     [Fact]
-    public void DefaultMaxRequestBytes_ShouldSitBelowTheAcsHardCap()
+    public void DefaultMaxRequestBytes_ShouldSitBelowTheTransportCeiling()
     {
-        PacketEmailSizeFitter.DefaultMaxRequestBytes.Should().BeLessThan(PacketEmailSizeFitter.AcsMaxRequestBytes);
-        PacketEmailSizeFitter.AcsMaxRequestBytes.Should().Be(10_000_000);
+        PacketEmailSizeFitter.DefaultMaxRequestBytes.Should().BeLessThan(PacketEmailSizeFitter.TransportMaxRequestBytes);
+        PacketEmailSizeFitter.TransportMaxRequestBytes.Should().Be(10_000_000);
     }
 
     [Fact]

@@ -40,7 +40,7 @@ public class SmsOptionsValidatorTests
         var result = _sut.Validate(null, new SmsOptions { Enabled = true, FromPhoneNumber = fromNumber! });
 
         result.Failed.Should().BeTrue();
-        result.FailureMessage.Should().Contain("AzureCommunicationServices:Sms:FromPhoneNumber");
+        result.FailureMessage.Should().Contain("Sms:FromPhoneNumber");
     }
 
     [Theory]

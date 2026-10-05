@@ -113,8 +113,6 @@ category too.) License bodies are in [§5](#5-license-texts).
 | Newtonsoft.Json | 13.0.4 | MIT | © James Newton-King |
 | Swashbuckle.AspNetCore.SwaggerUI | 10.1.7 | MIT | © Richard Morris — embeds swagger-ui © SmartBear Software (Apache-2.0) |
 | OpenTelemetry.Api | 1.15.3 | Apache-2.0 | © The OpenTelemetry Authors |
-| Azure.Communication.Email | 1.1.0 | MIT | © Microsoft |
-| Azure.Communication.Sms | 1.0.2 | MIT | © Microsoft |
 | Azure.Identity | 1.21.0 | MIT | © Microsoft |
 | Azure.Storage.Blobs | 12.27.0 | MIT | © Microsoft |
 | Azure.Extensions.AspNetCore.Configuration.Secrets | 1.5.0 | MIT | © Microsoft |

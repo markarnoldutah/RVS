@@ -4,7 +4,7 @@ namespace RVS.Domain.Validation;
 
 /// <summary>
 /// Normalises a customer-entered US or Canadian phone number to E.164 (<c>+1NXXNXXXXXX</c>),
-/// the only form Azure Communication Services accepts (issue #661). Every number handed to an
+/// the form Twilio expects (issue #661). Every number handed to an
 /// SMS send goes through here first: intake confirmations today, advisor invites next.
 ///
 /// Accepts the ways people actually type a North American number — <c>(801) 555-1234</c>,

@@ -3,8 +3,8 @@ using RVS.Domain.Integrations;
 namespace RVS.API.Integrations;
 
 /// <summary>
-/// No-op SMS notification service, registered whenever SMS is disabled, mocks are on, or no ACS
-/// endpoint is configured. Logs the notification details but performs no external calls.
+/// No-op SMS notification service, registered whenever SMS is disabled, mocks are on, or no Twilio
+/// credentials are configured. Logs the notification details but performs no external calls.
 /// </summary>
 public sealed class NoOpSmsNotificationService : ISmsNotificationService
 {
@@ -26,16 +26,6 @@ public sealed class NoOpSmsNotificationService : ISmsNotificationService
         _logger.LogDebug(
             "NoOpSmsNotificationService: Would send SMS for tenant {TenantId}, location {LocationId} to {Recipient}: {Message}",
             tenantId, locationId, toPhoneNumber, message);
-        return Task.FromResult<string?>(null);
-    }
-
-    /// <inheritdoc />
-    public Task<string?> SendSystemSmsAsync(
-        string toPhoneNumber, string message, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug(
-            "NoOpSmsNotificationService: Would send system SMS to {Recipient}: {Message}",
-            toPhoneNumber, message);
         return Task.FromResult<string?>(null);
     }
 }

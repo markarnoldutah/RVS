@@ -45,7 +45,7 @@ public class PacketEmailOptionsValidatorTests
     [Fact]
     public void Validate_BudgetAboveTheAcsCeiling_ShouldFail()
     {
-        var options = new PacketEmailOptions { MaxRequestBytes = PacketEmailSizeFitter.AcsMaxRequestBytes + 1 };
+        var options = new PacketEmailOptions { MaxRequestBytes = PacketEmailSizeFitter.TransportMaxRequestBytes + 1 };
 
         var result = _sut.Validate(name: null, options);
 

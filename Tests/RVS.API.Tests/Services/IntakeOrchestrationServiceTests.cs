@@ -1123,7 +1123,7 @@ public class IntakeOrchestrationServiceTests
 
         await _sut.ExecuteAsync("test-slug", BuildValidRequest());
 
-        // BuildValidRequest submits "801-555-1234"; ACS only accepts E.164 (issue #661).
+        // BuildValidRequest submits "801-555-1234"; SMS sends require E.164 (issue #661).
         _notificationOrchestratorMock.Verify(n => n.SendServiceRequestConfirmationAsync(
             "ten_test", "loc_test", It.IsAny<string?>(),
             It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string?>(),

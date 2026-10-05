@@ -7,7 +7,7 @@
 //
 // Resource Groups:
 //   • rg-rvs-{env}-westus3  — API, Cosmos DB, Storage, Key Vault,
-//                              OpenAI GPT-4o, ACS, Log Analytics,
+//                              OpenAI GPT-4o, Log Analytics,
 //                              App Insights
 //   • rg-rvs-{env}-ncus     — Whisper OpenAI (northcentralus)
 //   • rg-rvs-{env}-westus2  — Static Web Apps (Intake + Manager)
@@ -91,33 +91,31 @@ param storageAllowSharedKeyAccess bool = true
 @description('Optional. Object ID of an Entra ID group granted blob data access on the storage account for developer / manual operations (local runs via AzureCliCredential, ops inspection). Set only in non-production parameter files. Empty = no such grant.')
 param devBlobAccessPrincipalId string = ''
 
-// ── ACS Parameters ────────────────────────────────────────────
+// ── Messaging Parameters (SendGrid email, Twilio SMS) ─────────
+// Neither provider is an Azure resource: accounts, numbers and keys live in the
+// SendGrid and Twilio consoles, secrets in Key Vault (SendGrid--ApiKey,
+// Twilio--*), set by hand. Bicep owns only the DNS and the app settings.
 
-@description('When true, deploys an Azure Communication Services resource with Email and SMS capabilities.')
-param deployAcs bool = false
+@description('Sending subdomain for all RVS email (e.g. mail.rvintake.com), authenticated in SendGrid. Set in staging (mail-staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a single-label subdomain of intakeZoneName so Bicep can write its records. Empty = no From address; the API then refuses to build the email sender.')
+param mailSendingDomain string = ''
 
-@description('ACS data residency location.')
-param acsDataLocation string = 'United States'
+@description('Display name on the email From line, injected as Email__SenderDisplayName. Empty = the API default, "RV Intake" (prod). Staging sets "RV Intake [Staging]" so its mail is distinguishable in an inbox (#828).')
+param emailSenderDisplayName string = ''
 
-@description('Custom sending subdomain for the packet email (e.g. mail.rvintake.com). Empty = Azure-managed *.azurecomm.net only. Set in staging (mail-staging.rvintake.com) and prod (mail.rvintake.com) params. Must be a subdomain of intakeZoneName so Bicep can write its SPF/DKIM/DMARC records; the operator still runs `initiate-verification` and the follow-up link deploy (acsCustomDomainVerified) out of band — README "Deploy Production" step 4. (#532)')
-param acsCustomEmailDomain string = ''
+@description('CNAME records SendGrid domain authentication asks for, copied from the SendGrid console (Settings → Sender Authentication): [{ name: \'em1234.mail\', target: \'u1234.wl.sendgrid.net\' }, { name: \'s1._domainkey.mail\', ... }, { name: \'s2._domainkey.mail\', ... }]. Names are zone-relative to intakeZoneName. Empty until the domain has been added in SendGrid — see the mailSendingDomainAction output.')
+param sendGridDnsRecords array = []
 
-@description('Mailbox that receives DMARC aggregate reports (rua=) for the custom sending domain and, in prod, the rvintake.com apex. Required when acsCustomEmailDomain is set; must be a monitored mailbox or a DMARC-processor address. If it is outside rvintake.com, the reporting domain must publish an RFC 7489 §7.1 authorization record per policy domain — see the dmarcReportAuthorizationAction output. (#532, #608)')
+@description('Mailbox that receives DMARC aggregate reports (rua=) for the sending domain and, in prod, the rvintake.com apex. Required when mailSendingDomain is set; must be a monitored mailbox or a DMARC-processor address. If it is outside rvintake.com, the reporting domain must publish an RFC 7489 §7.1 authorization record per policy domain — see the dmarcReportAuthorizationAction output. (#532, #608)')
 param dmarcReportingAddress string = ''
 
-@description('When true, links the custom domain to the ACS account. ACS rejects linking an unverified domain, so this must stay false (the default) on the deploy that first creates a new acsCustomEmailDomain — that deploy only creates the domain and writes its DNS records. Once every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified, set this to true in the .bicepparam file and redeploy to perform the link. Once linked it must stay true — false unlinks the domain on the next deploy. (#579)')
-param acsCustomDomainVerified bool = false
+@description('E.164 toll-free number in this environment\'s Twilio Messaging Service sender pool, injected as Sms__FromPhoneNumber (#661). Bought in the Twilio console, not by Bicep. Empty = no sending number; the API then cannot enable SMS.')
+param smsFromPhoneNumber string = ''
 
-@description('E.164 toll-free number this environment\'s ACS resource owns, injected as AzureCommunicationServices__Sms__FromPhoneNumber (#661). Bought in the portal, not by Bicep, so it is a hand-entered string. Empty = no sending number; the API then cannot enable SMS.')
-param acsSmsFromPhoneNumber string = ''
+@description('Turns outbound SMS on, injected as Sms__Enabled (#661). Leave false until smsFromPhoneNumber has cleared Twilio toll-free verification: unverified toll-free traffic is blocked, and the API refuses to start with SMS enabled and no number.')
+param smsEnabled bool = false
 
-@description('Turns outbound SMS on, injected as AzureCommunicationServices__Sms__Enabled (#661). Leave false until acsSmsFromPhoneNumber has cleared toll-free verification: carriers reject an unverified number\'s traffic, and the API refuses to start with SMS enabled and no number. Only takes effect when deployAcs is true.')
-param acsSmsEnabled bool = false
-
-@description('Shared secret for the inbound Event Grid webhook that carries ACS SMS keywords and delivery reports to the API (issue #665). Event Grid cannot present a bearer token, so the subscription URL carries this and the API checks it. REQUIRED, no default (#678): each .bicepparam reads it from Key Vault (EventGrid--Inbound--Key) with az.getSecret, so the subscription URL and the API always use the same value, and a deploy that cannot resolve it fails instead of quietly skipping the subscription. Never pass it on the command line.')
-@secure()
-@minLength(32)
-param eventGridWebhookKey string
+@description('The Twilio Messaging Service SID (MG…) whose sender pool holds smsFromPhoneNumber, injected as Twilio__MessagingServiceSid. Not a secret. Sending through it is what applies Advanced Opt-Out, which answers STOP, START and HELP — set it before smsEnabled.')
+param twilioMessagingServiceSid string = ''
 
 // ── Static Web App Parameters ─────────────────────────────────
 
@@ -148,7 +146,7 @@ param dnsResourceGroupName string = 'rg-rvs-prod-westus3'
 @description('Corporate DNS zone. Holds the API origin host (#633) and a no-mail posture (null MX, SPF -all, DMARC reject); no customer-facing hostname lives here. Formerly managerZoneName — the Manager SWA moved to the intake zone in #632.')
 param apiZoneName string = 'rvserviceflow.com'
 
-@description('DNS zone for every customer-facing host: Intake (apex in prod, subdomain CNAME in non-prod envs), Manager, the channel-tagging redirect, the ACS sending domain and the Auth0 login host.')
+@description('DNS zone for every customer-facing host: Intake (apex in prod, subdomain CNAME in non-prod envs), Manager, the channel-tagging redirect, the email sending domain and the Auth0 login host.')
 param intakeZoneName string = 'rvintake.com'
 
 @description('The Intake SWA apex validation token, minted once when the apex was registered out of band. Read it from the zone (`az network dns record-set txt show -z rvintake.com -n @`), not from `az staticwebapp hostname show`, whose validationToken reads blank once the apex is Ready. Prod only. It shares the apex TXT record-set with the SPF string (#652), and a deploy PUTs that whole set, so Bicep has to carry the token or it deletes it. Empty = the apex TXT record-set is not declared at all: no SPF, and nothing already in the zone is removed.')
@@ -169,7 +167,7 @@ param apiDnsPrefix string = environmentName == 'prod' ? 'api' : 'api-${environme
 @description('Auth0 Universal Login host in the INTAKE zone (Auth0 checklist §6, #627). Deliberately NOT environment-suffixed, unlike every other prefix above: the Free plan includes exactly one custom domain and dev/staging/prod share one Auth0 tenant (#610), so there is a single login host serving all three. A subdomain is also forced — Auth0 does not support an apex custom domain, and the rvintake.com apex is the Intake SWA.')
 param auth0LoginDnsPrefix string = 'login'
 
-@description('CNAME target Auth0 mints for the custom domain, shown once on Branding -> Custom Domains after the domain is added (shaped like <tenant>-cd-<hash>.edge.tenants.us.auth0.com). EMPTY UNTIL THE DOMAIN IS CREATED IN THE PORTAL — the record is then a no-op and login stays on the canonical tenant domain. Tenant-wide and environment-independent, so both environments upsert the identical record and this is not env-guarded; that is also why it is a hand-entered string rather than something the template can derive. Same shape of out-of-band token as the ACS domain verification (#532). Fill it in as Auth0 checklist §6.3, then deploy the DNS resource group.')
+@description('CNAME target Auth0 mints for the custom domain, shown once on Branding -> Custom Domains after the domain is added (shaped like <tenant>-cd-<hash>.edge.tenants.us.auth0.com). EMPTY UNTIL THE DOMAIN IS CREATED IN THE PORTAL — the record is then a no-op and login stays on the canonical tenant domain. Tenant-wide and environment-independent, so both environments upsert the identical record and this is not env-guarded; that is also why it is a hand-entered string rather than something the template can derive. Same shape of out-of-band token as the SendGrid domain-authentication CNAMEs. Fill it in as Auth0 checklist §6.3, then deploy the DNS resource group.')
 param auth0CustomDomainCnameTarget string = 'dev-2jhzz8xmjggh26pm-cd-mdl9vngn46azp32y.edge.tenants.us.auth0.com'
 
 @description('Object IDs of principals (e.g. the staging GitHub Actions service principal) that need DNS Zone Contributor on the shared zones. Granted at zone scope so they cannot touch other prod resources. Set this in prod params, not staging.')
@@ -452,9 +450,13 @@ module appServiceConfig 'modules/app-service-config.bicep' = if (deployAppServic
     appInsightsConnectionString: (deployAppService && deployObservability) ? appInsights.outputs.connectionString : ''
     #disable-next-line BCP318
     keyVaultUri: (deployAppService && deployKeyVault) ? keyVault.outputs.vaultUri : ''
-    acsEmailFromAddress: (deployAppService && deployAcs) ? acsEmailFromAddress : ''
-    acsSmsEnabled: deployAcs && acsSmsEnabled
-    acsSmsFromPhoneNumber: deployAcs ? acsSmsFromPhoneNumber : ''
+    emailFromAddress: emailFromAddress
+    emailSenderDisplayName: emailSenderDisplayName
+    smsEnabled: smsEnabled
+    smsFromPhoneNumber: smsFromPhoneNumber
+    twilioMessagingServiceSid: twilioMessagingServiceSid
+    // Twilio signs each webhook over the URL it called, and calls back here.
+    twilioWebhookBaseUrl: 'https://${apiDnsPrefix}.${apiZoneName}'
     configureStagingSlot: deployStagingSlot
   }
 }
@@ -587,115 +589,38 @@ module keyVaultSecrets 'modules/openai-keyvault-secrets.bicep' = if (deployKeyVa
   }
 }
 
-// ── Azure Communication Services ──────────────────────────────
-
-module acsNaming 'modules/naming-tags.bicep' = if (deployAcs) {
-  name: 'deploy-acs-naming-${environmentName}'
-  scope: rgPrimary
-  params: {
-    resourceTypePrefix: 'acs'
-    appName: 'rvs'
-    workload: 'notify'
-    environmentName: environmentName
-    location: location
-  }
-}
-
-module communicationServices 'modules/communication-services.bicep' = if (deployAcs) {
-  name: 'deploy-acs-${environmentName}'
-  scope: rgPrimary
-  params: {
-    #disable-next-line BCP318
-    resourceName: deployAcs ? acsNaming.outputs.resourceName : 'unused'
-    #disable-next-line BCP318
-    tags: deployAcs ? acsNaming.outputs.tags : {}
-    dataLocation: acsDataLocation
-    #disable-next-line BCP318
-    apiPrincipalId: (deployAcs && deployAppService) ? appService.outputs.principalId : ''
-    #disable-next-line BCP318
-    stagingSlotPrincipalId: (deployAcs && deployAppService && deployStagingSlot) ? appService.outputs.stagingSlotPrincipalId : ''
-    customDomainName: acsCustomEmailDomain
-    linkCustomDomain: acsCustomDomainVerified
-  }
-}
-
-// ── ACS custom sending domain — derived values (#532) ─────────
+// ── Email sending domain (SendGrid) ───────────────────────────
 // True in staging (mail-staging.rvintake.com) and prod (mail.rvintake.com).
-var acsCustomDomainOn = deployAcs && !empty(acsCustomEmailDomain)
+var mailSendingDomainOn = !empty(mailSendingDomain)
 
-// Packet-email From address: the custom verified subdomain when configured,
-// otherwise the Azure-managed *.azurecomm.net domain. Consumed by
-// app-service-config.bicep above. `acsMailFromSenderDomain` picks the right
-// one; the DoNotReply@ mailbox is fixed on both.
-#disable-next-line BCP318
-var acsMailFromSenderDomain = deployAcs ? (acsCustomDomainOn ? communicationServices.outputs.customFromSenderDomain : communicationServices.outputs.azureManagedMailFrom) : ''
-var acsEmailFromAddress = empty(acsMailFromSenderDomain) ? '' : 'DoNotReply@${acsMailFromSenderDomain}'
+// Every RVS email goes From DoNotReply@ the sending subdomain. SendGrid refuses a
+// sender on a domain it has not authenticated, so this is only correct once the
+// sendGridDnsRecords below resolve and SendGrid shows the domain Verified.
+var emailFromAddress = mailSendingDomainOn ? 'DoNotReply@${mailSendingDomain}' : ''
 
-// SPF / DKIM / domain-ownership records ACS requires to verify the custom
-// domain — deterministic once the domain resource exists, written into the
-// Intake zone by the dnsIntake module below. `initiate-verification` and the
-// follow-up link deploy stay manual (README "Deploy Production" step 4).
-//
-// ACS's `verificationRecords[*].name` values are NOT zone-relative — confirmed
-// against a live `az communication email domain show` (2026-09-12, when staging's
-// domain was still the two-label mail.staging.rvintake.com): DKIM/DKIM2 come back
-// as a bare selector with no domain suffix at all
-// ('selector1-azurecomm-prod-net._domainkey'), and Domain/SPF come back as the
-// full custom-domain FQDN. Passing either straight through as a dns.bicep
-// record-set name inside the PARENT zone (rvintake.com) is wrong: the FQDN form
-// double-suffixes (the observed failure was
-// 'mail.staging.rvintake.com.rvintake.com'), and the bare-selector form is
-// missing the subdomain host it needs to sit under. Both are corrected here by
-// combining them with the subdomain's own label under the zone — 'mail' for
-// mail.rvintake.com, 'mail-staging' for mail-staging.rvintake.com — the same
-// label the DMARC record below already uses.
-//
-// Since #634 that label is a SINGLE label in every environment: staging's domain
-// was renamed from mail.staging.rvintake.com to mail-staging.rvintake.com to match
-// the <function>-staging convention the other hosts use. The replace() below
-// handles either shape, so this is a parameter change rather than a code one —
-// but a single label is the shape the rest of this template assumes, and it
-// removes the double-suffix trap above rather than relying on the fix.
-var acsCustomDomainSubLabel = acsCustomDomainOn ? replace(acsCustomEmailDomain, '.${intakeZoneName}', '') : ''
+// The subdomain's own label under the intake zone — 'mail' in prod,
+// 'mail-staging' in staging. A single label in every environment (#634).
+var mailSendingSubLabel = mailSendingDomainOn ? replace(mailSendingDomain, '.${intakeZoneName}', '') : ''
 
-var acsCustomDomainCnameRecords = acsCustomDomainOn ? [
+// SendGrid domain authentication with automated security asks for three CNAMEs:
+// the return path (em1234.mail → u1234.wl.sendgrid.net), which carries SPF for
+// the envelope sender, and two DKIM selectors (s1/s2._domainkey.mail). They are
+// minted per domain in the SendGrid console, so they arrive as a parameter, with
+// names already zone-relative. Nothing is needed at the subdomain label itself.
+var sendGridCnameRecords = mailSendingDomainOn ? sendGridDnsRecords : []
+
+// DMARC is authored here so we control the policy and the reporting address:
+// p=none surfaces failures without dropping mail while the domain warms. Relaxed
+// alignment is what lets SendGrid's d=mail.rvintake.com DKIM signature and its
+// em1234.mail.rvintake.com envelope both align with the From domain. Reports
+// reach a human only if the reporting domain authorizes them — see "DMARC
+// aggregate-report destination (#608)" below.
+var mailSendingDmarcTxtRecords = mailSendingDomainOn ? [
   {
-    #disable-next-line BCP318
-    name: '${communicationServices.outputs.customDomainVerificationRecords.DKIM.name}.${acsCustomDomainSubLabel}'
-    #disable-next-line BCP318
-    target: communicationServices.outputs.customDomainVerificationRecords.DKIM.value
-  }
-  {
-    #disable-next-line BCP318
-    name: '${communicationServices.outputs.customDomainVerificationRecords.DKIM2.name}.${acsCustomDomainSubLabel}'
-    #disable-next-line BCP318
-    target: communicationServices.outputs.customDomainVerificationRecords.DKIM2.value
+    name: '_dmarc.${mailSendingSubLabel}'
+    values: [ 'v=DMARC1; p=none; rua=mailto:${dmarcReportingAddress}; adkim=r; aspf=r' ]
   }
 ] : []
-
-// DMARC is authored here (not taken from ACS) so we control the policy and the
-// reporting address: p=none surfaces failures without dropping mail while the
-// domain warms. Reports reach a human only if the reporting domain authorizes
-// them — see "DMARC aggregate-report destination (#608)" below.
-var acsCustomDomainDmarcRecord = {
-  name: '_dmarc.${acsCustomDomainSubLabel}'
-  values: [ 'v=DMARC1; p=none; rua=mailto:${dmarcReportingAddress}; adkim=r; aspf=r' ]
-}
-
-// Domain (ownership) + SPF share one record-set name — the subdomain's own
-// label under the zone, not the FQDN ACS returns in .name.
-var acsCustomDomainOwnershipTxtRecords = acsCustomDomainOn ? [
-  {
-    name: acsCustomDomainSubLabel
-    values: [
-      #disable-next-line BCP318
-      communicationServices.outputs.customDomainVerificationRecords.Domain.value
-      #disable-next-line BCP318
-      communicationServices.outputs.customDomainVerificationRecords.SPF.value
-    ]
-  }
-] : []
-var acsCustomDomainTxtRecords = acsCustomDomainOn ? concat(acsCustomDomainOwnershipTxtRecords, [ acsCustomDomainDmarcRecord ]) : []
 
 // ── DMARC aggregate-report destination (#608) ──
 //
@@ -720,7 +645,7 @@ var acsCustomDomainTxtRecords = acsCustomDomainOn ? concat(acsCustomDomainOwners
 var dmarcReportingDomain = empty(dmarcReportingAddress) ? '' : toLower(last(split(dmarcReportingAddress, '@')))
 var dmarcReportingIsExternal = !empty(dmarcReportingDomain) && dmarcReportingDomain != intakeZoneName && !endsWith(dmarcReportingDomain, '.${intakeZoneName}')
 var dmarcReportAuthorizationNames = dmarcReportingIsExternal ? concat(
-  acsCustomDomainOn ? [ '${acsCustomEmailDomain}._report._dmarc.${dmarcReportingDomain}' ] : [],
+  mailSendingDomainOn ? [ '${mailSendingDomain}._report._dmarc.${dmarcReportingDomain}' ] : [],
   (intakeApexIsManaged && deploySwa && deployDns) ? [ '${intakeZoneName}._report._dmarc.${dmarcReportingDomain}' ] : []
 ) : []
 
@@ -825,39 +750,6 @@ var auth0CnameRecords = empty(auth0CustomDomainCnameTarget) ? [] : [
     target: auth0CustomDomainCnameTarget
   }
 ]
-
-module acsKeyVaultSecrets 'modules/acs-keyvault-secrets.bicep' = if (deployAcs && deployKeyVault) {
-  name: 'deploy-acs-kv-secrets-${environmentName}'
-  scope: rgPrimary
-  params: {
-    #disable-next-line BCP318
-    keyVaultName: deployKeyVault ? keyVault.outputs.name : 'unused'
-    #disable-next-line BCP318
-    acsName: deployAcs ? communicationServices.outputs.name : 'unused'
-  }
-}
-
-// ── Event Grid: inbound ACS SMS events (issue #665) ───────────
-
-// Needs the API host to deliver to, and the secret the API checks. The key is
-// not part of the condition (#678): it is read from Key Vault by the
-// .bicepparam, so a missing key fails the deploy rather than dropping this
-// module. See the module header for the secret-first ordering a first bring-up
-// needs — Event Grid validates the endpoint as it creates the subscription, so
-// the API has to be running with the secret already.
-module eventGridAcsSms 'modules/eventgrid-acs-sms.bicep' = if (deployAcs && deployAppService) {
-  name: 'deploy-eventgrid-acs-sms-${environmentName}'
-  scope: rgPrimary
-  params: {
-    #disable-next-line BCP318
-    acsName: deployAcs ? communicationServices.outputs.name : 'unused'
-    systemTopicName: 'evgt-rvs-acs-${environmentName}'
-    #disable-next-line BCP318
-    tags: deployAcs ? acsNaming.outputs.tags : {}
-    apiHostName: '${apiDnsPrefix}.${apiZoneName}'
-    eventGridWebhookKey: eventGridWebhookKey
-  }
-}
 
 // ── Key Vault Secrets (Cosmos DB) ─────────────────────────────
 
@@ -1024,12 +916,11 @@ module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
 //           on Azure DNS" flow (or the CLI equivalent) — README.md "Deploy
 //           Production". Incremental deploys leave them alone thereafter.
 
-// The Intake zone also carries the ACS custom-sending-domain records
-// (SPF/DKIM/DMARC for mail.rvintake.com in prod, mail-staging.rvintake.com in
-// staging) when acsCustomEmailDomain is set — see "ACS custom sending domain —
-// derived values (#532)" above. The two use distinct record names, so neither
-// environment's deploy touches the other's. An env without acsCustomEmailDomain
-// leaves acsCustomDomain* empty, so this is a no-op there.
+// The Intake zone also carries the sending-domain records (SendGrid CNAMEs and
+// DMARC for mail.rvintake.com in prod, mail-staging.rvintake.com in staging)
+// when mailSendingDomain is set — see "Email sending domain (SendGrid)" above.
+// The two use distinct record names, so neither environment's deploy touches the
+// other's. An env without mailSendingDomain leaves them empty.
 //
 // It also carries the Auth0 Universal Login record (login.rvintake.com, #627) once
 // auth0CustomDomainCnameTarget is set — see "login.rvintake.com" above. That one is
@@ -1049,10 +940,10 @@ module dnsApi 'modules/dns.bicep' = if (deploySwa && deployDns) {
 //
 // ⚠ READ THIS BEFORE ADDING A SENDING SUBDOMAIN. A DMARC policy applies to every
 // subdomain with no record of its own, and this one says reject. A new sender
-// under rvintake.com (a second ACS domain, a transactional or marketing provider)
+// under rvintake.com (a second SendGrid domain, a marketing provider)
 // that is not given its own _dmarc record has ALL of its mail rejected from the
 // first message. Nothing on the sending side tells you why, and nobody changed a
-// record. Give the new subdomain a _dmarc record, the way acsCustomDomainDmarcRecord
+// record. Give the new subdomain a _dmarc record, the way mailSendingDmarcTxtRecords
 // does, in the same change that starts it sending.
 //
 // Why sp=reject rather than sp=none: mail.rvintake.com is expected to stay the
@@ -1110,7 +1001,7 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         #disable-next-line BCP318
         target: swaIntake.outputs.defaultHostname
       }
-    ], managerCnameRecords, acsCustomDomainCnameRecords, redirectCnameRecords, auth0CnameRecords)
+    ], managerCnameRecords, sendGridCnameRecords, redirectCnameRecords, auth0CnameRecords)
     aRecords: environmentName == 'prod' ? [
       {
         name: '@'
@@ -1118,7 +1009,7 @@ module dnsIntake 'modules/dns.bicep' = if (deploySwa && deployDns) {
         targetResourceId: swaIntake.outputs.id
       }
     ] : []
-    txtRecords: concat(acsCustomDomainTxtRecords, redirectTxtRecords, intakeApexSpfTxtRecords, intakeApexDmarcTxtRecords)
+    txtRecords: concat(mailSendingDmarcTxtRecords, redirectTxtRecords, intakeApexSpfTxtRecords, intakeApexDmarcTxtRecords)
     mxRecords: intakeApexNullMxRecords
   }
 }
@@ -1292,35 +1183,16 @@ output opsAlertReceiverAction string = (deployObservability && empty(opsAlertEma
   ? 'ACTION REQUIRED: set opsAlertEmailReceivers and redeploy — e.g. --parameters opsAlertEmailReceivers=\'[{"name":"oncall","email":"..."}]\'. Do NOT add a receiver via the portal instead: the next deploy will silently delete it (#639). Until a receiver is set via this parameter, packet-pipeline critical alerts fire but notify nobody.'
   : ''
 
-// ── ACS ───────────────────────────────────────────────────────
+// ── Messaging ─────────────────────────────────────────────────
 
-@description('ACS resource endpoint URL. Empty when deployAcs = false.')
-#disable-next-line BCP318
-output acsEndpoint string = deployAcs ? communicationServices.outputs.endpoint : ''
+@description('Email From address applied to the API app settings. Empty when mailSendingDomain is unset.')
+output emailFromAddress string = emailFromAddress
 
-@description('ACS resource name. Empty when deployAcs = false.')
-#disable-next-line BCP318
-output acsName string = deployAcs ? communicationServices.outputs.name : ''
-
-@description('ACS Email Service name. Empty when deployAcs = false.')
-#disable-next-line BCP318
-output acsEmailServiceName string = deployAcs ? communicationServices.outputs.emailServiceName : ''
-
-@description('Azure-managed MailFrom sender domain. Empty when deployAcs = false.')
-#disable-next-line BCP318
-output acsMailFromDomain string = deployAcs ? communicationServices.outputs.azureManagedMailFrom : ''
-
-@description('Custom sending subdomain in use for the packet email. Empty unless acsCustomEmailDomain is set (#532).')
-output acsCustomEmailDomain string = acsCustomDomainOn ? acsCustomEmailDomain : ''
-
-@description('Packet-email From address applied to the API app settings — custom verified domain when configured, else the Azure-managed domain.')
-output acsEmailFromAddress string = deployAcs ? acsEmailFromAddress : ''
-
-@description('Manual follow-up when a custom sending domain is configured. Bicep provisions the CustomerManaged ACS domain and writes its SPF/DKIM/DMARC records, but cannot initiate verification, link the verified domain to the account, or raise the send quota. Empty when acsCustomEmailDomain is unset.')
-output acsCustomDomainAction string = acsCustomDomainOn
-  ? (acsCustomDomainVerified
-      ? 'Domain linked to the ACS account. If sends fail with DomainNotLinked, confirm every entry in `az communication email domain show ... --query properties.verificationStates` reads Verified. Send quota starts at 30/min, 100/hour; request an increase only when volume warrants it (#603) — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.'
-      : 'ACTION REQUIRED: run `az communication email domain initiate-verification` for Domain/SPF/DKIM/DKIM2, confirm every record shows Verified, then set acsCustomDomainVerified=true in the parameter file and redeploy to link the domain to the account — see Infra/Bicep.IaC/README.md "Deploy Production" step 4.')
+@description('Manual follow-up for the sending domain. Bicep writes the SendGrid CNAMEs and the _dmarc record, but the domain is added and verified in the SendGrid console. Empty when mailSendingDomain is unset.')
+output mailSendingDomainAction string = mailSendingDomainOn
+  ? (empty(sendGridDnsRecords)
+      ? 'ACTION REQUIRED: in SendGrid (Settings → Sender Authentication), authenticate ${mailSendingDomain} with automated security on, copy its three CNAMEs into sendGridDnsRecords (zone-relative names) in the parameter file, redeploy, then press Verify in SendGrid. Until then every email is refused.'
+      : 'SendGrid CNAMEs for ${mailSendingDomain} are written. If SendGrid does not show the domain Verified, press Verify there; see Infra/Bicep.IaC/README.md "Email — SendGrid".')
   : ''
 
 @description('Manual DNS step that Bicep cannot do (#608). dmarcReportingAddress is on another organizational domain, so RFC 7489 §7.1 requires that domain to publish a TXT "v=DMARC1" at <policy-domain>._report._dmarc.<rua-domain> for every policy domain naming it, or conforming receivers drop the reports. That zone is at its registrar, outside Azure. Empty when the address is inside the intake zone or unset.')

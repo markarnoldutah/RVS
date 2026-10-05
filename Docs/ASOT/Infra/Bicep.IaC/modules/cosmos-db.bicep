@@ -455,7 +455,7 @@ resource intakeInvites 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/conta
           { path: '/locationId/?' }
           { path: '/advisorUserId/?' }
           { path: '/createdAtUtc/?' }
-          { path: '/acsMessageId/?' }
+          { path: '/providerMessageId/?' }
         ]
         excludedPaths: [
           { path: '/*' }

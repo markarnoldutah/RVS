@@ -23,7 +23,8 @@ internal static class ServiceRequestConfirmationContent
     /// <summary>
     /// Submitted verbatim as a sample message in the toll-free verification application (#659),
     /// so it changes only in step with that application and with <c>Spec A-2</c>'s disclosure
-    /// wording. <c>HELP</c> is answered by the inbound keyword handler (#665).
+    /// wording. <c>HELP</c> is answered by Twilio's Advanced Opt-Out, with the text in
+    /// <see cref="InboundSmsReplyContent.Help"/>.
     /// </summary>
     private const string Compliance = "Msg & data rates may apply. Reply STOP to opt out, HELP for help.";
 
@@ -41,25 +42,52 @@ internal static class ServiceRequestConfirmationContent
         string dealershipName, string? customerFirstName, string statusUrl, int? expiresInDays, string? dealerPhone)
     {
         var dealer = WebUtility.HtmlEncode(dealershipName);
-        var greeting = string.IsNullOrWhiteSpace(customerFirstName)
-            ? "Hi,"
-            : $"Hi {WebUtility.HtmlEncode(customerFirstName.Trim())},";
         var href = WebUtility.HtmlEncode(statusUrl);
-        var expiry = expiresInDays is { } days
-            ? $" This link expires in {days} {(days == 1 ? "day" : "days")}."
-            : string.Empty;
-        var questions = string.IsNullOrWhiteSpace(dealerPhone)
-            ? $"If you have questions, please contact {dealer} directly."
-            : $"If you have questions, please contact {dealer} directly at {WebUtility.HtmlEncode(dealerPhone.Trim())}.";
+        var phone = dealerPhone is null ? null : WebUtility.HtmlEncode(dealerPhone);
 
         return
-            $"<p>{greeting}</p>" +
+            $"<p>{Greeting(customerFirstName is null ? null : WebUtility.HtmlEncode(customerFirstName))}</p>" +
             $"<p>Thank you for submitting a service request for your RV to <strong>{dealer}</strong>. " +
             "Use the link below to check your request status at any time:</p>" +
             $"<p><a href=\"{href}\">Check request status</a></p>" +
-            $"<p>You're receiving this email from RV Intake on behalf of {dealer} because you submitted a service request.{expiry}</p>" +
-            $"<p>{questions}</p>";
+            $"<p>{SenderSentence(dealer, expiresInDays)}</p>" +
+            $"<p>{QuestionsSentence(dealer, phone)}</p>";
     }
+
+    /// <summary>
+    /// The same message as <see cref="BuildEmailHtmlBody"/> for the plain-text alternative
+    /// (issue #829): no markup and no entities, with the status link bare on its own line so a
+    /// plain-text client neither wraps nor hides it.
+    /// </summary>
+    public static string BuildEmailPlainTextBody(
+        string dealershipName, string? customerFirstName, string statusUrl, int? expiresInDays, string? dealerPhone) =>
+        string.Join(
+            "\n\n",
+            Greeting(customerFirstName),
+            $"Thank you for submitting a service request for your RV to {dealershipName}. " +
+            "Use the link below to check your request status at any time:",
+            statusUrl,
+            SenderSentence(dealershipName, expiresInDays),
+            QuestionsSentence(dealershipName, dealerPhone));
+
+    // The sentences below take their variable parts already encoded for the HTML body and raw for
+    // the plain-text one, so the fixed wording itself is never entity-encoded.
+
+    private static string Greeting(string? customerFirstName) =>
+        string.IsNullOrWhiteSpace(customerFirstName) ? "Hi," : $"Hi {customerFirstName.Trim()},";
+
+    private static string SenderSentence(string dealershipName, int? expiresInDays)
+    {
+        var expiry = expiresInDays is { } days
+            ? $" This link expires in {days} {(days == 1 ? "day" : "days")}."
+            : string.Empty;
+        return $"You're receiving this email from RV Intake on behalf of {dealershipName} because you submitted a service request.{expiry}";
+    }
+
+    private static string QuestionsSentence(string dealershipName, string? dealerPhone) =>
+        string.IsNullOrWhiteSpace(dealerPhone)
+            ? $"If you have questions, please contact {dealershipName} directly."
+            : $"If you have questions, please contact {dealershipName} directly at {dealerPhone.Trim()}.";
 
     public static string BuildSmsBody(string dealershipName, string statusUrl, string? dealerPhone)
     {

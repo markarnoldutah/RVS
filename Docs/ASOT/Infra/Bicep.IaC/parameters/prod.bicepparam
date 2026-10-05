@@ -102,18 +102,26 @@ param opsAlertEmailReceivers = [
   }
 ]
 
-// Communication Services (Email + SMS)
-param deployAcs = true
+// Messaging: email through SendGrid, SMS through Twilio (Oct 2 2026 — ACS removed
+// before go-live; it retires Sep 30 2028). Neither is an Azure resource. Keys
+// live in Key Vault (SendGrid--ApiKey, Twilio--AccountSid / --ApiKeySid /
+// --ApiKeySecret / --AuthToken), set by hand; README "Email — SendGrid" and
+// "SMS — Twilio".
 
-// Custom sending subdomain for the packet email (#532). The Azure-managed
-// *.azurecomm.net domain is capped at 10 emails/hour with no support path to
-// raise it, and carries no sender reputation — a spam quarantine at a pilot
-// shop is unrecoverable. Bicep provisions the CustomerManaged ACS domain and
-// writes its SPF (-all) / DKIM / DMARC (p=none) records into the rvintake.com
-// zone; the operator then runs `az communication email domain
-// initiate-verification` — README "Deploy Production" step 4. The send-quota
-// increase is volume-triggered (#603), not part of bring-up.
-param acsCustomEmailDomain = 'mail.rvintake.com'
+// Sending subdomain for all prod email, authenticated in SendGrid.
+param mailSendingDomain = 'mail.rvintake.com'
+// The three CNAMEs SendGrid domain authentication (automated security) shows for
+// mail.rvintake.com, with names relative to rvintake.com, e.g.
+//   { name: 'em1234.mail', target: 'u1234.wl.sendgrid.net' }
+//   { name: 's1._domainkey.mail', target: 's1.domainkey.u1234.wl.sendgrid.net' }
+//   { name: 's2._domainkey.mail', target: 's2.domainkey.u1234.wl.sendgrid.net' }
+// Empty until the domain is added in SendGrid; the mailSendingDomainAction
+// output says what is left to do.
+param sendGridDnsRecords = [
+  { name: 'em5357.mail', target: 'u116141940.wl191.sendgrid.net' }
+  { name: 's1._domainkey.mail', target: 's1.domainkey.u116141940.wl191.sendgrid.net' }
+  { name: 's2._domainkey.mail', target: 's2.domainkey.u116141940.wl191.sendgrid.net' }
+]
 // DMARC aggregate-report destination (#608): a monitored mailbox on the filing
 // entity's own domain, the same address the Intake footer shows (SiteIdentity.cs).
 //
@@ -129,25 +137,16 @@ param acsCustomEmailDomain = 'mail.rvintake.com'
 // placeholder, until 2026-09-17. Then dmarc-reports@rvintake.com, which bounced
 // because rvintake.com has no MX. It now has a null MX (prod apex, #608).
 param dmarcReportingAddress = 'support@arnolddigitalsolutions.com'
-// Verified and linked. Must stay true: false unlinks the domain on redeploy.
-param acsCustomDomainVerified = true
-// SMS (#661). Prod's ACS resource owns toll-free +18332398230. Its toll-free
-// verification is #659; flip acsSmsEnabled to true and redeploy only once the
-// portal shows it verified.
-param acsSmsFromPhoneNumber = '+18332398230'
-param acsSmsEnabled = false
 
-// Inbound Event Grid webhook (#665, #678). The value lives only in Key Vault as
-// EventGrid--Inbound--Key; this line makes ARM read it at deploy time, so it is
-// never typed, never on a command line and never in this file. Every deploy
-// picks up the current value. If the secret cannot be read (missing, vault not
-// enabledForTemplateDeployment, deployer lacks
-// Microsoft.KeyVault/vaults/deploy/action) the deploy FAILS before creating or
-// removing anything, rather than quietly deploying no subscription.
-// The subscription id is the one this environment deploys into; getSecret needs
-// it as a literal. Rotation and first bring-up of a brand-new environment: see
-// the runbook in RVS_Infrastructure.md.
-param eventGridWebhookKey = az.getSecret('4d1d5e99-e872-496d-98be-e8a0a4232aec', 'rg-rvs-prod-westus3', 'kv-rvs-prod-wus3', 'EventGrid--Inbound--Key')
+// SMS (#661). The prod Twilio subaccount's toll-free number and the Messaging
+// Service that holds it. Both empty until they are bought and created in the
+// Twilio console. Leave smsEnabled false until Twilio shows the number's
+// toll-free verification approved (#659), then flip it and redeploy (G-4).
+// The ACS numbers (+18662319618 staging, +18332398230 prod) were released on
+// Oct 2 2026 and are gone.
+param smsFromPhoneNumber = ''
+param twilioMessagingServiceSid = ''
+param smsEnabled = false
 
 // Static Web Apps — Free until go-live, to cut cost while prod carries no
 // traffic. Set back to 'Standard' at go-live for the SLA:

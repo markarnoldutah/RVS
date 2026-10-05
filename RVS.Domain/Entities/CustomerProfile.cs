@@ -69,7 +69,7 @@ public class CustomerProfile : EntityBase
 
     /// <summary>
     /// When the last inbound keyword (<c>STOP</c> / <c>START</c> / <c>UNSTOP</c>) that RVS acted
-    /// on was sent. Event Grid delivers at least once and in no fixed order, so an event older
+    /// on was received. Webhooks may repeat or arrive in no fixed order, so an event older
     /// than this is ignored rather than allowed to undo a later one (issue #665).
     /// Null when no keyword has ever arrived for this number.
     /// </summary>
@@ -118,12 +118,12 @@ public class CustomerProfile : EntityBase
     /// it is answered with a fixed reply, and is neither consent nor a revocation.
     ///
     /// An event at or before <see cref="SmsKeywordAtUtc"/> is ignored, which covers both the
-    /// duplicate deliveries and the out-of-order pairs Event Grid is allowed to produce.
+    /// duplicate deliveries and out-of-order pairs a webhook can produce.
     /// <see cref="SmsOptOutAtUtc"/> keeps the *first* opt-out's time, since that is the evidence
     /// of when the customer asked; a repeat only advances <see cref="SmsKeywordAtUtc"/>.
     /// </summary>
     /// <param name="keyword">What the inbound text meant.</param>
-    /// <param name="eventAtUtc">When the customer sent it, per the ACS event.</param>
+    /// <param name="eventAtUtc">When the customer sent it, per the inbound webhook.</param>
     /// <returns><c>true</c> when the record changed and needs persisting.</returns>
     public bool ApplySmsKeyword(SmsKeyword keyword, DateTime eventAtUtc)
     {

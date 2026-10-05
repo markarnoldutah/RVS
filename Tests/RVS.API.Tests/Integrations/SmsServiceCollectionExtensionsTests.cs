@@ -1,4 +1,3 @@
-using Azure.Communication.Sms;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,95 +9,93 @@ using RVS.Domain.Integrations;
 namespace RVS.API.Tests.Integrations;
 
 /// <summary>
-/// The SMS registration gate (issue #661): <c>Sms:Enabled</c> is checked before the ACS endpoint,
-/// so an environment whose vault holds <c>AzureCommunicationServices--Endpoint</c> still sends no
-/// SMS until the flag is turned on.
+/// The SMS registration gate (issue #661): <c>Sms:Enabled</c> is checked before the Twilio
+/// credentials, so an environment whose vault already holds them sends no SMS until its
+/// toll-free number is verified and the flag is turned on.
 /// </summary>
 public class SmsServiceCollectionExtensionsTests
 {
-    private const string AcsEndpoint = "https://rvs-acs-test.communication.azure.com";
-    private const string FromNumber = "+18662319618";
+    private const string FromNumber = "+18885550100";
 
-    private int _smsClientsCreated;
+    private static readonly Dictionary<string, string?> TwilioCredentials = new()
+    {
+        ["Twilio:AccountSid"] = "ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ["Twilio:ApiKeySid"] = "SKdddddddddddddddddddddddddddddddd",
+        ["Twilio:ApiKeySecret"] = "secret",
+    };
 
     [Fact]
-    public void AddSmsNotifications_WhenDisabledWithAnAcsEndpoint_ShouldRegisterNoOpAndNeverBuildAnSmsClient()
+    public void AddSmsNotifications_WhenDisabledWithTwilioCredentials_ShouldRegisterNoOp()
     {
-        using var provider = Build(useMocks: false, new()
+        using var provider = Build(useMocks: false, With(TwilioCredentials, new()
         {
-            ["AzureCommunicationServices:Endpoint"] = AcsEndpoint,
-            ["AzureCommunicationServices:Sms:Enabled"] = "false",
-            ["AzureCommunicationServices:Sms:FromPhoneNumber"] = FromNumber,
-        });
+            ["Sms:Enabled"] = "false",
+            ["Sms:FromPhoneNumber"] = FromNumber,
+        }));
 
         provider.GetRequiredService<ISmsNotificationService>().Should().BeOfType<NoOpSmsNotificationService>();
-        provider.GetService<SmsClient>().Should().BeNull();
-        _smsClientsCreated.Should().Be(0);
     }
 
     [Fact]
     public void AddSmsNotifications_WhenEnabledIsUnset_ShouldDefaultToNoOp()
     {
-        using var provider = Build(useMocks: false, new()
-        {
-            ["AzureCommunicationServices:Endpoint"] = AcsEndpoint,
-        });
+        using var provider = Build(useMocks: false, With(TwilioCredentials, new()));
 
         provider.GetRequiredService<ISmsNotificationService>().Should().BeOfType<NoOpSmsNotificationService>();
-        _smsClientsCreated.Should().Be(0);
     }
 
     [Fact]
-    public void AddSmsNotifications_WhenEnabledWithAnAcsEndpoint_ShouldRegisterAcs()
+    public void AddSmsNotifications_WhenEnabledWithTwilioCredentials_ShouldRegisterTwilio()
     {
-        using var provider = Build(useMocks: false, new()
+        using var provider = Build(useMocks: false, With(TwilioCredentials, new()
         {
-            ["AzureCommunicationServices:Endpoint"] = AcsEndpoint,
-            ["AzureCommunicationServices:Sms:Enabled"] = "true",
-            ["AzureCommunicationServices:Sms:FromPhoneNumber"] = FromNumber,
-        });
+            ["Sms:Enabled"] = "true",
+            ["Sms:FromPhoneNumber"] = FromNumber,
+        }));
 
         using var scope = provider.CreateScope();
 
-        scope.ServiceProvider.GetRequiredService<ISmsNotificationService>().Should().BeOfType<AcsSmsNotificationService>();
-        _smsClientsCreated.Should().Be(1);
+        scope.ServiceProvider.GetRequiredService<ISmsNotificationService>().Should().BeOfType<TwilioSmsNotificationService>();
     }
 
-    [Fact]
-    public void AddSmsNotifications_WhenEnabledWithoutAnAcsEndpoint_ShouldRegisterNoOp()
+    [Theory]
+    [InlineData("Twilio:AccountSid")]
+    [InlineData("Twilio:ApiKeySid")]
+    [InlineData("Twilio:ApiKeySecret")]
+    public void AddSmsNotifications_WhenEnabledButACredentialIsMissing_ShouldRegisterNoOp(string missing)
     {
-        using var provider = Build(useMocks: false, new()
+        var settings = With(TwilioCredentials, new()
         {
-            ["AzureCommunicationServices:Sms:Enabled"] = "true",
-            ["AzureCommunicationServices:Sms:FromPhoneNumber"] = FromNumber,
+            ["Sms:Enabled"] = "true",
+            ["Sms:FromPhoneNumber"] = FromNumber,
         });
+        settings.Remove(missing);
+
+        using var provider = Build(useMocks: false, settings);
 
         provider.GetRequiredService<ISmsNotificationService>().Should().BeOfType<NoOpSmsNotificationService>();
-        _smsClientsCreated.Should().Be(0);
     }
 
     [Fact]
     public void AddSmsNotifications_WhenUsingMocks_ShouldRegisterNoOpEvenIfEnabled()
     {
-        using var provider = Build(useMocks: true, new()
+        using var provider = Build(useMocks: true, With(TwilioCredentials, new()
         {
-            ["AzureCommunicationServices:Endpoint"] = AcsEndpoint,
-            ["AzureCommunicationServices:Sms:Enabled"] = "true",
-            ["AzureCommunicationServices:Sms:FromPhoneNumber"] = FromNumber,
-        });
+            ["Sms:Enabled"] = "true",
+            ["Sms:FromPhoneNumber"] = FromNumber,
+        }));
 
         provider.GetRequiredService<ISmsNotificationService>().Should().BeOfType<NoOpSmsNotificationService>();
-        _smsClientsCreated.Should().Be(0);
     }
 
     [Fact]
-    public void AddSmsNotifications_ShouldBindSmsOptionsFromTheAcsSmsSection()
+    public void AddSmsNotifications_ShouldBindSmsOptionsFromTheSmsSection()
     {
         using var provider = Build(useMocks: false, new()
         {
-            ["AzureCommunicationServices:Sms:Enabled"] = "true",
-            ["AzureCommunicationServices:Sms:FromPhoneNumber"] = FromNumber,
-            ["AzureCommunicationServices:Sms:MaxMessagesPerTenantPerHour"] = "42",
+            ["Sms:Enabled"] = "true",
+            ["Sms:FromPhoneNumber"] = FromNumber,
+            ["Sms:MaxMessagesPerTenantPerHour"] = "42",
         });
 
         var options = provider.GetRequiredService<IOptions<SmsOptions>>().Value;
@@ -106,6 +103,22 @@ public class SmsServiceCollectionExtensionsTests
         options.Enabled.Should().BeTrue();
         options.FromPhoneNumber.Should().Be(FromNumber);
         options.MaxMessagesPerTenantPerHour.Should().Be(42);
+    }
+
+    [Fact]
+    public void AddSmsNotifications_ShouldBindTwilioOptionsEvenWhenSmsIsOff()
+    {
+        // The inbound webhook verifies signatures with the auth token whether or not sending is on.
+        using var provider = Build(useMocks: false, new()
+        {
+            ["Twilio:AuthToken"] = "token",
+            ["Twilio:WebhookBaseUrl"] = "https://api.rvserviceflow.com",
+        });
+
+        var twilio = provider.GetRequiredService<IOptions<TwilioOptions>>().Value;
+
+        twilio.AuthToken.Should().Be("token");
+        twilio.WebhookBaseUrl.Should().Be("https://api.rvserviceflow.com");
     }
 
     [Fact]
@@ -123,7 +136,7 @@ public class SmsServiceCollectionExtensionsTests
     {
         using var provider = Build(useMocks: false, new()
         {
-            ["AzureCommunicationServices:Sms:Enabled"] = "true",
+            ["Sms:Enabled"] = "true",
         });
 
         var act = () => provider.GetRequiredService<IOptions<SmsOptions>>().Value;
@@ -131,17 +144,16 @@ public class SmsServiceCollectionExtensionsTests
         act.Should().Throw<OptionsValidationException>();
     }
 
-    private ServiceProvider Build(bool useMocks, Dictionary<string, string?> settings)
+    private static Dictionary<string, string?> With(Dictionary<string, string?> first, Dictionary<string, string?> second) =>
+        first.Concat(second).ToDictionary(kv => kv.Key, kv => kv.Value);
+
+    private static ServiceProvider Build(bool useMocks, Dictionary<string, string?> settings)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddSmsNotifications(configuration, useMocks, endpoint =>
-        {
-            _smsClientsCreated++;
-            return new SmsClient($"endpoint={endpoint};accesskey=dGVzdA==");
-        });
+        services.AddSmsNotifications(configuration, useMocks);
 
         return services.BuildServiceProvider();
     }

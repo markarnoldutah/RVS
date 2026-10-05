@@ -26,9 +26,4 @@ public sealed class ConfiguredSmsSenderNumberResolver : ISmsSenderNumberResolver
         return Task.FromResult(
             string.IsNullOrWhiteSpace(_options.FromPhoneNumber) ? null : _options.FromPhoneNumber);
     }
-
-    /// <inheritdoc />
-    public Task<string?> ResolveDefaultAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(
-            string.IsNullOrWhiteSpace(_options.FromPhoneNumber) ? null : _options.FromPhoneNumber);
 }

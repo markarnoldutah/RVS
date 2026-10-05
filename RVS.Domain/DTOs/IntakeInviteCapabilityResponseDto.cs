@@ -8,13 +8,13 @@ namespace RVS.Domain.DTOs;
 public sealed record IntakeInviteCapabilityResponseDto
 {
     /// <summary>
-    /// <c>true</c> when the API will actually hand an invite to ACS. It is <c>false</c> in any
+    /// <c>true</c> when the API will actually hand an invite to the SMS provider. It is <c>false</c> in any
     /// environment whose toll-free number is not verified yet.
     /// </summary>
     public required bool SmsEnabled { get; init; }
 
     /// <summary>
-    /// <c>true</c> when the API will actually hand an emailed invite to ACS (issue #693). It is
+    /// <c>true</c> when the API will actually hand an emailed invite to the email provider (issue #693). It is
     /// <c>false</c> wherever email falls back to the no-op sender. Not <c>required</c>, so an
     /// older API that never sent it reads as email being unavailable.
     /// </summary>

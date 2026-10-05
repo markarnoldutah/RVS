@@ -432,7 +432,7 @@ public sealed class IntakeOrchestrationService : IIntakeOrchestrationService
             ? (int)Math.Ceiling((expiresAtUtc - DateTime.UtcNow).TotalDays)
             : null;
 
-        // ACS only accepts E.164 (issue #661). A number that doesn't normalise is dropped from the
+        // SMS sends require E.164 (issue #661). A number that doesn't normalise is dropped from the
         // notification rather than sent raw; the profile keeps it as entered.
         // The preference chooses the channel; the opt-outs veto it (Spec A-2, issue #662). They are
         // the profile's stored opt-outs, not this submission's boxes (issue #673): a Text preference

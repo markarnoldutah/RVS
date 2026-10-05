@@ -77,10 +77,10 @@ public class PacketEmailDeliveryEmbeddedTests
         var d = new PacketEmailDeliveryEmbedded();
         d.MarkAttempt();
 
-        d.MarkFailed("InvalidOperationException: ACS rejected the message");
+        d.MarkFailed("InvalidOperationException: SendGrid rejected the message");
 
         d.Status.Should().Be("Failed");
-        d.LastError.Should().Be("InvalidOperationException: ACS rejected the message");
+        d.LastError.Should().Be("InvalidOperationException: SendGrid rejected the message");
         d.AttemptCount.Should().Be(1);
     }
 
