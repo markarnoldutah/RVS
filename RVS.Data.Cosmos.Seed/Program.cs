@@ -3,8 +3,15 @@
 // Idempotent: safe to re-run (uses UpsertItemAsync and CreateContainerIfNotExistsAsync).
 //
 // Usage:
-//   dotnet run                          → seeds Local (emulator)
-//   dotnet run -- --environment Staging → seeds Staging
+//   dotnet run                             → seeds Local (emulator)
+//   dotnet run -- --environment Staging    → seeds Staging
+//   dotnet run -- --environment Production → refreshes Production reference data only
+//
+// Production is reference-data only. It upserts the global, tenant-free containers
+// (lookup-sets, rv-warranty-rules), never deletes a container, and never builds or
+// writes a tenant, location, customer or service request. Production reads its Cosmos
+// key from its own user-secrets store (ProductionUserSecretsId below), so a Staging
+// key can never point a Production run at the wrong account, or the reverse.
 //
 // Configuration layering:
 //   appsettings.json → appsettings.{environment}.json → user secrets → command-line args
@@ -28,12 +35,14 @@ var cmdConfig = new ConfigurationBuilder()
     .Build();
 
 var environment = cmdConfig["environment"] ?? "Local";
-var validEnvironments = new[] { "Local", "Staging" };
+var validEnvironments = new[] { "Local", "Staging", "Production" };
 if (!validEnvironments.Contains(environment, StringComparer.OrdinalIgnoreCase))
 {
     Console.WriteLine($"✗ Unknown environment '{environment}'. Valid values: {string.Join(", ", validEnvironments)}");
     return;
 }
+
+var isProduction = string.Equals(environment, "Production", StringComparison.OrdinalIgnoreCase);
 
 Console.WriteLine($"🌍 Environment: {environment}");
 Console.WriteLine();
@@ -45,7 +54,11 @@ var configBuilder = new ConfigurationBuilder()
 
 // User secrets supply sensitive values (e.g. Cosmos key) for non-local environments.
 // Local emulator creds live in appsettings.local.json and are not secret.
-if (!string.Equals(environment, "Local", StringComparison.OrdinalIgnoreCase))
+// Production has its own store so it never inherits Staging's endpoint or key.
+const string ProductionUserSecretsId = "rvs-cosmos-seed-production";
+if (isProduction)
+    configBuilder.AddUserSecrets(ProductionUserSecretsId);
+else if (!string.Equals(environment, "Local", StringComparison.OrdinalIgnoreCase))
     configBuilder.AddUserSecrets<Program>(optional: false);
 
 configBuilder.AddCommandLine(args, switchMappings);
@@ -57,15 +70,29 @@ var key = configuration["CosmosDb:Key"] ?? throw new InvalidOperationException("
 var databaseId = configuration["CosmosDb:DatabaseId"] ?? throw new InvalidOperationException("CosmosDb:DatabaseId is not configured.");
 
 // Container management — set to true to delete and recreate containers (WARNING: deletes all data!)
+// Never honoured on Production.
 const bool DeleteContainersBeforeCreating = true;
+var deleteContainers = DeleteContainersBeforeCreating && !isProduction;
+
+// The global, tenant-free containers. These are the only ones a Production run touches.
+string[] referenceContainerIds = ["lookup-sets", "rv-warranty-rules"];
+
+// Belt and braces against a Production run aimed at another environment's account.
+if (isProduction && !endpointUri.Contains("-prod-", StringComparison.OrdinalIgnoreCase))
+{
+    Console.WriteLine($"✗ Production endpoint '{endpointUri}' does not look like a production account (expected '-prod-' in the host).");
+    return;
+}
 
 if (!string.Equals(environment, "Local", StringComparison.OrdinalIgnoreCase))
 {
     Console.ForegroundColor = ConsoleColor.Yellow;
     Console.WriteLine($"⚠️  You are about to seed the {environment.ToUpperInvariant()} Cosmos database: {databaseId}");
     Console.WriteLine($"   Endpoint: {endpointUri}");
-    if (DeleteContainersBeforeCreating)
+    if (deleteContainers)
         Console.WriteLine("   DeleteContainersBeforeCreating = true — ALL DATA WILL BE DELETED!");
+    if (isProduction)
+        Console.WriteLine($"   Reference data only: upserts {string.Join(", ", referenceContainerIds)}. No container is deleted; no tenant data is written.");
     Console.ResetColor();
     Console.Write("\nType 'yes' to continue: ");
     var confirmation = Console.ReadLine();
@@ -90,8 +117,10 @@ try
 
     // ── 1. Container definitions ────────────────────────────────────────
     var containerDefs = BuildContainerDefinitions();
+    if (isProduction)
+        containerDefs = [.. containerDefs.Where(d => referenceContainerIds.Contains(d.Id))];
 
-    if (DeleteContainersBeforeCreating)
+    if (deleteContainers)
     {
         Console.WriteLine("⚠️  DeleteContainersBeforeCreating = true. Deleting existing containers...");
         foreach (var def in containerDefs)
@@ -113,7 +142,17 @@ try
 
     Console.WriteLine();
 
-    // ── 2. Build all seed data ──────────────────────────────────────────
+    // ── 2. Reference data (every environment) ───────────────────────────
+    await SeedItemsAsync(containers["lookup-sets"], BuildLookupSets(), ls => new PartitionKey(ls.Category), "lookup-sets");
+    await SeedItemsAsync(containers["rv-warranty-rules"], BuildRvWarrantyRules(), wr => new PartitionKey(wr.Manufacturer), "rv-warranty-rules");
+
+    if (isProduction)
+    {
+        Console.WriteLine("\n✓ Done. Production: reference data only — tenant data skipped.");
+        return;
+    }
+
+    // ── 3. Build tenant/demo seed data (Local and Staging only) ─────────
     var tenants = BuildTenants();
     var tenantConfigs = BuildTenantConfigs();
     var dealerships = BuildDealerships();
@@ -123,8 +162,6 @@ try
     var globalAccounts = BuildGlobalCustomerAccounts();
     var serviceRequests = BuildServiceRequests();
     var assetLedgerEntries = BuildAssetLedgerEntries();
-    var lookupSets = BuildLookupSets();
-    var warrantyRules = BuildRvWarrantyRules();
 
     // Profiles carry the phone as a customer would type it, and the E.164 form beside it.
     // Derived rather than written out per profile so the two can never drift: the API does the
@@ -138,7 +175,7 @@ try
                 $"Seed profile '{profile.Id}' has a phone that is not a valid US/CA number: '{profile.Phone}'.");
     }
 
-    // ── 3. Seed each container (idempotent via upsert) ──────────────────
+    // ── 4. Seed each container (idempotent via upsert) ──────────────────
     await SeedItemsAsync(containers["dealerships"], dealerships, d => new PartitionKey(d.TenantId), "dealerships");
     await SeedItemsAsync(containers["locations"], locations, l => new PartitionKey(l.TenantId), "locations");
     await SeedItemsAsync(containers["service-requests"], serviceRequests, sr => new PartitionKey(sr.TenantId), "service-requests");
@@ -147,8 +184,6 @@ try
     await SeedItemsAsync(containers["asset-ledger"], assetLedgerEntries, ale => new PartitionKey(ale.AssetId), "asset-ledger");
     await SeedItemsAsync(containers["slug-lookups"], slugLookups, sl => new PartitionKey(sl.Slug), "slug-lookups");
     await SeedItemsAsync(containers["tenant-configs"], tenantConfigs, tc => new PartitionKey(tc.TenantId), "tenant-configs");
-    await SeedItemsAsync(containers["lookup-sets"], lookupSets, ls => new PartitionKey(ls.Category), "lookup-sets");
-    await SeedItemsAsync(containers["rv-warranty-rules"], warrantyRules, wr => new PartitionKey(wr.Manufacturer), "rv-warranty-rules");
 
     // Tenants go into the dealerships container (same PK /tenantId, discriminated by type)
     await SeedItemsAsync(containers["dealerships"], tenants, t => new PartitionKey(t.TenantId), "tenants (in dealerships container)");

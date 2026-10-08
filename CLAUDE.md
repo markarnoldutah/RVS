@@ -96,6 +96,7 @@ Tools/rvs-launch.cmd
 # Seed Cosmos — idempotent; re-run is safe
 dotnet run --project RVS.Data.Cosmos.Seed                     # Local (emulator)
 dotnet run --project RVS.Data.Cosmos.Seed -- --environment Staging
+dotnet run --project RVS.Data.Cosmos.Seed -- --environment Production  # reference data only (lookup-sets, rv-warranty-rules); never deletes; key in user-secrets id rvs-cosmos-seed-production
 
 # Dump sample packets for print-testing — HTML + PDF, full + minimal
 dotnet run --project RVS.PacketDump -- ~/Desktop
