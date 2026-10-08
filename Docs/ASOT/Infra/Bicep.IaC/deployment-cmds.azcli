@@ -437,50 +437,71 @@ az webapp config appsettings list \
 
 # ── (4) ACS teardown — ONE TIME, per environment, after the Bicep redeploy ────
 # Removing a module from Bicep never deletes the resource (incremental mode), so
-# these are explicit. The phone numbers were already released in the portal on
-# Oct 2 2026 — that had to come first, or deleting the resource leaves them
-# billing as orphans. Confirm none remain before step c:
-#   Portal → acs-rvs-notify-<env>-wus3-s01-001 → Phone numbers → (empty)
+# these are explicit. Flags verified against az 2.90.0 + communication 1.14.0
+# (`--help`, 2026-10-05); names from the deleted ACS modules in git history.
 #
-# Order matters: an email domain cannot be deleted while linked to the ACS
-# resource, and role assignments outlive the scope they were made on.
-ENV=staging                    # then repeat with ENV=prod
+# Preconditions:
+#   - That environment's API already runs the SendGrid/Twilio code (staging:
+#     yes; prod: after the merge + promote), or its email stops at step c.
+#   - Phone numbers released (done Oct 2 2026). Confirm the list is empty:
+#       Portal → acs-rvs-notify-<env>-wus3-s01-001 → Phone numbers
+#
+# Children are deleted explicitly, parent last, rather than relying on cascade.
+ENV=staging                                  # then repeat with ENV=prod
+DOMAIN=mail-staging.rvintake.com             # prod: mail.rvintake.com
+SUB=mail-staging                             # prod: mail
 RG=rg-rvs-$ENV-westus3
 ACS=acs-rvs-notify-$ENV-wus3-s01-001
+EMAIL_SVC=$ACS-email
 ACS_ID=$(az communication show --name "$ACS" --resource-group "$RG" --query id -o tsv)
+echo "$ACS_ID"                               # must be non-empty before going on
 
-#   a. Event Grid system topic (deleting it deletes the acs-sms-to-api subscription):
+#   a. Event Grid: the subscription, then its system topic.
+az eventgrid system-topic event-subscription delete \
+  --name acs-sms-to-api --system-topic-name "evgt-rvs-acs-$ENV" --resource-group "$RG" --yes
 az eventgrid system-topic delete --name "evgt-rvs-acs-$ENV" --resource-group "$RG" --yes
 
-#   b. The API (and slot) managed identities' Contributor grants on the resource:
-az role assignment list --scope "$ACS_ID" --query '[].{id:id, principal:principalId, role:roleDefinitionName}' -o table
-az role assignment delete --scope "$ACS_ID" --yes
+#   b. Role assignments made ON the ACS resource (the API's Contributor grant).
+#      List first, then delete the same set — without --include-inherited this
+#      touches only assignments at this exact scope. (--yes is a no-op here.)
+az role assignment list   --scope "$ACS_ID" --query '[].{principal:principalId, role:roleDefinitionName}' -o table
+az role assignment delete --scope "$ACS_ID"
 
-#   c. The ACS resource (this unlinks its email domains):
+#   c. The ACS resource. This also drops its links to the email domains.
 az communication delete --name "$ACS" --resource-group "$RG" --yes
 
-#   d. The Email Communication Service, with its domains and sender usernames:
-az communication email delete --name "$ACS-email" --resource-group "$RG" --yes
+#   d. Email service: both domains, then the service. Don't delete the DoNotReply
+#      sender username first — ACS refuses to remove a domain's last sender username
+#      ("Cannot remove all SenderUsernames"); deleting the domain takes it along.
+#      Note the flag is --email-service-name, not --name.
+az communication email domain delete \
+  --domain-name "$DOMAIN" --email-service-name "$EMAIL_SVC" --resource-group "$RG" --yes
+az communication email domain delete \
+  --domain-name AzureManagedDomain --email-service-name "$EMAIL_SVC" --resource-group "$RG" --yes
+az communication email domain list --email-service-name "$EMAIL_SVC" --resource-group "$RG" -o table   # expect empty
+az communication email delete --email-service-name "$EMAIL_SVC" --resource-group "$RG" --yes
 
-#   e. The Key Vault secrets ACS used (soft-deleted; purge is optional):
+#   e. Key Vault secrets ACS used. Soft-deleted; purge protection is on, so they
+#      age out on their own — no purge needed.
 az keyvault secret delete --vault-name "kv-rvs-$ENV-wus3" --name "AzureCommunicationServices--Endpoint"
 az keyvault secret delete --vault-name "kv-rvs-$ENV-wus3" --name "AzureCommunicationServices--ConnectionString"
 az keyvault secret delete --vault-name "kv-rvs-$ENV-wus3" --name "EventGrid--Inbound--Key"
 
-#   f. The ACS DNS records in rvintake.com (the zone is in the PROD RG for both
+#   f. ACS DNS records in rvintake.com (the zone is in the PROD RG for both
 #      environments). Bicep stopped declaring them but never deletes a record.
-#      List first — keep _dmarc.<sub> and the SendGrid em*/s1/s2 CNAMEs:
-SUB=mail-staging               # PROD: mail
+#      List first. KEEP _dmarc.$SUB and the SendGrid em*/s1/s2 CNAMEs.
 az network dns record-set list -g rg-rvs-prod-westus3 -z rvintake.com \
   --query "[?contains(name,'$SUB')].{n:name,t:type}" -o table
-#      Then delete the ACS ones — the domain-ownership + SPF TXT at the bare label,
-#      and the two azurecomm DKIM selectors:
+#      Delete only the ACS ones: the domain-ownership + SPF TXT set at the bare
+#      label (nothing else lives there now), and the two azurecomm DKIM selectors.
 az network dns record-set txt   delete -g rg-rvs-prod-westus3 -z rvintake.com -n "$SUB" --yes
 az network dns record-set cname delete -g rg-rvs-prod-westus3 -z rvintake.com -n "selector1-azurecomm-prod-net._domainkey.$SUB" --yes
 az network dns record-set cname delete -g rg-rvs-prod-westus3 -z rvintake.com -n "selector2-azurecomm-prod-net._domainkey.$SUB" --yes
 
-#   g. Confirm nothing ACS is left in the subscription:
-az resource list --query "[?starts_with(type,'Microsoft.Communication') || type=='Microsoft.EventGrid/systemTopics'].{n:name,t:type,rg:resourceGroup}" -o table
+#   g. Confirm nothing ACS is left in this environment (all three expect empty):
+az communication list       --resource-group "$RG" -o table
+az communication email list --resource-group "$RG" -o table
+az eventgrid system-topic list --resource-group "$RG" -o table
 
 # ── (5) End-to-end checks ────────────────────────────────────────────────────
 
