@@ -372,6 +372,22 @@ else
 {
     builder.Services.AddScoped<IIntakeRedirectHitRepository, NoOpIntakeRedirectHitRepository>();
 }
+
+// Intake form starts (Spec A-13, issue #839) — the completion-rate denominator, on the same
+// table account and with the same no-op fallback as the redirect hits above.
+if (!string.IsNullOrWhiteSpace(tableStorageEndpoint))
+{
+    builder.Services.AddScoped<IIntakeFormStartRepository>(sp =>
+    {
+        var client = sp.GetRequiredService<TableServiceClient>();
+        var logger = sp.GetRequiredService<ILogger<AzTableIntakeFormStartRepository>>();
+        return new AzTableIntakeFormStartRepository(client, logger);
+    });
+}
+else
+{
+    builder.Services.AddScoped<IIntakeFormStartRepository, NoOpIntakeFormStartRepository>();
+}
 #endregion
 
 #region Services
@@ -388,6 +404,7 @@ builder.Services.AddScoped<IServiceRequestService, ServiceRequestService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IIntakeOrchestrationService, IntakeOrchestrationService>();
 builder.Services.AddScoped<IIntakeRedirectService, IntakeRedirectService>();
+builder.Services.AddScoped<IIntakeFormStartService, IntakeFormStartService>();
 builder.Services.AddScoped<IIntakeSourceReportService, IntakeSourceReportService>();
 builder.Services.AddScoped<IIntakeInviteService, IntakeInviteService>();
 

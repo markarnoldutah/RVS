@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using RVS.API.Integrations;
@@ -28,6 +29,7 @@ public class IntakeController : ControllerBase
     private readonly IVinExtractionService _vinExtractionService;
     private readonly ISpeechToTextService _speechToTextService;
     private readonly IIssueTextRefinementService _issueTextRefinementService;
+    private readonly IIntakeFormStartService _formStartService;
     private readonly AiOptions _aiOptions;
     private readonly ILogger<IntakeController> _logger;
 
@@ -42,6 +44,7 @@ public class IntakeController : ControllerBase
         IVinExtractionService vinExtractionService,
         ISpeechToTextService speechToTextService,
         IIssueTextRefinementService issueTextRefinementService,
+        IIntakeFormStartService formStartService,
         IOptions<AiOptions> aiOptions,
         ILogger<IntakeController> logger)
     {
@@ -52,6 +55,7 @@ public class IntakeController : ControllerBase
         _vinExtractionService = vinExtractionService;
         _speechToTextService = speechToTextService;
         _issueTextRefinementService = issueTextRefinementService;
+        _formStartService = formStartService;
         _aiOptions = aiOptions.Value;
         _logger = logger;
     }
@@ -72,6 +76,36 @@ public class IntakeController : ControllerBase
         var config = await _intakeService.GetIntakeConfigAsync(locationSlug, ct);
 
         return Ok(config);
+    }
+
+    /// <summary>
+    /// Records that a visit reached Step 1 of the intake form (<c>Spec A-13</c>, issue #839), the
+    /// denominator of the completion rate. Returns 204 in every case — unknown slug, A-19-expired
+    /// slug, malformed body, storage outage — because the intake app fires it and moves on; it never
+    /// waits on it or retries it.
+    /// </summary>
+    /// <param name="locationSlug">Location slug from the intake URL.</param>
+    /// <param name="request">The visit's session id and <c>src</c>. Optional: a missing body writes nothing.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <example>
+    /// POST /api/intake/camping-world-slc/starts
+    /// </example>
+    [HttpPost("starts")]
+    public async Task<IActionResult> RecordStart(
+        string locationSlug,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] IntakeFormStartRequestDto? request,
+        CancellationToken ct = default)
+    {
+        var userAgent = Request.Headers.UserAgent.ToString();
+
+        await _formStartService.RecordAsync(
+            locationSlug,
+            request?.SessionId,
+            request?.Src,
+            string.IsNullOrEmpty(userAgent) ? null : userAgent,
+            ct);
+
+        return NoContent();
     }
 
     /// <summary>

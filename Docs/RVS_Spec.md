@@ -43,6 +43,15 @@ All four AI capabilities in A-9–A-12 are in scope — decision Q8 / issue #429
 
 **Redirect hits are not opens, and are never reported as such.** iMessage and most messaging clients fetch a URL to build a link preview the moment it is composed — before anybody taps anything, possibly once per send, at a rate that varies by client. Obvious bot user agents are flagged and excluded from reported counts, but the filter is coarse by design and the residue is still not a count of people. **Submissions by source** is the metric a dealer is shown. Raw open counts are not.
 
+**Completion rate: the intake form records a start per visit (issue `#839`).** A third record, kept with the redirect hits and for the same reasons. When Step 1 first shows a location's form, the intake app makes one anonymous, fire-and-forget call, and the API appends a row to a second append-only Table Storage table, partitioned by location. The row holds the location, the normalised `src`, a visit id, the time and a bot flag, and no customer identity. Completion rate per location and per channel, per month, is **visits ÷ starts**:
+
+- **A start is one visit, not one page load.** The visit id is generated per browser tab and kept with the wizard's session state, so a refresh, a step change or Back into Step 1 is the same visit. A new visit starts after a submission, or when the tab follows a link to a different location. Starts are counted as distinct visit ids, excluding rows flagged as bots.
+- **The numerator is visits, not service requests.** One submission can create several requests (A-17), so it is counted once: one per submission id.
+- **What isn't a start:** the A-19 expired notice, an unknown slug, and an invalid link all show no form, so they record nothing. An A-14 invite opening is a start, with `src=advisor`.
+- **It never costs the customer anything.** The call is not awaited or retried, the API answers it the same way whatever happens, and a storage outage costs the row, not the form.
+
+The rate is read by hand from saved queries for the pilot, not shown to dealers or on a dashboard. Completion rate is a measure of the form, while submissions by source is the number a dealer sees.
+
 This means the packet's structured content is: decoded unit, one category, the customer's own words, the diagnostic Q&A, and photos. That is the honest scope, and it is enough. The diagnostic Q&A block is the part that reads as expert on paper — *"Does the slide move at all? — Motor hums, no movement"* is worth more to a service manager than any taxonomy label. Invest the effort there.
 
 ### Contact preference and confirmation routing (A-2)

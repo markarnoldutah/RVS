@@ -169,6 +169,40 @@ public sealed class IntakeWizardState
     public bool IsInvitePrefilled { get; set; }
 
     /// <summary>
+    /// This visit's form-start id (<c>Spec A-13</c>, issue #839), or <c>null</c> until Step 1 has
+    /// shown the form. Persisted with the rest of the wizard, so a refresh or a Back into Step 1
+    /// is the same visit; cleared with it, so the next visit gets its own.
+    /// </summary>
+    public string? FormStartSessionId { get; private set; }
+
+    /// <summary>
+    /// Makes this visit's form-start id the first time it is called, and returns <c>null</c>
+    /// every time after, so the caller records exactly one start per visit. If
+    /// <c>sessionStorage</c> is unavailable the id is still returned: the start is recorded, and a
+    /// refresh may count it again.
+    /// </summary>
+    public async Task<string?> TryBeginFormStartAsync()
+    {
+        if (FormStartSessionId is not null)
+        {
+            return null;
+        }
+
+        FormStartSessionId = Guid.NewGuid().ToString("N");
+
+        try
+        {
+            await PersistAsync();
+        }
+        catch (JSException)
+        {
+            // Storage blocked: record the start anyway.
+        }
+
+        return FormStartSessionId;
+    }
+
+    /// <summary>
     /// Whether the customer ticked "Remember my details on this device" on Step 2 (issue #811).
     /// Unticked by default: a shared browser must not keep one customer's details for
     /// the next. The submission saves them only while this is set.
@@ -959,6 +993,7 @@ public sealed class IntakeWizardState
             SmsOptOut = SmsOptOut,
             EmailOptOut = EmailOptOut,
             IsInvitePrefilled = IsInvitePrefilled,
+            FormStartSessionId = FormStartSessionId,
             RememberDetails = RememberDetails,
             IsRememberedPrefilled = IsRememberedPrefilled,
             Vin = Vin,
@@ -1019,6 +1054,7 @@ public sealed class IntakeWizardState
             SmsOptOut = data.SmsOptOut;
             EmailOptOut = data.EmailOptOut;
             IsInvitePrefilled = data.IsInvitePrefilled;
+            FormStartSessionId = data.FormStartSessionId;
             RememberDetails = data.RememberDetails;
             IsRememberedPrefilled = data.IsRememberedPrefilled;
             Vin = data.Vin;
@@ -1121,6 +1157,7 @@ public sealed class IntakeWizardState
         SmsOptOut = false;
         EmailOptOut = false;
         IsInvitePrefilled = false;
+        FormStartSessionId = null;
         RememberDetails = false;
         IsRememberedPrefilled = false;
         Vin = string.Empty;
@@ -1413,6 +1450,9 @@ internal sealed class IntakeWizardStateData
     public bool SmsOptOut { get; set; }
     public bool EmailOptOut { get; set; }
     public bool IsInvitePrefilled { get; set; }
+
+    /// <summary>This visit's form-start id (<c>Spec A-13</c>, issue #839).</summary>
+    public string? FormStartSessionId { get; set; }
 
     /// <summary>Step 2's "Remember my details on this device" (issue #811).</summary>
     public bool RememberDetails { get; set; }

@@ -67,6 +67,62 @@ public class IntakeApiClientTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    // ── RecordFormStartAsync (Spec A-13, issue #839) ─────────────────────
+
+    [Fact]
+    public async Task RecordFormStartAsync_ShouldPostSessionIdAndSourceToTheStartsRoute()
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.NoContent, new { });
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        await sut.RecordFormStartAsync("my-slug", "3f2b8c0e9d4a4f6b8e1c2d3a4b5c6d7e", "advisor");
+
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
+        handler.LastRequest.RequestUri!.AbsolutePath.Should().Be("/api/intake/my-slug/starts");
+        var body = await handler.LastRequest.Content!.ReadFromJsonAsync<IntakeFormStartRequestDto>(
+            TestContext.Current.CancellationToken);
+        body.Should().Be(new IntakeFormStartRequestDto("3f2b8c0e9d4a4f6b8e1c2d3a4b5c6d7e", "advisor"));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task RecordFormStartAsync_WhenApiFails_ShouldNotThrow(HttpStatusCode statusCode)
+    {
+        // Fire-and-forget: a failed start costs a row, never the form.
+        var handler = new FakeHttpHandler(statusCode, new { message = "nope" });
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.RecordFormStartAsync("my-slug", "3f2b8c0e9d4a4f6b8e1c2d3a4b5c6d7e", null);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task RecordFormStartAsync_WhenNetworkFails_ShouldNotThrow()
+    {
+        var sut = CreateClient(new HttpClient(new ThrowingHttpHandler()) { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.RecordFormStartAsync("my-slug", "3f2b8c0e9d4a4f6b8e1c2d3a4b5c6d7e", "qr");
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RecordFormStartAsync_WhenSlugIsBlank_ShouldNotSendOrThrow(string? slug)
+    {
+        var handler = new FakeHttpHandler(HttpStatusCode.NoContent, new { });
+        var sut = CreateClient(new HttpClient(handler) { BaseAddress = new Uri("https://test.local") });
+
+        var act = () => sut.RecordFormStartAsync(slug!, "3f2b8c0e9d4a4f6b8e1c2d3a4b5c6d7e", "qr");
+
+        await act.Should().NotThrowAsync();
+        handler.LastRequest.Should().BeNull();
+    }
+
     // ── GetUploadSasAsync ────────────────────────────────────────────────
 
     [Theory]
@@ -667,6 +723,13 @@ public class IntakeApiClientTests
     }
 
     // ── Test helper ──────────────────────────────────────────────────────
+
+    private sealed class ThrowingHttpHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("offline");
+    }
 
     private sealed class FakeHttpHandler : HttpMessageHandler
     {
