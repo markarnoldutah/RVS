@@ -37,7 +37,42 @@ Unlike the infrastructure items above, these apply to **staging as well as prod*
 
 | # | Action | Setting | Why it is parked until go-live |
 |---|---|---|---|
-| G-5 | Clear prod Cosmos of demo data and recreate Nova RV Services only | No Bicep flag — a data operation against `rvs-db`, run once | Prod was seeded for hands-on testing with Jay Lyons from a one-off seeder change that was never committed (the seeder deliberately refuses `--environment Production`). It currently holds the full demo seed — Blue Compass RV and Happy Trails RV tenants, demo locations and slugs, fake customer profiles, service requests and asset-ledger entries — alongside Nova RV Services. The demo customer accounts carry magic-link tokens hard-coded in the public seed source, and `GET /api/status/{token}` accepts them, so anyone reading the repo can open those status pages on prod today. Demo locations also carry `.example.com` packet recipients, which hard-bounce and would cost the sending domain's reputation if a demo slug were ever used. At go-live, prod Cosmos must contain only Nova RV Services plus global reference data, with no token from the repo working against prod. See #609. |
+| G-5 | Wipe all prod data, then provision Nova RV Services fresh through `/admin` | No Bicep flag — a one-time data operation, run as the [G-5 wipe sequence](#g-5-wipe-sequence) below | Everything in prod today is test data: tenants created by hand for hands-on testing, plus whatever demo seed the one-off seeder change wrote (the committed seeder's `--environment Production` writes reference data only — `lookup-sets` and `rv-warranty-rules` — never tenant data). Demo customer accounts carry magic-link tokens hard-coded in the public seed source, and `GET /api/status/{token}` accepts them, so anyone reading the repo can open those status pages on prod. Demo locations carry `.example.com` packet recipients, which hard-bounce. Test intakes have also put names, emails, phone numbers, VINs and photos into Blob storage and the logs. Nova is deleted with everything else and re-created, not carried over, so no test request, attachment or Auth0 password survives into the pilot. At go-live, prod holds only the new Nova plus global reference data, and no token from the repo works against prod. See #609. |
+
+### G-5 wipe sequence
+
+Run it in this order, all of it in one sitting. Resource names are the prod defaults from `main.bicep`; the `az` commands assume `-g rg-rvs-prod-westus3`.
+
+1. **Record the prod tenant IDs before deleting anything.** Run `SELECT c.tenantId, c.name FROM c` against `tenant-configs` in Data Explorer. The Auth0 tenant is shared by dev, staging and prod, and `app_metadata.tenantId` is the only thing that marks a user as prod's, so once Cosmos is empty there is no way to tell which Auth0 users to delete.
+2. **Stop the API** (`az webapp stop -n app-rvs-api-prod-wus3`) so nothing writes mid-wipe.
+3. **Cosmos (`cosmos-rvs-data-prod-wus3` / `rvs-db`): delete the nine tenant and customer containers** with `az cosmosdb sql container delete`: `service-requests`, `customer-profiles`, `global-customer-accounts`, `asset-ledger`, `dealerships`, `locations`, `slug-lookups`, `tenant-configs`, `intake-invites`. Deleting a container is quicker and more thorough than deleting documents. **Keep `lookup-sets` and `rv-warranty-rules`:** they are global reference data. If either is ever lost, `dotnet run --project RVS.Data.Cosmos.Seed -- --environment Production` refills them, and touches nothing else. Backups are `Continuous7Days`, so the deleted data stays restorable, by someone with control-plane rights, for seven days.
+4. **Blob (`strvsprodwus3001`): delete the `rvs-attachments` container**, which step 9 recreates. Delete it through Azure Resource Manager, which needs only Owner or Contributor on the resource group. The data-plane route (`az storage blob delete-batch --auth-mode login`) also needs Storage Blob Data Contributor, which prod deliberately grants to no developer (`devBlobAccessPrincipalId` is unset), and shared-key access is off.
+
+   ```bash
+   az storage account blob-service-properties show -n strvsprodwus3001 -g rg-rvs-prod-westus3 \
+     --query "{blobSoftDelete: deleteRetentionPolicy.enabled, containerSoftDelete: containerDeleteRetentionPolicy.enabled, versioning: isVersioningEnabled}"
+   az storage container-rm list --storage-account strvsprodwus3001 -g rg-rvs-prod-westus3 --query "[].name" -o tsv
+   az storage container-rm delete --storage-account strvsprodwus3001 -g rg-rvs-prod-westus3 -n rvs-attachments --yes
+   ```
+
+   Bicep turns on none of the three soft-delete or versioning settings. If the first command shows any of them `true`, someone turned it on by hand, and the deleted data is kept until its retention runs out. Turn it off before deleting. Delete any container the list shows that is not in `storage-account.bicep` the same way. Do this early: Azure blocks reuse of a deleted container's name for about 30 seconds.
+5. **Table: delete every table in the account** (`intakeRedirectHits`, and the G-7 start counter if it has shipped), which step 9 recreates. Use Azure Resource Manager here too, for the same reason; `az storage table` has no Resource Manager subcommand, so call the API directly:
+
+   ```bash
+   ACCT=$(az storage account show -n strvsprodwus3001 -g rg-rvs-prod-westus3 --query id -o tsv)
+   az rest --method get    --url "https://management.azure.com$ACCT/tableServices/default/tables?api-version=2023-05-01" --query "value[].name"
+   az rest --method delete --url "https://management.azure.com$ACCT/tableServices/default/tables/intakeRedirectHits?api-version=2023-05-01"
+   ```
+
+   Do this early: a deleted table's name cannot be reused for a minute or so.
+6. **Logs.** App Insights `appi-rvs-api-prod-wus3` and Log Analytics `law-rvs-obs-prod-wus3` keep 30 days. If go-live is more than 30 days after the last test traffic, let them expire. Otherwise delete App Insights first, then the workspace, permanently: `--force true`, or tick "Delete the workspace permanently" in the portal. A plain delete only soft-deletes the workspace for 14 days, and step 9 recreating a workspace with the same name in that window restores the old one, test data included. Step 9 also writes the new App Insights connection string to Key Vault, and the API picks it up when it starts in step 10. Don't use the purge API; it is a slow, filter-based GDPR tool. Also clear `/home/LogFiles` through Kudu, or let its 3-day retention clear it.
+7. **SendGrid.** The activity feed cannot be purged and ages out on its own. Check the bounce, block and spam-report suppression lists for any real address used during testing (your own inboxes, Nova's) and remove it, or the first real packet to that address is dropped without an error. Twilio needs nothing until G-4: prod has no number, and opt-outs mirrored into `customer-profiles` went with step 3.
+8. **Auth0: delete every user whose `app_metadata.tenantId` is one of step 1's IDs**, Nova's included. Before deleting, check that no staging tenant uses the same ID. Keep your platform-admin user. This matters for Nova in particular: `/admin` provisioning adopts an existing Auth0 user with the same email and `tenantId` instead of creating one (`Auth0ManagementProvisioner.EnsureUserAsync`). The new Nova's ID is derived from its name, so a surviving user would keep their test password and receive no new password email. Leave the API, its audience, the claim namespace and the Post-Login Action alone. Auth0's own logs cannot be purged.
+9. **Redeploy `main.bicep` with `prod.bicepparam`** ([Bicep README](ASOT/Infra/Bicep.IaC/README.md#deploy-production)). It recreates the containers, the table and the telemetry resources, and writes the new App Insights connection string to Key Vault and app settings. G-1, G-2 and G-3 can go in the same deploy.
+10. **Start the API and provision Nova RV Services in `/admin`**, with its real locations, slugs and packet recipients.
+11. **Verify.** The nine containers hold only Nova's documents, and `lookup-sets` still has its data. A seed magic-link token from the repo returns 404 on `/api/status/{token}`. A demo slug on `go.rvintake.com` still redirects (the redirect never fails) but to no location. Blob and Table hold only your smoke test. Telemetry reaches the new App Insights, and `/health` passes. One full intake on Nova delivers its packet email, and each Nova user signs in with a newly set password. Then take the first G-8 reading.
+
+Nothing to wipe in Key Vault (configuration only, behind purge protection), the Static Web Apps, DNS, or Azure OpenAI and Whisper, which keep nothing you control.
 
 ---
 
