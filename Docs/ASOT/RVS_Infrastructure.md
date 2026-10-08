@@ -30,7 +30,7 @@
 | Availability-failing + telemetry-dark alerts (`#602`) | `monitor-alerts.bicep` | `deployObservability`, and only while the availability webtest exists |
 | Key Vault + role assignments | `key-vault.bicep` | `deployKeyVault` |
 | Cosmos account, database, 11 containers | `cosmos-db.bicep` | `deployCosmosDb` |
-| Storage account, CORS, `rvs-attachments`, `intakeRedirectHits` table, 7 role assignments | `storage-account.bicep` | `deployStorageAccount` |
+| Storage account, CORS, `rvs-attachments`, `intakeRedirectHits` and `intakeFormStarts` tables, 7 role assignments | `storage-account.bicep` | `deployStorageAccount` |
 | Two Static Web Apps + custom domains | `static-web-app.bicep` | `deploySwa` |
 | DNS zones + record sets | `dns.bicep` | `deploySwa && deployDns` |
 | DNS Zone Contributor grants | `dns-zone-contributor.bicep` | `deploySwa && deployDns && env=='prod' && principals supplied` |
@@ -73,7 +73,7 @@ Two things to know before using these:
 
 **Cosmos** — Standard offer, Session consistency, `EnableServerless`, single region westus3, not zone-redundant, continuous backup, TLS 1.2, system-assigned identity. `publicNetworkAccess: Enabled`, `disableLocalAuth: false` — consumed by key, not RBAC.
 
-**Storage** — StorageV2, `Standard_LRS`, Hot, TLS 1.2, `allowBlobPublicAccess: false`, network ACL default `Allow`. Two data services on the one account: the `rvs-attachments` blob container, and the `intakeRedirectHits` table (`#599`) holding the append-only `go.rvintake.com` redirect hit log, partitioned by location. The table carries no CORS — nothing in a browser talks to it — and its access grant is **Storage Table Data Contributor** on the same three principals as the blob roles (app identity, staging slot, the dev Entra group). Shape and rationale in `RVS_DataModel.md`.
+**Storage** — StorageV2, `Standard_LRS`, Hot, TLS 1.2, `allowBlobPublicAccess: false`, network ACL default `Allow`. Two data services on the one account: the `rvs-attachments` blob container, and two tables, both append-only and partitioned by location: `intakeRedirectHits` (`#599`), the `go.rvintake.com` redirect hit log, and `intakeFormStarts` (`#839`), one row per Intake visit, the completion-rate denominator. The tables carry no CORS — nothing in a browser talks to it — and their access grant is **Storage Table Data Contributor** on the same three principals as the blob roles (app identity, staging slot, the dev Entra group). Shape and rationale in `RVS_DataModel.md`.
 
 **Azure OpenAI** — both accounts `kind: OpenAI`, SKU `S0`, custom subdomain, system-assigned identity. `gpt-4o` version `2024-11-20`; Whisper model `whisper` version `001`. Whisper is in northcentralus because Whisper 001 Standard is not offered in westus3.
 

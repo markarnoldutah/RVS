@@ -56,12 +56,13 @@ Run it in this order, all of it in one sitting. Resource names are the prod defa
    ```
 
    Bicep turns on none of the three soft-delete or versioning settings. If the first command shows any of them `true`, someone turned it on by hand, and the deleted data is kept until its retention runs out. Turn it off before deleting. Delete any container the list shows that is not in `storage-account.bicep` the same way. Do this early: Azure blocks reuse of a deleted container's name for about 30 seconds.
-5. **Table: delete every table in the account** (`intakeRedirectHits`, and the G-7 start counter if it has shipped), which step 9 recreates. Use Azure Resource Manager here too, for the same reason; `az storage table` has no Resource Manager subcommand, so call the API directly:
+5. **Table: delete every table in the account** (`intakeRedirectHits` and `intakeFormStarts`), which step 9 recreates. Use Azure Resource Manager here too, for the same reason; `az storage table` has no Resource Manager subcommand, so call the API directly:
 
    ```bash
    ACCT=$(az storage account show -n strvsprodwus3001 -g rg-rvs-prod-westus3 --query id -o tsv)
    az rest --method get    --url "https://management.azure.com$ACCT/tableServices/default/tables?api-version=2023-05-01" --query "value[].name"
    az rest --method delete --url "https://management.azure.com$ACCT/tableServices/default/tables/intakeRedirectHits?api-version=2023-05-01"
+   az rest --method delete --url "https://management.azure.com$ACCT/tableServices/default/tables/intakeFormStarts?api-version=2023-05-01"
    ```
 
    Do this early: a deleted table's name cannot be reused for a minute or so.
@@ -78,9 +79,8 @@ Nothing to wipe in Key Vault (configuration only, behind purge protection), the 
 
 ## Pilot metrics (prod)
 
-The four pilot metrics (#528) are read from the first real packet onward. They come from Cosmos `service-requests` and a Table Storage start counter, not from App Insights, which keeps 30 days and can drop data. The tracking approach is on #528.
+The four pilot metrics (#528) are read from the first real packet onward. They come from Cosmos `service-requests` and the `intakeFormStarts` table (Spec A-13, #839), not from App Insights, which keeps 30 days and can drop data. The tracking approach is on #528; the queries are in [`Tools/PilotMetrics.md`](../Tools/PilotMetrics.md).
 
 | # | Action | Setting | Why it is parked until go-live |
 |---|---|---|---|
-| G-7 | Ship the Intake form-start counter before the first real customer | No Bicep flag: new API + Intake work under #528, deployed to prod | Completion rate is submissions ÷ starts, and starts are not recorded anywhere today. A start that isn't recorded when it happens cannot be backfilled, so every visit before the counter ships is permanently missing from the completion rate. Nothing needs it before there is real traffic, but it has to be live by then. |
-| G-8 | Have the saved Cosmos metric queries ready, and take the first reading after the G-5 wipe | No Bicep flag: a repo file of Cosmos SQL (requests per location, capture rate, delivery failures), run in Data Explorer per tenant partition | The queries were drafted on #528 but have never been run. Check them against real prod documents on the first packet, not at the end of the first month. Read nothing before G-5 clears the demo data, or the demo seed's requests count as pilot traffic. |
+| G-8 | Have the saved metric queries ready, and take the first reading after the G-5 wipe | No Bicep flag: [`Tools/PilotMetrics.md`](../Tools/PilotMetrics.md) — Cosmos SQL (requests and visits per location, capture rate, delivery failures) run in Data Explorer per tenant partition, plus the completion-rate read of `intakeFormStarts` | The queries were drafted on #528 but have never been run. Check them against real prod documents on the first packet, not at the end of the first month. Read nothing before G-5 clears the demo data, or the demo seed's requests count as pilot traffic. |

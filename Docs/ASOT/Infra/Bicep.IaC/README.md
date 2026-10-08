@@ -742,6 +742,7 @@ The `storage-account.bicep` module creates:
 - **Storage account**: Standard LRS, TLS 1.2, no public blob access
 - **`rvs-attachments` container**: `PublicAccess = None` — holds intake file attachments and, since #434, generated packet PDFs under the `packets/` prefix
 - **`intakeRedirectHits` table** (`#599`): the append-only `go.rvintake.com` redirect hit log, partitioned by location. No CORS — nothing in a browser talks to it. Table names are alphanumeric only, which is why this one is camelCase where the Cosmos containers are kebab-case
+- **`intakeFormStarts` table** (`#839`): one append-only row per Intake visit that reaches Step 1, partitioned by location — the completion-rate denominator. Same account-scoped table role, so no new assignment
 - **CORS rules**: Configured per environment for browser-based SAS uploads
 - **Role assignments**: Storage Blob Data Contributor + Blob Delegator, and Storage Table Data Contributor, for the API managed identity (and the staging deployment slot's identity when present)
 

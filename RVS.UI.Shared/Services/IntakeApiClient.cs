@@ -39,6 +39,39 @@ public sealed class IntakeApiClient
     }
 
     /// <summary>
+    /// Tells the API a visit reached Step 1 (<c>Spec A-13</c>, issue #839), the completion-rate
+    /// denominator. Fire-and-forget by contract: it never throws, and nothing should wait on it.
+    /// A blank slug, a non-success status or a network failure costs the row, never the form.
+    /// </summary>
+    /// <param name="locationSlug">The location slug.</param>
+    /// <param name="sessionId">The per-tab visit id, so one visit counts once.</param>
+    /// <param name="source">The <c>src</c> the visit arrived with, or <c>null</c> for print.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task RecordFormStartAsync(
+        string locationSlug,
+        string sessionId,
+        string? source,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(locationSlug))
+        {
+            return;
+        }
+
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync(
+                $"api/intake/{Uri.EscapeDataString(locationSlug)}/starts",
+                new IntakeFormStartRequestDto(sessionId, source),
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or NotSupportedException)
+        {
+            // Not recorded. The customer never sees it.
+        }
+    }
+
+    /// <summary>
     /// Gets what an A-14 advisor invite prefills (<c>Spec A-14</c>, issue #664): the caller's first
     /// name and phone. Returns <c>null</c> for any non-success response, since an expired, used
     /// or unknown invite still gets a working blank form. Opening does not spend the invite.

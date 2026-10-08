@@ -140,6 +140,12 @@ resource intakeRedirectHitsTable 'Microsoft.Storage/storageAccounts/tableService
   name: 'intakeRedirectHits'
 }
 
+@description('Append-only log of Intake form starts, partitioned by location — the completion-rate denominator (Spec A-13, #839). The table-data role below is account-scoped, so it covers this table with no new assignment.')
+resource intakeFormStartsTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2025-01-01' = {
+  parent: tableService
+  name: 'intakeFormStarts'
+}
+
 // ── Role Assignments ───────────────────────────────────────────
 
 // Storage Blob Data Contributor — read/write blobs, create containers

@@ -197,6 +197,7 @@
         if (State.Config is not null)
         {
             _isLoading = false;
+            await RecordFormStartAsync();
             return;
         }
 
@@ -217,6 +218,7 @@
                 return;
             }
 
+            await RecordFormStartAsync();
             await ApplyInvitePrefillAsync();
             await ApplyRememberedDetailsAsync();
         }
@@ -231,6 +233,28 @@
         finally
         {
             _isLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Spec A-13 (issue #839): records one form start per visit, the completion-rate denominator.
+    /// Only once the form is actually shown, so never on the A-19 expired notice or an invalid
+    /// link, and only the first time: the state keeps the visit's id, so a refresh, Back into
+    /// this step or a step change does not count again. An A-14 invite arrives with
+    /// <c>src=advisor</c> and counts as a start like any other link. The call is not awaited: the
+    /// form never waits on it, and it never fails.
+    /// </summary>
+    private async Task RecordFormStartAsync()
+    {
+        if (State.Config is not { IntakeExpired: false })
+        {
+            return;
+        }
+
+        var sessionId = await State.TryBeginFormStartAsync();
+        if (sessionId is not null)
+        {
+            _ = IntakeApi.RecordFormStartAsync(State.Slug, sessionId, State.IntakeSource);
         }
     }
 

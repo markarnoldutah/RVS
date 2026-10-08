@@ -23,6 +23,7 @@ public class IntakeControllerTests
     private readonly Mock<IVinExtractionService> _vinExtractionServiceMock = new();
     private readonly Mock<ISpeechToTextService> _speechToTextServiceMock = new();
     private readonly Mock<IIssueTextRefinementService> _issueTextRefinementServiceMock = new();
+    private readonly Mock<IIntakeFormStartService> _formStartServiceMock = new();
     private readonly Mock<ILogger<IntakeController>> _loggerMock = new();
     private readonly IntakeController _sut;
 
@@ -37,12 +38,51 @@ public class IntakeControllerTests
             _vinExtractionServiceMock.Object,
             _speechToTextServiceMock.Object,
             _issueTextRefinementServiceMock.Object,
+            _formStartServiceMock.Object,
             aiOptions,
             _loggerMock.Object);
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()
         };
+    }
+
+    // ── RecordStart (Spec A-13, issue #839) ─────────────────────────────
+
+    [Fact]
+    public async Task RecordStart_ShouldPassSlugBodyAndUserAgentToTheServiceAndReturnNoContent()
+    {
+        const string userAgent = "Mozilla/5.0 (iPhone)";
+        _sut.ControllerContext.HttpContext.Request.Headers.UserAgent = userAgent;
+
+        var result = await _sut.RecordStart(
+            "camping-world-slc", new IntakeFormStartRequestDto("3f2b8c0e9d4a4f6b8e1c2d3a4b5c6d7e", "qr"));
+
+        result.Should().BeOfType<NoContentResult>();
+        _formStartServiceMock.Verify(s => s.RecordAsync(
+            "camping-world-slc", "3f2b8c0e9d4a4f6b8e1c2d3a4b5c6d7e", "qr", userAgent, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RecordStart_WhenBodyIsMissing_ShouldStillReturnNoContent()
+    {
+        var result = await _sut.RecordStart("camping-world-slc", null);
+
+        result.Should().BeOfType<NoContentResult>();
+        _formStartServiceMock.Verify(s => s.RecordAsync(
+            "camping-world-slc", null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RecordStart_WhenNoUserAgent_ShouldPassNull()
+    {
+        await _sut.RecordStart("camping-world-slc", new IntakeFormStartRequestDto("3f2b8c0e9d4a4f6b8e1c2d3a4b5c6d7e", null));
+
+        _formStartServiceMock.Verify(s => s.RecordAsync(
+            "camping-world-slc", It.IsAny<string?>(), null, null, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

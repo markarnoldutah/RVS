@@ -184,7 +184,9 @@ CORS on the blob service allows GET/HEAD/PUT from the Static Web App custom doma
 
 ## Table Storage
 
-One table, `intakeRedirectHits`, on the same storage account as the attachment container (`modules/storage-account.bicep`, issue #599). Append-only: the application never updates or deletes a row, and retention is a storage-lifecycle concern rather than application code.
+Two tables, `intakeRedirectHits` (issue #599) and `intakeFormStarts` (issue #839), on the same storage account as the attachment container (`modules/storage-account.bicep`). Append-only: the application never updates or deletes a row, and retention is a storage-lifecycle concern rather than application code.
+
+### `intakeRedirectHits`
 
 | | |
 |---|---|
@@ -197,6 +199,18 @@ One table, `intakeRedirectHits`, on the same storage account as the attachment c
 **No customer identity.** No IP address, no cookie, no token. The only client-supplied value stored is a truncated User-Agent, kept so the `IsLikelyBot` classification can be re-evaluated later if the preview-fetcher landscape shifts.
 
 Auth is the app's managed identity with **Storage Table Data Contributor**, granted in the same module as the blob roles. When `TableStorage:Endpoint` is unset the API registers `NoOpIntakeRedirectHitRepository` instead: redirects still work and `ServiceRequest.intakeSource` is still recorded, only the conversion denominator is lost.
+
+### `intakeFormStarts`
+
+One row per Intake visit that reaches Step 1 with the form showing: the denominator of the completion rate (Spec A-13, "Completion rate"). Written by `POST api/intake/{slug}/starts` → `IntakeFormStartService` → `AzTableIntakeFormStartRepository`, which follows the redirect-hit repository: same keys, same create-on-404 retry, `NoOpIntakeFormStartRepository` when `TableStorage:Endpoint` is unset. The endpoint answers `204` whatever it is sent.
+
+| | |
+|---|---|
+| PartitionKey | `locationId`. Only resolved, unexpired slugs are recorded, so there is no `unresolved` partition |
+| RowKey | `{inverted ticks:D19}-{guid:N}`, as for redirect hits |
+| Columns | `TenantId`, `Slug`, `Source` (normalised `src`, so completion rate splits by channel), `SessionId`, `OccurredAtUtc`, `IsLikelyBot`, `UserAgent` (truncated to 256 chars) |
+
+**`SessionId`** is a random per-tab id the Intake app generates on the first Step 1 render and keeps in `sessionStorage` with the wizard state, so a refresh or Back into Step 1 is the same visit; a cleared session (after a submission, or a link to another location) is a new one. Count distinct `SessionId`, not rows: if storage is blocked, a refresh can write a second row with a new id, and nothing stops a client posting twice. The API drops any id that is not 8–64 letters, digits, `-` or `_`. Like the redirect hits, a row holds no customer identity.
 
 ---
 
