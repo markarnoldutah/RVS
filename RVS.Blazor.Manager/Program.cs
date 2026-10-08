@@ -10,6 +10,7 @@ using RVS.Blazor.Manager.State;
 using RVS.UI.Shared.Services;
 
 
+
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
