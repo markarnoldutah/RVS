@@ -305,7 +305,7 @@ In the manager app, open **Locations** and edit a location. The drawer has a **S
 
 ### 3.2 Board and list (C-1, C-3)
 
-- [ ] After sign-in, the app lands on the board (`/board`) in the **Actionable today** view: open requests plus anything closed today. The view can be switched off.
+- [ ] After sign-in, the app lands on the board (`/board`). Every open request is on it. The **Done** column shows completed and cancelled requests changed in the last 60 days, and nothing older; its **Older in Service Requests** link opens `/service-requests`. There is no *Actionable today* switch.
 - [ ] Drag a card to another column. The status changes, and the customer status page shows the new status after a reload.
 - [ ] `/service-requests` lists the location's requests newest first. Filtering by status works for all six statuses, including **Waiting on Customer**.
 - [ ] `/service-requests/{id}/edit` no longer exists. The typed URL does not open an edit form.

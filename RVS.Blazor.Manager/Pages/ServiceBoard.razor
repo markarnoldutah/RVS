@@ -38,7 +38,7 @@
                 <LocationSelector />
             </div>
 
-            @* Keyword filter + actionable-today toggle (issue #498: the board lands pre-filtered) *@
+            @* Keyword and job-type filters *@
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Class="mb-2">
                 <div class="filter-no-helper flex-grow-1">
                     <MudTextField T="string"
@@ -69,11 +69,6 @@
                         }
                     </MudSelect>
                 </div>
-                <MudSwitch T="bool"
-                           Value="_actionableOnly"
-                           ValueChanged="OnActionableOnlyChanged"
-                           Color="Color.Primary"
-                           Label="Actionable today" />
             </MudStack>
 
             @* Loading skeleton *@
@@ -145,7 +140,14 @@
                                                            OnClick="@(() => OpenCreateDialog(columnStatus))"
                                                            aria-label="@($"Add to {column.Title}")" />
                                         </MudStack>
-                                        <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary); padding-left: 2px;">@column.Description</MudText>
+                                        <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary); padding-left: 2px;">
+                                            @column.Description
+                                            @if (column.Status == "Completed")
+                                            {
+                                                @* Spec C-10: older closed work lives in the list, not on the board *@
+                                                <text> · </text><MudLink Href="/service-requests" Typo="Typo.caption">Older in Service Requests</MudLink>
+                                            }
+                                        </MudText>
                                     </MudStack>
 
                                     <div class="board-column-scroll">
@@ -287,12 +289,6 @@
     [SupplyParameterFromQuery(Name = "sr")]
     public string? OpenServiceRequestId { get; set; }
 
-    /// <summary>
-    /// The board lands on today's actionable requests (issue #498): open work plus anything closed
-    /// today. See <see cref="ActionableRequestFilter"/>.
-    /// </summary>
-    private bool _actionableOnly = true;
-
     /// <summary>Job-type filter (<c>Spec C-10</c> / C-11); null shows every job type.</summary>
     private string? _jobTypeFilter;
 
@@ -301,7 +297,7 @@
         new("New",         "New",             Icons.Material.Filled.FiberNew,     Color.Info,    "Items that haven't been started"),
         new("In Progress", "InProgress",      Icons.Material.Filled.Autorenew,    Color.Warning, "Items being actively worked"),
         new("Waiting",     "WaitingOnParts",  Icons.Material.Filled.HourglassEmpty, Color.Warning, "Items waiting on parts, customer, etc"),
-        new("Done",        "Completed",       Icons.Material.Filled.CheckCircle,  Color.Success, "Items that are completed or cancelled"),
+        new("Done",        "Completed",       Icons.Material.Filled.CheckCircle,  Color.Success, $"Completed or cancelled in the last {BoardRetentionFilter.DoneColumnWindowDays} days"),
     ];
 
     protected override async Task OnInitializedAsync()
@@ -528,22 +524,14 @@
         _needsContainerRefresh = true;
     }
 
-    private void OnActionableOnlyChanged(bool value)
-    {
-        _actionableOnly = value;
-        ApplyFilter();
-        _needsContainerRefresh = true;
-    }
-
     private void ApplyFilter()
     {
-        var now = DateTimeOffset.Now;
-        IEnumerable<BoardItem> items = _actionableOnly
-            ? _boardItems.Where(i => string.IsNullOrWhiteSpace(i.Status)
-                || ActionableRequestFilter.IsActionable(i.Status, i.Summary.CreatedAtUtc, i.Summary.UpdatedAtUtc, now))
-            : _boardItems;
-
-        items = items.Where(i => JobTypes.MatchesFilter(i.Summary.JobType, _jobTypeFilter));
+        // Spec C-10: open work always; the Done column only for the last 60 days.
+        var nowUtc = DateTime.UtcNow;
+        var items = _boardItems
+            .Where(i => string.IsNullOrWhiteSpace(i.Status)
+                || BoardRetentionFilter.IsOnBoard(i.Status, i.Summary.CreatedAtUtc, i.Summary.UpdatedAtUtc, nowUtc))
+            .Where(i => JobTypes.MatchesFilter(i.Summary.JobType, _jobTypeFilter));
 
         var tokens = string.IsNullOrWhiteSpace(_filterText)
             ? []
