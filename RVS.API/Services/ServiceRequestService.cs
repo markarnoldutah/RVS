@@ -67,6 +67,11 @@ public sealed class ServiceRequestService : IServiceRequestService
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentNullException.ThrowIfNull(request);
 
+        if (!string.IsNullOrWhiteSpace(request.JobType) && !JobTypes.IsValidFilter(request.JobType))
+        {
+            throw new ArgumentException($"Unknown job type filter '{request.JobType}'.", nameof(request));
+        }
+
         return await _repository.SearchAsync(tenantId, request, continuationToken, cancellationToken);
     }
 
@@ -75,6 +80,7 @@ public sealed class ServiceRequestService : IServiceRequestService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentNullException.ThrowIfNull(entity);
+        ThrowIfInvalidJobType(entity.JobType);
 
         return await _repository.CreateAsync(entity, cancellationToken);
     }
@@ -100,6 +106,8 @@ public sealed class ServiceRequestService : IServiceRequestService
         {
             throw new ArgumentException($"Invalid status transition from '{existing.Status}' to '{request.Status}'.");
         }
+
+        ThrowIfInvalidJobType(request.JobType);
 
         existing.ApplyUpdate(request, _userContext.UserId);
 
@@ -197,5 +205,14 @@ public sealed class ServiceRequestService : IServiceRequestService
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
         return _packetGenerationService.GetPdfLinkAsync(tenantId, id, cancellationToken);
+    }
+
+    /// <summary>Spec C-11: one fixed set. Null or blank means unset.</summary>
+    private static void ThrowIfInvalidJobType(string? jobType)
+    {
+        if (!string.IsNullOrWhiteSpace(jobType) && !JobTypes.IsValid(jobType.Trim()))
+        {
+            throw new ArgumentException($"Unknown job type '{jobType}'.", nameof(jobType));
+        }
     }
 }

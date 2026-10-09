@@ -37,6 +37,7 @@
                             {
                                 <PriorityBadge Priority="@_sr.Priority" />
                             }
+                            <JobTypeChip JobType="@_sr.JobType" />
                         </MudStack>
                     </MudStack>
                 }
@@ -206,6 +207,26 @@
                                 <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
                                 <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
                                 <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                            </MudSelect>
+                        </MudStack>
+                    </MudPaper>
+
+                    @* Spec C-11: an operator creating the request can triage it now, or leave it unset. *@
+                    <MudPaper Elevation="1" Class="pa-4" Style="background: var(--mud-palette-background);">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Job type</MudText>
+                            <MudSelect T="string" @bind-Value="_createForm.JobType"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Placeholder="@JobTypes.NotTriagedLabel"
+                                       Clearable="true"
+                                       aria-label="Job type"
+                                       AnchorOrigin="Origin.BottomCenter"
+                                       TransformOrigin="Origin.TopCenter">
+                                @foreach (var jobType in JobTypes.All)
+                                {
+                                    <MudSelectItem T="string" Value="@jobType.Code">@jobType.Name</MudSelectItem>
+                                }
                             </MudSelect>
                         </MudStack>
                     </MudPaper>
@@ -764,6 +785,40 @@
                         }
                         <MudDivider Class="my-4" />
 
+                        @* Job type (Spec C-11) — set at triage; clearing it returns the request to "Not triaged". *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Job type</MudText>
+                            @if (_jobTypeUpdating)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                        </MudStack>
+                        <MudSelect T="string" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   FullWidth="true"
+                                   Value="@_selectedJobType"
+                                   ValueChanged="OnJobTypeChangeAsync"
+                                   Placeholder="@JobTypes.NotTriagedLabel"
+                                   Clearable="true"
+                                   Disabled="_jobTypeUpdating"
+                                   aria-label="Job type"
+                                   AnchorOrigin="Origin.BottomCenter"
+                                   TransformOrigin="Origin.TopCenter"
+                                   Dense="true"
+                                   Class="compact-field">
+                            @foreach (var jobType in JobTypes.All)
+                            {
+                                <MudSelectItem T="string" Value="@jobType.Code">
+                                    <span style="font-size: 0.875rem;">@jobType.Name</span>
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                        @if (_jobTypeError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_jobTypeError</MudAlert>
+                        }
+                        <MudDivider Class="my-4" />
+
                         @* Priority — the retired ServiceRequestEdit page was the only other editor (#713). *@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                             <MudText Typo="Typo.body2" Style="font-weight: 700;">Priority</MudText>
@@ -1269,6 +1324,9 @@
     private string? _selectedPriority;
     private bool _priorityUpdating;
     private string? _priorityError;
+    private string? _selectedJobType;
+    private bool _jobTypeUpdating;
+    private string? _jobTypeError;
     private bool _saving;
     private CreateForm _createForm = new();
     private MudForm? _createFormRef;
@@ -1307,11 +1365,6 @@
     private bool _statusNoteSaving;
     private string? _statusNoteError;
     private string? _editStatusNote;
-
-    private bool _editingTitle;
-    private bool _titleSaving;
-    private string? _titleError;
-    private string? _editTitleText;
 
     private bool _editingIssue;
     private bool _issueSaving;
@@ -1441,6 +1494,8 @@
         _packetPdfUrl = null;
         _priorityError = null;
         _selectedPriority = null;
+        _jobTypeError = null;
+        _selectedJobType = null;
     }
 
     @* Switching to another issue from the same visit reloads the flyout in place; any open
@@ -1452,7 +1507,6 @@
         CancelEditAsset();
         CancelEditTech();
         CancelEditStatusNote();
-        CancelEditTitle();
         _commentText = null;
         _commentError = null;
         await LoadServiceRequestAsync(serviceRequestId);
@@ -1556,6 +1610,7 @@
         _allowedStatuses = ["New", "InProgress", "WaitingOnCustomer", "WaitingOnParts", "Completed", "Cancelled"];
         _selectedStatus = _sr.Status;
         _selectedPriority = _sr.Priority ?? "Medium";
+        _selectedJobType = _sr.JobType;
     }
 
     @* The API's ApplyUpdate is a full overwrite, not a merge: every field absent from the
@@ -1703,6 +1758,42 @@
         }
     }
 
+    private async Task OnJobTypeChangeAsync(string? newJobType)
+    {
+        if (_sr is null || _dealershipId is null) return;
+        if (string.IsNullOrWhiteSpace(newJobType)) newJobType = null;
+        if (string.Equals(newJobType, _sr.JobType, StringComparison.Ordinal)) return;
+
+        _selectedJobType = newJobType;
+        _jobTypeUpdating = true;
+        _jobTypeError = null;
+        StateHasChanged();
+
+        try
+        {
+            var combinedSummary = ActivityLogFormatter.PrependSystemEntry(
+                _sr.TechnicianSummary,
+                newJobType is null
+                    ? "Job type cleared"
+                    : $"Job type set to {JobTypes.GetLabel(newJobType)}");
+
+            var request = BuildUpdateRequest(combinedSummary) with { JobType = newJobType };
+
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            RefreshSidebarSelections();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _jobTypeError = ex.Message;
+            _selectedJobType = _sr.JobType;
+        }
+        finally
+        {
+            _jobTypeUpdating = false;
+        }
+    }
+
     private async Task AddCommentAsync()
     {
         if (_sr is null || _dealershipId is null || string.IsNullOrWhiteSpace(_commentText)) return;
@@ -1757,12 +1848,9 @@
         StateHasChanged();
         try
         {
-            var request = new ServiceRequestUpdateRequestDto
+            // ApplyUpdate is a full overwrite: carry every other field forward.
+            var request = BuildUpdateRequest(_sr.TechnicianSummary) with
             {
-                Status = _sr.Status,
-                IssueDescription = _sr.IssueDescription,
-                Priority = _sr.Priority ?? "Medium",
-                TechnicianSummary = _sr.TechnicianSummary,
                 Customer = new CustomerInfoDto
                 {
                     FirstName = _editCustomerFirstName ?? string.Empty,
@@ -1805,12 +1893,9 @@
         StateHasChanged();
         try
         {
-            var request = new ServiceRequestUpdateRequestDto
+            // ApplyUpdate is a full overwrite: carry every other field forward.
+            var request = BuildUpdateRequest(_sr.TechnicianSummary) with
             {
-                Status = _sr.Status,
-                IssueDescription = _sr.IssueDescription,
-                Priority = _sr.Priority ?? "Medium",
-                TechnicianSummary = _sr.TechnicianSummary,
                 Asset = new AssetInfoDto
                 {
                     AssetId      = _editAssetId ?? string.Empty,
@@ -1860,20 +1945,13 @@
         try
         {
             var scheduledUtc = _editIssueScheduled?.ToUniversalTime();
-            var request = new ServiceRequestUpdateRequestDto
+            var request = BuildUpdateRequest(_sr.TechnicianSummary) with
             {
-                Status = _sr.Status,
                 IssueDescription = _editIssueDescription!.Trim(),
                 IssueCategory = string.IsNullOrWhiteSpace(_editIssueCategory) ? null : _editIssueCategory.Trim(),
-                Priority = _sr.Priority ?? "Medium",
-                TechnicianSummary = _sr.TechnicianSummary,
                 Urgency = string.IsNullOrWhiteSpace(_editIssueUrgency) ? null : _editIssueUrgency.Trim(),
                 RvUsage = string.IsNullOrWhiteSpace(_editIssueRvUsage) ? null : _editIssueRvUsage.Trim(),
-                HasExtendedWarranty = _sr.HasExtendedWarranty,
-                ApproxPurchaseDate = _sr.ApproxPurchaseDate,
-                AssignedTechnicianId = _sr.AssignedTechnicianId,
                 ScheduledDateUtc = scheduledUtc,
-                RequiredSkills = _sr.RequiredSkills
             };
             _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
             _editingIssue = false;
@@ -1976,64 +2054,6 @@
         finally { _statusNoteSaving = false; }
     }
 
-    private void BeginEditTitle()
-    {
-        if (_sr is null) return;
-        _editTitleText = FormatTitleLine(_sr);
-        _titleError = null;
-        _editingTitle = true;
-    }
-
-    private void CancelEditTitle()
-    {
-        _editingTitle = false;
-        _titleError = null;
-    }
-
-    private async Task SaveTitleAsync()
-    {
-        if (_sr is null || _dealershipId is null || string.IsNullOrWhiteSpace(_editTitleText)) return;
-        _titleSaving = true;
-        _titleError = null;
-        StateHasChanged();
-        try
-        {
-            var (firstName, lastName, year, manufacturer, model) = ParseTitle(_editTitleText);
-            if (string.IsNullOrWhiteSpace(firstName))
-            {
-                _titleError = "Enter at least a first name.";
-                return;
-            }
-            var request = new ServiceRequestUpdateRequestDto
-            {
-                Status = _sr.Status,
-                IssueDescription = _sr.IssueDescription,
-                Priority = _sr.Priority ?? "Medium",
-                TechnicianSummary = _sr.TechnicianSummary,
-                Customer = new CustomerInfoDto
-                {
-                    FirstName = firstName,
-                    LastName  = lastName,
-                    Email     = _sr.Customer.Email,
-                    Phone     = _sr.Customer.Phone,
-                    PreferredContact = _sr.Customer.PreferredContact
-                },
-                Asset = new AssetInfoDto
-                {
-                    AssetId      = _sr.Asset.AssetId,
-                    Manufacturer = manufacturer,
-                    Model        = model,
-                    Year         = year
-                }
-            };
-            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
-            _editingTitle = false;
-            await OnChanged.InvokeAsync();
-        }
-        catch (Exception ex) { _titleError = ex.Message; }
-        finally { _titleSaving = false; }
-    }
-
     private async Task CreateAsync()
     {
         _createSubmitted = true;
@@ -2077,7 +2097,8 @@
                     Year = _createForm.Year
                 },
                 IssueCategory = _createForm.IssueCategory!,
-                IssueDescription = _createForm.IssueDescription!
+                IssueDescription = _createForm.IssueDescription!,
+                JobType = _createForm.JobType,
             };
 
             await SrClient.CreateAsync(_dealershipId, request);
@@ -2300,53 +2321,6 @@
         return $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant();
     }
 
-    @* Parses a title of form "FirstName LastName, Year Manufacturer, Model" back into parts.
-       Tolerant of missing pieces; year detected only when the leading token is a 4-digit number 1950–2100. *@
-    private static (string FirstName, string LastName, int? Year, string? Manufacturer, string? Model) ParseTitle(string title)
-    {
-        var parts = (title ?? string.Empty).Split(',', 3, StringSplitOptions.TrimEntries);
-
-        var firstName = string.Empty;
-        var lastName = string.Empty;
-        if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]))
-        {
-            var nameTokens = parts[0].Split(' ', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            firstName = nameTokens.Length > 0 ? nameTokens[0] : string.Empty;
-            lastName  = nameTokens.Length > 1 ? nameTokens[1] : string.Empty;
-        }
-
-        int? year = null;
-        string? manufacturer = null;
-        if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
-        {
-            var seg = parts[1].Trim();
-            var spaceIdx = seg.IndexOf(' ');
-            if (spaceIdx > 0
-                && int.TryParse(seg[..spaceIdx], out var y) && y is >= 1950 and <= 2100)
-            {
-                year = y;
-                var rest = seg[(spaceIdx + 1)..].Trim();
-                manufacturer = string.IsNullOrWhiteSpace(rest) ? null : rest;
-            }
-            else if (int.TryParse(seg, out var yOnly) && yOnly is >= 1950 and <= 2100)
-            {
-                year = yOnly;
-            }
-            else
-            {
-                manufacturer = seg;
-            }
-        }
-
-        string? model = null;
-        if (parts.Length > 2 && !string.IsNullOrWhiteSpace(parts[2]))
-        {
-            model = parts[2].Trim();
-        }
-
-        return (firstName, lastName, year, manufacturer, model);
-    }
-
     private static string FormatTitleLine(ServiceRequestDetailResponseDto sr)
     {
         var name = $"{sr.Customer.FirstName} {sr.Customer.LastName}".Trim();
@@ -2553,5 +2527,6 @@
         public string? IssueCategory { get; set; }
         public string? IssueDescription { get; set; }
         public string? Priority { get; set; } = "Medium";
+        public string? JobType { get; set; }
     }
 }

@@ -39,6 +39,7 @@ public static class ServiceRequestMapper
             Priority = entity.Priority,
             AssignedTechnicianId = entity.AssignedTechnicianId,
             ScheduledDateUtc = entity.ScheduledDateUtc,
+            JobType = entity.JobType,
             RequiredSkills = entity.RequiredSkills,
             BoardSequence = entity.BoardSequence,
             DiagnosticResponses = entity.DiagnosticResponses.Select(d => d.ToDto()).ToList(),
@@ -109,6 +110,7 @@ public static class ServiceRequestMapper
             AttachmentCount = entity.Attachments.Count,
             AssignedTechnicianId = entity.AssignedTechnicianId,
             Priority = entity.Priority,
+            JobType = entity.JobType,
             BoardSequence = entity.BoardSequence,
             SubmissionId = entity.SubmissionId,
             SubmissionPosition = entity.SubmissionPosition,
@@ -192,6 +194,7 @@ public static class ServiceRequestMapper
             RvUsage = dto.RvUsage?.Trim(),
             HasExtendedWarranty = dto.HasExtendedWarranty?.Trim(),
             ApproxPurchaseDate = dto.ApproxPurchaseDate?.Trim(),
+            JobType = string.IsNullOrWhiteSpace(dto.JobType) ? null : dto.JobType.Trim(),
             CustomerSnapshot = new CustomerSnapshotEmbedded
             {
                 FirstName = dto.Customer.FirstName.Trim(),
@@ -244,6 +247,7 @@ public static class ServiceRequestMapper
         entity.ScheduledDateUtc = dto.ScheduledDateUtc;
         entity.RequiredSkills = dto.RequiredSkills;
         entity.BoardSequence = dto.BoardSequence ?? entity.BoardSequence;
+        entity.JobType = string.IsNullOrWhiteSpace(dto.JobType) ? null : dto.JobType.Trim();
 
         if (dto.Customer is not null)
         {

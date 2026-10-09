@@ -1,0 +1,17 @@
+@* Job type chip (Spec C-11, issue #843): label, icon and color from JobTypeDisplay. *@
+@{
+    var style = JobTypeDisplay.For(JobType);
+}
+<MudChip T="string" Size="Size.Small"
+         Variant="style.Variant"
+         Color="style.Color"
+         Icon="@style.Icon"
+         aria-label="@($"Job type: {style.Label}")">
+    @style.Label
+</MudChip>
+
+@code {
+    /// <summary>The stored job-type code; null or blank reads "Not triaged".</summary>
+    [Parameter]
+    public string? JobType { get; set; }
+}

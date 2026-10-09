@@ -52,6 +52,23 @@
                                   Immediate="true"
                                   Clearable="true" />
                 </div>
+                @* Spec C-10 / C-11: filter by job type, together with the status columns *@
+                <div class="filter-no-helper" style="min-width: 200px;">
+                    <MudSelect T="string"
+                               Value="_jobTypeFilter"
+                               ValueChanged="OnJobTypeFilterChanged"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Placeholder="All job types"
+                               Clearable="true"
+                               aria-label="Filter by job type"
+                               AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                        @foreach (var option in JobTypeDisplay.FilterOptions)
+                        {
+                            <MudSelectItem T="string" Value="@option.Value">@option.Label</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
                 <MudSwitch T="bool"
                            Value="_actionableOnly"
                            ValueChanged="OnActionableOnlyChanged"
@@ -183,9 +200,10 @@
                                             </MudText>
                                         }
 
-                                        @* Chips row: created date, category, assigned tech *@
+                                        @* Chips row: job type, created date, category *@
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
                                                   Wrap="Wrap.Wrap" Class="mt-1">
+                                            <JobTypeChip JobType="@boardItem.Summary.JobType" />
                                             <MudChip T="string" Size="Size.Small"
                                                      Variant="Variant.Outlined"
                                                      Style="@($"color: {ChipFontColor};")">
@@ -265,6 +283,9 @@
     /// today. See <see cref="ActionableRequestFilter"/>.
     /// </summary>
     private bool _actionableOnly = true;
+
+    /// <summary>Job-type filter (<c>Spec C-10</c> / C-11); null shows every job type.</summary>
+    private string? _jobTypeFilter;
 
     private static readonly BoardColumn[] _columns =
     [
@@ -440,21 +461,11 @@
                     $"Status changed to {newColumnTitle}");
             }
 
-            var updateRequest = new ServiceRequestUpdateRequestDto
+            // ApplyUpdate is a full overwrite: carry every field forward, job type included.
+            var updateRequest = ServiceRequestMobileView.BuildUpdateRequest(detail, updatedSummary) with
             {
                 // Preserve original status on reorder; use zone identifier when column changes
                 Status = zoneChanged ? newZone : previousStatus,
-                IssueDescription = detail.IssueDescription,
-                Priority = detail.Priority ?? "Medium",
-                IssueCategory = detail.IssueCategory,
-                TechnicianSummary = updatedSummary,
-                Urgency = detail.Urgency,
-                RvUsage = detail.RvUsage,
-                HasExtendedWarranty = detail.HasExtendedWarranty,
-                ApproxPurchaseDate = detail.ApproxPurchaseDate,
-                AssignedTechnicianId = detail.AssignedTechnicianId,
-                ScheduledDateUtc = detail.ScheduledDateUtc,
-                RequiredSkills = detail.RequiredSkills,
                 BoardSequence = item.Sequence,
                 UpdatedAtUtc = detail.UpdatedAtUtc,
             };
@@ -464,20 +475,9 @@
             foreach (var sibling in targetColumnItems.Where(i => i.Summary.Id != item.Summary.Id))
             {
                 var siblingDetail = await SrClient.GetByIdAsync(_dealershipId, sibling.Summary.Id);
-                var siblingUpdate = new ServiceRequestUpdateRequestDto
+                var siblingUpdate = ServiceRequestMobileView.BuildUpdateRequest(siblingDetail, siblingDetail.TechnicianSummary) with
                 {
                     Status = sibling.Status,
-                    IssueDescription = siblingDetail.IssueDescription,
-                    Priority = siblingDetail.Priority ?? "Medium",
-                    IssueCategory = siblingDetail.IssueCategory,
-                    TechnicianSummary = siblingDetail.TechnicianSummary,
-                    Urgency = siblingDetail.Urgency,
-                    RvUsage = siblingDetail.RvUsage,
-                    HasExtendedWarranty = siblingDetail.HasExtendedWarranty,
-                    ApproxPurchaseDate = siblingDetail.ApproxPurchaseDate,
-                    AssignedTechnicianId = siblingDetail.AssignedTechnicianId,
-                    ScheduledDateUtc = siblingDetail.ScheduledDateUtc,
-                    RequiredSkills = siblingDetail.RequiredSkills,
                     BoardSequence = sibling.Sequence,
                     UpdatedAtUtc = siblingDetail.UpdatedAtUtc,
                 };
@@ -512,6 +512,13 @@
         _needsContainerRefresh = true;
     }
 
+    private void OnJobTypeFilterChanged(string? value)
+    {
+        _jobTypeFilter = value;
+        ApplyFilter();
+        _needsContainerRefresh = true;
+    }
+
     private void OnActionableOnlyChanged(bool value)
     {
         _actionableOnly = value;
@@ -526,6 +533,8 @@
             ? _boardItems.Where(i => string.IsNullOrWhiteSpace(i.Status)
                 || ActionableRequestFilter.IsActionable(i.Status, i.Summary.CreatedAtUtc, i.Summary.UpdatedAtUtc, now))
             : _boardItems;
+
+        items = items.Where(i => JobTypes.MatchesFilter(i.Summary.JobType, _jobTypeFilter));
 
         var tokens = string.IsNullOrWhiteSpace(_filterText)
             ? []
