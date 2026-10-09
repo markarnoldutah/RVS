@@ -31,6 +31,10 @@ public sealed record ServiceRequestDetailResponseDto
     public DateTime? ScheduledDateUtc { get; init; }
     public List<string> RequiredSkills { get; init; } = [];
     public int BoardSequence { get; init; }
+
+    /// <summary>How the operator will do the work (<c>Spec C-11</c>); null until triaged.</summary>
+    public string? JobType { get; init; }
+
     public List<DiagnosticResponseDto> DiagnosticResponses { get; init; } = [];
     public List<AttachmentDto> Attachments { get; init; } = [];
     public AiEnrichmentMetadataDto? AiEnrichment { get; init; }

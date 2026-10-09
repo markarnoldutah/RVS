@@ -51,6 +51,7 @@ public static class ServiceRequestMobileView
             ScheduledDateUtc = sr.ScheduledDateUtc,
             RequiredSkills = [.. sr.RequiredSkills],
             BoardSequence = sr.BoardSequence,
+            JobType = sr.JobType,
         };
     }
 

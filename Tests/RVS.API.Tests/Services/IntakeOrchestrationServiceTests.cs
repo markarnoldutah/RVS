@@ -100,6 +100,17 @@ public class IntakeOrchestrationServiceTests
         result.ServiceRequest.LocationId.Should().Be("loc_test");
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WhenRequestCarriesJobType_ShouldIgnoreIt()
+    {
+        // Spec C-11: the operator sets the job type; the customer never does at intake.
+        SetupFullHappyPath();
+
+        var result = await _sut.ExecuteAsync("test-slug", BuildValidRequest() with { JobType = "OnSite" });
+
+        result.ServiceRequest.JobType.Should().BeNull();
+    }
+
     // ── Spec A-19: a disabled tenant's intake expires after 60 days ──────────
 
     [Fact]

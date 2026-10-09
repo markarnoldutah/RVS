@@ -37,6 +37,13 @@ public sealed record ServiceRequestUpdateRequestDto
     public int? BoardSequence { get; init; }
 
     /// <summary>
+    /// How the operator will do the work (<c>Spec C-11</c>): one of <c>JobTypes.Codes</c>, or
+    /// null or blank to clear it. Like every other field here it is a full overwrite, so a caller
+    /// that is not changing it must send the current value.
+    /// </summary>
+    public string? JobType { get; init; }
+
+    /// <summary>
     /// Last-known <c>UpdatedAtUtc</c> value for optimistic concurrency validation.
     /// </summary>
     public DateTime? UpdatedAtUtc { get; init; }

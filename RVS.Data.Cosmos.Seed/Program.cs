@@ -1573,6 +1573,23 @@ static List<LookupSet> BuildLookupSets() =>
             SortOrder = e.SortOrder,
         })],
     },
+    new LookupSet
+    {
+        Id = "job-types",
+        TenantId = "GLOBAL",
+        Category = "JobType",
+        Name = "Job Types",
+        Description = "How the operator will do the work on a service request (Spec C-11)",
+        OverrideMode = LookupOverrideMode.GlobalOnly,
+        CreatedByUserId = "seed",
+        // Single source of truth: RVS.Domain.Validation.JobTypes.
+        Items = [.. JobTypes.All.Select(e => new LookupItem
+        {
+            Code = e.Code,
+            Name = e.Name,
+            SortOrder = e.SortOrder,
+        })],
+    },
 ];
 
 // ── RV Warranty Rules (20) ──────────────────────────────────────────────

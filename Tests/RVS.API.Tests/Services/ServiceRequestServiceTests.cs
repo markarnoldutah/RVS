@@ -781,6 +781,98 @@ public class ServiceRequestServiceTests
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    // ── Job type (Spec C-11, issue #843) ─────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Remote")]
+    [InlineData("OnSite")]
+    [InlineData("InShop")]
+    [InlineData("Inspection")]
+    [InlineData("Install")]
+    [InlineData("Other")]
+    public async Task UpdateAsync_WhenJobTypeNullOrValid_ShouldSaveIt(string? jobType)
+    {
+        var existing = BuildServiceRequest();
+        existing.JobType = "Remote";
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, BuildUpdateRequest() with { JobType = jobType });
+
+        result.JobType.Should().Be(string.IsNullOrEmpty(jobType) ? null : jobType);
+    }
+
+    [Theory]
+    [InlineData("Solar")]
+    [InlineData("remote")]
+    [InlineData("NotTriaged")]
+    public async Task UpdateAsync_WhenJobTypeInvalid_ShouldThrowArgumentExceptionAndNotSave(string jobType)
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var act = () => _sut.UpdateAsync("ten_1", existing.Id, BuildUpdateRequest() with { JobType = jobType });
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*job type*");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("OnSite")]
+    public async Task CreateAsync_WhenJobTypeNullOrValid_ShouldSaveIt(string? jobType)
+    {
+        var entity = BuildServiceRequest();
+        entity.JobType = jobType;
+        _repoMock.Setup(r => r.CreateAsync(entity, It.IsAny<CancellationToken>())).ReturnsAsync(entity);
+
+        var result = await _sut.CreateAsync("ten_1", entity);
+
+        result.JobType.Should().Be(jobType);
+    }
+
+    [Theory]
+    [InlineData("Solar")]
+    [InlineData("NotTriaged")]
+    public async Task CreateAsync_WhenJobTypeInvalid_ShouldThrowArgumentExceptionAndNotSave(string jobType)
+    {
+        var entity = BuildServiceRequest();
+        entity.JobType = jobType;
+
+        var act = () => _sut.CreateAsync("ten_1", entity);
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*job type*");
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("Remote")]
+    [InlineData("NotTriaged")]
+    public async Task SearchAsync_WhenJobTypeFilterValid_ShouldDelegateToRepository(string filter)
+    {
+        var request = new ServiceRequestSearchRequestDto { JobType = filter };
+        var expected = new PagedResult<ServiceRequest> { Items = [] };
+        _repoMock.Setup(r => r.SearchAsync("ten_1", request, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var result = await _sut.SearchAsync("ten_1", request);
+
+        result.Should().BeSameAs(expected);
+    }
+
+    [Fact]
+    public async Task SearchAsync_WhenJobTypeFilterInvalid_ShouldThrowArgumentException()
+    {
+        var act = () => _sut.SearchAsync("ten_1", new ServiceRequestSearchRequestDto { JobType = "Solar" });
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*job type*");
+    }
+
     private static ServiceRequest BuildServiceRequest(string? id = null, string tenantId = "ten_1") => new()
     {
         Id = id ?? Guid.NewGuid().ToString(),

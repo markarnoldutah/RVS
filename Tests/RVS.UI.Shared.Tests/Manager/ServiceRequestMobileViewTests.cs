@@ -38,6 +38,7 @@ public class ServiceRequestMobileViewTests
         ScheduledDateUtc = new DateTime(2026, 10, 1, 15, 0, 0, DateTimeKind.Utc),
         RequiredSkills = ["hydraulics"],
         BoardSequence = 4,
+        JobType = "OnSite",
     };
 
     // ---- Statuses ---------------------------------------------------------------
@@ -99,6 +100,7 @@ public class ServiceRequestMobileViewTests
         request.ScheduledDateUtc.Should().Be(sr.ScheduledDateUtc);
         request.RequiredSkills.Should().Equal("hydraulics");
         request.BoardSequence.Should().Be(4);
+        request.JobType.Should().Be("OnSite");
     }
 
     [Fact]

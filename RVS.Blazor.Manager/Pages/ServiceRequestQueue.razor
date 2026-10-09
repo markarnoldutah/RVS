@@ -102,6 +102,21 @@
                         </MudSelect>
                     </MudStack>
                 </MudItem>
+                @* Spec C-1 / C-11: the one filter beyond status that the list view allows *@
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Job type</MudText>
+                        <MudSelect T="string" @bind-Value="_search.JobType"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Clearable="true"
+                                   AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                            @foreach (var option in JobTypeDisplay.FilterOptions)
+                            {
+                                <MudSelectItem T="string" Value="@option.Value">@option.Label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudStack>
+                </MudItem>
                 <MudItem xs="12" sm="6" md="3">
                     <MudStack Spacing="1">
                         <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Date from</MudText>
@@ -153,6 +168,7 @@
                 <MudTh>ID</MudTh>
                 <MudTh>Status</MudTh>
                 <MudTh>Priority</MudTh>
+                <MudTh>Job type</MudTh>
                 <MudTh>Customer</MudTh>
                 <MudTh>Asset</MudTh>
                 <MudTh>Category</MudTh>
@@ -179,6 +195,9 @@
                     {
                         <PriorityBadge Priority="@context.Priority" />
                     }
+                </MudTd>
+                <MudTd DataLabel="Job type">
+                    <JobTypeChip JobType="@context.JobType" />
                 </MudTd>
                 <MudTd DataLabel="Customer">@context.CustomerFullName</MudTd>
                 <MudTd DataLabel="Asset">@(context.AssetDisplay ?? "—")</MudTd>
@@ -282,6 +301,7 @@
                 AssignedTechnicianId = _search.AssignedTechnicianId,
                 AssetId = _search.AssetId,
                 Priority = _search.Priority,
+                JobType = _search.JobType,
                 DateFrom = _dateFrom?.ToUniversalTime(),
                 DateTo = _dateTo?.ToUniversalTime(),
                 Page = _currentPage,
@@ -365,5 +385,6 @@
         public string? AssignedTechnicianId { get; set; }
         public string? AssetId { get; set; }
         public string? Priority { get; set; }
+        public string? JobType { get; set; }
     }
 }

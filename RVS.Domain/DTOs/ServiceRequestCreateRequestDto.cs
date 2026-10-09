@@ -25,6 +25,13 @@ public sealed record ServiceRequestCreateRequestDto
     public List<DiagnosticResponseDto>? DiagnosticResponses { get; init; }
 
     /// <summary>
+    /// How the operator will do the work (<c>Spec C-11</c>, issue #843), when an operator creates
+    /// the request in the manager app. Anonymous intake ignores it: the customer never sets the
+    /// job type.
+    /// </summary>
+    public string? JobType { get; init; }
+
+    /// <summary>
     /// When <c>true</c>, the customer has opted out of SMS notifications.
     /// Default is <c>false</c> (both channels active).
     /// </summary>

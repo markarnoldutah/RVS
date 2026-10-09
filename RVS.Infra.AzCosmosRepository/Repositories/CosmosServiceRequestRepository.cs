@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using RVS.Domain.DTOs;
 using RVS.Domain.Entities;
 using RVS.Domain.Interfaces;
+using RVS.Domain.Validation;
 using System.Net;
 
 namespace RVS.Infra.AzCosmosRepository.Repositories;
@@ -113,6 +114,10 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
             conditions.Add("c.createdAtUtc <= @dateTo");
         if (!string.IsNullOrWhiteSpace(request.Priority))
             conditions.Add("c.priority = @priority");
+        if (request.JobType == JobTypes.NotTriagedFilter)
+            conditions.Add("(NOT IS_DEFINED(c.jobType) OR IS_NULL(c.jobType))");
+        else if (!string.IsNullOrWhiteSpace(request.JobType))
+            conditions.Add("c.jobType = @jobType");
         if (!string.IsNullOrWhiteSpace(request.Keyword))
             conditions.Add("(CONTAINS(LOWER(c.customerSnapshot.firstName), LOWER(@keyword)) OR CONTAINS(LOWER(c.customerSnapshot.lastName), LOWER(@keyword)) OR CONTAINS(LOWER(c.issueDescription), LOWER(@keyword)) OR CONTAINS(LOWER(c.assetInfo.assetId), LOWER(@keyword)))");
 
@@ -137,6 +142,8 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
             definition = definition.WithParameter("@dateTo", request.DateTo.Value);
         if (!string.IsNullOrWhiteSpace(request.Priority))
             definition = definition.WithParameter("@priority", request.Priority);
+        if (request.JobType != JobTypes.NotTriagedFilter && !string.IsNullOrWhiteSpace(request.JobType))
+            definition = definition.WithParameter("@jobType", request.JobType);
         if (!string.IsNullOrWhiteSpace(request.Keyword))
             definition = definition.WithParameter("@keyword", request.Keyword);
 

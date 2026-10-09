@@ -24,6 +24,9 @@ public sealed record ServiceRequestSummaryResponseDto
     public string? Priority { get; init; }
     public int BoardSequence { get; init; }
 
+    /// <summary>How the operator will do the work (<c>Spec C-11</c>); null until triaged.</summary>
+    public string? JobType { get; init; }
+
     /// <summary>
     /// The multi-issue intake submission this request belongs to (<c>Spec A-17</c>): its first
     /// request's id. <c>null</c> for a request reported on its own.

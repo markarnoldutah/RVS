@@ -14,6 +14,12 @@ public sealed record ServiceRequestSearchRequestDto
     public DateTime? DateFrom { get; init; }
     public DateTime? DateTo { get; init; }
     public string? Priority { get; init; }
+
+    /// <summary>
+    /// Job-type filter (<c>Spec C-1</c> / C-11): a job-type code, or <c>JobTypes.NotTriagedFilter</c>
+    /// for requests with none.
+    /// </summary>
+    public string? JobType { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 25;
 }

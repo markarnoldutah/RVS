@@ -118,6 +118,14 @@ public class ServiceRequest : EntityBase
     public List<string> RequiredSkills { get; set; } = [];
 
     /// <summary>
+    /// How the operator will do the work — one of <see cref="Validation.JobTypes"/>
+    /// (<c>Spec C-11</c>, issue #843). Set by the operator at triage, never at intake; null until
+    /// then. Not on the packet, the customer status page or the X-2 ledger entry.
+    /// </summary>
+    [JsonProperty("jobType")]
+    public string? JobType { get; set; }
+
+    /// <summary>
     /// Service priority level.
     /// </summary>
     [JsonProperty("priority")]
