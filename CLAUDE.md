@@ -26,7 +26,7 @@ There is no target number of these. One authoritative home per fact; a document 
 - [Docs/ARCHIVE/](Docs/ARCHIVE/) and [Docs/Obsolete/](Docs/Obsolete/) are frozen snapshots. **Never cite them as current.**
 - Per-language instruction files also live in [.github/instructions/](.github/instructions/) (C#, ASP.NET, Blazor, Markdown, Testing).
 
-**Scope discipline.** The product was deliberately reduced to: anonymous intake → a one-page packet emailed to the service department → a thin manager app. Archived and out of scope: DMS integration, two-way SMS, technician/MAUI app, scheduling, benchmarking and analytics, billing tiers, OEM data licensing. Code for several of these still exists and is a descope target, not a feature — see the descope backlogs in the ASOT docs before extending anything in those areas.
+**Scope discipline.** The product was deliberately reduced to: anonymous intake → a one-page packet emailed to the service department → a thin manager app. Archived and out of scope: DMS integration, two-way SMS, technician/MAUI app, scheduling beyond one booked date/time per request (Spec C-12), benchmarking and analytics, billing tiers, OEM data licensing. Code for several of these still exists and is a descope target, not a feature — see the descope backlogs in the ASOT docs before extending anything in those areas.
 
 ## Working an Issue
 

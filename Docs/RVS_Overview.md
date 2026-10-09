@@ -19,7 +19,7 @@ A customer (or a technician on the customer's behalf) fills out a short web form
 |---|---|---|
 | **A** | **Intake app** (Blazor, anonymous, per-location URL) | Substantially built |
 | **B** | **Packet + email delivery** (body text, image attachments, PDF) | To build — this is the current work |
-| **C** | **Manager app** (Blazor, thin: set SR status, disposition) | Minimal build |
+| **C** | **Manager app** (Blazor, thin: set SR status, disposition; a service board for mobile operators, who have no DMS) | Minimal build |
 
 Spec: `RVS_Spec.md`. Build order: `RVS_Plan.md`.
 
@@ -37,8 +37,8 @@ Two live prospects:
 Both prospects said some version of *"not another dashboard."* The product is built around taking that seriously.
 
 - **Not a DMS.** No work orders, no parts, no labor, no invoicing, no accounting.
-- **Not a scheduling system.** No calendar, no bay assignment, no capacity planning.
-- **Not a messaging platform.** RVS sends a service request to the shop and a status link to the customer. It does not host conversations. Two-way SMS is out.
+- **Not a scheduling system.** No calendar, availability, booking or reminders, no bay assignment, no capacity planning. A request can carry one scheduled date and time (Spec C-12), so a mobile operator's board shows when each job is booked.
+- **Not a messaging platform.** RVS sends a service request to the shop, and a status link and one-way status updates to the customer (Spec X-8). It does not host conversations. Two-way SMS is out.
 - **Not an analytics product.** No benchmarking, no dashboards of charts, no cross-dealer comparison.
 - **Not integrated with any DMS.** Deliberately. Email plus a paste-ready text block does the same job today without a partner program. See [`RVS_Archive_Index.md`](RVS_Archive_Index.md) for the analysis behind that call.
 
