@@ -137,7 +137,7 @@ HTML with an embedded print stylesheet is the primary rendering; it must print c
 | Size ceiling | The send is budgeted at 9.5 MB of a 10 MB transport limit, counting both bodies and attachments **after** base64 encoding. Over budget, attachments are dropped to fit rather than failing the send: the PDF is kept first if it fits, then photos fill what is left in order, dropping from the last one back. An email always goes out. The budget is checked at startup — at least 5 MB so the PDF always fits, and never above the transport limit, where every send would fail again |
 | Target | Delivered within 60 seconds of submission, P99 |
 | Retry | 3 attempts, exponential backoff, then alert |
-| Bounce | A hard bounce disables that recipient and notifies the owner — never the whole configuration |
+| Bounce | Not detected by RVS. SendGrid suppresses a hard-bounced address and silently drops every later send to it until the address is removed from its suppression list. Bounces are handled operationally: a missing-packet report starts at the location's recipient list, then SendGrid's suppressions, plus a weekly suppression check. Decision #833 (option C) |
 | Sending rate | The transport's per-subscription send quota is a deployment constraint, not a code one. A quota too low for pilot volume must be raised before launch, not after — see `RVS_Infrastructure.md` |
 
 Idempotent per `(serviceRequestId, packetVersion)`.

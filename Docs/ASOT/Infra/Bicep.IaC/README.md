@@ -808,17 +808,14 @@ notify nobody — the `opsAlertReceiverAction` deployment output flags this.
 `kind: LogAlert`) scoped to the App Insights component. Each query is
 `union traces, exceptions | where tostring(customDimensions.EventId) == "<id>"`
 and projects the structured log properties as **split dimensions**, so the
-alert payload carries `TenantId` plus the offending `LocationId` /
-`ServiceRequestId`. `union traces, exceptions` because 434001 logs with an
+alert payload carries `TenantId` plus the offending `ServiceRequestId`. `union traces, exceptions` because 434001 logs with an
 exception argument and so lands in `exceptions`, not `traces`.
 
 | Rule | EventId | Tier | Cadence / window | Dimensions |
 |---|---|---|---|---|
-| `sqr-rvs-packet-recipients-bounced-<env>-wus3` | 439002 `AllRecipientsBounced` | Sev 1 — page | 5 min / 5 min | `LocationId`, `TenantId` |
 | `sqr-rvs-packet-email-delivery-exhausted-<env>-wus3` | 438001 `PacketEmailDeliveryExhausted` | Sev 1 — page | 5 min / 5 min | `ServiceRequestId`, `TenantId` |
 | `sqr-rvs-packet-generation-exhausted-<env>-wus3` | 434001 `PacketGenerationExhausted` | Sev 1 — page | 5 min / 5 min | `ServiceRequestId`, `TenantId` |
 | `sqr-rvs-packet-email-oversized-<env>-wus3` | 521001 `PacketEmailOversized` | Sev 1 — page | 5 min / 5 min | `ServiceRequestId`, `TenantId` |
-| `sqr-rvs-packet-recipient-bounced-warn-<env>-wus3` | 439001 `RecipientHardBounced` | Sev 3 — digest | 1 h / 6 h | `LocationId`, `TenantId` |
 | `sqr-rvs-law-daily-cap-reached-<env>-wus3` | — (workspace `OverQuota`) | Sev 2 | 15 min / 1 h | — |
 | `ma-rvs-api-availability-<env>-wus3` ¹ | — (`/health` test failing) | Sev 1 — page | 5 min / one test interval | — |
 | `sqr-rvs-api-telemetry-dark-<env>-wus3` ¹ | — (pings pass, no `requests`) | Sev 2 | 15 min / 1 h | — |
@@ -843,11 +840,17 @@ Without the availability test there is nothing to compare against: on an idle
 B1 worker with no Always On, "no requests for an hour" is the normal state.
 **So while the test is off, a repeat of #602 is caught by nothing.**
 
-5 minutes is the practical near-real-time floor for log-search alerts; the four
-Sev 1 rules use it. **439001** (one recipient disabled, others still receive
-packets) is deliberately lower: it is not a delivery failure, so it does not
-page — a Sev 3 rule on a 6-hour window evaluated hourly reads as a digest. Fix
-the address before it becomes the last active one (439002).
+5 minutes is the practical near-real-time floor for log-search alerts; the three
+Sev 1 packet rules use it.
+
+**Hard bounces raise no alert** (#833, option C). SendGrid puts a hard-bounced
+address on its account-wide suppression list and drops every later send to it,
+while the Mail Send API still returns 202, so nothing reaches App Insights. See
+"Packets stopped arriving" in the runbook below. The two bounce rules that
+#439/#494 deployed (`sqr-rvs-packet-recipients-bounced-<env>-wus3`,
+`sqr-rvs-packet-recipient-bounced-warn-<env>-wus3`) were removed from the
+template. A deployment does not delete a resource that leaves the template, so
+both were deleted by hand in staging and prod on Oct 9 2026.
 
 **521001** (`PacketEmailOversized`) pages from day one. Since #566 validates the
 email size budget at startup, it can no longer be reached by a misconfigured
@@ -860,13 +863,6 @@ trimmed, no `EventId`) is informational and is not alerted.
 
 ### Runbook — on-call
 
-- **439002 `AllRecipientsBounced`** — packets for that location are going
-  nowhere. In the manager app (or Cosmos), open the location's packet settings
-  and **fix or replace the bounced address in `recipients`, then save**.
-  `LocationService.UpdateAsync` reconciles the disabled list — re-enabling a
-  bounced address is just "add it back to `recipients` and save". The alert
-  auto-resolves once no 439002 recurs within the window. Payload carries
-  `LocationId` + `TenantId`.
 - **438001 / 434001** — a service request has no packet delivered / generated
   after 3 attempts. Payload carries `ServiceRequestId` + `TenantId`. Check the
   correlated traces/exceptions for the failure, then trigger regeneration
@@ -876,17 +872,28 @@ trimmed, no `EventId`) is informational and is not alerted.
   for that `ServiceRequestId` from the manager app, check the PDF size and what
   inflated it (embedded image resampling, a per-location logo, the HTML body),
   and file a bug.
-- **439001 `RecipientHardBounced`** (digest) — one address on a location was
-  disabled; delivery still works via the others. Replace it at leisure before
-  the location hits 439002.
+- **Packets stopped arriving** (a dealer reports it; no alert fires). Check
+  in this order:
+  1. **The location's recipient list** — in the manager app, open the
+     location's packet settings and check each address for typos. A corrected
+     address is a new address, so it is not suppressed; save and the next
+     packet goes out.
+  2. **SendGrid → Suppressions → Bounces** (also Blocks and Spam Reports) for
+     each recipient. A listed address gets nothing, even after its mailbox is
+     fixed. Confirm the mailbox now works, then delete it from the list.
+  3. **SendGrid → Activity** for that address shows each send as delivered,
+     bounced or dropped, with the reason.
+  4. **App Insights** for 438001 / `Packet email dispatch failed` — a send
+     SendGrid refused outright, as opposed to one it accepted and dropped.
+- **Weekly:** look at SendGrid → Suppressions → Bounces in each environment
+  and clear up any packet-recipient address there with the dealer.
 
 Verify the pipeline end to end (payload really carries the dimensions):
 
 ```kusto
 union traces, exceptions
-| where tostring(customDimensions.EventId) in ("439002","438001","434001","521001","439001")
+| where tostring(customDimensions.EventId) in ("438001","434001","521001")
 | project timestamp, customDimensions.EventId, SeverityLevel,
-          LocationId = tostring(customDimensions.LocationId),
           ServiceRequestId = tostring(customDimensions.ServiceRequestId),
           TenantId = tostring(customDimensions.TenantId)
 | order by timestamp desc
