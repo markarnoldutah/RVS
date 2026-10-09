@@ -16,13 +16,6 @@ public sealed record PacketConfigDto
     /// <summary>Email addresses that receive the packet. 0–10 entries.</summary>
     public List<string> Recipients { get; init; } = [];
 
-    /// <summary>
-    /// Recipient addresses parked after a hard bounce (<c>Spec B-4</c>, issue #439). Read-only at
-    /// the API boundary — the list is managed by the bounce-handling flow, not set by a caller.
-    /// A manager re-enables one by adding its address back into <see cref="Recipients"/> and saving.
-    /// </summary>
-    public IReadOnlyList<DisabledRecipientDto> DisabledRecipients { get; init; } = [];
-
     /// <summary>Attach the rendered PDF to the packet email.</summary>
     public bool AttachPdf { get; init; } = true;
 
@@ -36,18 +29,3 @@ public sealed record PacketConfigDto
     public int StatusLinkTtlDays { get; init; } = PacketConfigEmbedded.DefaultStatusLinkTtlDays;
 }
 
-/// <summary>
-/// A packet-email recipient that was disabled after a hard bounce (<c>Spec B-4</c>, issue #439),
-/// surfaced so location settings can show and re-enable it.
-/// </summary>
-public sealed record DisabledRecipientDto
-{
-    /// <summary>The disabled email address.</summary>
-    public string Email { get; init; } = string.Empty;
-
-    /// <summary>Short, non-PII bounce reason. May be null.</summary>
-    public string? Reason { get; init; }
-
-    /// <summary>UTC time the address was disabled.</summary>
-    public DateTime DisabledAtUtc { get; init; }
-}

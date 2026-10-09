@@ -5,14 +5,16 @@
 // land in Application Insights, into actionable Azure Monitor
 // alerts routed to an ops action group. Covers:
 //
-//   EventId 439002  AllRecipientsBounced        (LocationService)        — page
 //   EventId 438001  PacketEmailDeliveryExhausted (PacketGenerationSvc)   — page
 //   EventId 434001  PacketGenerationExhausted    (PacketGenerationSvc)   — page
 //   EventId 521001  PacketEmailOversized         (PacketGenerationSvc)   — page
-//   EventId 439001  RecipientHardBounced         (LocationService)       — warn
 //
-// Each event is emitted with structured log properties (LocationId /
-// ServiceRequestId + TenantId). The Application Insights ILogger
+// Hard bounces are not here: SendGrid suppresses a bounced address
+// itself and RVS records nothing (#833, option C — runbook in
+// README.md "Monitoring & alerts").
+//
+// Each event is emitted with structured log properties
+// (ServiceRequestId + TenantId). The Application Insights ILogger
 // provider projects those into `customDimensions`, and the alert
 // queries surface them as split dimensions so the alert payload
 // carries the tenant and the offending location / request.
@@ -74,12 +76,6 @@ param availabilityTestFrequencySeconds int = 900
 // evaluationFrequency == windowSize == 5 minutes is the practical near-real-time
 // floor for log-search alerts and avoids partial-bucket flapping.
 var criticalEvents = [
-  {
-    slug: 'recipients-bounced'
-    eventId: '439002'
-    idColumn: 'LocationId'
-    description: 'EventId 439002 AllRecipientsBounced — a hard bounce removed a location\'s last active packet recipient. No packets can be delivered for that location until an address is fixed in its packet settings. Runbook: RVS Infra/Bicep.IaC/README.md "Monitoring & alerts".'
-  }
   {
     slug: 'email-delivery-exhausted'
     eventId: '438001'
@@ -182,65 +178,6 @@ resource criticalRules 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = [
     }
   }
 ]
-
-// EventId 439001 — one recipient disabled, others still receive packets. Lower
-// tier by design: not a delivery failure, just a "fix the address before it
-// becomes the last one (439002)" signal. Severity 3, a 6-hour window evaluated
-// hourly so it reads as a digest rather than a page, routed to the same ops
-// action group.
-resource recipientBounceWarning 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
-  name: 'sqr-rvs-packet-recipient-bounced-warn-${environmentName}-wus3'
-  location: location
-  tags: tags
-  kind: 'LogAlert'
-  properties: {
-    displayName: '[RVS ${environmentName}] Packet recipient hard-bounced (EventId 439001)'
-    description: 'EventId 439001 RecipientHardBounced — a hard bounce disabled one packet recipient for a location; other recipients still receive packets. Warning tier: digest to ops, not a page. Fix or replace the address in the location\'s packet settings before it becomes the last active recipient (439002).'
-    severity: 3
-    enabled: true
-    scopes: [
-      appInsightsResourceId
-    ]
-    evaluationFrequency: 'PT1H'
-    windowSize: 'PT6H'
-    autoMitigate: true
-    criteria: {
-      allOf: [
-        {
-          query: 'union traces, exceptions | where tostring(customDimensions.EventId) == "439001" | extend LocationId = tostring(customDimensions.LocationId), TenantId = tostring(customDimensions.TenantId) | project LocationId, TenantId'
-          timeAggregation: 'Count'
-          operator: 'GreaterThan'
-          threshold: 0
-          dimensions: [
-            {
-              name: 'LocationId'
-              operator: 'Include'
-              values: [
-                '*'
-              ]
-            }
-            {
-              name: 'TenantId'
-              operator: 'Include'
-              values: [
-                '*'
-              ]
-            }
-          ]
-          failingPeriods: {
-            numberOfEvaluationPeriods: 1
-            minFailingPeriodsToAlert: 1
-          }
-        }
-      ]
-    }
-    actions: {
-      actionGroups: [
-        opsActionGroup.id
-      ]
-    }
-  }
-}
 
 // Daily ingestion cap reached (logAnalyticsDailyCapGb). Once the cap is hit the
 // workspace stops ingesting until its daily reset, so every rule above goes
@@ -374,9 +311,6 @@ output actionGroupName string = opsActionGroup.name
 
 @description('Names of the critical (page) scheduled-query alert rules.')
 output criticalRuleNames array = [for (e, i) in criticalEvents: criticalRules[i].name]
-
-@description('Name of the warning-tier (digest) scheduled-query alert rule.')
-output warningRuleName string = recipientBounceWarning.name
 
 @description('Name of the Log Analytics daily-cap-reached alert rule.')
 output dailyCapRuleName string = dailyCapReached.name

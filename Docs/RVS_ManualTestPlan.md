@@ -426,7 +426,6 @@ These are Spec requirements the current build does not meet. Run the check anywa
 | C-2 | The detail view renders the packet | The drawer shows request data, not the packet | #443 |
 | C-5 | Resend the packet to the configured recipients or an ad-hoc address | No resend anywhere in the manager app. Regeneration is API-only | #444 |
 | B-1 | Three failed attempts are shown in the manager app | An alert fires. Nothing shows in the manager app | — |
-| B-4 | A hard bounce disables that recipient and notifies the owner | Disabling is built, but nothing receives a bounce yet, so it never fires | — (follow-up to closed #439; see `RVS_PacketComposition.md`) |
 | B-6 | Status-link time-to-live and optional logo | Both save from the Locations drawer. Neither is used by the packet or the status token yet | #505 (logo) |
 | A-6 | Attachments: jpeg, png, mp4, m4a, wav | The upload step accepts jpeg, png, gif, webp, heic/heif, mp4, mov, webm and pdf, and **not** m4a or wav | — (decide: amend the Spec or the build) |
 | A-7 | Returning-customer prefill | **Cancelled**; token path removed, superseded by device memory (#811). 1.2c checks nothing comes from the server | #673, #815 |

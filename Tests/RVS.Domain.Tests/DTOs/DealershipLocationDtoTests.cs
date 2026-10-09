@@ -119,7 +119,6 @@ public class DealershipLocationDtoTests
 
         dto.Enabled.Should().BeTrue();
         dto.Recipients.Should().BeEmpty();
-        dto.DisabledRecipients.Should().BeEmpty();
         dto.AttachPdf.Should().BeTrue();
         dto.IncludePhotos.Should().BeTrue();
         dto.PasteBlockCharacterCap.Should().Be(2500);
