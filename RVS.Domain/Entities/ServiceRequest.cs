@@ -100,10 +100,25 @@ public class ServiceRequest : EntityBase
     public List<DiagnosticResponseEmbedded> DiagnosticResponses { get; set; } = [];
 
     /// <summary>
-    /// Scheduled service date. Null until an advisor schedules the request.
+    /// The booked start (<c>Spec C-12</c>, issue #844), as a UTC instant. Null until the operator
+    /// schedules the request. For a date-only booking it is local midnight in
+    /// <see cref="ScheduledTimeZone"/>. Set only through <see cref="Validation.ServiceSchedule"/>.
     /// </summary>
-    [JsonProperty("scheduledDateUtc")]
-    public DateTime? ScheduledDateUtc { get; set; }
+    [JsonProperty("scheduledStartUtc")]
+    public DateTime? ScheduledStartUtc { get; set; }
+
+    /// <summary>
+    /// The IANA zone the start was booked in, and is always shown in. Set whenever
+    /// <see cref="ScheduledStartUtc"/> is; null otherwise.
+    /// </summary>
+    [JsonProperty("scheduledTimeZone")]
+    public string? ScheduledTimeZone { get; set; }
+
+    /// <summary>
+    /// False for a date-only booking ("Thursday", hour not yet known), which shows no time anywhere.
+    /// </summary>
+    [JsonProperty("scheduledTimeIsSet")]
+    public bool ScheduledTimeIsSet { get; set; }
 
     /// <summary>
     /// Assigned technician identifier. Null until assigned.

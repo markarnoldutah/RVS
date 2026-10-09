@@ -822,6 +822,55 @@ public class ServiceRequestServiceTests
         _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task UpdateAsync_WhenScheduleValid_ShouldSaveItInTheStoredZone()
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceRequest e, CancellationToken _) => e);
+
+        var result = await _sut.UpdateAsync("ten_1", existing.Id, BuildUpdateRequest() with
+        {
+            ScheduledDate = new DateOnly(2026, 10, 15),
+            ScheduledTime = new TimeOnly(9, 0),
+            ScheduledTimeZone = "America/Denver",
+        });
+
+        result.ScheduledStartUtc.Should().Be(new DateTime(2026, 10, 15, 15, 0, 0, DateTimeKind.Utc));
+        result.ScheduledTimeZone.Should().Be("America/Denver");
+        result.ScheduledTimeIsSet.Should().BeTrue();
+    }
+
+    public static TheoryData<DateOnly?, TimeOnly?, string?> InvalidSchedules() => new()
+    {
+        { new DateOnly(2026, 10, 15), new TimeOnly(9, 0), null },             // start without a zone
+        { new DateOnly(2026, 10, 15), null, "Mars/Olympus_Mons" },            // unknown zone
+        { null, new TimeOnly(9, 0), "America/Denver" },                       // time without a date
+        { new DateOnly(2026, 3, 8), new TimeOnly(2, 30), "America/Denver" },  // spring-forward gap
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidSchedules))]
+    public async Task UpdateAsync_WhenScheduleInvalid_ShouldThrowArgumentExceptionAndNotSave(
+        DateOnly? date, TimeOnly? time, string? zone)
+    {
+        var existing = BuildServiceRequest();
+        _repoMock.Setup(r => r.GetByIdAsync("ten_1", existing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var act = () => _sut.UpdateAsync("ten_1", existing.Id, BuildUpdateRequest() with
+        {
+            ScheduledDate = date,
+            ScheduledTime = time,
+            ScheduledTimeZone = zone,
+        });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ServiceRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("OnSite")]

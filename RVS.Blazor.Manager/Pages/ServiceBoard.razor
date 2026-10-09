@@ -200,6 +200,15 @@
                                             </MudText>
                                         }
 
+                                        @* Scheduled date/time (Spec C-12), in the zone it was booked in *@
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudIcon Icon="@Icons.Material.Outlined.Event" Size="Size.Small"
+                                                     Style="@($"color: {CardTextColor}; font-size: 0.95rem;")" />
+                                            <MudText Typo="Typo.caption" Style="@($"color: {CardTextColor};")">
+                                                @(boardItem.Summary.ScheduledDisplay ?? ServiceSchedule.NotScheduledLabel)
+                                            </MudText>
+                                        </MudStack>
+
                                         @* Chips row: job type, created date, category *@
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
                                                   Wrap="Wrap.Wrap" Class="mt-1">

@@ -108,6 +108,7 @@ public sealed class ServiceRequestService : IServiceRequestService
         }
 
         ThrowIfInvalidJobType(request.JobType);
+        ThrowIfInvalidSchedule(request);
 
         existing.ApplyUpdate(request, _userContext.UserId);
 
@@ -205,6 +206,16 @@ public sealed class ServiceRequestService : IServiceRequestService
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
         return _packetGenerationService.GetPdfLinkAsync(tenantId, id, cancellationToken);
+    }
+
+    /// <summary>Spec C-12: a date needs a zone, a time needs a date, and the time must exist in that zone.</summary>
+    private static void ThrowIfInvalidSchedule(ServiceRequestUpdateRequestDto request)
+    {
+        var result = ServiceSchedule.Validate(request.ScheduledDate, request.ScheduledTime, request.ScheduledTimeZone);
+        if (!result.IsValid)
+        {
+            throw new ArgumentException(result.ErrorMessage, nameof(request));
+        }
     }
 
     /// <summary>Spec C-11: one fixed set. Null or blank means unset.</summary>

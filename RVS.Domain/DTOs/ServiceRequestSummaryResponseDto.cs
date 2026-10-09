@@ -27,6 +27,12 @@ public sealed record ServiceRequestSummaryResponseDto
     /// <summary>How the operator will do the work (<c>Spec C-11</c>); null until triaged.</summary>
     public string? JobType { get; init; }
 
+    /// <summary>The booked start (<c>Spec C-12</c>) as a UTC instant, for sorting; null when unscheduled.</summary>
+    public DateTime? ScheduledStartUtc { get; init; }
+
+    /// <summary>"Thu Oct 15 · 9:00 AM MDT", always in the stored zone; null when unscheduled.</summary>
+    public string? ScheduledDisplay { get; init; }
+
     /// <summary>
     /// The multi-issue intake submission this request belongs to (<c>Spec A-17</c>): its first
     /// request's id. <c>null</c> for a request reported on its own.

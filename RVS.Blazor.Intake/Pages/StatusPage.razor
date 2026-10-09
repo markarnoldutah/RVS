@@ -189,6 +189,14 @@ else if (_statusResponse is not null)
                                                     <td>@sr.IssueCategory</td>
                                                 </tr>
                                             }
+                                            @if (!string.IsNullOrWhiteSpace(sr.ScheduledDisplay))
+                                            {
+                                                @* Spec C-12: already formatted in the zone it was booked in. *@
+                                                <tr>
+                                                    <td><strong>Scheduled</strong></td>
+                                                    <td>@sr.ScheduledDisplay</td>
+                                                </tr>
+                                            }
                                             <tr>
                                                 <td><strong>Submitted</strong></td>
                                                 <td>@sr.SubmittedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>

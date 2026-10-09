@@ -169,6 +169,13 @@
                 <MudTh>Status</MudTh>
                 <MudTh>Priority</MudTh>
                 <MudTh>Job type</MudTh>
+                <MudTh>
+                    @* Spec C-12: sorts the loaded page by booked instant; unscheduled rows sort last. *@
+                    <MudTableSortLabel T="ServiceRequestSummaryResponseDto"
+                                       SortBy="@(sr => sr.ScheduledStartUtc ?? DateTime.MaxValue)">
+                        Scheduled
+                    </MudTableSortLabel>
+                </MudTh>
                 <MudTh>Customer</MudTh>
                 <MudTh>Asset</MudTh>
                 <MudTh>Category</MudTh>
@@ -199,6 +206,7 @@
                 <MudTd DataLabel="Job type">
                     <JobTypeChip JobType="@context.JobType" />
                 </MudTd>
+                <MudTd DataLabel="Scheduled">@(context.ScheduledDisplay ?? ServiceSchedule.NotScheduledLabel)</MudTd>
                 <MudTd DataLabel="Customer">@context.CustomerFullName</MudTd>
                 <MudTd DataLabel="Asset">@(context.AssetDisplay ?? "—")</MudTd>
                 <MudTd DataLabel="Category">@context.IssueCategory</MudTd>

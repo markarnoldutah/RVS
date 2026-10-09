@@ -94,12 +94,13 @@ public class CustomerIntakeDtoTests
     }
 
     [Fact]
-    public void CustomerStatusItemResponseDto_ExposesOnlyTheSpecX1AndC9Fields()
+    public void CustomerStatusItemResponseDto_ExposesOnlyTheSpecX1C9AndC12Fields()
     {
         // Spec X-1 shows unit, submission date, current status, and the location's phone
         // number; Spec C-9 adds the manager-authored status note; issue #741 adds the issue
         // category's display name; issue #793 adds the servicing location's name and logo so
-        // requests at different dealers are told apart. Nothing customer-identifying and no
+        // requests at different dealers are told apart; Spec C-12 (issue #844) adds the
+        // scheduled date/time, already formatted in its booked zone. Nothing customer-identifying and no
         // free-text problem description crosses this boundary.
         var properties = typeof(CustomerStatusItemResponseDto)
             .GetProperties()
@@ -107,7 +108,7 @@ public class CustomerIntakeDtoTests
             .OrderBy(n => n);
 
         properties.Should().Equal(
-            "IssueCategory", "LocationLogoUrl", "LocationName", "LocationPhone", "Status", "StatusNote", "SubmittedAtUtc", "Unit");
+            "IssueCategory", "LocationLogoUrl", "LocationName", "LocationPhone", "ScheduledDisplay", "Status", "StatusNote", "SubmittedAtUtc", "Unit");
     }
 
     [Fact]

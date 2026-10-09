@@ -251,7 +251,7 @@ static List<ContainerProperties> BuildContainerDefinitions()
                     new IncludedPath { Path = "/customerProfileId/?" },
                     new IncludedPath { Path = "/issueCategory/?" },
                     new IncludedPath { Path = "/createdAtUtc/?" },
-                    new IncludedPath { Path = "/scheduledDateUtc/?" },
+                    new IncludedPath { Path = "/scheduledStartUtc/?" },
                     new IncludedPath { Path = "/type/?" },
                 },
                 ExcludedPaths =
@@ -1274,7 +1274,9 @@ static List<ServiceRequest> BuildServiceRequests() =>
         Name = "SR-002 Johnson Slide-Out",
         CreatedByUserId = "seed",
         AssignedTechnicianId = "tech_brian",
-        ScheduledDateUtc = SeedDate(-2),
+        ScheduledStartUtc = SeedDate(-2),
+        ScheduledTimeZone = "America/Denver",
+        ScheduledTimeIsSet = true,
         CustomerSnapshot = new CustomerSnapshotEmbedded
         {
             FirstName = "Mike", LastName = "Johnson",
@@ -1298,7 +1300,9 @@ static List<ServiceRequest> BuildServiceRequests() =>
         Name = "SR-003 Johnson Roof Inspection",
         CreatedByUserId = "seed",
         AssignedTechnicianId = "tech_brian",
-        ScheduledDateUtc = SeedDate(30),
+        ScheduledStartUtc = SeedDate(30),
+        ScheduledTimeZone = "America/Denver",
+        ScheduledTimeIsSet = true,
         CustomerSnapshot = new CustomerSnapshotEmbedded
         {
             FirstName = "Mike", LastName = "Johnson",
@@ -1323,7 +1327,9 @@ static List<ServiceRequest> BuildServiceRequests() =>
         Name = "SR-004 Smith Furnace",
         CreatedByUserId = "seed",
         AssignedTechnicianId = "tech_maria",
-        ScheduledDateUtc = SeedDate(-5),
+        ScheduledStartUtc = SeedDate(-5),
+        ScheduledTimeZone = "America/Denver",
+        ScheduledTimeIsSet = true,
         CustomerSnapshot = new CustomerSnapshotEmbedded
         {
             FirstName = "Sarah", LastName = "Smith",
@@ -1371,7 +1377,9 @@ static List<ServiceRequest> BuildServiceRequests() =>
         Name = "SR-006 Martinez AC",
         CreatedByUserId = "seed",
         AssignedTechnicianId = "tech_james",
-        ScheduledDateUtc = SeedDate(-1),
+        ScheduledStartUtc = SeedDate(-1),
+        ScheduledTimeZone = "America/Denver",
+        ScheduledTimeIsSet = true,
         CustomerSnapshot = new CustomerSnapshotEmbedded
         {
             FirstName = "Carlos", LastName = "Martinez",
@@ -1418,7 +1426,9 @@ static List<ServiceRequest> BuildServiceRequests() =>
         Name = "SR-008 Williams Tank Sensor",
         CreatedByUserId = "seed",
         AssignedTechnicianId = "tech_tom",
-        ScheduledDateUtc = SeedDate(14),
+        ScheduledStartUtc = SeedDate(14),
+        ScheduledTimeZone = "America/Denver",
+        ScheduledTimeIsSet = true,
         CustomerSnapshot = new CustomerSnapshotEmbedded
         {
             FirstName = "Jenny", LastName = "Williams",
@@ -1490,7 +1500,9 @@ static List<ServiceRequest> BuildServiceRequests() =>
         Name = "SR-011 Chen Inverter",
         CreatedByUserId = "seed",
         AssignedTechnicianId = "tech_james",
-        ScheduledDateUtc = SeedDate(25),
+        ScheduledStartUtc = SeedDate(25),
+        ScheduledTimeZone = "America/Denver",
+        ScheduledTimeIsSet = true,
         CustomerSnapshot = new CustomerSnapshotEmbedded
         {
             FirstName = "Lisa", LastName = "Chen",
@@ -1515,7 +1527,9 @@ static List<ServiceRequest> BuildServiceRequests() =>
         Name = "SR-012 Chen Slide-Out",
         CreatedByUserId = "seed",
         AssignedTechnicianId = "tech_james",
-        ScheduledDateUtc = SeedDate(-3),
+        ScheduledStartUtc = SeedDate(-3),
+        ScheduledTimeZone = "America/Denver",
+        ScheduledTimeIsSet = true,
         CustomerSnapshot = new CustomerSnapshotEmbedded
         {
             FirstName = "Lisa", LastName = "Chen",
