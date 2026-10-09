@@ -21,7 +21,10 @@ You don't want to type that link a dozen times a day. Give it a shortcut.
 
 1. Open **Settings**.
 2. Tap **General management**, then **Samsung Keyboard settings**.
-3. Tap **More typing options**, then **Text shortcuts**.
+3. Tap **Text shortcuts**.
+
+   *If **Text shortcuts** doesn't appear in Samsung Keyboard settings, look under **More typing options**.*
+
 4. Tap **Add**.
 5. In **Shortcut**, type something short you'd never type by accident — `rvlink` works.
 6. In **Expanded phrase**, type the whole message you want to send:
@@ -95,7 +98,7 @@ whoever set up your account for the exact link.
 
 ## Before this goes out — verify on a real Galaxy
 
-- [ ] Settings → General management → Samsung Keyboard settings → More typing options → Text shortcuts path is current on the shipping One UI version
+- [x] Settings → General management → Samsung Keyboard settings → Text shortcuts path is current on the shipping One UI version (some versions put it under More typing options; the guide covers both)
 - [ ] Length cap on an expanded phrase; write the real number in if there is one
 - [ ] Whether a text shortcut auto-expands or only suggests — the guide says suggests
 - [ ] Phone → ⋮ → Settings → **Quick decline messages** is the current name (older One UI called it "Reject call with message")
