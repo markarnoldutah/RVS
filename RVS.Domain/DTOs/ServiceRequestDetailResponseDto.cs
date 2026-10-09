@@ -28,7 +28,25 @@ public sealed record ServiceRequestDetailResponseDto
     public string? ApproxPurchaseDate { get; init; }
     public string? Priority { get; init; }
     public string? AssignedTechnicianId { get; init; }
-    public DateTime? ScheduledDateUtc { get; init; }
+
+    /// <summary>The booked start (<c>Spec C-12</c>) as a UTC instant; null when unscheduled.</summary>
+    public DateTime? ScheduledStartUtc { get; init; }
+
+    /// <summary>The IANA zone the start was booked in.</summary>
+    public string? ScheduledTimeZone { get; init; }
+
+    /// <summary>False for a date-only booking.</summary>
+    public bool ScheduledTimeIsSet { get; init; }
+
+    /// <summary>The booked date in <see cref="ScheduledTimeZone"/>, for the editor.</summary>
+    public DateOnly? ScheduledDate { get; init; }
+
+    /// <summary>The booked time in <see cref="ScheduledTimeZone"/>; null for a date-only booking.</summary>
+    public TimeOnly? ScheduledTime { get; init; }
+
+    /// <summary>"Thu Oct 15 · 9:00 AM MDT", always in the stored zone; null when unscheduled.</summary>
+    public string? ScheduledDisplay { get; init; }
+
     public List<string> RequiredSkills { get; init; } = [];
     public int BoardSequence { get; init; }
 

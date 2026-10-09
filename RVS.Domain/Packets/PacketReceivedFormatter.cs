@@ -83,7 +83,7 @@ public static class PacketReceivedFormatter
     /// <see cref="TimeSpan"/>'s default formatting so the sign is always present and the width
     /// never varies.
     /// </summary>
-    private static string OffsetLabel(TimeSpan offset) =>
+    internal static string OffsetLabel(TimeSpan offset) =>
         string.Create(
             CultureInfo.InvariantCulture,
             $"UTC{(offset < TimeSpan.Zero ? '-' : '+')}{offset.Duration():hh\\:mm}");

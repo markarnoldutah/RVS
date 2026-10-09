@@ -28,7 +28,20 @@ public sealed record ServiceRequestUpdateRequestDto
     public string? HasExtendedWarranty { get; init; }
     public string? ApproxPurchaseDate { get; init; }
     public string? AssignedTechnicianId { get; init; }
-    public DateTime? ScheduledDateUtc { get; init; }
+
+    /// <summary>
+    /// The booked date (<c>Spec C-12</c>) as the operator sees it in <see cref="ScheduledTimeZone"/>;
+    /// null clears the schedule. Wall-clock values, not UTC: the API converts them, so the client
+    /// needs no time-zone database. A full overwrite like every other field here.
+    /// </summary>
+    public DateOnly? ScheduledDate { get; init; }
+
+    /// <summary>The booked time of day, or null for a date-only booking. Needs <see cref="ScheduledDate"/>.</summary>
+    public TimeOnly? ScheduledTime { get; init; }
+
+    /// <summary>IANA zone of <see cref="ScheduledDate"/> and <see cref="ScheduledTime"/>; required with a date.</summary>
+    public string? ScheduledTimeZone { get; init; }
+
     public List<string> RequiredSkills { get; init; } = [];
 
     /// <summary>

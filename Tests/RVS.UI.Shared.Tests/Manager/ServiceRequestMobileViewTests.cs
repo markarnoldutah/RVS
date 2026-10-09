@@ -35,7 +35,11 @@ public class ServiceRequestMobileViewTests
         ApproxPurchaseDate = "2021-06",
         Priority = "High",
         AssignedTechnicianId = "tech_7",
-        ScheduledDateUtc = new DateTime(2026, 10, 1, 15, 0, 0, DateTimeKind.Utc),
+        ScheduledStartUtc = new DateTime(2026, 10, 1, 15, 0, 0, DateTimeKind.Utc),
+        ScheduledTimeZone = "America/Denver",
+        ScheduledTimeIsSet = true,
+        ScheduledDate = new DateOnly(2026, 10, 1),
+        ScheduledTime = new TimeOnly(9, 0),
         RequiredSkills = ["hydraulics"],
         BoardSequence = 4,
         JobType = "OnSite",
@@ -97,7 +101,9 @@ public class ServiceRequestMobileViewTests
         request.HasExtendedWarranty.Should().Be("Yes");
         request.ApproxPurchaseDate.Should().Be("2021-06");
         request.AssignedTechnicianId.Should().Be("tech_7");
-        request.ScheduledDateUtc.Should().Be(sr.ScheduledDateUtc);
+        request.ScheduledDate.Should().Be(new DateOnly(2026, 10, 1));
+        request.ScheduledTime.Should().Be(new TimeOnly(9, 0));
+        request.ScheduledTimeZone.Should().Be("America/Denver");
         request.RequiredSkills.Should().Equal("hydraulics");
         request.BoardSequence.Should().Be(4);
         request.JobType.Should().Be("OnSite");

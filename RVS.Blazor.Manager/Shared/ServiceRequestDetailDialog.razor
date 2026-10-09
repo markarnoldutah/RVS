@@ -345,15 +345,6 @@
                                             </MudSelect>
                                         </MudStack>
                                     </MudItem>
-                                    <MudItem xs="12" sm="6">
-                                        <MudStack Spacing="1">
-                                            <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Scheduled</MudText>
-                                            <MudDatePicker @bind-Date="_editIssueScheduled"
-                                                           Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                           Class="compact-field"
-                                                           Clearable="true" />
-                                        </MudStack>
-                                    </MudItem>
                                 </MudGrid>
                                 @if (_issueError is not null)
                                 {
@@ -431,7 +422,7 @@
                                     </MudItem>
                                     <MudItem xs="6" sm="3">
                                         <MudText Typo="Typo.caption" Style="@IssueLabelStyle">Scheduled</MudText>
-                                        <MudText Typo="Typo.body2" Style="@ValueStyle">@(_sr.ScheduledDateUtc?.ToLocalTime().ToString("g") ?? "—")</MudText>
+                                        <MudText Typo="Typo.body2" Style="@ValueStyle">@(_sr.ScheduledDisplay ?? ServiceSchedule.NotScheduledLabel)</MudText>
                                     </MudItem>
                                 </MudGrid>
                             </MudStack>
@@ -816,6 +807,67 @@
                         @if (_jobTypeError is not null)
                         {
                             <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_jobTypeError</MudAlert>
+                        }
+                        <MudDivider Class="my-4" />
+
+                        @* Scheduled date/time (Spec C-12) — one booked start, shown in the zone it was
+                           booked in, never the viewer's. The time is optional; the zone is not. *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 700;">Scheduled</MudText>
+                            @if (_scheduleSaving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            }
+                        </MudStack>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Outlined.Event" Size="Size.Small" />
+                            <MudText Typo="Typo.body2">@(_sr.ScheduledDisplay ?? ServiceSchedule.NotScheduledLabel)</MudText>
+                        </MudStack>
+                        <MudStack Spacing="2">
+                            <MudDatePicker @bind-Date="_scheduleDate"
+                                           Label="Date"
+                                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                                           Class="compact-field"
+                                           Clearable="true"
+                                           Disabled="_scheduleSaving" />
+                            <MudTimePicker @bind-Time="_scheduleTime"
+                                           Label="Time (optional)"
+                                           AmPm="true"
+                                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                                           Class="compact-field"
+                                           Clearable="true"
+                                           Disabled="@(_scheduleSaving || _scheduleDate is null)" />
+                            <MudSelect T="string" @bind-Value="_scheduleZone"
+                                       Label="Time zone"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       Dense="true"
+                                       AnchorOrigin="Origin.BottomCenter"
+                                       TransformOrigin="Origin.TopCenter"
+                                       Class="compact-field"
+                                       Disabled="_scheduleSaving">
+                                @foreach (var zone in ScheduleEditor.ZoneOptions(_scheduleZone))
+                                {
+                                    <MudSelectItem T="string" Value="@zone.IanaId">
+                                        <span style="font-size: 0.875rem;">@zone.Label</span>
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                                <MudButton Variant="Variant.Text" Size="Size.Small"
+                                           OnClick="ClearScheduleAsync"
+                                           Disabled="@(_scheduleSaving || _sr.ScheduledStartUtc is null)">
+                                    Clear
+                                </MudButton>
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="SaveScheduleAsync"
+                                           Disabled="@(_scheduleSaving || _scheduleDate is null)">
+                                    Save schedule
+                                </MudButton>
+                            </MudStack>
+                        </MudStack>
+                        @if (_scheduleError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_scheduleError</MudAlert>
                         }
                         <MudDivider Class="my-4" />
 
@@ -1327,6 +1379,12 @@
     private string? _selectedJobType;
     private bool _jobTypeUpdating;
     private string? _jobTypeError;
+    private DateTime? _scheduleDate;
+    private TimeSpan? _scheduleTime;
+    private string? _scheduleZone;
+    private string? _locationTimeZoneId;
+    private bool _scheduleSaving;
+    private string? _scheduleError;
     private bool _saving;
     private CreateForm _createForm = new();
     private MudForm? _createFormRef;
@@ -1373,7 +1431,6 @@
     private string? _editIssueCategory;
     private string? _editIssueUrgency;
     private string? _editIssueRvUsage;
-    private DateTime? _editIssueScheduled;
     private List<LookupItemDto>? _issueCategories;
 
     private static readonly string[] _urgencyOptions = ["Low", "Medium", "High", "Critical"];
@@ -1496,6 +1553,11 @@
         _selectedPriority = null;
         _jobTypeError = null;
         _selectedJobType = null;
+        _scheduleError = null;
+        _scheduleDate = null;
+        _scheduleTime = null;
+        _scheduleZone = null;
+        _locationTimeZoneId = null;
     }
 
     @* Switching to another issue from the same visit reloads the flyout in place; any open
@@ -1532,6 +1594,7 @@
             var categoriesTask = EnsureIssueCategoriesAsync();
             _sr = await srTask;
             await categoriesTask;
+            _locationTimeZoneId = await TryGetLocationTimeZoneAsync(_sr.LocationId);
             RefreshSidebarSelections();
         }
         catch (AccessTokenNotAvailableException ex)
@@ -1611,6 +1674,39 @@
         _selectedStatus = _sr.Status;
         _selectedPriority = _sr.Priority ?? "Medium";
         _selectedJobType = _sr.JobType;
+        _scheduleDate = _sr.ScheduledDate?.ToDateTime(TimeOnly.MinValue);
+        _scheduleTime = _sr.ScheduledTime?.ToTimeSpan();
+        _scheduleZone = ScheduleEditor.DefaultZone(_sr.ScheduledTimeZone, _locationTimeZoneId, BrowserTimeZoneId());
+    }
+
+    @* The location's P-5 zone is only the picker's default, so a failed lookup is not an error. *@
+    private async Task<string?> TryGetLocationTimeZoneAsync(string locationId)
+    {
+        try
+        {
+            return (await LookupClient.GetLocationByIdAsync(locationId)).TimeZoneId;
+        }
+        catch (AccessTokenNotAvailableException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    @* Blazor WASM sets TimeZoneInfo.Local from the browser's IANA zone. *@
+    private static string? BrowserTimeZoneId()
+    {
+        try
+        {
+            return TimeZoneInfo.Local.Id;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     @* The API's ApplyUpdate is a full overwrite, not a merge: every field absent from the
@@ -1794,6 +1890,53 @@
         }
     }
 
+    private Task SaveScheduleAsync()
+    {
+        if (_scheduleDate is null) return Task.CompletedTask;
+
+        var date = DateOnly.FromDateTime(_scheduleDate.Value);
+        var time = _scheduleTime is { } t ? TimeOnly.FromTimeSpan(t) : (TimeOnly?)null;
+        var when = time is { } tm
+            ? $"{date.ToString("ddd MMM d", System.Globalization.CultureInfo.InvariantCulture)} at {tm.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture)}"
+            : date.ToString("ddd MMM d", System.Globalization.CultureInfo.InvariantCulture);
+
+        return UpdateScheduleAsync(date, time, _scheduleZone, $"Scheduled for {when} ({_scheduleZone})");
+    }
+
+    private Task ClearScheduleAsync() => UpdateScheduleAsync(null, null, null, "Schedule cleared");
+
+    private async Task UpdateScheduleAsync(DateOnly? date, TimeOnly? time, string? zone, string logEntry)
+    {
+        if (_sr is null || _dealershipId is null) return;
+
+        _scheduleSaving = true;
+        _scheduleError = null;
+        StateHasChanged();
+
+        try
+        {
+            var combinedSummary = ActivityLogFormatter.PrependSystemEntry(_sr.TechnicianSummary, logEntry);
+            var request = BuildUpdateRequest(combinedSummary) with
+            {
+                ScheduledDate = date,
+                ScheduledTime = time,
+                ScheduledTimeZone = zone,
+            };
+
+            _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
+            RefreshSidebarSelections();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _scheduleError = ex.Message;
+        }
+        finally
+        {
+            _scheduleSaving = false;
+        }
+    }
+
     private async Task AddCommentAsync()
     {
         if (_sr is null || _dealershipId is null || string.IsNullOrWhiteSpace(_commentText)) return;
@@ -1919,7 +2062,6 @@
         _editIssueCategory    = _sr.IssueCategory;
         _editIssueUrgency     = _sr.Urgency;
         _editIssueRvUsage     = _sr.RvUsage;
-        _editIssueScheduled   = _sr.ScheduledDateUtc?.ToLocalTime();
         _issueError = null;
         _editingIssue = true;
     }
@@ -1944,14 +2086,12 @@
         StateHasChanged();
         try
         {
-            var scheduledUtc = _editIssueScheduled?.ToUniversalTime();
             var request = BuildUpdateRequest(_sr.TechnicianSummary) with
             {
                 IssueDescription = _editIssueDescription!.Trim(),
                 IssueCategory = string.IsNullOrWhiteSpace(_editIssueCategory) ? null : _editIssueCategory.Trim(),
                 Urgency = string.IsNullOrWhiteSpace(_editIssueUrgency) ? null : _editIssueUrgency.Trim(),
                 RvUsage = string.IsNullOrWhiteSpace(_editIssueRvUsage) ? null : _editIssueRvUsage.Trim(),
-                ScheduledDateUtc = scheduledUtc,
             };
             _sr = await SrClient.UpdateAsync(_dealershipId, _sr.Id, request);
             _editingIssue = false;

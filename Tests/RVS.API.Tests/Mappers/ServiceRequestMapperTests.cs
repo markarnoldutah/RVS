@@ -39,7 +39,9 @@ public class ServiceRequestMapperTests
             ApproxPurchaseDate = "March 2023",
             Priority = "High",
             AssignedTechnicianId = "tech_1",
-            ScheduledDateUtc = now,
+            ScheduledStartUtc = now,
+            ScheduledTimeZone = "UTC",
+            ScheduledTimeIsSet = true,
             RequiredSkills = ["electrical"],
             BoardSequence = 7,
             CreatedAtUtc = now
@@ -61,7 +63,9 @@ public class ServiceRequestMapperTests
         dto.ApproxPurchaseDate.Should().Be("March 2023");
         dto.Priority.Should().Be("High");
         dto.AssignedTechnicianId.Should().Be("tech_1");
-        dto.ScheduledDateUtc.Should().Be(now);
+        dto.ScheduledStartUtc.Should().Be(now);
+        dto.ScheduledTimeZone.Should().Be("UTC");
+        dto.ScheduledTimeIsSet.Should().BeTrue();
         dto.RequiredSkills.Should().ContainSingle().Which.Should().Be("electrical");
         dto.BoardSequence.Should().Be(7);
         dto.CreatedAtUtc.Should().Be(now);

@@ -19,6 +19,9 @@ public static class ServiceRequestMapper
     {
         ArgumentNullException.ThrowIfNull(entity);
 
+        var scheduledLocal = ServiceSchedule.ToLocal(
+            entity.ScheduledStartUtc, entity.ScheduledTimeZone, entity.ScheduledTimeIsSet);
+
         return new ServiceRequestDetailResponseDto
         {
             Id = entity.Id,
@@ -38,7 +41,12 @@ public static class ServiceRequestMapper
             ApproxPurchaseDate = entity.ApproxPurchaseDate,
             Priority = entity.Priority,
             AssignedTechnicianId = entity.AssignedTechnicianId,
-            ScheduledDateUtc = entity.ScheduledDateUtc,
+            ScheduledStartUtc = entity.ScheduledStartUtc,
+            ScheduledTimeZone = entity.ScheduledTimeZone,
+            ScheduledTimeIsSet = entity.ScheduledTimeIsSet,
+            ScheduledDate = scheduledLocal.Date,
+            ScheduledTime = scheduledLocal.Time,
+            ScheduledDisplay = FormatSchedule(entity),
             JobType = entity.JobType,
             RequiredSkills = entity.RequiredSkills,
             BoardSequence = entity.BoardSequence,
@@ -111,6 +119,8 @@ public static class ServiceRequestMapper
             AssignedTechnicianId = entity.AssignedTechnicianId,
             Priority = entity.Priority,
             JobType = entity.JobType,
+            ScheduledStartUtc = entity.ScheduledStartUtc,
+            ScheduledDisplay = FormatSchedule(entity),
             BoardSequence = entity.BoardSequence,
             SubmissionId = entity.SubmissionId,
             SubmissionPosition = entity.SubmissionPosition,
@@ -146,9 +156,13 @@ public static class ServiceRequestMapper
             LocationLogoUrl = LocationBrandingValidator.IsHttpsUrl(logoUrl) ? logoUrl : null,
             StatusNote = string.IsNullOrWhiteSpace(entity.CustomerStatusNote?.Text)
                 ? null
-                : entity.CustomerStatusNote.Text
+                : entity.CustomerStatusNote.Text,
+            ScheduledDisplay = FormatSchedule(entity)
         };
     }
+
+    private static string? FormatSchedule(ServiceRequest entity) =>
+        ServiceSchedule.Format(entity.ScheduledStartUtc, entity.ScheduledTimeZone, entity.ScheduledTimeIsSet);
 
     private static string? TrimToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -244,7 +258,10 @@ public static class ServiceRequestMapper
         entity.HasExtendedWarranty = dto.HasExtendedWarranty?.Trim();
         entity.ApproxPurchaseDate = dto.ApproxPurchaseDate?.Trim();
         entity.AssignedTechnicianId = dto.AssignedTechnicianId?.Trim();
-        entity.ScheduledDateUtc = dto.ScheduledDateUtc;
+        var scheduled = ServiceSchedule.Resolve(dto.ScheduledDate, dto.ScheduledTime, dto.ScheduledTimeZone);
+        entity.ScheduledStartUtc = scheduled?.StartUtc;
+        entity.ScheduledTimeZone = scheduled?.TimeZoneId;
+        entity.ScheduledTimeIsSet = scheduled?.TimeIsSet ?? false;
         entity.RequiredSkills = dto.RequiredSkills;
         entity.BoardSequence = dto.BoardSequence ?? entity.BoardSequence;
         entity.JobType = string.IsNullOrWhiteSpace(dto.JobType) ? null : dto.JobType.Trim();
