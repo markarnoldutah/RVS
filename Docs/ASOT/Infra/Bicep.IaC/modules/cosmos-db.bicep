@@ -125,7 +125,11 @@ resource serviceRequests 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
           { path: '/customerProfileId/?' }
           { path: '/issueCategory/?' }
           { path: '/createdAtUtc/?' }
+          { path: '/updatedAtUtc/?' }
           { path: '/scheduledStartUtc/?' }
+          { path: '/priority/?' }
+          { path: '/assignedTechnicianId/?' }
+          { path: '/jobType/?' }
           { path: '/type/?' }
         ]
         excludedPaths: [

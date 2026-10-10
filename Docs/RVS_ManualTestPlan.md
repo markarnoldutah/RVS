@@ -305,9 +305,13 @@ In the manager app, open **Locations** and edit a location. The drawer has a **S
 
 ### 3.2 Board and list (C-1, C-3)
 
-- [ ] After sign-in, the app lands on the board (`/board`). Every open request is on it. The **Done** column shows completed and cancelled requests changed in the last 60 days, and nothing older; its **Older in Service Requests** link opens `/service-requests`. There is no *Actionable today* switch.
+- [ ] After sign-in, the app lands on the board (`/board`). Every open request is on it. At a location with more than 100 requests, open requests created long ago still appear (#851). The **Done** column shows completed and cancelled requests changed in the last 60 days, and nothing older; its **Older in Service Requests** link opens `/service-requests`. There is no *Actionable today* switch.
 - [ ] Drag a card to another column. The status changes, and the customer status page shows the new status after a reload.
 - [ ] `/service-requests` lists the location's requests newest first. Filtering by status works for all six statuses, including **Waiting on Customer**.
+- [ ] With every filter blank, `/service-requests` covers all history, not just the newest 25. The pager at the bottom moves through every page (25, 50 or 100 rows per page).
+- [ ] Status **Open** shows every request that is not Completed or Cancelled. Category (a dropdown), Priority and Technician (part of the ID, any case) each apply on **Search** and find matching requests of any age. There is no Asset / VIN field; a VIN typed into **Keyword** finds the request.
+- [ ] Every column header sorts. **Scheduled** puts *Not scheduled* last in both directions; **Priority** sorts Critical, High, Medium, Low, then unset.
+- [ ] (Optional, needs more than 500 matching requests) A search that matches more than 500 shows *Showing the newest 500. Narrow your filters to see older requests.*
 - [ ] `/service-requests/{id}/edit` no longer exists. The typed URL does not open an edit form.
 
 ### 3.3 Status links from the packet email (C-7)

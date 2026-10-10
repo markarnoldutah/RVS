@@ -22,6 +22,28 @@ public class BoardRetentionFilterTests
         BoardRetentionFilter.DoneColumnWindowDays.Should().Be(60);
     }
 
+    [Fact]
+    public void ClosedStatuses_ShouldBeCompletedAndCancelled()
+    {
+        BoardRetentionFilter.ClosedStatuses.Should().BeEquivalentTo("Completed", "Cancelled");
+    }
+
+    [Fact]
+    public void DoneColumnCutoffUtc_ShouldBeSixtyDaysBeforeNow()
+    {
+        BoardRetentionFilter.DoneColumnCutoffUtc(NowUtc).Should().Be(NowUtc.AddDays(-60));
+    }
+
+    [Fact]
+    public void DoneColumnCutoffUtc_ShouldAgreeWithIsOnBoard_AtTheBoundary()
+    {
+        // The server scopes the board with "last changed > cutoff"; IsOnBoard must draw the same line.
+        var cutoff = BoardRetentionFilter.DoneColumnCutoffUtc(NowUtc);
+
+        BoardRetentionFilter.IsOnBoard("Completed", cutoff, cutoff, NowUtc).Should().BeFalse();
+        BoardRetentionFilter.IsOnBoard("Completed", cutoff, cutoff.AddTicks(1), NowUtc).Should().BeTrue();
+    }
+
     [Theory]
     [InlineData("New")]
     [InlineData("InProgress")]

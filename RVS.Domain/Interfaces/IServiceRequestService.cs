@@ -31,13 +31,15 @@ public interface IServiceRequestService
     Task<IReadOnlyList<ServiceRequest>> GetSubmissionMembersAsync(string tenantId, string id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Searches service requests using up to 10 filter parameters with continuation-token pagination.
+    /// Returns every service request matching the filters, newest first (issue #849): the whole
+    /// board set for the board scope, or up to <see cref="Validation.ServiceRequestSearch.MaxListResults"/>
+    /// for the list scope.
     /// </summary>
     /// <param name="tenantId">Tenant identifier for tenant isolation.</param>
-    /// <param name="request">Filter criteria and page size (keyword, status, category, location, etc.).</param>
-    /// <param name="continuationToken">Optional continuation token for the next page.</param>
+    /// <param name="request">Scope and filter criteria.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<PagedResult<ServiceRequest>> SearchAsync(string tenantId, ServiceRequestSearchRequestDto request, string? continuationToken = null, CancellationToken cancellationToken = default);
+    /// <exception cref="ArgumentException">The scope or job-type filter is unknown.</exception>
+    Task<ServiceRequestSearchResult> SearchAsync(string tenantId, ServiceRequestSearchRequestDto request, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a new service request.

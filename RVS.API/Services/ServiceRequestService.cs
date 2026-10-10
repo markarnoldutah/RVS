@@ -58,21 +58,30 @@ public sealed class ServiceRequestService : IServiceRequestService
     }
 
     /// <inheritdoc />
-    public async Task<PagedResult<ServiceRequest>> SearchAsync(
+    public async Task<ServiceRequestSearchResult> SearchAsync(
         string tenantId,
         ServiceRequestSearchRequestDto request,
-        string? continuationToken = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentNullException.ThrowIfNull(request);
+
+        if (!ServiceRequestSearch.IsValidScope(request.Scope))
+        {
+            throw new ArgumentException($"Unknown search scope '{request.Scope}'.", nameof(request));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.IssueCategory) && !IssueCategoryVocabulary.IsValid(request.IssueCategory))
+        {
+            throw new ArgumentException($"Unknown issue category filter '{request.IssueCategory}'.", nameof(request));
+        }
 
         if (!string.IsNullOrWhiteSpace(request.JobType) && !JobTypes.IsValidFilter(request.JobType))
         {
             throw new ArgumentException($"Unknown job type filter '{request.JobType}'.", nameof(request));
         }
 
-        return await _repository.SearchAsync(tenantId, request, continuationToken, cancellationToken);
+        return await _repository.SearchAsync(tenantId, request, cancellationToken);
     }
 
     /// <inheritdoc />
