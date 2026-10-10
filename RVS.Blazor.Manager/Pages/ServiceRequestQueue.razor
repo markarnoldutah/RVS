@@ -28,7 +28,7 @@
                                       Variant="Variant.Outlined"
                                       Margin="Margin.Dense"
                                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                                      Placeholder="Customer, asset, category..." />
+                                      Placeholder="Customer, VIN, issue text..." />
                     </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
@@ -38,6 +38,7 @@
                                    Variant="Variant.Outlined" Margin="Margin.Dense"
                                    Clearable="true"
                                    AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                            <MudSelectItem T="string" Value="@ServiceRequestSearch.OpenStatusFilter">Open (not completed or cancelled)</MudSelectItem>
                             <MudSelectItem T="string" Value="@("New")">New</MudSelectItem>
                             <MudSelectItem T="string" Value="@("InProgress")">In Progress</MudSelectItem>
                             <MudSelectItem T="string" Value="@("WaitingOnCustomer")">Waiting on Customer</MudSelectItem>
@@ -50,10 +51,15 @@
                 <MudItem xs="12" sm="6" md="3">
                     <MudStack Spacing="1">
                         <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Issue category</MudText>
-                        <MudTextField T="string" @bind-Value="_search.IssueCategory"
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      Placeholder="e.g., Electrical" />
+                        <MudSelect T="string" @bind-Value="_search.IssueCategory"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Clearable="true"
+                                   AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+                            @foreach (var category in IssueCategoryVocabulary.All)
+                            {
+                                <MudSelectItem T="string" Value="@category.Code">@category.Name</MudSelectItem>
+                            }
+                        </MudSelect>
                     </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
@@ -76,16 +82,7 @@
                         <MudTextField T="string" @bind-Value="_search.AssignedTechnicianId"
                                       Variant="Variant.Outlined"
                                       Margin="Margin.Dense"
-                                      Placeholder="Technician ID" />
-                    </MudStack>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudStack Spacing="1">
-                        <MudText Typo="Typo.body1" Style="font-weight: 700; color: var(--mud-palette-text-primary);">Asset / VIN</MudText>
-                        <MudTextField T="string" @bind-Value="_search.AssetId"
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      Placeholder="Full or partial VIN" />
+                                      Placeholder="Full or partial technician ID" />
                     </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
@@ -161,27 +158,35 @@
     }
     else
     {
-        <MudTable Items="@_results" Hover="true" Striped="true" Dense="true"
+        @if (_isTruncated)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">@ServiceRequestListView.TruncatedNotice</MudAlert>
+        }
+
+        @* Issue #849: the API applies every filter and returns every match (up to the cap); sorting and paging happen here. *@
+        <MudTable @ref="_table" Items="@_results" Hover="true" Striped="true" Dense="true"
                   OnRowClick="OnRowClick" T="ServiceRequestSummaryResponseDto"
+                  RowsPerPage="PageSize"
                   RowClass="cursor-pointer">
             <HeaderContent>
-                <MudTh>ID</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>Priority</MudTh>
-                <MudTh>Job type</MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => sr.Id)">ID</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => sr.Status)">Status</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => ServiceRequestListView.PrioritySortKey(sr))">Priority</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => JobTypes.GetLabel(sr.JobType))">Job type</MudTableSortLabel></MudTh>
                 <MudTh>
-                    @* Spec C-12: sorts the loaded page by booked instant; unscheduled rows sort last. *@
+                    @* Spec C-12: by booked instant across every loaded row; unscheduled rows last either way. *@
                     <MudTableSortLabel T="ServiceRequestSummaryResponseDto"
-                                       SortBy="@(sr => sr.ScheduledStartUtc ?? DateTime.MaxValue)">
+                                       SortBy="@(sr => ServiceRequestListView.ScheduledSortKey(sr, _scheduledSortDirection))"
+                                       SortDirectionChanged="@(d => _scheduledSortDirection = d)">
                         Scheduled
                     </MudTableSortLabel>
                 </MudTh>
-                <MudTh>Customer</MudTh>
-                <MudTh>Asset</MudTh>
-                <MudTh>Category</MudTh>
-                <MudTh>Location</MudTh>
-                <MudTh>Technician</MudTh>
-                <MudTh>Created</MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => sr.CustomerFullName)">Customer</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => sr.AssetDisplay ?? string.Empty)">Asset</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => sr.IssueCategory)">Category</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => sr.LocationName ?? sr.LocationId)">Location</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => sr.AssignedTechnicianId ?? string.Empty)">Technician</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="ServiceRequestSummaryResponseDto" SortBy="@(sr => sr.CreatedAtUtc)">Created</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="ID">
@@ -217,23 +222,10 @@
             <NoRecordsContent>
                 <MudText Typo="Typo.body1" Color="Color.Secondary">No service requests found.</MudText>
             </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="@(new[] { 25, 50, 100 })" />
+            </PagerContent>
         </MudTable>
-
-        @* Pagination *@
-        @if (_totalPages > 1)
-        {
-            <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="2" Class="mt-4">
-                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
-                               Disabled="@(_currentPage <= 1)"
-                               OnClick="PreviousPageAsync"
-                               aria-label="Previous page" />
-                <MudText Typo="Typo.body2">Page @_currentPage of @_totalPages (@_totalCount total)</MudText>
-                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
-                               Disabled="@(_currentPage >= _totalPages)"
-                               OnClick="NextPageAsync"
-                               aria-label="Next page" />
-            </MudStack>
-        }
     }
 </MudStack>
 
@@ -247,13 +239,13 @@
     private SearchModel _search = new();
     private DateTime? _dateFrom;
     private DateTime? _dateTo;
+    private SortDirection _scheduledSortDirection = SortDirection.None;
+    private MudTable<ServiceRequestSummaryResponseDto>? _table;
     private List<LocationSummaryResponseDto> _locations = [];
     private List<ServiceRequestSummaryResponseDto> _results = [];
+    private bool _isTruncated;
     private bool _loading;
     private string? _error;
-    private int _currentPage = 1;
-    private long _totalCount;
-    private int _totalPages;
     private bool _filtersExpanded = true;
     private string? _dealershipId;
 
@@ -302,24 +294,22 @@
         {
             var request = new ServiceRequestSearchRequestDto
             {
+                Scope = ServiceRequestSearch.ListScope,
                 Keyword = _search.Keyword,
                 Status = _search.Status,
-                IssueCategory = _search.IssueCategory,
                 LocationId = _search.LocationId,
-                AssignedTechnicianId = _search.AssignedTechnicianId,
-                AssetId = _search.AssetId,
+                IssueCategory = _search.IssueCategory,
                 Priority = _search.Priority,
+                AssignedTechnicianId = _search.AssignedTechnicianId,
                 JobType = _search.JobType,
                 DateFrom = _dateFrom?.ToUniversalTime(),
                 DateTo = _dateTo?.ToUniversalTime(),
-                Page = _currentPage,
-                PageSize = PageSize
             };
 
             var response = await SrClient.SearchAsync(_dealershipId, request);
             _results = response.Results.Items;
-            _totalCount = response.Results.TotalCount;
-            _totalPages = (int)Math.Ceiling((double)_totalCount / PageSize);
+            _isTruncated = response.IsTruncated;
+            _table?.NavigateTo(Page.First);
         }
         catch (AccessTokenNotAvailableException ex)
         {
@@ -340,25 +330,6 @@
         _search = new();
         _dateFrom = null;
         _dateTo = null;
-        _currentPage = 1;
-    }
-
-    private async Task PreviousPageAsync()
-    {
-        if (_currentPage > 1)
-        {
-            _currentPage--;
-            await SearchAsync();
-        }
-    }
-
-    private async Task NextPageAsync()
-    {
-        if (_currentPage < _totalPages)
-        {
-            _currentPage++;
-            await SearchAsync();
-        }
     }
 
     private void OnRowClick(TableRowClickEventArgs<ServiceRequestSummaryResponseDto> args)
@@ -388,11 +359,10 @@
     {
         public string? Keyword { get; set; }
         public string? Status { get; set; }
-        public string? IssueCategory { get; set; }
         public string? LocationId { get; set; }
-        public string? AssignedTechnicianId { get; set; }
-        public string? AssetId { get; set; }
+        public string? IssueCategory { get; set; }
         public string? Priority { get; set; }
+        public string? AssignedTechnicianId { get; set; }
         public string? JobType { get; set; }
     }
 }

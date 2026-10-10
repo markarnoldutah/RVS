@@ -37,13 +37,14 @@ public interface IServiceRequestRepository
     Task<IReadOnlyList<ServiceRequest>> GetBySubmissionIdAsync(string tenantId, string submissionId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Searches service requests using up to 10 filter parameters with Cosmos DB continuation-token pagination.
+    /// Returns every service request matching the filters in one call, newest first (issue #849).
+    /// The board scope is uncapped; the list scope stops at
+    /// <see cref="Validation.ServiceRequestSearch.MaxListResults"/> and flags the result as truncated.
     /// </summary>
     /// <param name="tenantId">Tenant partition key.</param>
-    /// <param name="request">Filter criteria and page size (keyword, status, category, location, etc.).</param>
-    /// <param name="continuationToken">Optional Cosmos DB continuation token for the next page.</param>
+    /// <param name="request">Scope and filter criteria.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<PagedResult<ServiceRequest>> SearchAsync(string tenantId, ServiceRequestSearchRequestDto request, string? continuationToken = null, CancellationToken cancellationToken = default);
+    Task<ServiceRequestSearchResult> SearchAsync(string tenantId, ServiceRequestSearchRequestDto request, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a new service request document.

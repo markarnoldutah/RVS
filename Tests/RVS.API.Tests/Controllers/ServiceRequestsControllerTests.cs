@@ -55,18 +55,16 @@ public class ServiceRequestsControllerTests
     }
 
     [Fact]
-    public async Task Search_ShouldReturnOkWithPagedResult()
+    public async Task Search_ShouldReturnOkWithEveryRowAndTheTruncationFlag()
     {
-        var pagedResult = new PagedResult<ServiceRequest>
+        var searchResult = new ServiceRequestSearchResult
         {
-            Page = 1,
-            PageSize = 25,
-            TotalCount = 1,
-            Items = [BuildServiceRequest()]
+            Items = [BuildServiceRequest()],
+            IsTruncated = true,
         };
 
-        _serviceMock.Setup(s => s.SearchAsync(TenantId, It.IsAny<ServiceRequestSearchRequestDto>(), null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(pagedResult);
+        _serviceMock.Setup(s => s.SearchAsync(TenantId, It.IsAny<ServiceRequestSearchRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(searchResult);
 
         var request = new ServiceRequestSearchRequestDto();
         var result = await _sut.Search("dlr_1", request, CancellationToken.None);
@@ -75,6 +73,7 @@ public class ServiceRequestsControllerTests
         var wrapper = okResult.Value.Should().BeOfType<ServiceRequestSearchResultResponseDto>().Subject;
         wrapper.Results.TotalCount.Should().Be(1);
         wrapper.Results.Items.Should().ContainSingle();
+        wrapper.IsTruncated.Should().BeTrue();
     }
 
     [Fact]

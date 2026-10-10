@@ -251,7 +251,13 @@ static List<ContainerProperties> BuildContainerDefinitions()
                     new IncludedPath { Path = "/customerProfileId/?" },
                     new IncludedPath { Path = "/issueCategory/?" },
                     new IncludedPath { Path = "/createdAtUtc/?" },
+                    // The board scope keeps closed work by its last change (issue #849).
+                    new IncludedPath { Path = "/updatedAtUtc/?" },
                     new IncludedPath { Path = "/scheduledStartUtc/?" },
+                    // Search filters (issue #849).
+                    new IncludedPath { Path = "/priority/?" },
+                    new IncludedPath { Path = "/assignedTechnicianId/?" },
+                    new IncludedPath { Path = "/jobType/?" },
                     new IncludedPath { Path = "/type/?" },
                 },
                 ExcludedPaths =

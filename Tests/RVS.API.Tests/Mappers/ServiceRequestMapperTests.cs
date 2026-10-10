@@ -894,37 +894,42 @@ public class ServiceRequestMapperTests
         entity.DiagnosticResponses[0].QuestionText.Should().Be("Does it click?");
     }
 
-    // ── ToSummaryPagedResult ─────────────────────────────────────────────────
+    // ── ToSearchResultResponseDto ───────────────────────────────────────────
 
     [Fact]
-    public void ToSummaryPagedResult_WhenPagedResultIsNull_ShouldThrowArgumentNullException()
+    public void ToSearchResultResponseDto_WhenResultIsNull_ShouldThrowArgumentNullException()
     {
-        PagedResult<ServiceRequest>? paged = null;
+        ServiceRequestSearchResult? result = null;
 
-        var act = () => paged!.ToSummaryPagedResult();
+        var act = () => result!.ToSearchResultResponseDto();
 
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
-    public void ToSummaryPagedResult_ShouldCarryForwardPaginationFields()
+    public void ToSearchResultResponseDto_ShouldReturnEveryRowAsOnePage()
     {
-        var paged = new PagedResult<ServiceRequest>
+        var result = new ServiceRequestSearchResult
         {
-            Page = 2,
-            PageSize = 10,
-            TotalCount = 45,
-            ContinuationToken = "tok_abc",
-            Items = [new ServiceRequest()]
+            Items = [new ServiceRequest { Id = "sr_1" }, new ServiceRequest { Id = "sr_2" }],
         };
 
-        var result = paged.ToSummaryPagedResult();
+        var dto = result.ToSearchResultResponseDto();
 
-        result.Page.Should().Be(2);
-        result.PageSize.Should().Be(10);
-        result.TotalCount.Should().Be(45);
-        result.ContinuationToken.Should().Be("tok_abc");
-        result.Items.Should().ContainSingle();
+        dto.Results.Items.Select(i => i.Id).Should().Equal("sr_1", "sr_2");
+        dto.Results.Page.Should().Be(1);
+        dto.Results.PageSize.Should().Be(2);
+        dto.Results.TotalCount.Should().Be(2);
+        dto.Results.ContinuationToken.Should().BeNull();
+        dto.IsTruncated.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToSearchResultResponseDto_ShouldCarryTheTruncationFlag()
+    {
+        var result = new ServiceRequestSearchResult { Items = [new ServiceRequest()], IsTruncated = true };
+
+        result.ToSearchResultResponseDto().IsTruncated.Should().BeTrue();
     }
 
     // ── Embedded helpers ─────────────────────────────────────────────────────

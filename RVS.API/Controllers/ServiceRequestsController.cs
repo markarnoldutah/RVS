@@ -97,12 +97,9 @@ public class ServiceRequestsController : ControllerBase
     {
         var tenantId = _claimsService.GetTenantIdOrThrow();
 
-        var result = await _service.SearchAsync(tenantId, request, cancellationToken: ct);
+        var result = await _service.SearchAsync(tenantId, request, ct);
 
-        return Ok(new ServiceRequestSearchResultResponseDto
-        {
-            Results = result.ToSummaryPagedResult()
-        });
+        return Ok(result.ToSearchResultResponseDto());
     }
 
     /// <summary>

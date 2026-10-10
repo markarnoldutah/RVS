@@ -375,11 +375,8 @@
 
         try
         {
-            var request = new ServiceRequestSearchRequestDto
-            {
-                LocationId = AppState.SelectedLocation,
-                PageSize = 100,
-            };
+            // Issue #849: the board scope returns all open work plus the Done window, uncapped.
+            var request = ServiceRequestListView.BoardRequest(AppState.SelectedLocation);
 
             var result = await SrClient.SearchAsync(_dealershipId, request);
             var items = result.Results?.Items ?? [];

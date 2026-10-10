@@ -293,20 +293,25 @@ public static class ServiceRequestMapper
     }
 
     /// <summary>
-    /// Maps a paged result of <see cref="ServiceRequest"/> entities to a paged result of summary DTOs.
+    /// Maps a <see cref="ServiceRequestSearchResult"/> to the search response: every row as one
+    /// page of summaries, plus whether the list was cut at its cap (issue #849).
     /// </summary>
-    public static PagedResult<ServiceRequestSummaryResponseDto> ToSummaryPagedResult(
-        this PagedResult<ServiceRequest> pagedResult)
+    public static ServiceRequestSearchResultResponseDto ToSearchResultResponseDto(this ServiceRequestSearchResult result)
     {
-        ArgumentNullException.ThrowIfNull(pagedResult);
+        ArgumentNullException.ThrowIfNull(result);
 
-        return new PagedResult<ServiceRequestSummaryResponseDto>
+        var items = result.Items.Select(e => e.ToSummaryDto()).ToList();
+
+        return new ServiceRequestSearchResultResponseDto
         {
-            Page = pagedResult.Page,
-            PageSize = pagedResult.PageSize,
-            TotalCount = pagedResult.TotalCount,
-            ContinuationToken = pagedResult.ContinuationToken,
-            Items = pagedResult.Items.Select(e => e.ToSummaryDto()).ToList()
+            Results = new PagedResult<ServiceRequestSummaryResponseDto>
+            {
+                Page = 1,
+                PageSize = items.Count,
+                TotalCount = items.Count,
+                Items = items,
+            },
+            IsTruncated = result.IsTruncated,
         };
     }
 

@@ -84,105 +84,38 @@ public sealed class CosmosServiceRequestRepository : CosmosRepositoryBase, IServ
     }
 
     /// <inheritdoc />
-    public async Task<PagedResult<ServiceRequest>> SearchAsync(
+    public async Task<ServiceRequestSearchResult> SearchAsync(
         string tenantId,
         ServiceRequestSearchRequestDto request,
-        string? continuationToken = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         ArgumentNullException.ThrowIfNull(request);
 
-        var pageSize = Math.Min(request.PageSize, 100);
-
-        // Build dynamic WHERE clause — only include active filters
-        var conditions = new List<string> { "c.tenantId = @tenantId", "c.type = 'serviceRequest'" };
-
-        if (!string.IsNullOrWhiteSpace(request.Status))
-            conditions.Add("c.status = @status");
-        if (!string.IsNullOrWhiteSpace(request.IssueCategory))
-            conditions.Add("c.issueCategory = @issueCategory");
-        if (!string.IsNullOrWhiteSpace(request.LocationId))
-            conditions.Add("c.locationId = @locationId");
-        if (!string.IsNullOrWhiteSpace(request.AssignedTechnicianId))
-            conditions.Add("c.assignedTechnicianId = @assignedTechnicianId");
-        if (!string.IsNullOrWhiteSpace(request.AssetId))
-            conditions.Add("c.assetInfo.assetId = @assetId");
-        if (request.DateFrom.HasValue)
-            conditions.Add("c.createdAtUtc >= @dateFrom");
-        if (request.DateTo.HasValue)
-            conditions.Add("c.createdAtUtc <= @dateTo");
-        if (!string.IsNullOrWhiteSpace(request.Priority))
-            conditions.Add("c.priority = @priority");
-        if (request.JobType == JobTypes.NotTriagedFilter)
-            conditions.Add("(NOT IS_DEFINED(c.jobType) OR IS_NULL(c.jobType))");
-        else if (!string.IsNullOrWhiteSpace(request.JobType))
-            conditions.Add("c.jobType = @jobType");
-        if (!string.IsNullOrWhiteSpace(request.Keyword))
-            conditions.Add("(CONTAINS(LOWER(c.customerSnapshot.firstName), LOWER(@keyword)) OR CONTAINS(LOWER(c.customerSnapshot.lastName), LOWER(@keyword)) OR CONTAINS(LOWER(c.issueDescription), LOWER(@keyword)) OR CONTAINS(LOWER(c.assetInfo.assetId), LOWER(@keyword)))");
-
-        var sql = $"SELECT * FROM c WHERE {string.Join(" AND ", conditions)} ORDER BY c.createdAtUtc DESC";
-
-        var definition = new QueryDefinition(sql)
-            .WithParameter("@tenantId", tenantId);
-
-        if (!string.IsNullOrWhiteSpace(request.Status))
-            definition = definition.WithParameter("@status", request.Status);
-        if (!string.IsNullOrWhiteSpace(request.IssueCategory))
-            definition = definition.WithParameter("@issueCategory", request.IssueCategory);
-        if (!string.IsNullOrWhiteSpace(request.LocationId))
-            definition = definition.WithParameter("@locationId", request.LocationId);
-        if (!string.IsNullOrWhiteSpace(request.AssignedTechnicianId))
-            definition = definition.WithParameter("@assignedTechnicianId", request.AssignedTechnicianId);
-        if (!string.IsNullOrWhiteSpace(request.AssetId))
-            definition = definition.WithParameter("@assetId", request.AssetId);
-        if (request.DateFrom.HasValue)
-            definition = definition.WithParameter("@dateFrom", request.DateFrom.Value);
-        if (request.DateTo.HasValue)
-            definition = definition.WithParameter("@dateTo", request.DateTo.Value);
-        if (!string.IsNullOrWhiteSpace(request.Priority))
-            definition = definition.WithParameter("@priority", request.Priority);
-        if (request.JobType != JobTypes.NotTriagedFilter && !string.IsNullOrWhiteSpace(request.JobType))
-            definition = definition.WithParameter("@jobType", request.JobType);
-        if (!string.IsNullOrWhiteSpace(request.Keyword))
-            definition = definition.WithParameter("@keyword", request.Keyword);
+        var definition = ServiceRequestSearchQuery.Build(tenantId, request, DateTime.UtcNow);
 
         var queryOptions = new QueryRequestOptions
         {
             PartitionKey = new PartitionKey(tenantId),
-            MaxItemCount = pageSize,
         };
 
-        var iterator = _container.GetItemQueryIterator<ServiceRequest>(
-            definition,
-            requestOptions: queryOptions,
-            continuationToken: continuationToken);
+        var iterator = _container.GetItemQueryIterator<ServiceRequest>(definition, requestOptions: queryOptions);
 
-        var items = new List<ServiceRequest>();
+        // Read every page: the list is bounded by TOP, the board by its scope (issue #849).
+        var rows = new List<ServiceRequest>();
         double totalCharge = 0;
-        string? nextToken = null;
 
-        if (iterator.HasMoreResults)
+        while (iterator.HasMoreResults)
         {
             var page = await iterator.ReadNextAsync(cancellationToken);
             totalCharge += page.RequestCharge;
-            nextToken = page.ContinuationToken;
-            items.AddRange(page);
+            rows.AddRange(page);
         }
 
-        _logger.LogDebug("SearchAsync [tenant={TenantId}] — {Count} items, RequestCharge: {Charge} RU",
-            tenantId, items.Count, totalCharge);
+        _logger.LogDebug("SearchAsync [tenant={TenantId}, scope={Scope}] — {Count} rows, RequestCharge: {Charge} RU",
+            tenantId, request.Scope ?? ServiceRequestSearch.ListScope, rows.Count, totalCharge);
 
-        // TotalCount is not available without an additional COUNT(*) query; it reflects only the current page.
-        // Callers should use ContinuationToken to determine whether more results exist.
-        return new PagedResult<ServiceRequest>
-        {
-            Page = request.Page,
-            PageSize = pageSize,
-            TotalCount = items.Count,
-            Items = items,
-            ContinuationToken = nextToken,
-        };
+        return ServiceRequestSearchQuery.ToResult(rows, request.Scope);
     }
 
     /// <inheritdoc />

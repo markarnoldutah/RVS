@@ -30,8 +30,7 @@ public class ServiceRequestDtoTests
     {
         var dto = new ServiceRequestSearchRequestDto();
 
-        dto.Page.Should().Be(1);
-        dto.PageSize.Should().Be(25);
+        dto.Scope.Should().BeNull();
         dto.Keyword.Should().BeNull();
         dto.Status.Should().BeNull();
         dto.LocationId.Should().BeNull();

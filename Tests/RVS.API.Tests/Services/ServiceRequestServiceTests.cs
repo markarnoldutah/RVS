@@ -170,8 +170,24 @@ public class ServiceRequestServiceTests
     public async Task SearchAsync_ShouldDelegateToRepository()
     {
         var request = new ServiceRequestSearchRequestDto { Status = "New" };
-        var expected = new PagedResult<ServiceRequest> { Items = [BuildServiceRequest()] };
-        _repoMock.Setup(r => r.SearchAsync("ten_1", request, null, It.IsAny<CancellationToken>()))
+        var expected = new ServiceRequestSearchResult { Items = [BuildServiceRequest()] };
+        _repoMock.Setup(r => r.SearchAsync("ten_1", request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var result = await _sut.SearchAsync("ten_1", request);
+
+        result.Should().BeSameAs(expected);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("List")]
+    [InlineData("Board")]
+    public async Task SearchAsync_WhenScopeIsKnown_ShouldDelegateToRepository(string? scope)
+    {
+        var request = new ServiceRequestSearchRequestDto { Scope = scope };
+        var expected = new ServiceRequestSearchResult();
+        _repoMock.Setup(r => r.SearchAsync("ten_1", request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
         var result = await _sut.SearchAsync("ten_1", request);
@@ -180,17 +196,34 @@ public class ServiceRequestServiceTests
     }
 
     [Fact]
-    public async Task SearchAsync_WithContinuationToken_ShouldPassTokenToRepository()
+    public async Task SearchAsync_WhenCategoryFilterInvalid_ShouldThrowArgumentException()
     {
-        var request = new ServiceRequestSearchRequestDto();
-        var expected = new PagedResult<ServiceRequest>();
-        _repoMock.Setup(r => r.SearchAsync("ten_1", request, "token123", It.IsAny<CancellationToken>()))
+        var act = () => _sut.SearchAsync("ten_1", new ServiceRequestSearchRequestDto { IssueCategory = "Plumbin" });
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*category*");
+        _repoMock.Verify(r => r.SearchAsync(It.IsAny<string>(), It.IsAny<ServiceRequestSearchRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SearchAsync_WhenCategoryFilterValid_ShouldDelegateToRepository()
+    {
+        var request = new ServiceRequestSearchRequestDto { IssueCategory = "Plumbing" };
+        var expected = new ServiceRequestSearchResult();
+        _repoMock.Setup(r => r.SearchAsync("ten_1", request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
-        var result = await _sut.SearchAsync("ten_1", request, "token123");
+        var result = await _sut.SearchAsync("ten_1", request);
 
         result.Should().BeSameAs(expected);
-        _repoMock.Verify(r => r.SearchAsync("ten_1", request, "token123", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SearchAsync_WhenScopeIsUnknown_ShouldThrowArgumentException()
+    {
+        var act = () => _sut.SearchAsync("ten_1", new ServiceRequestSearchRequestDto { Scope = "Everything" });
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*scope*");
+        _repoMock.Verify(r => r.SearchAsync(It.IsAny<string>(), It.IsAny<ServiceRequestSearchRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── CreateAsync ──────────────────────────────────────────────────────────
@@ -905,8 +938,8 @@ public class ServiceRequestServiceTests
     public async Task SearchAsync_WhenJobTypeFilterValid_ShouldDelegateToRepository(string filter)
     {
         var request = new ServiceRequestSearchRequestDto { JobType = filter };
-        var expected = new PagedResult<ServiceRequest> { Items = [] };
-        _repoMock.Setup(r => r.SearchAsync("ten_1", request, null, It.IsAny<CancellationToken>()))
+        var expected = new ServiceRequestSearchResult();
+        _repoMock.Setup(r => r.SearchAsync("ten_1", request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
         var result = await _sut.SearchAsync("ten_1", request);
